@@ -1,0 +1,138 @@
+description = """
+Group producer-failure signals by tight fingerprint and launch repair review
+when a pattern reaches threshold.
+"""
+formula = "brief-producer-failure-rollup"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-producer-failure-rollup"
+description = "Roll up repeated producer-failure patterns and sling repair reviews."
+
+[vars]
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = ".beads/briefs"
+
+[vars.threshold]
+description = "Distinct source-bead count required for a tight fingerprint."
+default = "3"
+
+[vars.operator_target]
+description = "Run target for rollup."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "build-rollups"
+title = "Build producer-failure rollups"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Read `{{artifact_root}}/.producer-failure-pile/*.toml`.
+
+Dedupe by:
+
+```text
+source_formula + failed_gate + failure_fingerprint + source_bead
+```
+
+Group deduped signals by:
+
+```text
+source_formula + failed_gate + failure_fingerprint
+```
+
+Write one JSON object per open group to
+`{{artifact_root}}/.producer-failure-rollups/open.jsonl` with:
+
+- `source_formula`
+- `failed_gate`
+- `failure_fingerprint`
+- `distinct_source_bead_count`
+- `signal_paths`
+- `oldest_observed_at`
+- `newest_observed_at`
+- `status`
+"""
+
+[[steps]]
+id = "launch-repair-review"
+title = "Launch repair reviews for groups at threshold"
+needs = ["build-rollups"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+For each group in `open.jsonl` with at least `{{threshold}}` distinct
+source beads, create:
+
+`{{artifact_root}}/.producer-failure-rollups/batches/<source_formula>-<failed_gate>-<failure_fingerprint>.md`
+
+The batch file must include:
+
+- the tight fingerprint tuple
+- threshold and observed count
+- all rejected brief paths
+- all source beads
+- all route paths
+- failure summaries
+- links to producer-failure event bead ids when available
+
+Create or find one repair-review bead for that batch in the target rig store
+`rig:gascity-packs`, not in city HQ. The repair workflow is routed to
+`gascity-packs/gc.run-operator`; slinging a city `gt-*` bead across stores is
+rejected and wedges the workflow. Derive the target rig directory from the live
+city registry:
+
+```bash
+repair_rig_dir="$(gc rig list --json | jq -r '.rigs[] | select(.name=="gascity-packs") | .path')"
+if [ -z "$repair_rig_dir" ]; then
+  echo "I'm sorry, I can't do that — rig:gascity-packs is not registered." >&2
+  echo "Register or resume the gascity-packs rig before launching producer repair review." >&2
+  exit 1
+fi
+```
+
+Before slinging, run the dependency preflight and assignee guard:
+
+```bash
+for cmd in bd gc jq; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    echo "I'm sorry, I can't do that — required command '$cmd' is missing." >&2
+    echo "Install '$cmd' or run the appropriate setup/update skill before launching producer repair review." >&2
+    exit 1
+  }
+done
+
+assignee="$(bd -C "$repair_rig_dir" show "$repair_bead" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
+if [ -n "$assignee" ]; then
+  echo "ALREADY DISPATCHED — bead $repair_bead has active assignee: $assignee; aborting producer repair sling" >&2
+  exit 1
+fi
+```
+
+Sling:
+
+```bash
+repair_dispatch_json="$(gc sling gascity-packs/gc.run-operator "$repair_bead" --on brief-producer-repair \
+  --var source_formula="$source_formula" \
+  --var failed_gate="$failed_gate" \
+  --var failure_fingerprint="$failure_fingerprint" \
+  --var failure_batch="$batch_path" \
+  --var artifact_root="{{artifact_root}}" \
+  --var operator_target="gascity-packs/gc.run-operator" \
+  --json)"
+repair_workflow="$(printf '%s\n' "$repair_dispatch_json" | jq -r '.workflow_id // .bead_id // ""')"
+
+sleep 5
+repair_status="$(bd -C "$repair_rig_dir" show "$repair_workflow" --json --readonly | jq -r '.[0].status // .status // ""')"
+if [ -z "$repair_workflow" ] || [ -z "$repair_status" ]; then
+  echo "DISPATCH VERIFY FAILED — no repair workflow bead after producer repair sling" >&2
+  exit 1
+fi
+```
+
+If no group reaches threshold, record `no producer-failure group at threshold`
+and exit 0.
+"""

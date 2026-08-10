@@ -1,0 +1,248 @@
+description = """
+Routing wrapper: auto-selects between simple-work-briefed and build-basic-briefed.
+
+A single `route` step reads the source bead, assesses complexity, and
+re-dispatches it to the right formula:
+
+  - SIMPLE  → simple-work-briefed (execute-task + file-brief, 2 steps)
+  - FULL    → build-basic-briefed (full 37-step factory)
+
+Use this formula instead of choosing between simple-work-briefed and
+build-basic-briefed by hand. The router decides. The source bead is dispatched
+once and only once — the routing step dispatches the child molecule and exits.
+
+## Routing heuristic (applied by the worker in the `route` step)
+
+SIMPLE when ALL of the following hold:
+  - The task is a single bounded operation with a clear, unambiguous output.
+  - No planning, decomposition, or multi-step implementation is needed.
+  - Examples: run a script, apply a one-file patch, verify a condition,
+    generate a text artifact from a known template, record a result.
+
+FULL when ANY of the following hold:
+  - The task requires understanding requirements, planning, or design.
+  - The task decomposes into sub-tasks that need independent implementation.
+  - The task touches multiple files/systems with interdependencies.
+  - The output will need starter review (acceptance, test-evidence, simplicity).
+
+When in doubt, route FULL. SIMPLE is only for tasks where the bead description
+already contains every input needed for a single-shot subagent execution.
+"""
+formula = "work-briefed"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "work-briefed"
+description = "Auto-routes to simple-work-briefed (bounded tasks) or build-basic-briefed (full cycle) based on bead complexity assessment."
+
+[vars]
+[vars.source_bead]
+description = "The work bead ID to route. The router reads this bead's description to assess complexity."
+required = true
+
+[vars.artifact_root]
+description = "Build artifact root (passed to build-basic-briefed for full-path; brief pipeline root for simple-path)."
+required = true
+
+[vars.brief_slug]
+description = "Stable slug for the brief artifact (used by simple-path via simple-work-briefed)."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.model]
+description = "Model for simple-path task execution. Ignored on full-path. Default haiku: sufficient for bounded work."
+default = "haiku"
+enum = ["haiku", "sonnet", "opus"]
+
+[vars.brief_type]
+description = "Brief type for simple-path filing. Ignored on full-path (build-basic-briefed always files a decision brief)."
+default = "standard"
+enum = ["standard", "decision", "no-brainer"]
+
+[vars.interaction_mode]
+description = "Interaction posture passed to build-basic-briefed on full-path."
+default = "autonomous"
+
+[vars.review_mode]
+description = "Review authority passed to build-basic-briefed on full-path."
+default = "report"
+
+[vars.drain_policy]
+description = "Implementation drain policy passed to build-basic-briefed on full-path."
+default = "separate"
+
+[vars.push]
+description = "Whether to allow final push. Passed to build-basic-briefed on full-path."
+default = "false"
+
+[vars.open_pr]
+description = "Whether to open a PR. Passed to build-basic-briefed on full-path."
+default = "false"
+
+[vars.child_run_target]
+description = "Child dispatch target. Use auto to resolve <owning-rig>/gc.run-operator from source_bead via gc rig list --json; override only with an explicit rig-qualified fleet address."
+default = "auto"
+
+[vars.routing_path]
+description = "Comma-separated route prefix for nested routers."
+default = "work-briefed"
+
+[[steps]]
+id = "route"
+title = "Route {{source_bead}}: assess complexity and dispatch to the right formula"
+metadata = { "gc.run_target" = "mathcity.brief-operator" }
+description = """
+You are the routing gate for `work-briefed`. Your job: read the source bead,
+assess its complexity, and dispatch it to the appropriate formula by re-slinging.
+You do NOT perform the work yourself — you choose the path and hand off.
+
+## Step 1 — Read the bead
+
+```bash
+bd show {{source_bead}}
+```
+
+Read the full description, title, and any existing notes.
+
+## Step 2 — Apply the routing heuristic
+
+**SIMPLE** when ALL of:
+  - Single bounded operation, clear unambiguous output
+  - No planning, decomposition, or multi-step implementation needed
+  - Bead description already contains every input for a single-shot execution
+
+**FULL** when ANY of:
+  - Requires requirements gathering, planning, or design
+  - Decomposes into sub-tasks needing independent implementation
+  - Touches multiple files/systems with interdependencies
+  - Needs starter review (acceptance, test-evidence, simplicity)
+
+When in doubt: FULL.
+
+## Step 3 — Record verdict
+
+```bash
+for cmd in bd gc jq; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    echo "I'm sorry, I can't do that — required command '$cmd' is missing." >&2
+    echo "Install '$cmd' or run the appropriate setup/update skill before routing work-briefed." >&2
+    exit 1
+  }
+done
+
+route_payload="$(jq -nc \
+  --arg schema "work-briefed-route.v1" \
+  --arg source_bead "{{source_bead}}" \
+  --arg route "<SIMPLE-or-FULL>" \
+  --arg child_formula "<simple-work-briefed-or-build-basic-briefed>" \
+  --arg routing_path "{{routing_path}},<simple-work-briefed-or-build-basic-briefed>" \
+  --arg reason "<one-line reason from the heuristic>" \
+  '{schema:$schema,source_bead:$source_bead,route:$route,child_formula:$child_formula,routing_path:$routing_path,reason:$reason}')"
+route_event="$(bd create "work-briefed route for {{source_bead}}" \
+  --type=event \
+  --event-category work_briefed.route \
+  --event-target "{{source_bead}}" \
+  --event-payload "$route_payload" \
+  --silent)"
+bd dep relate "$route_event" "{{source_bead}}"
+```
+
+Do not write a route note to `{{source_bead}}`; the linked event bead is the
+append-only route record.
+
+## Step 4 — Dispatch to the right formula
+
+Before either child `gc sling`, verify the source bead is not already actively
+assigned:
+
+```bash
+assignee="$(bd show "{{source_bead}}" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
+if [ -n "$assignee" ]; then
+  echo "ALREADY DISPATCHED — bead {{source_bead}} has active assignee: $assignee; aborting work-briefed child dispatch" >&2
+  exit 1
+fi
+
+resolve_child_run_target() {
+  requested="{{child_run_target}}"
+  if [ "$requested" != "auto" ]; then
+    printf '%s\n' "$requested"
+    return 0
+  fi
+
+  registry_json="$(gc rig list --json)" || {
+    echo "ROUTE TARGET FAILED — gc rig list --json is unavailable; pass --var child_run_target=<rig>/gc.run-operator explicitly" >&2
+    return 1
+  }
+  rig_name="$(printf '%s' "$registry_json" | jq -r --arg id "{{source_bead}}" '
+    [(.rigs // [])[] | select(.prefix as $p | $id | startswith($p + "-"))]
+    | sort_by(.prefix | length) | last // empty
+    | .name // empty')"
+  if [ -z "$rig_name" ]; then
+    echo "ROUTE TARGET FAILED — no configured rig prefix matches {{source_bead}}; pass --var child_run_target=<rig>/gc.run-operator explicitly" >&2
+    return 1
+  fi
+
+  printf '%s/gc.run-operator\n' "$rig_name"
+}
+
+CHILD_RUN_TARGET="$(resolve_child_run_target)" || exit 1
+```
+
+**If SIMPLE** — dispatch via simple-work-briefed:
+
+```bash
+gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on simple-work-briefed \
+  --var source_bead={{source_bead}} \
+  --var brief_slug={{brief_slug}} \
+  --var model={{model}} \
+  --var brief_type={{brief_type}} \
+  --var artifact_root={{artifact_root}} \
+  --var routing_path="{{routing_path}},simple-work-briefed" \
+  --var task="$(bd show {{source_bead}} | head -5)"
+```
+
+Note: `task` is populated from the bead title + first lines. If the bead
+description is richer, adjust the extraction command accordingly.
+
+**If FULL** — dispatch via build-basic-briefed:
+
+```bash
+gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on build-basic-briefed \
+  --var artifact_root={{artifact_root}} \
+  --var interaction_mode={{interaction_mode}} \
+  --var review_mode={{review_mode}} \
+  --var drain_policy={{drain_policy}} \
+  --var push={{push}} \
+  --var open_pr={{open_pr}} \
+  --var routing_path="{{routing_path}},build-basic-briefed"
+```
+
+After either child `gc sling`, verify that assignment became visible:
+
+```bash
+sleep 5
+child_assignee="$(bd show "{{source_bead}}" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
+if [ -z "$child_assignee" ]; then
+  echo "DISPATCH VERIFY FAILED — bead {{source_bead}} has no assignee after work-briefed child sling" >&2
+  exit 1
+fi
+```
+
+## Step 5 — Close this routing step
+
+```bash
+bd update <this-step-bead-id> --notes "Dispatched {{source_bead}} via <simple-work-briefed|build-basic-briefed>. Route molecule started."
+gc runtime drain-ack
+```
+
+If `gc sling` fails, escalate before exiting:
+
+```bash
+.gc/scripts/escalate.sh \
+  --title "work-briefed routing failed for {{source_bead}}" \
+  --priority 2
+```
+"""

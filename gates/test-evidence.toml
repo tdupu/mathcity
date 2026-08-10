@@ -1,0 +1,121 @@
+description = """
+Gate: test-evidence — briefs and merge candidates must carry per-test
+evidence before entering the brief stack.
+
+For each test cited with G1 Test-evidence: PASS, the evidence block must
+include ALL five structured fields:
+
+  - file path      (e.g. magma/test/test-264.mag, tests/foo.py)
+  - exact command  (e.g. magma -b magma/test/test-264.mag)
+  - exit code      (e.g. exit code 0)
+  - pass/fail      (PASS or FAILED)
+  - wall time      (e.g. 3.2s, wall time: 12s)
+
+If no tests apply (G1 Test-evidence: N/A), the brief must supply an
+explicit unrunnable reason on the same line or the line immediately
+following.
+
+Artifacts that omit this structured evidence or declare N/A without a
+reason are REJECTED before they enter the pile.  Rejection routes via the
+shuffler's .pile/.rejected path; no human adjudication is required.
+
+## Why this gate exists
+
+  Brief-prep polecats historically cited test file paths ("the test exists
+  at magma/test/test-264.mag") without confirming the test was run.  This
+  produced gate-silent throwbacks (he-tzcm, he-plen).  The five-field
+  requirement closes the gap mechanically: only concrete execution output
+  (command, exit code, timing) proves a test ran; prose assertions do not.
+
+## Scope
+
+  Applies to ALL briefs and merge candidates entering the brief stack,
+  regardless of brief type.  The gate does NOT apply to:
+
+  - Plans / charters (bead type=task with role=plan or category=plan)
+  - Policies (POLICY: prefix)
+  - Research docs (bead_class=research-data)
+  - Pure-inventory / big-move beads (no code delivery scope)
+  - Brief/workflow infrastructure beads
+
+  These are covered by the G1 N/A path: declare N/A + reason.
+
+## Scope distinction from test-execution gate
+
+  The sibling gate test-execution.toml (G14 Test-execution-silent) checks
+  whether a brief is SILENT about test execution at all (absent G14
+  declaration).  This gate (G1 Test-evidence) checks that when a brief
+  claims tests were run, it carries the five structured evidence fields per
+  test.  The two gates are complementary, not redundant: a brief can declare
+  G14 N/A while still needing to supply G1 PASS evidence for tests that
+  did run (e.g. lightweight unit tests alongside a heavier integration test
+  marked G14 N/A because it was deferred).
+
+## References
+
+  - he-8akk: G-test-execution gate — sibling (silent-on-execution throwback)
+  - he-tzcm: canonical exemplar (first gate-silent throwback instance)
+  - he-plen: second exemplar (improve-README + test-execution silent failures)
+  - he-5pdz: POLICY gate-evidence-ship (polecats MUST produce gate evidence)
+  - create-brief/SKILL.md: gate 1 definition (test-evidence)
+  - brief-prep/SKILL.md: Phase 2 (per-test evidence capture procedure)
+  - assets/brief-pipeline/gates.toml: G1 Test-evidence registry entry
+"""
+formula = "test-evidence"
+version = 1
+kind = "gate"
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "test-evidence"
+description = "Reject briefs and merge candidates that lack per-test evidence (path, command, exit code, pass/fail, wall time) or an explicit unrunnable reason."
+gate_id = "G1"
+registry = "assets/brief-pipeline/gates.toml"
+
+[vars]
+[vars.brief_path]
+description = "Absolute path to the brief markdown file. When unset the check script resolves via GC_BRIEF_PATH env or gc metadata."
+required = false
+
+[[steps]]
+id = "check-evidence-block"
+title = "Assert per-test evidence fields or explicit N/A reason"
+metadata = { "gc.gate" = "G1-test-evidence", "gc.gate.kind" = "mechanical" }
+description = """
+Inspect the brief's Gate Evidence section for G1 Test-evidence.
+
+**Three allowed outcomes — anything else is a gate FAIL:**
+
+1. `G1 Test-evidence: PASS` — evidence block must contain ALL five fields
+   per test: file path, exact command, exit code, pass/fail outcome, and
+   wall time.  A prose assertion that tests exist does NOT satisfy this
+   requirement; only concrete execution output does.
+
+2. `G1 Test-evidence: N/A` — must be followed by an explicit one-line
+   reason proving there is no testable surface (e.g. "pure docs change, no
+   runnable test surface", "no Magma available on this rig").  A bare N/A
+   with no reason is treated identically to a silent skip.
+
+3. *(anything else)* — FAIL.  Silent / absent G1 Test-evidence declarations
+   are FAIL; BLOCKED and FAIL declarations are FAIL.
+
+This step is poka-yoke / binary: the check script exits 0 (gate passes) or
+1 (gate fails with reason on stderr).  No judgment is applied here; anything
+requiring human assessment belongs in the G2 Good-test or G4 Critical-review
+judgment gates.
+
+On failure the shuffler moves the brief to
+  .pile/.rejected/<slug>/brief.md
+and logs the rejection reason.  The brief-prep producer should fix the
+evidence block and re-submit rather than waiting for human adjudication.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/gate-test-evidence.sh"
+timeout = "30s"

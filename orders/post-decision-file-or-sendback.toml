@@ -1,0 +1,33 @@
+# Event-trigger order — the post-decision bell-catcher.
+#
+# DIVISION OF LABOR (two brief.decided consumers): this order handles FOLLOW-UP
+# BRIEFING routing only — it decides FILE (re-brief a successor) vs SEND-BACK
+# (archive). The sibling order brief-decision-dispatch ACTS on the decision
+# (reassign/follow-up-bead/defer). The two do not overlap: file-or-sendback
+# never reassigns or merges, dispatch never routes briefing.
+#
+# `brief.decided` is rung by brief-record-decision (emit-decided-event
+# step) whenever a brief decision is recorded, and by the refinery after
+# merge-time decisions once the refinery-role expansion lands (gsp-itx).
+# This order catches the bell and pours the file-or-sendback gate, which
+# appends the FILE/SEND-BACK audit log (decisions/file-or-sendback.jsonl)
+# and fires downstream brief-prep or archive-sweep.
+#
+# Event-driven per the human adjudicator 2026-06-30: ring the bell — no polling, no
+# cron, no interval recheck. The formula is idempotent (it scans durable
+# decision records and skips already-routed slugs), so coalesced or
+# repeated events are safe.
+
+[order]
+description = "Route a decided brief: log FILE/SEND-BACK and fire downstream work"
+scope = "city"
+formula = "file-or-sendback-route"
+trigger = "event"
+on = "brief.decided"
+# gsp-fqo: same pool-routing fix as gsp-f79; bare "polecat" never resolved for
+# a city order (polecats are rig-scoped). gc.run-operator is the gc-native
+# city pool (gastown.dog removed 2026-07-09 per ba2ff381).
+# Retarget: gastown-vestige pool "gc.run-operator" -> pack-local mathcity.brief-operator (the human adjudicator 2026-07-13, example-owner/gascity-packs#4)
+pool = "mathcity.brief-operator"
+timeout = "120s"
+idempotent = true

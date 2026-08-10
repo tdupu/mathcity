@@ -1,0 +1,54 @@
+description = """
+build-basic with a decision-brief terminal slot (Mechanism D2, POC-3).
+
+Extends the gascity `build-basic` full-lifecycle factory and REDECLARES the
+`publish` step so the formula compiler's mergeSteps (parser.go:411-436)
+REPLACES the parent step in-place — same id, same position, same
+`needs=["finalize"]` edge. Everything upstream (requirements → plan →
+plan-review → decompose → implement → review → finalize) is inherited
+unchanged from build-basic.
+
+What the overridden slot does: instead of the built-in publish flow
+(push/PR/no-op), the terminal step produces a DECISION BRIEF for the build's
+source bead by running the brief-prep SKILL (the proven skill path — no
+dependency on the brief-prep FORMULA and therefore none on the Phase-0
+bare-target fix), routes it through catch-no-brainer, and deposits it into
+the brief pipeline. It never pushes and never opens a PR.
+
+Cycle safety (plan §6 D2): the `gc.publisher` AGENT is untouched — only this
+formula's step description differs. On APPROVE, the existing
+brief-decision-dispatch verdict edge reassigns the source bead to
+`<rig>/gc.publisher`, which runs the REAL publish flow and ships. A brief
+produced here is `gc.brief.*`-stamped by brief-prep, so the brief molecule
+itself is excluded from ever re-entering this formula (I1 invariant).
+
+run_target note: the overridden step keeps `gc.run_target = "gc.publisher"`
+deliberately — instantiation parity with the parent (this formula resolves
+exactly where build-basic resolves; rig-scoped named_session, gc-roles
+pack.toml). Retargeting to a mathcity-owned agent is a later option; for the
+POC the smallest delta wins (gsp-510c / brief-firing-plan §10 Task D2-1).
+"""
+formula = "build-basic-briefed"
+version = 1
+extends = ["build-basic"]
+target_required = true
+
+[catalog]
+name = "build-basic-briefed"
+description = "build-basic whose terminal publish slot produces a decision brief (via the brief-prep skill + catch-no-brainer) instead of pushing; shipping happens on APPROVE via the normal verdict edge."
+
+[vars]
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to final producer."
+default = "build-basic-briefed"
+
+[[steps]]
+id = "publish"
+title = "Produce decision brief for the build (briefed publish slot)"
+needs = ["finalize"]
+metadata = { "gc.run_target" = "gc.publisher", "gc.brief.source_formula" = "build-basic-briefed", "gc.brief.source_step" = "publish", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1" }
+description_file = "../assets/workflows/build-basic-briefed/publish.md"
+
+[requires]
+formula_compiler = ">=2.0.0"

@@ -1,0 +1,12 @@
+[order]
+name = "no-brainer-candidate-curate"
+scope = "rig"
+formula = "no-brainer-candidate-curate"
+pool = "mathcity.brief-operator"
+trigger = "manual"
+description = "Curate no-brainer leak/candidate batches into repair briefs."
+timeout = "120s"
+idempotent = true
+
+[vars]
+artifact_root = ".beads/briefs"

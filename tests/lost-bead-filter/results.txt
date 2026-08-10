@@ -1,0 +1,22 @@
+lost-bead-filter smoke test results:
+  PASS: Python script compiles
+  PASS: valid fixtures pass validator
+  PASS: invalid fixture fails loudly
+  PASS: downstream rollup command succeeds
+  PASS: downstream rollup emits threshold candidate
+  PASS: below-threshold downstream rollup succeeds
+  PASS: below-threshold downstream rollup emits no candidate
+  PASS: upstream rollup command succeeds
+  PASS: upstream rollup emits known-source repair candidate
+  PASS: unknown provenance routes to provenance repair
+  PASS: unknown provenance does not blame mathcity.work
+  PASS: downstream formula parses
+  PASS: upstream formula parses
+  PASS: classification contract present in skills/bead-check/SKILL.md
+  PASS: classification contract present in subdomains/dev/skills/strand-sweep/SKILL.md
+  PASS: classification contract present in skills/create-bead-manifest/SKILL.md
+  PASS: classification contract present in skills/refine-bead-manifest/SKILL.md
+  PASS: downstream file-brief has evidence-first self-close contract
+  PASS: mathcity.work provenance and strand hooks documented
+  PASS: rollup formulas create linked decision brief beads
+PASS - 20 checks passed

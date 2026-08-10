@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-proof-assist"
+version = "0.1.0"
+schema = 2
+description = "Lean/Coq/Isabelle proof checking — the escalation target for prose-math correctness that reviewers cannot settle; a passing build is the strongest G4 evidence."

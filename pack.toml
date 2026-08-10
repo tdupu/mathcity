@@ -1,0 +1,21 @@
+[pack]
+name = "mathcity"
+version = "0.2.0"
+schema = 2
+description = "portable mathematical work pack, including the brief pipeline formulas, orders, and gate policy registry."
+
+[imports.gc]
+source = "https://github.com/gastownhall/gascity-packs/tree/main/gascity"
+version = "sha:3b3b89f2011e06d84459aa7bea1552382f13930a"
+
+[providers.codex]
+base = "builtin:codex"
+options_schema_merge = "by_key"
+
+[[providers.codex.options_schema]]
+key = "permission_mode"
+
+  [[providers.codex.options_schema.choices]]
+  value = "no-approval-sandboxed"
+  label = "No approval (sandboxed)"
+  flag_args = ["--ask-for-approval", "never", "--sandbox", "workspace-write"]

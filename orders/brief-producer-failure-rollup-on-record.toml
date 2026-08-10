@@ -1,0 +1,9 @@
+[order]
+description = "Roll up producer-failure records and launch repair review batches."
+scope = "city"
+formula = "brief-producer-failure-rollup"
+trigger = "event"
+on = "brief.producer_failure_recorded"
+pool = "mathcity.brief-operator"
+timeout = "180s"
+idempotent = true

@@ -1,0 +1,13 @@
+
+create-issue-briefed smoke-test results:
+  PASS: formula file exists
+  PASS: TOML parses without error
+  PASS: catalog fields present (name, description, formula, version)
+  PASS: steps = intake, compose-body, file-brief (terminal brief step)
+  PASS: file-brief carries brief-producer.v1 metadata
+  PASS: required vars source_bead + brief_slug (with pattern) declared
+  PASS: no model names in run_targets (F1.3/F3.3)
+  PASS: never EXECUTES gh issue create (prose-only mentions ok)
+  SKIP: gc formula show — formula not loaded into the live city yet (expected pre-install)
+
+PASS — 8/8 checks passed

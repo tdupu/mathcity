@@ -1,0 +1,11 @@
+[order]
+description = "Reclaim in_progress beads whose lease has gone stale (bd reclaim reaper)"
+trigger = "cooldown"
+interval = "5m"
+exec = "bd reclaim --older-than 15m"
+scope = "city"
+timeout = "30s"
+# WS-A #1 fix (MAYOR-HANDOFF-throughput-plan.md, 2026-07-23).
+# Invariant: no in_progress bead retains a WIP slot longer than 3× lease TTL
+# (~20m) past lease expiry — dead workers cannot hold slots indefinitely.
+# The core reaper.sh does NOT run bd reclaim; this order fills that gap.

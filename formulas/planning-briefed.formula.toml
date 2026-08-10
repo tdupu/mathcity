@@ -1,0 +1,232 @@
+description = """
+Produce a planning artifact (PERT chart, task decomposition, design doc, or
+requirements list) for a bead or epic, gated by a human decision brief before
+any implementation proceeds.
+
+Planning and review steps route to an Opus-level agent (gc.design-author by
+default). gc.design-author is configured as mode=on_demand — gascity
+auto-spawns a session when steps dispatch to it; 0 live sessions at rest is
+expected/normal.
+
+The pre-flight step verifies the pool EXISTS in gc agent list (not liveness —
+on_demand pools have no warm sessions). If the pool is not configured at all,
+it files a provisioning bead and drains.
+
+Steps:
+  1. pre-flight      — verify gc.design-author is a known agent (existence check, not liveness)
+  2. gather-context  — read source bead + related context; map scope and unknowns  [Opus]
+  3. produce-plan    — write the plan document (PERT / task list / design / requirements)  [Opus]
+  4. review-plan     — review for completeness, internal consistency, and risks  [Opus]
+  5. file-brief      — file decision brief with the full plan for human adjudication  [brief-operator]
+
+Does NOT start any implementation — the brief gate comes first. After the human adjudicator
+approves, agents may claim tasks from the plan.
+"""
+formula = "planning-briefed"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "planning-briefed"
+description = "Produce a planning artifact (PERT/decomposition/design) for a bead or epic, gated by a human decision brief. Planning steps run on Opus-level agents (gc.design-author, on_demand)."
+
+[vars]
+[vars.source_bead]
+description = "Bead or epic ID to plan. The agent reads this bead plus any related beads to understand scope."
+required = true
+
+[vars.brief_slug]
+description = "Stable filename stem for the brief artifact (e.g. gsp-abc-planning)."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.plan_type]
+description = "Kind of planning artifact to produce."
+default = "task-decomposition"
+enum = ["task-decomposition", "pert", "design-doc", "requirements", "hybrid"]
+
+[vars.plan_target]
+description = "Fleet agent for gather-context, produce-plan, and review-plan steps. Must be an Opus-level fleet address. Default gc.design-author (mode=on_demand, auto-spawned by gascity). Do NOT use model names (opus/fable) — these are fleet addresses."
+default = "gc.design-author"
+enum = ["gc.design-author", "gc.review-synthesizer", "gc.requirements-planner"]
+
+[vars.artifact_root]
+description = "Root for the brief artifact."
+default = ".beads/briefs"
+
+[vars.context]
+description = "Optional extra context (file paths, bead IDs, inline notes)."
+default = ""
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to final producer."
+default = "planning-briefed"
+
+[[steps]]
+id = "pre-flight"
+title = "Verify Opus-level agent ({{plan_target}}) is configured"
+metadata = { "gc.run_target" = "gc.run-operator" }
+description = """
+Check whether the Opus-level planning pool is a known configured agent.
+
+NOTE: do NOT check for live tmux sessions — {{plan_target}} is mode=on_demand,
+meaning gascity auto-spawns a session when steps dispatch to it. 0 live
+sessions at rest is expected and correct.
+
+```bash
+POOL="{{plan_target}}"
+if gc agent list 2>/dev/null | grep -q "${POOL}"; then
+  bd update {{source_bead}} --notes "planning-briefed pre-flight: {{plan_target}} is configured (on_demand). gascity will spawn on dispatch."
+else
+  # Pool does not exist at all — create it or file a bead and drain
+  PROV_ID=$(bd create "configure {{plan_target}} for planning-briefed" \
+    --type task \
+    --description "planning-briefed molecule for {{source_bead}} needs {{plan_target}}
+but this pool is not configured in the city.
+
+Action: gc agent create {{plan_target}} --model opus --rig gascity-packs
+Or verify gascity/roles/pack.toml contains a [[named_session]] entry with template={{plan_target##*.}}.
+
+Once configured, re-sling planning-briefed for {{source_bead}}.")
+
+  bd update {{source_bead}} --notes "planning-briefed pre-flight: {{plan_target}} not found in gc agent list. Provisioning bead: ${PROV_ID}. Draining."
+  gc runtime drain-ack
+fi
+```
+"""
+
+[[steps]]
+id = "gather-context"
+needs = ["pre-flight"]
+title = "Read {{source_bead}} and map planning scope"
+metadata = { "gc.run_target" = "{{plan_target}}" }
+description = """
+Read the source bead and any supplied context to understand what is being planned.
+
+```bash
+bd show {{source_bead}}
+{{#if context}}
+# Also consult: {{context}}
+{{/if}}
+```
+
+Extract:
+1. **Goal** — what is the deliverable or change being planned?
+2. **Unknowns** — what is not yet resolved (design questions, dependencies, open work)?
+3. **Constraints** — deadlines, ownership boundaries (LP1, CT-rules), tech constraints.
+4. **Related beads** — list any blocking / blocked-by / epic parent beads.
+5. **Plan type** — confirm or adjust {{plan_type}} based on the scope found.
+
+Record in bd notes:
+
+```bash
+bd update {{source_bead}} --notes "planning-briefed gather-context:
+  goal: <goal>
+  unknowns: <list>
+  constraints: <list>
+  plan_type: {{plan_type}}"
+```
+
+Stop if the bead is too vague to plan:
+
+```bash
+bd update {{source_bead}} --notes "BLOCKED: need more spec — <what is missing>"
+gc runtime drain-ack
+```
+"""
+
+[[steps]]
+id = "produce-plan"
+needs = ["gather-context"]
+title = "Write {{plan_type}} plan for {{source_bead}}"
+metadata = { "gc.run_target" = "{{plan_target}}" }
+description = """
+Produce the plan document. Write to $GC_WORK_DIR/{{source_bead}}-plan.md.
+
+Plan type guides:
+- **task-decomposition**: numbered task list with owner role, estimated complexity, and dep order.
+- **pert**: table (Task | Deps | Duration | Owner | Notes); include critical path.
+- **design-doc**: Problem / Proposed solution / Alternatives / Risks / Open questions.
+- **requirements**: Functional reqs / Non-functional reqs / Out-of-scope / Acceptance criteria.
+- **hybrid**: combine sections that fit the scope.
+
+```bash
+cat > $GC_WORK_DIR/{{source_bead}}-plan.md << 'EOF'
+# Plan: <goal from gather-context>
+
+## Plan type: {{plan_type}}
+
+<plan content>
+EOF
+```
+
+Record:
+
+```bash
+bd update {{source_bead}} --notes "planning-briefed produce-plan: draft at $GC_WORK_DIR/{{source_bead}}-plan.md"
+```
+"""
+
+[[steps]]
+id = "review-plan"
+needs = ["produce-plan"]
+title = "Opus review: completeness, consistency, risk"
+metadata = { "gc.run_target" = "{{plan_target}}" }
+description = """
+Review $GC_WORK_DIR/{{source_bead}}-plan.md against three criteria:
+
+1. **Completeness** — does the plan cover every unknown identified in gather-context?
+   Are there tasks with no clear owner role?
+2. **Internal consistency** — do deps form a DAG (no cycles)?
+   Do task IDs referenced in deps exist?
+3. **Risk** — what is the most likely failure mode? Is there a fallback or mitigation noted?
+
+Fix any issues in-place. Record findings:
+
+```bash
+bd update {{source_bead}} --notes "planning-briefed review-plan: <PASS | issues found and fixed: <list>>"
+```
+"""
+
+[[steps]]
+id = "file-brief"
+needs = ["review-plan"]
+title = "File decision brief for {{source_bead}} plan"
+metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "planning-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+description = """
+File a decision brief asking the human adjudicator to approve the plan before implementation begins.
+
+```bash
+BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
+mkdir -p "{{artifact_root}}/.pile"
+```
+
+The brief MUST contain:
+- `status: approved` frontmatter
+- `brief_bead: {{source_bead}}`
+- `producer_contract: brief-producer.v1`
+- `source_formula: planning-briefed`
+- `source_step: file-brief`
+- `routing_path: "{{routing_path}}"`
+- `review_gate: approved`
+- `unlock_count: <int>`
+- `priority: P0|P1|P2|P3|P4`
+- `server_touching: false`
+- `user_skill_touching_override: false`
+- The plan type and goal
+- The full plan document (from $GC_WORK_DIR/{{source_bead}}-plan.md) as a fenced markdown block
+- Key risks and unknowns surfaced by review-plan
+- Recommended verdict (A = approve plan and proceed to implementation / C = revise plan)
+- A complete `## Gate Evidence` section for the active gate profile, including
+  this machine-readable G9 line:
+  `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=the human adjudicator plan approval required; proposed_registry_extension=none`
+
+After filing:
+
+```bash
+bd update {{source_bead}} --notes "planning-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict"
+gc runtime drain-ack
+```
+"""

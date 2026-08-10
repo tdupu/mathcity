@@ -1,0 +1,219 @@
+description = """
+Single-writer shuffler for brief pile to stack promotion.
+
+This formula is intended for the `brief-shuffle-pile` order. It processes at
+most one pile item per run, applies gate-keep rules, and either promotes it to
+the stack with a manifest append or rejects it into `.pile/.rejected`.
+Lockless since v3 (gsp-89yli): per-item claiming is an atomic mv into
+.staging/, not a persistent .shuffle.lock file.
+"""
+formula = "brief-shuffle"
+# v2 (2026-07-16): reject branch no longer dead-ends — files a remediation
+# bead via escalate.sh + emits brief.gate_rejected (Mayor session S10 finding:
+# nothing reads .pile/.rejected/).
+version = 3
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-shuffle"
+description = "Promote or reject one brief from .pile according to the gate registry."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for shuffler bookkeeping."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[[steps]]
+id = "claim-item"
+title = "Claim one pile item (atomic mv)"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Claim exactly one pile item via an atomic filesystem `mv` — this replaces
+the old lock-file acquire step. No lock file is used or checked.
+
+1. Ensure `{{artifact_root}}/.staging/` exists (`mkdir -p`).
+2. RESCUE SWEEP (do this before claiming your own item): list every
+   `{{artifact_root}}/.staging/<slug>/brief.md` entry. For each one, check
+   its directory mtime. If it is older than 30 minutes, read the claiming
+   session's identity from `{{artifact_root}}/.staging/<slug>/.claimed_by`
+   (a one-line marker file written by the session that claimed this item —
+   see step 4 below). If `.claimed_by` is missing, treat the entry as
+   rescuable (an unattributed claim cannot be attributed at all).
+   Otherwise run `gc session list --state active` and check whether the
+   EXACT session name recorded in `.claimed_by` appears in that output.
+   Rescue the entry ONLY if that specific named session is NOT present in
+   the active-session list — never rescue merely because some other
+   session is active; a legitimately slow single-item run past 30 minutes
+   must not be rescued out from under itself by a concurrent run (that
+   would reintroduce double-processing). When rescuable, atomically
+   `mv -f {{artifact_root}}/.staging/<slug>/brief.md
+   {{artifact_root}}/.pile/<slug>.md` and remove the now-empty
+   `{{artifact_root}}/.staging/<slug>/` directory (including its
+   `.claimed_by` file). This is the ONLY mechanism that recovers a crashed
+   session's claimed item — do this sweep on every run, not just when you
+   notice a problem.
+3. EMPTY-PILE ROUTE (gsp-3al3, unchanged): select the oldest non-hidden
+   `.md` file directly under `{{artifact_root}}/.pile` (not `.pile/.rejected`,
+   not `.pile/.no-brainer`). If none exists, record `selection: none (pile
+   empty)` in this step's notes and persist the step outcome metadata with
+   the same kind of explicit command the claimed route uses below:
+   `gc bd update "<this-step-bead-id>" --set-metadata
+   "gc.brief.claim_result=empty"`. Do not merely note the intended value —
+   downstream steps read this key back via bead metadata, not from notes,
+   so it must actually be set. Then complete this step normally — the
+   downstream steps then pass through as clean no-ops.
+4. If a file was selected, claim it with a single atomic move:
+   `mv -f {{artifact_root}}/.pile/<slug>.md
+   {{artifact_root}}/.staging/<slug>/brief.md` (create the per-slug
+   `.staging/<slug>/` directory first with `mkdir -p`). The `mv` is atomic
+   on POSIX filesystems — if it succeeds, you exclusively own this item;
+   no other session can also claim it, because there is no window where
+   two sessions could both see the file present. Immediately record your
+   own session identity in the staging entry so a future rescue sweep can
+   attribute this claim to a specific, checkable session:
+   `echo "${BEADS_ACTOR:-${GC_SESSION_NAME:-${GC_SESSION_ID:-${GC_AGENT:-unknown}}}}" >
+   {{artifact_root}}/.staging/<slug>/.claimed_by` (the same session-identity
+   fallback chain gascity's own `gc claim` command uses to resolve an
+   assignee — see `commands/claim/run.sh`'s `EXPECTED_ASSIGNEE`). This
+   MUST be written before this step completes; the rescue sweep in step 2
+   depends on every claimed entry having one. Record
+   `gc.brief.claim_result=claimed`,
+   `gc.brief.slug=<slug>`, and
+   `gc.brief.staging_path={{artifact_root}}/.staging/<slug>/brief.md`
+   as step metadata via
+   `gc bd update "<this-step-bead-id>" --set-metadata "gc.brief.slug=<slug>" --set-metadata "gc.brief.staging_path={{artifact_root}}/.staging/<slug>/brief.md" --set-metadata "gc.brief.claim_result=claimed"`
+   so downstream steps can find your exact claimed item without globbing
+   (globbing `.staging/*` under concurrency is ambiguous — other sessions
+   may have their own entries there at the same time).
+
+Never proceed to process-item without first completing the rescue sweep in
+this same run.
+"""
+
+[[steps]]
+id = "process-item"
+title = "Apply gates and write disposition for the claimed item"
+needs = ["claim-item"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+This replaces the old `apply-gates` + `write-disposition` steps.
+
+Find the `claim-item` step bead for THIS workflow run — gascity does not
+pass sibling step-bead ids automatically, so resolve it via the same
+root-bead-id + step-ref lookup other multi-step gascity formulas use
+(see e.g. `gascity/assets/scripts/checks/design-review-approved.sh` and
+`gascity/assets/workflows/do-work/prepare-worktree.md`):
+1. Identify this step's own claimed bead id: `CLAIMED_BEAD_ID` from your
+   startup claim output, or `$GC_BEAD_ID` if the claim output did not
+   expose one; hard-fail if neither is present.
+2. `gc bd show "$CLAIMED_BEAD_ID" --json` and read
+   `metadata["gc.root_bead_id"]` as `ROOT_ID` — every step bead in this
+   workflow run carries it; hard-fail if missing.
+3. `gc bd list --all --metadata-field "gc.root_bead_id=$ROOT_ID" --json
+   --limit=0`, then select the single entry whose
+   `metadata["gc.step_ref"]` equals `brief-shuffle.claim-item`. That bead
+   is the claim-item step bead for this run.
+4. Read `gc.brief.claim_result` from that bead's metadata.
+
+EMPTY-PILE ROUTE (gsp-3al3, unchanged): if `gc.brief.claim_result=empty`,
+this step is a NO-OP — do not touch gates, do not reject or promote
+anything; note the pass-through and complete immediately. If
+`gc.brief.claim_result` cannot be resolved to either `claimed` or `empty`
+(e.g. the claim-item step bead can't be found by the lookup above, or the
+field comes back blank), treat that the same as the empty-pile route: do
+not guess or invent work, just no-op and complete immediately.
+
+Otherwise, read `gc.brief.slug` and `gc.brief.staging_path` from that
+same claim-item step bead's metadata (already fetched above — no second
+lookup needed). Apply the gate registry from
+`assets/brief-pipeline/gates.toml` to the brief at
+`gc.brief.staging_path`. Judgment gates must already be present in the
+brief; this step does not invent approvals.
+
+For `Disposition: promote`:
+1. Move the item out of staging into stack:
+   `mv -f {{artifact_root}}/.staging/<slug>/brief.md
+   {{artifact_root}}/stack/<slug>.md`, then remove the now-empty
+   `{{artifact_root}}/.staging/<slug>/` directory.
+2. Append one JSON object to `{{artifact_root}}/stack/.index.jsonl` with
+   EXACTLY the keys `slug`, `path`, `source`, `unlock_count`,
+   `created_at`, `gate_profile` (unchanged shape from before — see the
+   existing formula's write-disposition description for the field
+   definitions, they have not changed). Guard the append with a SHORT
+   `flock` around ONLY this append, not the whole step:
+   `(flock 9; printf '%s\n' "$JSON_LINE" >>
+   {{artifact_root}}/stack/.index.jsonl) 9>{{artifact_root}}/.manifest.lock`.
+   This lock is fast and bounded (one JSON line write), unlike the old
+   whole-run `.shuffle.lock` — it cannot strand the pipeline even if held
+   briefly by a concurrent promote.
+
+For `Disposition: reject` or `Disposition: blocked`:
+1. Move the item out of staging into
+   `{{artifact_root}}/.pile/.rejected/<slug>/brief.md` with a short
+   rejection record, then remove the now-empty
+   `{{artifact_root}}/.staging/<slug>/` directory.
+2. A rejection MUST NOT dead-end there — perform BOTH send-back actions
+   (unchanged from before):
+   - File a remediation bead: `.gc/scripts/escalate.sh --title
+     "[brief-shuffle] gate-rejected: <slug>" --body "<failed gates +
+     remediation guidance>" --priority 2`.
+   - Emit `gc event emit brief.gate_rejected --subject <slug>`.
+
+(Full auto re-prep routing is judgment-bearing and tracked as a separate
+follow-up bead; do NOT improvise it here — unchanged from before.)
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-shuffle-result-required.sh"
+timeout = "2m"
+
+[[steps]]
+id = "finalize"
+title = "Confirm staging cleared, no lock to release"
+needs = ["process-item"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+This replaces `release-lock`. There is no lock to release in the atomic-mv
+design. Find the `claim-item` step bead for THIS workflow run using the
+exact same lookup as `process-item` (own claimed bead id -> `$GC_BEAD_ID`
+fallback -> `gc bd show ... --json` -> `metadata["gc.root_bead_id"]` ->
+`gc bd list --all --metadata-field "gc.root_bead_id=$ROOT_ID" --json
+--limit=0` filtered to the entry whose `metadata["gc.step_ref"]` equals
+`brief-shuffle.claim-item`), then read `gc.brief.slug` and
+`gc.brief.claim_result` from that bead's metadata. Confirm the item you
+claimed is fully cleared out of `.staging/`:
+`{{artifact_root}}/.staging/<slug>/` (the slug from `gc.brief.slug`, or
+n/a on the empty-pile route where `gc.brief.claim_result=empty`) must no
+longer exist — check that ONE specific claimed-slug directory by exact
+path, never glob `.staging/*` (other sessions may have their own
+concurrent entries there at the same time). If `gc.brief.claim_result`
+cannot be resolved to either `claimed` or `empty` (e.g. the claim-item
+step bead can't be found, or the field is blank), treat it as the
+empty-pile route: there is no specific slug to check, so confirm nothing
+and complete as a no-op rather than guessing at a slug or inventing work.
+If the selected item was promoted, confirm `stack/.index.jsonl` is still
+valid JSONL. This step runs on every route (promote, reject, and the
+empty-pile no-op) — always confirm staging clearance so a failed finalize
+(rather than a stranded lock) is the only thing that can leave evidence of
+an incomplete run, and that evidence self-heals via the next run's rescue
+sweep.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-staging-clear.sh"
+timeout = "1m"

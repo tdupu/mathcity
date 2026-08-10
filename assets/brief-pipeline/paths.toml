@@ -1,0 +1,46 @@
+# Brief-pipeline filesystem layout (cache).
+#
+# Per brief-system POLICY.md B2.4/B2.8 (Adopted 2026-07-12): canonical brief
+# state — pile/stack membership, adjudication status, defer state — lives in
+# the BEAD STORE. Every path below is an implementation-detail cache,
+# regenerable from bead state; on any disagreement the bead store wins and
+# the filesystem is repaired to match.
+#
+# Paths are RIG-RELATIVE (resolve against <rig_root>), matching the live
+# pilot layout at <rig_root>/.beads/briefs/ (hecke pilot: <city-root>/hecke).
+# Scripts and formulas may override the root via BRIEF_ROOT / artifact_root
+# pointing at <rig_root>/.beads/briefs.
+
+[paths]
+root = ".beads/briefs"
+pile = ".beads/briefs/.pile"
+no_brainer = ".beads/briefs/.pile/.no-brainer"
+rejected = ".beads/briefs/.pile/.rejected"
+stack = ".beads/briefs/stack"
+archive = ".beads/briefs/archive"
+presentations = ".beads/briefs/presentations"
+decisions = ".beads/briefs/decisions"
+decisions_log = ".beads/briefs/decisions.jsonl"
+route_log = ".beads/briefs/decisions/file-or-sendback.jsonl"
+manifest = ".beads/briefs/stack/.index.jsonl"
+staging = ".beads/briefs/.staging"
+lock = ".beads/briefs/.shuffle.lock"
+
+# N5 kill-switch hierarchy (POLICY.md N5, Adopted 2026-07-12).
+# Auto-execute is the DEFAULT; the switches below are safety brakes, not
+# enablers. Semantics per level: file exists AND reads `false` -> halt
+# auto-execution; absent or `true` -> proceed. Check order: city-wide first,
+# then rig-level. Engaging or releasing a switch requires explicit the human adjudicator
+# authorization recorded as a STANDALONE decision bead (a kill-switch
+# authorization record — its own bead, NOT a brief verdict; unaffected by
+# the one-bead model).
+# (Supersedes the old opt-in ALLOW_NO_BRAINER_AUTO_EXECUTE file, whose
+# EXISTENCE enabled automation.)
+kill_switch_city = "<city-root>/.beads/auto_merge_enabled"
+kill_switch_rig = ".beads/auto_merge_enabled"
+
+[filenames]
+brief = "brief.md"
+evidence = "evidence.toml"
+decision = "decision.toml"
+breadcrumb = "breadcrumb.toml"

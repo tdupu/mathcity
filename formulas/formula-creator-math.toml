@@ -1,0 +1,378 @@
+description = """
+Create a new mathcity formula TOML, enforcing the mandatory briefed-terminal-
+step convention (all mathcity formulas must end with a step that files a
+decision brief for human adjudication before any output is merged or
+published).
+
+Steps:
+  1. gather-spec   — read source bead; extract formula name, shape, and vars
+  2. draft-toml    — produce a draft formula TOML matching the detected shape
+  3. validate      — assert terminal step is file-brief/brief-finalize/workflow-finalize; hygiene gate
+  4. file-brief    — file decision brief for the human adjudicator to review the new formula
+
+Does NOT commit the formula to git — the brief gate comes first. After the human adjudicator
+approves, the agent executing that verdict may commit and push.
+"""
+formula = "formula-creator-math"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "formula-creator-math"
+description = "Create a mathcity formula TOML with enforced briefed-terminal-step convention, gated by a human decision brief."
+
+[vars]
+[vars.source_bead]
+description = "Bead ID describing the formula to create. The agent reads this bead for name, purpose, shape, and vars."
+required = true
+
+[vars.brief_slug]
+description = "Stable filename stem for the brief artifact (e.g. gsp-ez3x6-formula-creator-math)."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.formula_name]
+description = "Proposed formula name (lowercase, hyphenated). Becomes the filename stem and the `formula = ` field."
+required = true
+pattern = "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+
+[vars.run_target]
+description = "Fleet agent for draft-toml and validate steps. Must be a named session address, not a model name."
+default = "gc.run-operator"
+enum = ["gc.run-operator", "gc.design-author", "gc.review-synthesizer"]
+
+[vars.plan_target]
+description = "Fleet agent for the gather-spec planning step. Must be a valid named session handle — NOT a model name. Default gc.run-operator. To route to Opus-class planning, use gc.design-author once gsp-ez3x6.7 ships that named session. See policy: fable-plans-haiku-executes."
+default = "gc.run-operator"
+enum = ["gc.run-operator", "gc.design-author", "gc.review-synthesizer"]
+
+[vars.artifact_root]
+description = "Root for the brief artifact."
+default = ".beads/briefs"
+
+[vars.context]
+description = "Optional extra context for the gathering step (file paths, bead IDs, inline notes)."
+default = ""
+
+[[steps]]
+id = "gather-spec"
+title = "Read {{source_bead}} and extract formula specification"
+metadata = { "gc.run_target" = "{{plan_target}}" }
+description = """
+Read the source bead and any provided context to extract a formula spec.
+
+```bash
+bd show {{source_bead}}
+{{#if context}}
+# Also consult: {{context}}
+{{/if}}
+```
+
+You are extracting:
+
+1. **Formula name** — use `{{formula_name}}` (already supplied).
+2. **Shape** — classify as exactly one of:
+   - `do-work`: single bounded operation; terminal step = `workflow-finalize`
+   - `non-methodology`: multi-step without Opus-class planning; terminal step = `file-brief`
+   - `methodology`: needs a plan or design step (Opus-class); terminal step = `file-brief` + `brief-finalize`
+   - `source-search`: search/survey primary deliverable; terminal step = `file-brief`
+3. **Vars** — list every runtime parameter the formula will need.
+4. **Steps** — enumerate each step (id + one-line purpose). The LAST step
+   MUST be `file-brief`, `brief-finalize`, or `workflow-finalize`.
+5. **Run targets** — which named session each step routes to. Valid values are
+   fleet addresses like `gc.run-operator`, `gc.design-author`, `gc.task-decomposer`,
+   `gc.implementation-worker`, `mathcity.brief-operator`, etc. Model names
+   (haiku, sonnet, opus, fable) are NOT valid gc.run_target values — they are
+   configured inside the named session, not passed as targets.
+
+Record the spec in bd notes:
+
+```bash
+bd update {{source_bead}} --notes "formula-creator-math gather-spec:
+  name: {{formula_name}}
+  shape: <do-work|non-methodology|methodology|source-search>
+  steps: <list>
+  vars: <list>
+  terminal-step: <file-brief|brief-finalize|workflow-finalize>"
+```
+
+**Stop here if the bead description is insufficient to spec the formula.**
+Record a block note explaining what is missing, then drain:
+
+```bash
+bd update {{source_bead}} --notes "BLOCKED: insufficient spec — need <what is missing>"
+gc runtime drain-ack
+```
+"""
+
+[[steps]]
+id = "draft-toml"
+needs = ["gather-spec"]
+title = "Draft formula-creator-math TOML for {{formula_name}}"
+metadata = { "gc.run_target" = "{{run_target}}" }
+description = """
+Using the spec from gather-spec, write a complete formula TOML draft.
+
+Target path: `mathcity/formulas/{{formula_name}}.toml`
+
+Requirements:
+- Top-level `description`, `formula`, `version = 1` fields.
+- `[requires] formula_compiler = ">=2.0.0"` (needed for metadata/check blocks).
+- `[catalog]` block with `name` and `description` (one-line; shown in gc formula list).
+- `[vars]` block for every runtime parameter.
+- `[[steps]]` blocks — every step after the first MUST have `needs`.
+- Last step id MUST be `file-brief`, `brief-finalize`, or `workflow-finalize`.
+- For methodology shape: include `[vars.plan_target]` with default = `gc.design-author`
+  (a valid fleet address for an Opus-backed planning agent) and set
+  `metadata = { "gc.run_target" = "{{plan_target}}" }` on the planning step.
+  Do NOT use model names (fable, opus, sonnet) as default values — those are
+  not valid gc.run_target values.
+- For do-work shape: last step should combine brief-filing + drain:
+  ```toml
+  [[steps]]
+  id = "workflow-finalize"
+  needs = ["execute-task"]
+  title = "File brief and finalize"
+  metadata = { "gc.run_target" = "mathcity.brief-operator" }
+  ```
+
+Write the draft to a temp path:
+```bash
+cat > /tmp/{{formula_name}}.toml << 'TOML_EOF'
+<TOML content here>
+TOML_EOF
+```
+
+Record the draft path in bd notes:
+```bash
+bd update {{source_bead}} --notes "formula-creator-math draft-toml: written to /tmp/{{formula_name}}.toml"
+```
+"""
+
+[[steps]]
+id = "validate"
+needs = ["draft-toml"]
+title = "Validate {{formula_name}}.toml — briefed terminal step + hygiene gate"
+metadata = { "gc.run_target" = "{{run_target}}" }
+description = """
+Run four checks against the draft TOML. All four must pass before filing the brief.
+
+**Before running any check, read POLICY-formulas.md:**
+
+```bash
+cat <mathcity-pack-root>/POLICY-formulas.md
+```
+
+This is required by F3.1 — formula-creation formulas must check the draft against
+all applicable policies before briefing.
+
+## Check 1 — TOML parses
+
+```bash
+python3 -c "import tomllib; tomllib.load(open('/tmp/{{formula_name}}.toml','rb'))" \
+  && echo "TOML: valid"
+```
+
+## Check 2 — Briefed terminal step
+
+```bash
+python3 << 'PY'
+import tomllib
+with open('/tmp/{{formula_name}}.toml', 'rb') as f:
+    d = tomllib.load(f)
+steps = d.get('steps', [])
+assert steps, 'No steps defined'
+last_id = steps[-1]['id']
+allowed = {'file-brief', 'brief-finalize', 'workflow-finalize'}
+assert last_id in allowed, (
+    f'FAIL: terminal step is "{last_id}" — must be one of {allowed}. '
+    f'Mathcity formulas must end with a briefed step.'
+)
+print(f'Terminal step: {last_id} ✓')
+PY
+```
+
+## Check 3 — Required catalog fields
+
+```bash
+python3 << 'PY'
+import tomllib
+with open('/tmp/{{formula_name}}.toml', 'rb') as f:
+    d = tomllib.load(f)
+cat = d.get('catalog', {})
+assert cat.get('name'), 'Missing [catalog] name'
+assert cat.get('description'), 'Missing [catalog] description'
+assert d.get('formula'), 'Missing top-level formula field'
+assert d.get('version'), 'Missing top-level version field'
+print('Catalog fields: valid ✓')
+PY
+```
+
+## Check 4 — POLICY-formulas.md conformance (F-rules)
+
+Audit the draft against all F-rules in POLICY-formulas.md:
+
+```python
+python3 << 'PY'
+import tomllib, re, sys
+
+with open('/tmp/{{formula_name}}.toml', 'rb') as f:
+    d = tomllib.load(f)
+
+MODEL_NAMES = {'fable', 'opus', 'sonnet', 'haiku'}
+HIGH_TIER = {'gc.design-author', 'gc.review-synthesizer', 'gc.requirements-planner'}
+LOW_TIER = {'gc.run-operator', 'gc.implementation-worker', 'mathcity.brief-operator'}
+PLANNING_VERBS = re.compile(r'plan|design|gather.spec|requirements|architect|brainstorm', re.I)
+EXEC_VERBS = re.compile(r'execute|^run|implement|write|commit|validate|file.brief', re.I)
+TMP_PAT = re.compile(r'/tmp/')
+CLONE_PAT = re.compile(r'git clone|git checkout')
+
+fails = []
+
+for step in d.get('steps', []):
+    sid = step.get('id', '')
+    stitle = step.get('title', '')
+    sdesc = step.get('description', '')
+    target = (step.get('metadata') or {}).get('gc.run_target', '')
+
+    # F1.3 — no model names as run_target
+    if target in MODEL_NAMES:
+        fails.append(f'F1.3 FAIL: step "{sid}" gc.run_target="{target}" is a model name, not a fleet address')
+
+    # F1.1 — planning steps to high tier
+    if PLANNING_VERBS.search(sid) or PLANNING_VERBS.search(stitle):
+        if target and target not in HIGH_TIER and target not in ('{' + '{plan_target}}',):
+            fails.append(f'F1.1 WARN: step "{sid}" looks like a planning step but routes to "{target}" (expected high-tier address)')
+
+    # F2.1 — tmp files
+    if TMP_PAT.search(sdesc):
+        term = d.get('steps', [])[-1]
+        if TMP_PAT.search(sdesc) and 'rm' not in (term.get('description') or ''):
+            fails.append(f'F2.1 WARN: step "{sid}" writes to /tmp but terminal step has no rm cleanup')
+
+# F3.3 — vars with run_target-bound defaults
+for vname, vdef in (d.get('vars') or {}).items():
+    for field in ('default', 'enum'):
+        val = vdef.get(field, [])
+        if isinstance(val, str):
+            val = [val]
+        for v in val:
+            if v in MODEL_NAMES:
+                fails.append(f'F3.3 FAIL: [vars.{vname}] {field}="{v}" is a model name (F1.3/F3.3)')
+
+if fails:
+    for f in fails:
+        print(f)
+    sys.exit(1)
+else:
+    print('POLICY-formulas.md (F1.1, F1.3, F2.1, F3.3): all checks PASS ✓')
+PY
+```
+
+If any check fails, fix the draft in-place and re-run before proceeding.
+Record the validation outcome:
+
+```bash
+bd update {{source_bead}} --notes "formula-creator-math validate: all checks passed (TOML, terminal-step, catalog, POLICY-formulas F-rules). terminal-step=<id>"
+```
+"""
+
+[[steps]]
+id = "file-brief"
+needs = ["validate"]
+title = "File decision brief for {{formula_name}} formula review"
+metadata = { "gc.run_target" = "mathcity.brief-operator" }
+description = """
+File a decision brief asking the human adjudicator to approve the new formula TOML.
+
+Read the draft from `/tmp/{{formula_name}}.toml`, then write the brief to
+`.pile/`; `brief-shuffle` is the only writer to `stack/`:
+
+```bash
+BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
+mkdir -p "{{artifact_root}}/.pile"
+```
+
+The brief MUST contain:
+- `status: approved` frontmatter
+- `brief_bead: {{source_bead}}`
+- `brief_slug: {{brief_slug}}`
+- `producer_contract: brief-producer.v1`
+- `source_formula: formula-creator-math`
+- `source_step: file-brief`
+- `review_gate: approved`
+- `unlock_count: <int>`
+- `priority: P0|P1|P2|P3|P4`
+- `server_touching: false`
+- `user_skill_touching_override: false`
+- A summary of what the formula does and which shape it uses
+- The full draft TOML (fenced as `toml`) for the human adjudicator to review inline
+- A recommended verdict (A=approve and commit / C=defer if more design needed)
+- The three validation check results (all-pass confirmation)
+- A complete `## Gate Evidence` section for the active gate profile, including
+  this machine-readable G9 line:
+  `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=human formula approval required; proposed_registry_extension=none`
+
+Template:
+
+```markdown
+---
+status: approved
+brief_bead: {{source_bead}}
+brief_slug: {{brief_slug}}
+producer_contract: brief-producer.v1
+source_formula: formula-creator-math
+source_step: file-brief
+review_gate: approved
+unlock_count: <int>
+priority: P2
+server_touching: false
+user_skill_touching_override: false
+recommended_verdict: A
+---
+
+# Formula Review: `{{formula_name}}`
+
+## What this formula does
+
+<One paragraph from the gather-spec step.>
+
+## Shape
+
+<do-work | non-methodology | methodology | source-search>
+
+## Validation
+
+- [x] TOML parses without error
+- [x] Terminal step is `<id>` (one of: file-brief, brief-finalize, workflow-finalize)
+- [x] Catalog fields present
+
+## Gate Evidence
+
+G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=human formula approval required; proposed_registry_extension=none
+
+Include every other required gate from the active profile as `PASS`, `FAIL`,
+`BLOCKED`, or justified `N/A` before filing to `.pile/`.
+
+## Draft TOML
+
+```toml
+<full content of /tmp/{{formula_name}}.toml>
+```
+
+## Recommended verdict
+
+**A** — approve and commit to `mathcity/formulas/{{formula_name}}.toml`, push to fork, and ask the repo-side landing agent to pull.
+
+If you prefer adjustments, defer (C) with notes and I will revise.
+```
+
+After writing:
+
+```bash
+bd update {{source_bead}} --notes "formula-creator-math file-brief: brief filed at {{brief_slug}}.md — awaiting human verdict"
+gc runtime drain-ack
+```
+"""

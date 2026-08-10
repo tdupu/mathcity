@@ -1,0 +1,124 @@
+description = """
+Sweep old rejected or decided brief artifacts into archive state.
+
+All operations are deterministic file moves — no judgment required. The
+formula runs as a single shell script (phase=vapor) so scan, archive, and
+record stay in one process without burning an LLM turn per step.
+"""
+formula = "brief-archive-sweep"
+phase = "vapor"
+version = 1
+
+[catalog]
+name = "brief-archive-sweep"
+description = "Keep rejected and decided brief artifacts tidy without deleting records."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = "~/.gc/mathcity/briefs"
+
+[[steps]]
+id = "sweep"
+title = "Scan, archive, and record brief artifacts"
+description = """
+Run this as one shell script so scan, move, and record stay in one process:
+
+```bash
+set -euo pipefail
+ROOT="${BRIEF_ROOT:-{{artifact_root}}}"
+WORK_BEAD="${GC_BEAD_ID:-}"
+DRAIN_ACKED=0
+
+drain_ack_once() {
+  if [ "$DRAIN_ACKED" -ne 1 ]; then
+    gc runtime drain-ack || true
+    DRAIN_ACKED=1
+  fi
+}
+
+trap 'drain_ack_once' EXIT
+
+archived=0
+skipped=0
+
+mkdir -p "$ROOT/archive/rejected" "$ROOT/archive/decisions" "$ROOT/archive/staging"
+
+# Archive rejected briefs whose rejection record is present.
+if [ -d "$ROOT/.pile/.rejected" ]; then
+  for slug_dir in "$ROOT/.pile/.rejected"/*/; do
+    [ -d "$slug_dir" ] || continue
+    slug="$(basename "$slug_dir")"
+    # Safe to archive: the directory exists (it IS the rejection record).
+    dest="$ROOT/archive/rejected/$slug"
+    if [ -d "$dest" ]; then
+      echo "already archived: rejected/$slug"
+      continue
+    fi
+    mv -f "$slug_dir" "$ROOT/archive/rejected/"
+    echo "archived: rejected/$slug"
+    archived=$((archived + 1))
+  done
+fi
+
+# Archive decided briefs that have been dispatched.
+# A decision is dispatched when its slug appears in decisions-dispatched.jsonl.
+if [ -d "$ROOT/decisions" ] && [ -f "$ROOT/decisions-dispatched.jsonl" ]; then
+  for decision_file in "$ROOT/decisions/"*.toml; do
+    [ -f "$decision_file" ] || continue
+    slug="$(basename "$decision_file" .toml)"
+    # Check if dispatched.
+    if grep -q "\"brief_slug\":\"${slug}\"" "$ROOT/decisions-dispatched.jsonl" 2>/dev/null; then
+      dest="$ROOT/archive/decisions/$slug.toml"
+      if [ -f "$dest" ]; then
+        echo "already archived: decisions/$slug.toml"
+        continue
+      fi
+      mkdir -p "$ROOT/archive/decisions"
+      mv -f "$decision_file" "$ROOT/archive/decisions/"
+      echo "archived: decisions/$slug.toml"
+      archived=$((archived + 1))
+    else
+      echo "skipped (not yet dispatched): decisions/$slug.toml"
+      skipped=$((skipped + 1))
+    fi
+  done
+fi
+
+# Archive staging directories for briefs already in stack or pile.
+if [ -d "$ROOT/.staging" ]; then
+  for staged_dir in "$ROOT/.staging"/*/; do
+    [ -d "$staged_dir" ] || continue
+    slug="$(basename "$staged_dir")"
+    # Safe to archive staging if the brief made it to stack or pile.
+    in_stack=0
+    in_pile=0
+    [ -f "$ROOT/stack/$slug.md" ] && in_stack=1
+    [ -f "$ROOT/.pile/$slug.md" ] && in_pile=1
+    if [ "$in_stack" -eq 1 ]; then
+      dest="$ROOT/archive/staging/$slug"
+      if [ -d "$dest" ]; then
+        echo "already archived: staging/$slug"
+        continue
+      fi
+      mv -f "$staged_dir" "$ROOT/archive/staging/"
+      echo "archived: staging/$slug (was in stack)"
+      archived=$((archived + 1))
+    elif [ "$in_pile" -eq 0 ]; then
+      echo "skipped (neither in stack nor pile): staging/$slug"
+      skipped=$((skipped + 1))
+    fi
+  done
+fi
+
+echo "archive-sweep complete: archived=$archived skipped=$skipped"
+
+if [ -n "$WORK_BEAD" ]; then
+  bd close "$WORK_BEAD" --reason "brief-archive-sweep: archived=$archived skipped=$skipped"
+fi
+drain_ack_once
+exit 0
+```
+
+**Exit criteria:** script exits 0; archived and skipped counts printed; work
+bead closed if GC_BEAD_ID is set; drain-ack sent."""

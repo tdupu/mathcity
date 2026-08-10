@@ -1,0 +1,96 @@
+# Condition-trigger order — file a brief-record after a needs-decision bead
+# is closed (post-merge intake into the brief pipeline).
+#
+# The merge lane closes work beads but never initiates the brief pipeline.
+# This order fires on-merge-brief-record so that any recently closed bead
+# carrying the `needs-decision` label gets a brief-record bead and enters the
+# brief-prep pipeline. The formula (v2) scans EVERY rig store itself.
+#
+# gsp-e62n: was trigger=event on bead.closed, scope=rig. Three defects:
+#   D1 fan-in — 16 rig-scoped instances all pouring into one city pool.
+#   D2 self-trigger runaway — the formula's own work-bead closures emit
+#      bead.closed (dispatch_runtime.go / molecule_autoclose.go) and the
+#      event exclusion (#3720) covers only order-tracking beads, so every
+#      run re-fired the order: 50+ duplicate brief-records (he-zohxx),
+#      12 churn wisps in one S6 window.
+#   D5 store blindness (N1 finding) — a rig-scoped order routed to an
+#      UNQUALIFIED (city) pool has its wisp poured into the CITY store
+#      (order_store.go: pool without "/" resolves to the city target), so
+#      the run executed HQ-side and its scan never saw rig beads (ho-7uj
+#      was invisible to the homog-scoped fire).
+# Fix: ONE city-scoped condition order (one single-flight gate, no fan-in,
+# no event wiring to self-trigger); the formula sweeps all rigs itself via
+# the rig registry — no per-rig knowledge anywhere (same invariant as
+# gsp-rqv0).
+#
+# The condition gate mirrors the formula's intake predicate: fire only when
+# some rig has a recently closed needs-decision bead (excluding pipeline
+# artifacts) that lacks a brief-record. The check window (7d) is shorter
+# than the formula's sweep window (30d) — any fire sweeps the full 30d in
+# every rig, so older unrecorded beads are recovered on the next genuine
+# intake event. Bounded: 25 candidate ids per rig, early exit on first hit;
+# a check timeout (10s) means "not due this tick" — fail closed, retried.
+#
+# Implementation note: [[patches.agent]] in pack.toml cannot target agents
+# owned by a different pack (only pack-local agents can be patched at
+# pack-level per pack-spec §2.6). mathcity does not own gc.run-operator,
+# so this order approach is the correct fallback as specified in task-2-brief.
+# (gastown.refinery removed 2026-07-09 per ba2ff381; gsp-7lc tracks the
+# pack-owned merge lane replacement.)
+
+[order]
+description = "Create brief-records + brief-prep intake for recently closed needs-decision beads (all rigs)."
+scope = "city"
+formula = "on-merge-brief-record"
+trigger = "condition"
+check = '''
+SINCE="$(date -u -v-7d '+%Y-%m-%d' 2>/dev/null || date -u -d '7 days ago' '+%Y-%m-%d' 2>/dev/null || echo '1970-01-01')"
+# Rig names straight from city.toml [[rigs]] blocks — the SAME source of
+# truth `gc rig list` surfaces, but without its per-rig beads-status pings
+# (~9s, which alone blows the 10s condition budget). Paths are derived as
+# <city>/<name>, mirroring gc's resolveRigPaths default for path-less rigs;
+# a rig with an explicit out-of-city path binding is simply never a trigger
+# source here (the formula, which uses the full registry, still sweeps it).
+# The check runs with the city root as cwd (city-scoped condition).
+[ -f city.toml ] || exit 1
+NAMES="$(awk '/^\[\[rigs\]\]/{f=1;next} f && /^name[ \t]*=/{gsub(/.*=[ \t]*"|".*$/,""); print; f=0}' city.toml)"
+TMP="$(mktemp -d)" || exit 1
+trap 'rm -rf "$TMP"' EXIT
+probe_rig() {
+  OUT="$(cd "$2" 2>/dev/null && bd list --status closed --label needs-decision --closed-after "$SINCE" --limit 25 --json 2>/dev/null)"
+  [ -n "$OUT" ] || return 0
+  IDS="$(printf '%s' "$OUT" | jq -r '[ .[]? | select((.title // "" | test("^\\[(brief-record|brief-prep|rejected|revise)\\]")) | not) | select((.metadata // {} | has("gc.brief.slug") or has("gc.brief.source")) | not) | .id ] | .[]' 2>/dev/null)"
+  [ -n "$IDS" ] || return 0
+  printf '%s\n' "$IDS" > "$TMP/$1.ids"
+}
+# Parallel probes: direct bd with each rig checkout as cwd (store resolves
+# from cwd). HQ row = the city root itself.
+probe_rig hq . &
+while IFS= read -r NAME; do
+  [ -z "$NAME" ] && continue
+  [ -d "./$NAME/.beads" ] || continue
+  probe_rig "$NAME" "./$NAME" &
+done <<NAMES_EOF
+$NAMES
+NAMES_EOF
+wait
+# Record-check candidates against the HQ store in ONE batched query
+# (records live HQ-side; per-id queries blow the 10s condition budget).
+# Record-missing only: poured-prep existence is not reliably probeable from
+# here, so a prep-only loss (he-uri06 class) is repaired as a side effect of
+# the next record-missing fire — the formula always sweeps everything.
+RECORDED="$(bd search "[brief-record]" --limit 0 --json 2>/dev/null | jq -r '[ .[]? | .metadata.source_bead // empty ] | .[]' 2>/dev/null)" || exit 1
+for f in "$TMP"/*.ids; do
+  [ -e "$f" ] || continue
+  while IFS= read -r ID; do
+    [ -z "$ID" ] && continue
+    printf '%s\n' "$RECORDED" | grep -qxF "$ID" || exit 0
+  done < "$f"
+done
+exit 1
+'''
+pool = "mathcity.brief-operator"
+timeout = "90s"
+# Fail CLOSED on single-flight gate timeout (the default). A duplicate sweep
+# races the record/prep dedup — never set idempotent=true here (gsp-e62n).
+idempotent = false

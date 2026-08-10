@@ -1,0 +1,95 @@
+description = """
+Block work on a bead whose in-progress claim is stale.
+
+A claim is stale when:
+1. The bead's lease has expired (`lease_expires_at` is in the past), OR
+2. The last heartbeat is older than the staleness window (`heartbeat_at`
+   is absent or older than `STALE_CLAIM_WINDOW_SECONDS`, default 3600s), OR
+3. `bd stale` lists the bead as stale (no update within `--days` window).
+
+Any of these conditions blocks progress; the gate exits nonzero and routes
+the bead for re-dispatch rather than letting a dead-agent claim hold a lock
+indefinitely.
+
+Poka-yoke: all decisions are binary/mechanical. The gate never infers agent
+liveness from anything other than the timestamps `bd show --json` exposes.
+Judgment calls (e.g. "agent is paused, not dead") route to the Mayor gate
+rather than being made here.
+"""
+formula = "stale-claim"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "stale-claim"
+description = "Block work on a bead whose claim is stale (dead agent or no-progress window exceeded)."
+
+[vars]
+[vars.bead_id]
+description = "ID of the bead to check. If omitted, the check reads GC_BEAD_ID from the environment."
+default = ""
+
+[vars.stale_window_seconds]
+description = "Seconds of heartbeat silence before a claim is considered stale. Default: 3600 (1 hour)."
+default = "3600"
+
+[vars.operator_target]
+description = "Run target for mechanical staleness detection."
+default = "gc.run-operator"
+
+[vars.mayor_target]
+description = "Run target for re-dispatch routing on stale detection."
+# Mechanical release + escalation notification; gc.run-operator is the routable
+# default. Cities importing the gastown pack may pass gastown.mayor.
+default = "gc.run-operator"
+
+[[steps]]
+id = "check-stale-claim"
+title = "Check whether the bead claim is stale"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.bead.id" = "{{bead_id}}" }
+description = """
+Run the mechanical stale-claim check against bead `{{bead_id}}` (falls back
+to `$GC_BEAD_ID` if empty).
+
+The check inspects `bd show <id> --json` for:
+- `lease_expires_at` — if set and before now, claim is stale.
+- `heartbeat_at` — if absent or older than `{{stale_window_seconds}}` seconds
+  from now, claim is stale.
+- `bd stale --status in_progress` — if the bead appears in this listing,
+  claim is stale.
+
+Exit 0 = claim is fresh, proceed allowed.
+Exit 1 = claim is stale, work is BLOCKED; route for re-dispatch.
+Exit 2 = bead not found or `bd` unavailable; fail closed (treat as stale).
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/stale-claim-check.sh"
+timeout = "1m"
+
+[[steps]]
+id = "route-for-redispatch"
+title = "Route stale bead for re-dispatch"
+needs = ["check-stale-claim"]
+condition = "{{steps.check-stale-claim.exit_code}} != 0"
+metadata = { "gc.run_target" = "{{mayor_target}}", "gc.bead.id" = "{{bead_id}}" }
+description = """
+The previous step detected a stale claim on bead `{{bead_id}}`.
+
+1. Release the stale claim: `bd update <id> --unassign` (if bd supports it)
+   or record the release intent in the bead notes.
+2. Set status back to open or `needs-redispatch` so the orchestrator can
+   re-route it to an available worker.
+3. Notify the Mayor with the staleness evidence (which criterion fired: lease
+   expired / heartbeat timeout / bd-stale listing).
+4. Do NOT proceed with the original work — return to the orchestrator.
+
+This step requires Mayor-level judgment only for the re-dispatch target
+selection; the staleness verdict itself is already mechanical from step 1.
+"""

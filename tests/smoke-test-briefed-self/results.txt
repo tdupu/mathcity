@@ -1,0 +1,10 @@
+
+smoke-test-briefed self-test results:
+  PASS: formula file exists
+  PASS: TOML parses without error
+  PASS: catalog fields present (name, description, formula, version)
+  PASS: terminal step is a brief step
+  FAIL: gc formula show smoke-test-briefed succeeds — gc formula show returned non-zero (formula may not be loaded yet)
+  PASS: testing-work SKILL.md exists
+
+FAIL — 1/6 checks failed

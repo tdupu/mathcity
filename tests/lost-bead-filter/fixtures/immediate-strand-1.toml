@@ -1,0 +1,19 @@
+schema = "lost-bead-classification.v1"
+bead_id = "gsp-test-strand-1"
+observed_at = "2026-07-25T00:00:00Z"
+observer = "fixture"
+
+[finding]
+lost_class = "immediate_strand"
+evidence = ["post-sling verify-assignee remained empty after 60s"]
+
+[disposition]
+recommendation = "resling"
+rationale = "The bead is still valid, but no worker claimed the dispatch."
+reversible = true
+
+[root_cause]
+class = "no_worker_claimed"
+suspected_source = "mathcity.work"
+repair_candidate = true
+fingerprint = "empty_assignee_after_verified_sling"

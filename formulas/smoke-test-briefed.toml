@@ -1,0 +1,362 @@
+description = """
+Run a basic smoke test against a mathcity artifact (formula TOML, skill SKILL.md,
+Magma intrinsic, Magma function, Python script, or shell script) and file a
+decision brief containing the test evidence and a reproducibility guide.
+
+Satisfies F6.1 (POLICY-formulas.md): every new formula or artifact must have
+a smoke test run and passing before its deploy brief is filed.
+
+Steps:
+  1. classify-artifact   — identify the artifact type and select the minimal
+                           test strategy for that type
+  2. generate-test       — write the smoke test script to mathcity/tests/<slug>/
+  3. run-test            — execute the smoke test; record stdout/stderr/exit code
+  4. record-results      — write a human-readable results + reproducibility .md
+  5. file-brief          — file a human decision brief with the test evidence
+                           and a recommended disposition (pass / conditional / fail)
+
+Does NOT modify the artifact under test — read-only audit only.
+Does NOT rewrite the source bead — progress is recorded as linked event beads.
+Does NOT gate on human adjudication of the artifact itself; that is separate.
+"""
+formula = "smoke-test-briefed"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "smoke-test-briefed"
+description = "Smoke-test a mathcity artifact (formula, skill, Magma, Python, script) and file a brief with test evidence and reproducibility guide (F6.1)."
+
+[vars]
+
+[vars.artifact_path]
+description = "Path to the artifact under test (formula TOML, SKILL.md, .mag file, .py file, .sh script, etc.)."
+required = true
+
+[vars.artifact_type]
+description = "Type of artifact. Used to select the correct smoke-test strategy."
+required = true
+enum = ["formula", "skill", "magma-intrinsic", "magma-function", "python", "script"]
+
+[vars.test_slug]
+description = "Stable slug for the test run. Used as the test directory name and brief artifact stem."
+required = true
+pattern = "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+
+[vars.source_bead]
+description = "Optional: bead ID that tracks the artifact. Used to link append-only event beads for smoke-test progress. Never rewrite this bead's notes or description."
+default = ""
+
+[vars.brief_slug]
+description = "Stable filename stem for the brief artifact. Defaults to test_slug."
+default = "{{test_slug}}-smoke-test"
+
+[vars.artifact_root]
+description = "Root for the brief artifact."
+default = ".beads/briefs"
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to final producer."
+default = "smoke-test-briefed"
+
+[vars.test_root]
+description = "Root directory for test scripts and results."
+default = "mathcity/tests"
+
+[vars.operator_target]
+description = "Fleet agent for deterministic steps (classify, generate, record)."
+default = "gc.run-operator"
+
+[vars.review_target]
+description = "Fleet agent for reviewing test results and drafting the brief."
+default = "gc.review-synthesizer"
+
+[[steps]]
+id = "classify-artifact"
+title = "Classify {{artifact_type}} artifact and select smoke-test strategy"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Read the artifact at `{{artifact_path}}` and determine the minimal smoke-test
+strategy for its type.
+
+```bash
+# Confirm file exists and is readable
+test -r "{{artifact_path}}" || { echo "ARTIFACT NOT FOUND: {{artifact_path}}"; exit 1; }
+```
+
+**Strategy by type:**
+
+- **formula**: Parse the TOML with Python `tomllib`; check catalog fields, terminal
+  step id, and that all required `[vars]` have `description` fields. Then attempt
+  a dry-run via `gc formula show {{formula_name}}` to verify the formula is
+  registered and parseable by gc. Smoke test = parse + catalog check + gc show.
+
+- **skill**: Confirm `SKILL.md` exists, has `name:` and `description:` frontmatter,
+  and that any referenced scripts exist. Smoke test = frontmatter parse + script
+  existence check.
+
+- **magma-intrinsic**: Run `magma -b -e 'print IsIntrinsic("<name>"); quit;'` and
+  confirm it returns `true`. Smoke test = intrinsic existence check.
+
+- **magma-function**: Run `magma -b -e 'load "{{artifact_path}}"; print "ok"; quit;'`
+  and confirm it exits 0. Smoke test = load without error.
+
+- **python**: Run `python3 -m py_compile {{artifact_path}}` (syntax check) and
+  then `python3 {{artifact_path}} --help 2>&1 || python3 -c "import importlib.util; s=importlib.util.spec_from_file_location('m','{{artifact_path}}'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print('import ok')"`.
+  Smoke test = compile + import or help.
+
+- **script**: Run `bash -n {{artifact_path}}` (syntax check) and then
+  `bash {{artifact_path}} --help 2>&1; echo "exit: $?"` if `--help` is safe.
+  Smoke test = syntax check + help invocation.
+
+Record the selected strategy as an append-only linked event bead:
+```bash
+if [ -n "{{source_bead}}" ]; then
+  strategy_summary="<one-line description>"
+  event_meta="$(jq -n \
+    --arg formula "smoke-test-briefed" \
+    --arg step "classify-artifact" \
+    --arg artifact_type "{{artifact_type}}" \
+    --arg strategy "$strategy_summary" \
+    '{source_formula:$formula, source_step:$step, artifact_type:$artifact_type, strategy:$strategy}')"
+  event_id="$(bd create "smoke-test-briefed classify-artifact for {{source_bead}}" \
+    --type event \
+    --priority 3 \
+    --event-kind smoke_test \
+    --event-target "{{source_bead}}" \
+    --metadata "$event_meta" \
+    --silent)"
+  bd dep relate "$event_id" "{{source_bead}}"
+fi
+```
+(Skip the event if `source_bead` is empty.)
+"""
+
+[[steps]]
+id = "generate-test"
+title = "Write smoke test to {{test_root}}/{{test_slug}}/"
+needs = ["classify-artifact"]
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Write a self-contained, idempotent smoke-test script at:
+`{{test_root}}/{{test_slug}}/smoke_test.sh`
+
+The script must:
+- Exit 0 on success, non-zero on failure
+- Print a one-line PASS or FAIL summary at the end
+- Be runnable without arguments: `bash {{test_root}}/{{test_slug}}/smoke_test.sh`
+- Clean up any files it creates (F2.1)
+- Not modify the artifact under test
+
+Also write `{{test_root}}/{{test_slug}}/README.md` with:
+- What is being tested and why
+- How to run the test (`bash <path>`)
+- What a passing result looks like (expected stdout snippet)
+- Known limitations / what is NOT tested
+
+```bash
+mkdir -p "{{test_root}}/{{test_slug}}"
+```
+
+Record the test path as an append-only linked event bead:
+```bash
+if [ -n "{{source_bead}}" ]; then
+  test_path="{{test_root}}/{{test_slug}}/smoke_test.sh"
+  event_meta="$(jq -n \
+    --arg formula "smoke-test-briefed" \
+    --arg step "generate-test" \
+    --arg test_path "$test_path" \
+    '{source_formula:$formula, source_step:$step, test_path:$test_path}')"
+  event_id="$(bd create "smoke-test-briefed generate-test for {{source_bead}}" \
+    --type event \
+    --priority 3 \
+    --event-kind smoke_test \
+    --event-target "{{source_bead}}" \
+    --metadata "$event_meta" \
+    --silent)"
+  bd dep relate "$event_id" "{{source_bead}}"
+fi
+```
+(Skip the event if source_bead is empty.)
+"""
+
+[[steps]]
+id = "run-test"
+title = "Run smoke test and record results"
+needs = ["generate-test"]
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Execute the smoke test and capture all output:
+
+```bash
+cd <rig-root>
+bash "{{test_root}}/{{test_slug}}/smoke_test.sh" \
+  2>&1 | tee "{{test_root}}/{{test_slug}}/results.txt"
+EXIT_CODE=${PIPESTATUS[0]}
+echo "exit_code: $EXIT_CODE" >> "{{test_root}}/{{test_slug}}/results.txt"
+```
+
+Record outcome as an append-only linked event bead:
+```bash
+if [ -n "{{source_bead}}" ]; then
+  results_path="{{test_root}}/{{test_slug}}/results.txt"
+  event_meta="$(jq -n \
+    --arg formula "smoke-test-briefed" \
+    --arg step "run-test" \
+    --arg exit_code "$EXIT_CODE" \
+    --arg results_path "$results_path" \
+    '{source_formula:$formula, source_step:$step, exit_code:$exit_code, results_path:$results_path}')"
+  event_id="$(bd create "smoke-test-briefed run-test for {{source_bead}}" \
+    --type event \
+    --priority 3 \
+    --event-kind smoke_test \
+    --event-target "{{source_bead}}" \
+    --metadata "$event_meta" \
+    --silent)"
+  bd dep relate "$event_id" "{{source_bead}}"
+fi
+```
+(Skip the event if source_bead is empty.)
+
+If exit_code != 0, do NOT stop — continue to record-results and file-brief
+so the human adjudicator sees the failure evidence. The brief will recommend a FAIL disposition.
+"""
+
+[[steps]]
+id = "record-results"
+title = "Write test results and reproducibility guide"
+needs = ["run-test"]
+metadata = { "gc.run_target" = "{{review_target}}" }
+description = """
+Write `{{test_root}}/{{test_slug}}/TESTING.md` — the canonical human-readable
+test record and reproducibility guide for this artifact.
+
+The document MUST contain:
+
+## 1. Artifact under test
+  - Path, type, git SHA at time of test
+
+## 2. Test summary
+  - Date, tester (this formula run), outcome (PASS / FAIL / CONDITIONAL)
+  - One-sentence summary of what passed and what did not
+
+## 3. How to reproduce
+  - Exact commands to re-run the smoke test, copy-pastable
+  - Any environment requirements (Magma version, Python version, etc.)
+  - Expected output (copy of the passing stdout from results.txt)
+
+## 4. What this test does NOT cover
+  - Mathematical correctness (if applicable)
+  - Edge cases not in the smoke-test scope
+  - Performance or resource limits
+
+## 5. Recommended next tests
+  - One or two concrete suggestions for what to test next
+  - This is the "tests grow over time" hook (F6.1)
+
+Read `results.txt` to populate sections 2 and 3. If the test failed, section 2
+must state that clearly and section 3 must explain how to debug the failure.
+"""
+
+[[steps]]
+id = "file-brief"
+title = "File test-evidence brief for {{test_slug}}"
+needs = ["record-results"]
+metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "smoke-test-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+description = """
+File a decision brief with the test evidence so the human adjudicator can review.
+
+```bash
+BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
+mkdir -p "{{artifact_root}}/.pile"
+```
+
+The brief MUST contain:
+- `status: approved` frontmatter
+- `brief_bead: {{source_bead}}` (if non-empty)
+- `brief_slug: {{brief_slug}}`
+- `producer_contract: brief-producer.v1`
+- `source_formula: smoke-test-briefed`
+- `source_step: file-brief`
+- `routing_path: "{{routing_path}}"`
+- `review_gate: approved`
+- `unlock_count: <int>`
+- `priority: P0|P1|P2|P3|P4`
+- `server_touching: false`
+- `user_skill_touching_override: false`
+- `recommended_verdict: A` (pass), `C` (conditional — minor issues), or `R` (fail)
+- Full contents of `{{test_root}}/{{test_slug}}/TESTING.md` embedded inline
+- Pass/fail status of each smoke-test step
+- A complete `## Gate Evidence` section for the active gate profile, including
+  this machine-readable G9 line:
+  `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=the human adjudicator smoke-test evidence review required; proposed_registry_extension=none`
+
+Template:
+
+```markdown
+---
+status: approved
+brief_bead: {{source_bead}}
+brief_slug: {{brief_slug}}
+producer_contract: brief-producer.v1
+source_formula: smoke-test-briefed
+source_step: file-brief
+routing_path: "{{routing_path}}"
+review_gate: approved
+unlock_count: <int>
+priority: P2
+server_touching: false
+user_skill_touching_override: false
+recommended_verdict: <A|C|R>
+---
+
+# Smoke Test Brief: `{{test_slug}}`
+
+## Artifact
+- Path: `{{artifact_path}}`
+- Type: `{{artifact_type}}`
+
+## Result: <PASS | CONDITIONAL | FAIL>
+
+<One-paragraph summary of what was tested and what the outcome was.>
+
+## Gate Evidence
+
+G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=the human adjudicator smoke-test evidence review required; proposed_registry_extension=none
+
+Include every other required gate from the active profile as `PASS`, `FAIL`,
+`BLOCKED`, or justified `N/A` before filing to `.pile/`.
+
+## TESTING.md
+
+<Full contents of {{test_root}}/{{test_slug}}/TESTING.md>
+
+## Recommended verdict
+
+**<A|C|R>** — <one sentence justification>
+```
+
+After writing:
+```bash
+if [ -n "{{source_bead}}" ]; then
+  event_meta="$(jq -n \
+    --arg formula "smoke-test-briefed" \
+    --arg step "file-brief" \
+    --arg brief_slug "{{brief_slug}}" \
+    --arg brief_path "$BRIEF_PATH" \
+    '{source_formula:$formula, source_step:$step, brief_slug:$brief_slug, brief_path:$brief_path, status:"awaiting_human_verdict"}')"
+  event_id="$(bd create "smoke-test-briefed file-brief for {{source_bead}}" \
+    --type event \
+    --priority 3 \
+    --event-kind smoke_test \
+    --event-target "{{source_bead}}" \
+    --metadata "$event_meta" \
+    --silent)"
+  bd dep relate "$event_id" "{{source_bead}}"
+fi
+gc runtime drain-ack
+```
+(Skip the event if source_bead is empty; still run drain-ack.)
+"""

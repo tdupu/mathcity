@@ -1,0 +1,82 @@
+{
+  "skill_name": "create-lmfdb-object",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to store cusps for a Bianchi group in the database. Each cusp has a label (order_label.cusp_hash), an order (text), a representative (jsonb — a Clifford algebra element stored as [num_list, den]), a stabilizer_rank (integer), and timing (text). The label is the order label followed by the base-62 hash of the representative. Store one file per order at DATA/cusps/<order_label>. No caching needed yet — file a GitHub issue for that. Also file an issue for the make script.",
+      "expected_output": "Type declaration + ATTRS (alphabetical, Sort), Print, load_lmfdb_cusp, eq, get_lmfdb_cusp_path (MonStgElt + CliffOrd + GrpPSL2Cliff overloads), read_lmfdb_cusps, write_lmfdb_cusp, create_lmfdb_cusp scaffold. package-IO.mag gets cusp_hash in TextCols, stabilizer_rank in IntegerCols, representative in JsonbCols. schema.md gets a Cusps table. Two GitHub issues filed.",
+      "assertions": [
+        {
+          "name": "ATTRS_is_sorted",
+          "description": "LMFDBCusp_ATTRS uses Sort([...]) and has //ALWAYS ALPHABETICAL! comment"
+        },
+        {
+          "name": "label_in_TextCols",
+          "description": "label attribute is registered in TextCols in package-IO.mag"
+        },
+        {
+          "name": "no_get_label_SL2O",
+          "description": "No call to get_label(SL2O) without a second argument anywhere in the generated code"
+        },
+        {
+          "name": "no_sig_files_touched",
+          "description": "No .sig files are created or modified"
+        },
+        {
+          "name": "schema_table_present",
+          "description": "schema.md has a new ## Cusps section with a column table"
+        },
+        {
+          "name": "SetColumns_in_path",
+          "description": "SetColumns(0) appears in the path function"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Add a new LMFDB type LMFDBTorsionElement. Attributes: label (text, scheme: order_label.base62_hash_of_matrix), order (text), matrix (jsonb — a 2x2 Clifford matrix), order_of_element (integer), word_in_fp_group (jsonb — integer sequence), timing (text). One file per entry: DATA/torsion/<order_label>/<entry_label>. The populating function is compute_torsion_elements(SL2O) which returns a list of matrices. Cache on GrpPSL2Cliff as torsion_cache (already declared). Write the make script for Gaussian integers now.",
+      "expected_output": "Full type scaffold plus make/make-torsion-1.mag that loads SL2O, calls compute_torsion_elements, checks per-file existence with OpenTest, creates and writes each entry. Per-entry path functions (two overloads). torsion_cache population in load intrinsic.",
+      "assertions": [
+        {
+          "name": "per_entry_path",
+          "description": "Path function takes (SL2O, entry_label) and produces DATA/torsion/<order_label>/<entry_label>"
+        },
+        {
+          "name": "make_script_restartable",
+          "description": "make-torsion-1.mag checks OpenTest for each file before computing (restartable)"
+        },
+        {
+          "name": "ATTRS_alphabetical",
+          "description": "LMFDBTorsionElement_ATTRS = Sort([...]) with all attribute names present"
+        },
+        {
+          "name": "read_returns_single",
+          "description": "read_lmfdb_torsion_element(fname) returns a single object, not a SetIndx, with assert #lines eq 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I need to store Hecke eigenvalue data. Type name: LMFDBHeckeEigenvalue. Attributes: label (text, scheme: gamma0_label.eigenvalue_index where eigenvalue_index is an integer formatted as a string), gamma0_label (text), eigenvalue (jsonb — a rational number stored as [num, den]), hecke_matrix_label (text), index (integer), timing (text). Path: one file per gamma0 group at DATA/hecke_eigenvalues/<order_label>/<gamma0_label>. No make script yet — file an issue. No caching needed.",
+      "expected_output": "Full type scaffold. Path takes (SL2O, gamma0_label) overload. gamma0_label in TextCols, hecke_matrix_label in TextCols, index in IntegerCols, eigenvalue in JsonbCols. schema.md table. GitHub issue for make script.",
+      "assertions": [
+        {
+          "name": "gamma0_label_in_TextCols",
+          "description": "gamma0_label registered in TextCols in package-IO.mag"
+        },
+        {
+          "name": "path_uses_two_args",
+          "description": "get_lmfdb_hecke_eigenvalue_path takes (SL2O, gamma0_label) or equivalent"
+        },
+        {
+          "name": "index_in_IntegerCols",
+          "description": "index is in IntegerCols (not TextCols)"
+        },
+        {
+          "name": "label_scheme_documented",
+          "description": "schema.md table documents the label scheme: gamma0_label.N"
+        }
+      ]
+    }
+  ]
+}

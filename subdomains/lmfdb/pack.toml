@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-lmfdb"
+version = "0.1.0"
+schema = 2
+description = "Query the LMFDB (elliptic curves, modular forms, number fields, L-functions) via search-lmfdb / mcp__lmfdb__* tools; cross-check computed data against the database."

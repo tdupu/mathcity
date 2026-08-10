@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-magma"
+version = "0.1.0"
+schema = 2
+description = "Magma package standards: the Magma Packages Policy (POLICY.md — naming, READMEs, testing, bead lifecycle, profiling, pipelines) plus the check-magma-hygiene audit gate and the new-magma-package scaffolder."

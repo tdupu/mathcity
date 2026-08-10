@@ -1,0 +1,86 @@
+description = """
+Watch the brief stack and request refill work when the stack is below target.
+
+This formula is intentionally conservative: it does not fabricate briefs. It
+identifies ready source work, opens or routes brief-prep work, and records any
+shortfall.
+"""
+formula = "brief-watchdog-refill"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-watchdog-refill"
+description = "Keep the brief stack above the configured low-water mark."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for watchdog bookkeeping."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[[steps]]
+id = "measure-stack"
+title = "Measure stack depth"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}", "gc.brief.manifest" = "{{artifact_root}}/stack/.index.jsonl" }
+description = """
+Read `assets/brief-pipeline/thresholds.toml` and
+`{{artifact_root}}/stack/.index.jsonl`. Count non-archived stack entries that
+are ready to present. Record the count in the watchdog run notes.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-manifest-current.sh"
+timeout = "1m"
+
+[[steps]]
+id = "select-ready-sources"
+title = "Select source work for new briefs"
+needs = ["measure-stack"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+If the stack is below `low_water`, select ready source beads or artifacts that
+need briefs. Respect stale-claim and master-current gates; do not queue brief
+prep for stale or blocked source work.
+"""
+
+[[steps]]
+id = "dispatch-brief-prep"
+title = "Dispatch brief-prep work"
+needs = ["select-ready-sources"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+For each selected source, create or route a bounded `brief-prep` run. Do not
+exceed `max_new_briefs_per_run` from `thresholds.toml`. If no source is
+available, write a short shortfall record under `{{artifact_root}}/watchdog/`.
+"""
+
+[[steps]]
+id = "record-watchdog-state"
+title = "Record watchdog state"
+needs = ["dispatch-brief-prep"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Record the measured stack depth, actions taken, and any shortfall. The record
+must be useful for tomorrow's operator to understand why the stack is or is not
+refilling.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-watchdog-record-required.sh"
+timeout = "1m"
+

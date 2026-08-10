@@ -1,0 +1,54 @@
+[schema]
+id = "lost-bead-classification.v1"
+description = "Manual or assisted classification of a bead that may be lost, stale, stranded, blocked, superseded, or no-fire."
+
+lost_classes = [
+  "immediate_strand",
+  "orphaned_wisp",
+  "hidden_blocker",
+  "dead_target",
+  "deadlock",
+  "sync_gap",
+  "stale_or_duplicate",
+  "unknown"
+]
+
+dispositions = [
+  "resling",
+  "recycle",
+  "rehome",
+  "combine",
+  "supersede",
+  "close_moot",
+  "defer",
+  "decision_needed",
+  "encode_dependency",
+  "repair_source",
+  "keep_observing"
+]
+
+root_causes = [
+  "no_worker_claimed",
+  "no_live_target",
+  "wrong_formula",
+  "dead_or_deprecated_target",
+  "missing_dependency_edge",
+  "hidden_human_decision_dependency",
+  "duplicate_or_superseded_source",
+  "sync_gap",
+  "formula_deadlock",
+  "stale_body_instruction",
+  "external_condition",
+  "unknown"
+]
+
+dispatch_sources = [
+  "mathcity.work",
+  "simple-work",
+  "priority-work",
+  "gc-sling",
+  "formula",
+  "manual",
+  "decisions-track",
+  "unknown"
+]

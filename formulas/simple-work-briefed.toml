@@ -1,0 +1,142 @@
+description = """
+Simple-work with a brief filing terminal slot.
+
+A lightweight alternative to build-basic-briefed for bounded, well-scoped
+tasks that do not need the full requirements → plan → decompose → implement →
+review → finalize cycle.
+
+Selects a model (default: haiku for simple mechanical work; caller may
+override to sonnet or opus), executes the task in a single step, then files
+a decision brief to the brief pipeline via the mathcity.brief-prep skill.
+
+Use when:
+- The task is a single, bounded operation (a script run, a database update,
+  a text generation, a verification pass, a label check).
+- The result still needs the human adjudicator's adjudication before anything ships.
+- build-basic-briefed is overkill — no planning, decompose, or finalize needed.
+
+Does NOT: run requirements / plan / decompose / implement / finalize.
+Does NOT: push code or open PRs.
+"""
+formula = "simple-work-briefed"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "simple-work-briefed"
+description = "Execute a bounded task with a configurable model, then file a brief for human adjudication."
+
+[vars]
+[vars.task]
+description = "The task to perform. State exactly what to do, what inputs to read, and what output is expected."
+required = true
+
+[vars.context]
+description = "Optional context: file paths, bead IDs, or content to read before executing. Leave empty if not needed."
+default = ""
+
+[vars.source_bead]
+description = "Bead ID this work is for. Used as the brief source and for recording output."
+required = true
+
+[vars.brief_slug]
+description = "Stable slug for the brief artifact (used as the brief filename stem)."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.model]
+description = "Model for task execution. Default haiku: fast, sufficient for simple bounded work. Use sonnet for tasks needing light reasoning; opus for high-stakes judgment."
+default = "haiku"
+enum = ["haiku", "sonnet", "opus"]
+
+[vars.brief_type]
+description = "Brief type filed after execution."
+default = "standard"
+enum = ["standard", "decision", "no-brainer"]
+
+[vars.run_target]
+description = "Pool that runs both formula steps."
+default = "mathcity.brief-operator"
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root (rig-relative)."
+default = ".beads/briefs"
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to final producer."
+default = "simple-work-briefed"
+
+[[steps]]
+id = "execute-task"
+title = "Execute: {{task}}"
+metadata = { "gc.run_target" = "{{run_target}}", "gc.brief.source" = "{{source_bead}}" }
+description = """
+Spawn a subagent (Agent tool, model override: {{model}} — selected by the
+caller as appropriate for this task's complexity) and give it this task:
+
+---
+{{task}}
+---
+
+{{context}}
+
+The subagent must complete the task as described and return its full output
+as its final message. That output becomes the evidence for the brief.
+
+When the subagent completes, record a summary of the result in this step
+bead's notes:
+
+```bash
+bd update <this-step-bead-id> --notes "<one-paragraph result summary>"
+```
+
+Then close this step bead and call `gc runtime drain-ack`.
+
+If blocked without a path forward, file an escalation before stopping:
+
+```bash
+.gc/scripts/escalate.sh \
+  --title "simple-work-briefed stalled on {{source_bead}}" \
+  --priority 2
+```
+"""
+
+[[steps]]
+id = "file-brief"
+title = "File brief for {{source_bead}}"
+needs = ["execute-task"]
+metadata = { "gc.run_target" = "{{run_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "simple-work-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.type" = "{{brief_type}}", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+description = """
+Use the `mathcity.brief-prep` skill to prepare and file a brief about the
+result of the `execute-task` step.
+
+First read the execute-task result from the source bead notes:
+
+```bash
+bd show {{source_bead}}
+```
+
+Then invoke the brief-prep skill with:
+- source: `{{source_bead}}`
+- slug: `{{brief_slug}}`
+- type: `{{brief_type}}`
+- artifact_root: `{{artifact_root}}`
+
+The brief's "What is being decided" section must describe the action taken
+and what the human adjudicator needs to approve, reject, or defer. Include the subagent
+output as the primary evidence section.
+
+The deposited brief must include this provenance frontmatter:
+
+```yaml
+producer_contract: brief-producer.v1
+source_formula: simple-work-briefed
+source_step: file-brief
+routing_path: "{{routing_path}}"
+```
+
+After `mathcity.brief-prep` completes and the brief is in `.pile/`, close
+this step bead and call `gc runtime drain-ack`.
+"""

@@ -1,0 +1,110 @@
+description = """
+Gate G-test-execution: verify that test execution actually happened.
+
+A claim that "tests were run" must be backed by hard evidence — the exact
+command executed, its exit code, and wall-clock duration. Asserted-but-
+unevidenced claims fail this gate. When the Magma server is unreachable the
+sanctioned path is the test-execution-request formula, which produces an
+auditable pending-execution record; that state is compliant and does NOT
+fail this gate.
+"""
+formula = "test-execution"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "test-execution"
+description = "Enforce that test-execution claims carry exact command, exit code, and wall time; accept test-execution-request records as compliant server-unreachable fallback."
+tags = ["gate", "test", "evidence", "mechanical"]
+
+[vars]
+[vars.brief_path]
+description = "Path to the brief markdown file."
+required = true
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for mechanical gate enforcement."
+default = "gc.run-operator"
+
+# ---------------------------------------------------------------------------
+# Step 1 — check G14 tri-state declaration
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "check-declaration"
+title = "Verify test-execution declaration is present and non-silent"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}" }
+description = """
+Scan `{{brief_path}}` for a `test-execution:` frontmatter line.
+
+Accepted tri-state values (matching gate spec from he-8akk):
+
+  test-execution: PASSED — log at <path>         (execution evidence attached)
+  test-execution: PASSED — see <bead/commit>     (cited execution evidence)
+  test-execution: NOT APPLICABLE — <reason>      (pure docs/pack/policy/inventory — reason required)
+  test-execution: REQUIRED — not yet run         (explicit gate-block; auto-throwback)
+
+Silent or absent → FAIL with gate_blocked_reason: test-execution-unstated.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/gate-test-execution-declaration.sh"
+timeout = "1m"
+
+# ---------------------------------------------------------------------------
+# Step 2 — verify execution evidence when PASSED is claimed
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "verify-evidence"
+title = "Verify execution evidence fields when PASSED is claimed"
+needs = ["check-declaration"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Only runs when step 1 found `test-execution: PASSED`.
+
+Requires ALL THREE evidence fields to appear in `{{brief_path}}` §5 (Test
+evidence) or in a cited execution-log artifact:
+
+1. **Command** — exact shell command or Magma script invocation (grep for
+   a line matching `^Command:` or `Cmd:` or a fenced code block with a
+   command).
+2. **Exit code** — explicit `exit 0`, `exit: 0`, `Exit code: 0`, or
+   equivalent; non-zero exit requires explicit `FAILED` verdict.
+3. **Wall time** — elapsed time in any format (`real Ns`, `Elapsed: Ns`,
+   `wall time: Ns`, or ISO-8601 duration).
+
+If ANY field is absent the gate fails with reason: test-execution-evidence-
+incomplete.
+
+"The test file exists at <path>" is NOT execution evidence — absence of a run
+produces a FAIL even when the file is cited. Deferred execution ("will be run
+by polecat") is NOT evidence — FAIL.
+
+When `test-execution: PASSED — see <bead/commit>` is used, the cited bead or
+commit SHA must be resolvable (bd show <bead> or git log -1 <sha>); the gate
+script does a best-effort check and fails if resolution fails.
+
+When the Magma server was unreachable and a test-execution-request record
+exists at `{{artifact_root}}/test-execution/<slug>.toml`, the brief MUST
+declare `test-execution: REQUIRED — pending request <slug>` (NOT `PASSED`).
+That state is compliant: step 1 accepts REQUIRED, this step is skipped (not
+PASSED), and the pending-request record is the audit trail.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/gate-test-execution-evidence.sh"
+timeout = "2m"

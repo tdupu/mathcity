@@ -1,0 +1,19 @@
+schema = "lost-bead-classification.v1"
+bead_id = "gsp-test-unknown-1"
+observed_at = "2026-07-25T00:00:00Z"
+observer = "fixture"
+
+[finding]
+lost_class = "dead_target"
+evidence = ["target formula name does not resolve", "no dispatch provenance event found"]
+
+[disposition]
+recommendation = "repair_source"
+rationale = "The source cannot be repaired until future dispatches stamp provenance."
+reversible = true
+
+[root_cause]
+class = "dead_or_deprecated_target"
+suspected_source = "unknown"
+repair_candidate = true
+fingerprint = "unattributed_dead_target"

@@ -1,0 +1,246 @@
+description = """
+Post-merge brief-record duty: inspect recently closed beads and, for those
+carrying the `needs-decision` label, create a brief-record bead and enter the
+brief-prep pipeline.
+
+Fired by the `on-merge-brief-record` order (condition trigger; see the order
+file for the gate). v2 (gsp-e62n): the order was event-triggered on
+`bead.closed` and rig-scoped, which produced (D1) a 16-rig fan-in into one
+pool, (D2) a self-trigger runaway — the formula's own work-bead closures
+re-fired the order indefinitely — and (D5, N1 finding) store blindness: a
+rig-scoped order routed to a city pool has its wisp poured into the CITY
+store (gc order_store.go: unqualified pool → city target), so the run scanned
+the HQ store and never saw rig beads. v2 makes the order city-scoped and THIS
+FORMULA scans every rig itself via the city's rig registry — the same pattern
+brief-decision-dispatch uses, and the same no-per-rig-knowledge invariant as
+gsp-rqv0.
+
+## Decision logic (verbatim per task-2-brief §2)
+
+After a successful merge of bead X:
+  (a) X is already closed by the refinery (existing behavior — no action).
+  (b) IF X carries the `needs-decision` label:
+      - Create a brief-record bead titled `[brief-record] <X-id> <X-title>`
+        with `metadata.source_bead = X-id`.
+      - Touch the brief-prep pipeline by creating a brief-prep work bead
+        using the brief-prep formula's intake convention:
+          source  = X-id   (the just-closed bead)
+          brief_slug = `brief-<X-id>` (stable slug derived from source bead)
+          brief_type = "decision"
+  (c) IF X is unlabeled (no `needs-decision`): do nothing extra.
+
+Record and prep artifacts are created in the HQ store (where this run
+executes), consistent with the HQ brief root (<city-root>/.beads/briefs, gsp-hsug).
+
+## Dedup contract (D3 fix)
+
+Record and prep are deduped INDEPENDENTLY, so a run that dies between the
+two creates leaves a recoverable state instead of a permanently lost prep
+(he-uri06):
+  - has_record(id): HQ beads with metadata.source_bead=id AND title starting
+    `[brief-record]` (the title filter excludes dispatch reject/revise
+    follow-ups, which also carry source_bead).
+  - has_prep(id): HQ beads with metadata `gc.brief.source`=id — matches BOTH
+    a poured brief-prep molecule (its steps carry gc.brief.source) and the
+    fallback intake work bead.
+Whichever half is missing is created; the other is skipped.
+
+## Self-exclusion guard (D2 defense-in-depth)
+
+Pipeline artifacts are never intake sources: the scan drops beads whose
+title starts with `[brief-record]`, `[brief-prep]`, `[rejected]`, or
+`[revise]`, and beads carrying gc.brief.* metadata. With the condition
+trigger the runaway is already structurally dead (work-bead closures don't
+create unpaired needs-decision beads); this guard keeps it dead even if the
+trigger shape changes again.
+
+## Why vapor
+
+All operations are deterministic bd CLI commands — no judgment required.
+The formula runs as a single shell script (phase=vapor) so scan, dedup,
+create, and pipeline-touch stay in one process without burning an LLM turn
+per step. Variable state crosses steps trivially within the same shell.
+
+## Wake-up contract
+
+This formula is a WAKE-UP, not a single-bead handler. The condition fire is
+a signal; no bead id or rig is passed in (the controller dispatches orders
+with no vars). We do a durable-state scan across ALL rigs: list recently
+closed `needs-decision` beads per rig store and create brief-records for the
+ones that don't have one yet.
+"""
+formula = "on-merge-brief-record"
+phase = "vapor"
+version = 2
+
+[catalog]
+name = "on-merge-brief-record"
+description = "Post-merge hook: create a brief-record and enter brief-prep when a closed bead carries needs-decision."
+
+[vars]
+[vars.prep_target]
+description = "Run target for brief-prep bookkeeping steps."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root relative to the city or rig root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.scan_window_days]
+description = "How far back the per-rig closed-bead scan reaches. The order's condition check uses a shorter window (see the order file); any fire sweeps this full window in every rig."
+default = "30"
+
+[[steps]]
+id = "scan-and-record"
+title = "Scan closed needs-decision beads across all rigs and create brief-records"
+metadata = { "gc.run_target" = "{{prep_target}}" }
+description = """
+Run this as one shell script so every derived value (CLOSED_IDS, MISSING,
+SLUG) remains in the same process without relying on cross-step variables.
+POSIX-safe iteration only — here-doc loops, no process substitution, no
+zsh-hostile word-splitting (he-y9zce).
+
+```bash
+set -euo pipefail
+WORK_BEAD="${GC_BEAD_ID:-}"
+DRAIN_ACKED=0
+
+drain_ack_once() {
+  if [ "$DRAIN_ACKED" -ne 1 ]; then
+    gc runtime drain-ack || true
+    DRAIN_ACKED=1
+  fi
+}
+
+trap 'drain_ack_once' EXIT
+
+SINCE="$(date -u -v-{{scan_window_days}}d '+%Y-%m-%d' 2>/dev/null || date -u -d '{{scan_window_days}} days ago' '+%Y-%m-%d' 2>/dev/null || echo '1970-01-01')"
+
+# ── Rig registry (authoritative; no per-rig knowledge in this formula) ─────
+RIGS_JSON="$(gc rig list --json 2>/dev/null)" || RIGS_JSON=""
+if [ -z "$RIGS_JSON" ]; then
+  echo "ERROR: gc rig list unavailable; cannot scan rig stores" >&2
+  exit 1
+fi
+# Lines of "name<TAB>path" for iteration. The HQ row is just another path
+# (the city root) — uniform treatment, no HQ special case.
+RIG_ROWS="$(printf '%s' "$RIGS_JSON" | jq -r '(.rigs // [])[] | [.name, .path] | @tsv')"
+
+# ── Scan one rig store for recently closed needs-decision beads ────────────
+# Direct bd with the rig checkout as cwd (store resolves from cwd). The gc
+# wrapper (`gc bd --rig`) costs ~3s per call — avoid it in loops.
+scan_rig_closed() {
+  rig_path="$1"
+  ( cd "$rig_path" 2>/dev/null && bd list --status closed --label needs-decision --closed-after "$SINCE" --json 2>/dev/null )
+}
+
+# Self-exclusion guard (D2): pipeline artifacts are never intake sources.
+FILTER_IDS='[ .[]?
+  | select((.title // "" | startswith("[brief-record]")) | not)
+  | select((.title // "" | startswith("[brief-prep]"))   | not)
+  | select((.title // "" | startswith("[rejected]"))     | not)
+  | select((.title // "" | startswith("[revise]"))       | not)
+  | select((.metadata // {} | has("gc.brief.slug") or has("gc.brief.source")) | not)
+  | .id ] | .[]'
+
+# ── Dedup checks (D3): independent record/prep existence, fail CLOSED ──────
+# Returns: 0=exists, 1=not-found, 2=unknown/error
+has_record() {
+  out=$(bd list --all --limit 0 --metadata-field source_bead="$1" --json 2>/dev/null) || return 2
+  n=$(printf '%s' "$out" | jq -er '[.[]? | select(.title // "" | startswith("[brief-record]"))] | length' 2>/dev/null) || return 2
+  [ "$n" -gt 0 ] && return 0 || return 1
+}
+has_prep() {
+  out=$(bd list --all --limit 0 --metadata-field gc.brief.source="$1" --json 2>/dev/null) || return 2
+  n=$(printf '%s' "$out" | jq -er 'if type=="array" then length else error("not array") end' 2>/dev/null) || return 2
+  [ "$n" -gt 0 ] && return 0 || return 1
+}
+
+ensure_record() {
+  CLOSED_ID="$1"; SRC_RIG_PATH="$2"
+  rc=0; has_record "$CLOSED_ID" || rc=$?
+  if [ "$rc" -eq 0 ]; then return 0; fi
+  if [ "$rc" -eq 2 ]; then echo "WARNING: has_record check failed for $CLOSED_ID; skipping this id this run" >&2; return 1; fi
+  BEAD_TITLE=$( (cd "$SRC_RIG_PATH" 2>/dev/null && bd show "$CLOSED_ID" --json 2>/dev/null) | jq -r '.[0].title // ""')
+  BRIEF_RECORD=$(bd create \
+    --type=task \
+    --title="[brief-record] $CLOSED_ID $BEAD_TITLE" \
+    --metadata "$(jq -n --arg sb "$CLOSED_ID" '{source_bead: $sb}')" \
+    --json | jq -r '.id')
+  if [ -z "$BRIEF_RECORD" ]; then
+    echo "ERROR: failed to create brief-record bead for $CLOSED_ID" >&2
+    return 1
+  fi
+  echo "brief-record bead created: $BRIEF_RECORD (source_bead: $CLOSED_ID)"
+}
+
+ensure_prep() {
+  CLOSED_ID="$1"
+  rc=0; has_prep "$CLOSED_ID" || rc=$?
+  if [ "$rc" -eq 0 ]; then return 0; fi
+  if [ "$rc" -eq 2 ]; then echo "WARNING: has_prep check failed for $CLOSED_ID; skipping this id this run" >&2; return 1; fi
+  SLUG="brief-${CLOSED_ID}"
+  if bd mol pour brief-prep \
+      --var source="$CLOSED_ID" \
+      --var brief_slug="$SLUG" \
+      --var brief_type="decision"; then
+    echo "poured brief-prep for $SLUG"
+  else
+    # Fallback — create the intake work bead directly (same gc.brief.source
+    # key, so has_prep dedups both shapes).
+    bd create \
+      --type=task \
+      --title="[brief-prep] $SLUG" \
+      --metadata "$(jq -n --arg s "$CLOSED_ID" --arg sl "$SLUG" --arg p "{{artifact_root}}/.staging/$SLUG/brief.md" \
+        '{"gc.brief.source": $s, "gc.brief.slug": $sl, "gc.brief.type": "decision", "gc.brief.path": $p}')"
+    echo "brief-prep work bead created for slug $SLUG"
+  fi
+}
+
+# ── Sweep every rig; per id ensure record AND prep independently ───────────
+processed=0
+skipped=0
+
+TAB="$(printf '\t')"
+while IFS="$TAB" read -r RIG_NAME RIG_PATH; do
+  [ -z "$RIG_NAME" ] && continue
+  [ -d "$RIG_PATH" ] || continue
+  RIG_CLOSED_JSON="$(scan_rig_closed "$RIG_PATH")" || RIG_CLOSED_JSON=""
+  [ -z "$RIG_CLOSED_JSON" ] && continue
+  RIG_IDS="$(printf '%s' "$RIG_CLOSED_JSON" | jq -r "$FILTER_IDS" 2>/dev/null)" || RIG_IDS=""
+  [ -z "$RIG_IDS" ] && continue
+
+  while IFS= read -r CLOSED_ID; do
+    [ -z "$CLOSED_ID" ] && continue
+    ok=1
+    ensure_record "$CLOSED_ID" "$RIG_PATH" || ok=0
+    ensure_prep "$CLOSED_ID"   || ok=0
+    if [ "$ok" -eq 1 ]; then
+      processed=$((processed + 1))
+    else
+      skipped=$((skipped + 1))
+    fi
+  done <<RIG_IDS_EOF
+$RIG_IDS
+RIG_IDS_EOF
+
+done <<RIG_ROWS_EOF
+$RIG_ROWS
+RIG_ROWS_EOF
+
+echo "on-merge-brief-record sweep: processed=$processed skipped=$skipped"
+
+if [ -n "$WORK_BEAD" ]; then
+  bd close "$WORK_BEAD" --reason "on-merge-brief-record: processed=$processed skipped=$skipped"
+fi
+drain_ack_once
+exit 0
+```
+
+**Exit criteria:** script exits 0; for every recently closed needs-decision
+bead in EVERY rig store (self-excluding pipeline artifacts), a brief-record
+(keyed on metadata.source_bead + [brief-record] title, fail-closed on error)
+AND a brief-prep entry (keyed on gc.brief.source, fail-closed on error) each
+exist — created independently if missing; work bead closed if GC_BEAD_ID is
+set; drain-ack sent."""

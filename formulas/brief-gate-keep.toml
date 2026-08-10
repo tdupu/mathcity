@@ -1,0 +1,116 @@
+description = """
+Run the brief gate registry against one brief.
+
+This formula is the gate-keep layer from the policy plan: mechanical gates are
+checked by scripts, judgment gates are explicit work steps, and stop/manual
+gates fail closed unless their evidence records human authorization.
+"""
+formula = "brief-gate-keep"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-gate-keep"
+description = "Apply the formal brief gate registry to a staged or piled brief."
+
+[vars]
+[vars.brief_path]
+description = "Path to the brief markdown file."
+required = true
+
+[vars.gate_profile]
+description = "Gate profile from assets/brief-pipeline/gates.toml."
+default = "standard"
+enum = ["standard", "no_brainer", "test_execution", "experiment"]
+
+[vars.operator_target]
+description = "Run target for deterministic gate checks and disposition."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[vars.review_target]
+description = "Run target for judgment-bearing review gates."
+default = "gc.review-synthesizer"
+
+[[steps]]
+id = "load-registry"
+title = "Load the gate registry"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.gate_profile" = "{{gate_profile}}" }
+description = """
+Read `mathcity/assets/brief-pipeline/gates.toml`.
+
+Use profile `{{gate_profile}}`. Fail closed if the profile is unknown or the
+brief does not have a `Gate Evidence` section.
+"""
+
+[[steps]]
+id = "mechanical-gates"
+title = "Enforce mechanical gates"
+needs = ["load-registry"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.gate_profile" = "{{gate_profile}}" }
+description = """
+Ensure the brief records pass/fail/N/A evidence for every mechanical gate:
+test evidence, shell-script testability, artifact staging, brief bookkeeping,
+README improvement, breadcrumbs, stale-claim checks, test-execution disclosure,
+and master-current evidence.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-mechanical-gates-required.sh"
+timeout = "2m"
+
+[[steps]]
+id = "judgment-gates"
+title = "Run judgment gates"
+needs = ["mechanical-gates"]
+metadata = { "gc.run_target" = "{{review_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.gate_profile" = "{{gate_profile}}" }
+description = """
+Review and update the judgment gates:
+
+- G2 Good-test
+- G4 Critical-review
+- G6 LaTeX-gate
+- G9 No-brainer-filter: the brief must contain exactly one machine-readable `classifier_state` (`known_no_brainer`, `known_non_no_brainer`, `candidate`, `capability_blocker`, or `safety_blocked`) plus `classified_at` and the fields required for that state. Free-form "classifier considered" prose is a gate failure.
+
+Use the corresponding brief-bundle skills/policies. Stop gates must remain
+blocked unless the brief cites human authorization.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-no-brainer-classification-evidence.sh"
+timeout = "1m"
+
+[[steps]]
+id = "disposition"
+title = "Write gate disposition"
+needs = ["judgment-gates"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.gate_profile" = "{{gate_profile}}" }
+description = """
+Record one disposition in the brief:
+
+- `Disposition: promote`
+- `Disposition: reject`
+- `Disposition: blocked`
+
+Promotion is allowed only when all required gates are `PASS` or justified `N/A`
+and no stop/manual gate is unresolved.
+
+Missing, malformed, or stale G9 classifier evidence must produce `Disposition: reject` or `Disposition: blocked`; it must never promote to stack.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-disposition-required.sh"
+timeout = "2m"

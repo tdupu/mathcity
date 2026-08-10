@@ -1,0 +1,141 @@
+description = """
+Review a batch of repeated producer-failure signals and file one human
+decision brief proposing a producer, route, shared terminal, gate, or no-action repair.
+
+This formula never mutates formulas, gates, policy, or skills directly.
+"""
+formula = "brief-producer-repair"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-producer-repair"
+description = "Diagnose repeated gate failures from a brief producer and file a repair brief."
+
+[vars]
+
+[vars.source_formula]
+description = "Producer formula under review."
+required = true
+
+[vars.failed_gate]
+description = "Gate id shared by the failure batch."
+required = true
+
+[vars.failure_fingerprint]
+description = "Tight failure fingerprint shared by the batch."
+required = true
+
+[vars.failure_batch]
+description = "Path to the batch markdown file created by brief-producer-failure-rollup."
+required = true
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for repair review."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "gather-failures"
+title = "Gather producer-failure context"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Read `{{failure_batch}}`, every referenced rejected brief, each rejection
+record, each source bead, producer formula TOML for `{{source_formula}}`, any
+route events, and the gate definition for `{{failed_gate}}`.
+
+Write
+`{{artifact_root}}/.producer-failure-rollups/context/{{source_formula}}-{{failed_gate}}-{{failure_fingerprint}}-context.md`.
+"""
+
+[[steps]]
+id = "diagnose"
+title = "Classify root cause"
+needs = ["gather-failures"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Classify each failure as exactly one:
+
+- WRONG_ROUTE
+- PRODUCER_HOLE
+- SHARED_TERMINAL_BUG
+- GATE_FALSE_POSITIVE
+- ONE_OFF
+
+For PRODUCER_HOLE, state whether the target is the `-briefed` override, an
+inherited parent step, or a shared terminal instruction.
+
+Write a diagnosis table with columns:
+
+`brief_slug | source_bead | routing_path | failed_gate | fingerprint | class | repair_target | evidence`
+"""
+
+[[steps]]
+id = "synthesize-repair"
+title = "Synthesize one repair proposal"
+needs = ["diagnose"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Choose exactly one recommendation:
+
+- PATCH_ROUTER
+- PATCH_SOURCE_FORMULA
+- PATCH_INHERITED_PARENT
+- PATCH_SHARED_TERMINAL
+- PATCH_GATE_OR_POLICY
+- SPLIT_FORMULA
+- NO_ACTION_YET
+
+Name exact target files. For PATCH_GATE_OR_POLICY, state that the proposal must
+go through the normal brief-system policy amendment path before any gate edit.
+
+Write
+`{{artifact_root}}/.producer-failure-rollups/proposals/{{source_formula}}-{{failed_gate}}-{{failure_fingerprint}}-proposal.md`.
+"""
+
+[[steps]]
+id = "file-repair-brief"
+title = "File producer repair decision brief"
+needs = ["synthesize-repair"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}", "gc.brief.source_formula" = "brief-producer-repair", "gc.brief.source_step" = "file-repair-brief", "gc.brief.producer_contract" = "brief-producer-repair.v1" }
+description = """
+File one decision brief into `{{artifact_root}}/.pile/` with a flat path:
+
+`{{artifact_root}}/.pile/producer-repair-{{source_formula}}-{{failed_gate}}-{{failure_fingerprint}}.md`
+
+The brief asks:
+
+"Approve this repair to prevent future {{source_formula}} failures of {{failed_gate}}/{{failure_fingerprint}}?"
+
+The brief must include:
+
+- batch examples
+- diagnosis table
+- one recommended repair
+- exact target files
+- alternatives considered
+- safety risks
+- replay/smoke checks
+- explicit DEFER and REJECT consequences
+
+Stamp this frontmatter:
+
+```yaml
+producer_contract: brief-producer-repair.v1
+source_formula: brief-producer-repair
+source_step: file-repair-brief
+routing_path: brief-producer-repair
+repair_source_formula: "{{source_formula}}"
+repair_failed_gate: "{{failed_gate}}"
+repair_failure_fingerprint: "{{failure_fingerprint}}"
+```
+
+Because `producer_contract: brief-producer-repair.v1` is present, this repair
+brief is excluded from producer-failure rollups if it is later rejected by
+the gates.
+"""

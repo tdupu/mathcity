@@ -1,0 +1,41 @@
+# Condition-trigger order — patrol for briefs stuck at the Phase 5 review gate.
+#
+# Backstop for brief-prep workers that deposit a brief but exit before
+# running Phase 5 (coordinate-review). Stuck signature: frontmatter
+# `review_gate: pending` older than the formula's grace period. The patrol
+# runs the missing review; APPROVING promotes the brief, anything else
+# records `review-failed` and escalates to the Mayor. Both outcomes remove
+# the brief from the candidate set.
+#
+# scope=rig (not city): mirrors the brief-shuffle-pile fix (gsp-fqo). City-scope
+# caused the formula's {{artifact_root}} default (.beads/briefs) to resolve
+# relative to <city-root> instead of the rig root, pointing at the wrong stack.
+# Rig-scope fires once per rig; condition checks run with the rig root as cwd.
+#
+# gsp-12rf: was trigger=cooldown/30m + idempotent=true. Two defects during the
+# 2026-07-15 Dolt storm (S6): (1) idempotent=true makes dispatch fail OPEN when
+# the single-flight/open-work gate times out under store contention
+# (orders/order.go Idempotent doc, gastownhall/gascity#2893) — 29 concurrent
+# "Scan stack" wisps piled up in 2.5h against an expected ~5; (2) blind
+# cooldown fired on all 16 rigs regardless of stack state (14 rigs always
+# empty). Fix: idempotent=false restores fail-CLOSED single-flight, and the
+# condition trigger only fires when the rig's stack actually contains a
+# stuck-pending brief.
+[order]
+description = "Advance stack briefs stuck at review_gate: pending through Phase 5 (coordinate-review)."
+scope = "rig"
+formula = "brief-review-patrol"
+trigger = "condition"
+# Fire only when a stack brief has review_gate: pending AND is old enough to
+# be presumed stuck. -mmin +30 mirrors the formula's {{stale_after}} grace
+# default (30m) as an mtime approximation — the formula's deposited_at parse
+# remains authoritative; keep the two values in sync if stale_after changes.
+# `-exec grep +` never runs grep on an empty match set, so an absent or empty
+# stack exits non-zero (not due) without noise.
+check = "find .beads/briefs/stack -maxdepth 1 -type f -name '*.md' -mmin +30 -exec grep -l '^review_gate:[[:space:]]*pending' {} + 2>/dev/null | grep -q ."
+pool = "mathcity.brief-operator"
+timeout = "120s"
+# Fail CLOSED on single-flight gate timeout (the default). Never set this
+# order idempotent=true again: a duplicate patrol run re-reviews the same
+# stuck briefs and floods the operator pool (gsp-12rf).
+idempotent = false

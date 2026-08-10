@@ -1,0 +1,60 @@
+description = """
+Roll up manually classified lost-bead records into candidate downstream filter rules.
+This formula reads an export cache generated from linked classification event beads and files linked decision brief beads; it never mutates source beads directly.
+"""
+formula = "lost-bead-classification-rollup"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "lost-bead-classification-rollup"
+description = "Group lost-bead classifications by fingerprint and prepare downstream filter-rule proposals."
+
+[vars]
+[vars.classification_root]
+description = "Directory containing exported lost-bead-classification.v1 TOML cache records generated from linked event beads."
+default = ".beads/lost-bead-classifications"
+
+[vars.output_path]
+description = "JSONL file receiving candidate downstream filter rules."
+default = ".beads/lost-bead-classifications/downstream-candidates.jsonl"
+
+[vars.threshold]
+description = "Distinct bead count required for a tight fingerprint."
+default = "3"
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for rollup and brief filing."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "collect-labels"
+title = "Collect downstream labels"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Run `mathcity/assets/scripts/checks/lost-bead-filter-check.sh {{classification_root}}` first. If it emits an `I'm sorry, I can't do that` dependency message, stop with that message and do not file a brief.
+Run `mathcity/assets/scripts/lost-bead-filter.py rollup-downstream --input {{classification_root}} --threshold {{threshold}} --output {{output_path}}`.
+Dedupe by bead id and group by `lost_class + disposition.recommendation + root_cause.class + root_cause.fingerprint`.
+If validation fails, stop with the script's nonzero exit and do not file a brief.
+"""
+
+[[steps]]
+id = "file-brief"
+title = "File downstream filter-rule decision brief"
+needs = ["collect-labels"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Read `{{output_path}}`.
+For each `downstream_filter_rule` row, file one decision brief into `{{artifact_root}}/.pile/`.
+Create the canonical brief as `bd create --type decision`, link it to every contributing classification event bead and affected source bead with `bd dep add <brief-id> <source-id> --type related`, then write the markdown printout and manifest cache row.
+The brief asks whether to promote the repeated hand label into a downstream lost-bead filter rule.
+Include the bead examples, fingerprint, proposed rule text, replay command, false-positive risk, and exact non-goal.
+If `{{output_path}}` is empty, record `no downstream filter candidate at threshold` and exit cleanly.
+After creating every decision bead, verify each related edge with `bd dep list "$BRIEF_ID" --readonly` and verify the markdown printout plus manifest cache row exist under `{{artifact_root}}/.pile/`. Then close this step with a reason naming the manifest path and decision bead IDs. If any verification fails, leave this step open and report the failing command/output; do not close the workflow root or finalizer yourself.
+"""

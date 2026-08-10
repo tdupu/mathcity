@@ -1,0 +1,25 @@
+# brief-watchdog-refill-on-stack-low is the event-driven companion to
+# brief-watchdog-refill.toml (30m cooldown). It fires the same refill formula
+# the moment the ripe brief stack drops to the low-water trigger, instead of
+# waiting out the cooldown (the human adjudicator 2026-06-30: "ring the bell" — event-driven,
+# not condition-polling).
+#
+# The emitting side is the post-decision hook (gsp-xhc), which calls
+# assets/scripts/brief-stack-low.sh --emit after filing a brief decision.
+# The script measures the combined stack-depth signals (approved / total /
+# unlock_count>0; see the script header) and emits `brief.stack-low` when any
+# signal is <= stack_low_trigger from assets/brief-pipeline/thresholds.toml.
+#
+# The refill formula is conservative and safe to re-run (it measures the
+# stack itself before dispatching brief-prep), so a duplicate fire is a
+# no-op — hence idempotent.
+[order]
+description = "Fire brief-watchdog-refill immediately when the brief stack drops to the low-water trigger"
+scope = "city"
+formula = "brief-watchdog-refill"
+trigger = "event"
+on = "brief.stack-low"
+# Retarget: gastown-vestige pool "dog" -> pack-local mathcity.brief-operator (the human adjudicator 2026-07-13, example-owner/gascity-packs#4)
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true

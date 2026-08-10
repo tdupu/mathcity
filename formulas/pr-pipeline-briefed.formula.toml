@@ -1,0 +1,327 @@
+description = """
+Compose a template-COMPLETE upstream PR body and route it through the brief
+pipeline for human adjudication — the mathcity-owned, briefed analogue of the
+pr-pipeline PR-open step. It NEVER runs `git push` or `gh pr create`.
+
+WHY THIS EXISTS (gsp-n2chl1): the upstream pr-pipeline (mol-pr-ship /
+mol-pr-from-issue) deliberately never opens the PR — a human opens it via the
+compare URL, and GitHub auto-appends `.github/pull_request_template.md` UNFILLED
+(the raw `## Summary — Explain the change` placeholder + empty Testing/Checklist).
+No filled body is ever produced for the human to paste (observed on #4865, #4868;
+the human adjudicator hand-fixed both). This formula closes that gap: at the PR-handoff point it
+EMITS a paste-ready, template-complete PR body AS A DECISION BRIEF, so the human
+pastes a finished body instead of GitHub's blank template.
+
+SHAPE — standalone briefed-terminal (POLICY-formulas.md F8.1: terminal step =
+file-brief). Modeled on mathcity/formulas/planning-briefed.formula.toml (the
+standalone briefed precedent), NOT `extends`. Rationale: extending mol-pr-ship /
+mol-pr-from-issue would inherit and RE-RUN the whole pre-push gate
+(simplify / review-iterate / contributor-check) AND the open-pr push step —
+contradicting this variant's scope, which owns ONLY the PR-BODY fill. It borrows
+mol-pr-from-issue's v6 READ-ONLY mechanisms (pr_work_dir guard,
+upstream-base resolution) for the intake step; it never mutates git.
+
+STEPS:
+  1. intake        — resolve branch + upstream base + commit range + source
+                     bead/issue #; LOCATE recorded focused-test evidence.
+                     Fail-closed (not a git checkout / on default branch /
+                     empty range / evidence missing).  [gc.run-operator]
+  2. compose-body  — assemble the template-complete PR body: ## Summary from the
+                     commit-message body; ## Testing from recorded focused-test
+                     evidence ONLY (never fabricate); ## Checklist from real
+                     state. Match the target repo's live
+                     `.github/pull_request_template.md` structure exactly.
+                     Surface (do NOT fix) a P5.5 Co-Authored-By warning.
+                     [gc.run-operator]
+  3. file-brief    — file the paste-ready PR body as a decision brief for the human adjudicator
+                     via the brief pipeline (brief-producer.v1). TERMINAL.
+                     [mathcity.brief-operator]
+
+Does NOT commit, push, or open a PR. After adjudication, the agent executing
+that verdict opens the PR (per the normal verdict edge) with the approved body.
+Upstream pr-pipeline is READ-ONLY here (frozen / load-bearing via
+BART's <repos-root> import; gascity-pack-readonly) — this formula only reads the
+mol-pr-ship report or root-bead notes for evidence; it never writes there.
+
+Out of scope: the P5.5 Co-Authored-By trailer is a COMMIT-level defect a PR body
+cannot remove (separate item gsp-7njh) — surface a warning, never fix it here.
+"""
+formula = "pr-pipeline-briefed"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "pr-pipeline-briefed"
+description = "Compose a template-complete upstream PR body (Summary from the commit body; Testing from recorded focused-test evidence, evidence-only; Checklist from real state) and file it as a human decision brief. Never pushes / never opens a PR — the human pastes the approved body."
+
+[vars]
+[vars.source_bead]
+description = "Bead (or upstream issue reference) the PR addresses. Used for brief linkage and the Checklist linked-issue line."
+required = true
+
+[vars.brief_slug]
+description = "Stable filename stem for the brief artifact (e.g. gsp-n2chl1-pr-body)."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.branch]
+description = "Feature branch to compose the PR body from. Default empty = the current branch in pr_work_dir. Must not be the default branch (intake fails closed)."
+default = ""
+
+[vars.issue_number]
+description = "Upstream linked issue number for the Checklist 'Closes #N' line. Default empty = resolve from the branch name / root-bead notes if present."
+default = ""
+
+[vars.pr_work_dir]
+description = "Absolute path to the git checkout the PR branch lives in. intake cd's here and refuses to run (fail-closed) if it is empty, not a git checkout, or not the checkout root — so the formula never reads from the caller's default work_dir by accident. Default empty = use the current work_dir (must still be a git checkout on a feature branch)."
+default = ""
+
+[vars.evidence_source]
+description = "Where recorded focused-test evidence is READ from (Testing section is evidence-only). Relative to the checkout root. Default is the mol-pr-ship report dir; root-bead notes are the fallback."
+default = ".gc/pr-pipeline/ship"
+
+[vars.artifact_root]
+description = "Root for the brief artifact."
+default = ".beads/briefs"
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to final producer (brief routing metadata)."
+default = "pr-pipeline-briefed"
+
+[vars.operator_target]
+description = "Fleet agent for the intake + compose-body steps. Fleet ADDRESS, never a model name."
+default = "gc.run-operator"
+
+[vars.brief_operator]
+description = "Fleet agent for the terminal file-brief step. Fleet ADDRESS, never a model name."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "intake"
+title = "Resolve branch, upstream base, commit range, and locate test evidence"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Resolve everything compose-body needs, READ-ONLY. This step performs NO git
+mutation — no checkout, no commit, no push. Fail closed on any missing input so
+the formula never composes a body from a bad or empty state.
+
+**1. Enter the PR checkout and confirm it is a git repo (pr_work_dir guard,
+borrowed READ-ONLY from mol-pr-from-issue v6):**
+```bash
+PR_WORK_DIR="{{pr_work_dir}}"
+if [ -n "$PR_WORK_DIR" ]; then
+    cd "$PR_WORK_DIR" || { echo "[pr-pipeline-briefed] BLOCKED: pr_work_dir not accessible: $PR_WORK_DIR"; bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: pr_work_dir not accessible: $PR_WORK_DIR"; gc runtime drain-ack; exit 0; }
+fi
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "[pr-pipeline-briefed] BLOCKED: not a git checkout"; bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: not in a git checkout"; gc runtime drain-ack; exit 0; }
+if [ -n "$PR_WORK_DIR" ] && [ "$REPO_ROOT" != "$PR_WORK_DIR" ]; then
+    echo "[pr-pipeline-briefed] BLOCKED: pr_work_dir=$PR_WORK_DIR but git root=$REPO_ROOT"
+    bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: pr_work_dir root mismatch (git root=$REPO_ROOT)"
+    gc runtime drain-ack; exit 0
+fi
+cd "$REPO_ROOT"
+```
+
+**2. Resolve the feature branch and refuse the default branch:**
+```bash
+BRANCH="{{branch}}"
+[ -z "$BRANCH" ] && BRANCH=$(git branch --show-current)
+DEFAULT=$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p' || echo "main")
+if [ -z "$BRANCH" ] || [ "$BRANCH" = "$DEFAULT" ] || [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
+    echo "[pr-pipeline-briefed] BLOCKED: on default/empty branch ($BRANCH) — no PR body to compose"
+    bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: on default/empty branch ($BRANCH)"
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**3. Resolve the upstream base SHA (READ-ONLY, no remote mutation — same
+mechanism as mol-pr-from-issue v6). `origin` may be a fork whose main diverged
+from upstream, so resolve the base from the fork's GitHub parent; fall back to
+this repo when there is no parent (this repo already IS upstream). Fetch by
+explicit URL and use FETCH_HEAD — never `git remote add` (remotes are shared
+across linked worktrees):**
+```bash
+BASE_REPO=$(gh repo view --json parent --jq 'if .parent then (.parent.owner.login + "/" + .parent.name) else "NO_PARENT" end' 2>/dev/null || echo "NO_PARENT")
+if [ "$BASE_REPO" = "NO_PARENT" ] || [ -z "$BASE_REPO" ]; then
+  BASE_REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
+fi
+BASE_SHA=""
+if [ -n "$BASE_REPO" ] && printf '%s' "$BASE_REPO" | grep -Eq '^[^/]+/[^/]+$'; then
+  BASE_BRANCH=$(gh repo view "$BASE_REPO" --json defaultBranchRef --jq '.defaultBranchRef.name // "main"' 2>/dev/null || echo "main")
+  git fetch --quiet "https://github.com/${BASE_REPO}.git" "refs/heads/${BASE_BRANCH:-main}" 2>/dev/null && BASE_SHA=$(git merge-base HEAD FETCH_HEAD 2>/dev/null || echo "")
+fi
+# Fallback: local origin/main merge-base if upstream resolution was unavailable.
+[ -z "$BASE_SHA" ] && BASE_SHA=$(git merge-base HEAD origin/"${DEFAULT:-main}" 2>/dev/null || echo "")
+[ -z "$BASE_SHA" ] && BASE_SHA=$(git rev-list --max-parents=0 HEAD | tail -1)
+RANGE="${BASE_SHA}..HEAD"
+COMMIT_COUNT=$(git rev-list --count "$RANGE" 2>/dev/null || echo 0)
+if [ "${COMMIT_COUNT:-0}" -eq 0 ]; then
+    echo "[pr-pipeline-briefed] BLOCKED: empty commit range $RANGE — nothing to describe"
+    bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: empty commit range ($RANGE)"
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**4. LOCATE recorded focused-test evidence (do not read it into a body yet —
+compose-body does that). Testing is evidence-only; if none exists, compose-body
+will fail closed.** Look in `{{evidence_source}}` (the mol-pr-ship report dir,
+keyed by branch) first, then root-bead notes:
+```bash
+SAFE=$(echo "$BRANCH" | tr '/' '_')
+EVIDENCE_PATH="{{evidence_source}}/${SAFE}.md"
+EVIDENCE_FOUND="no"
+if [ -f "$EVIDENCE_PATH" ]; then
+    EVIDENCE_FOUND="yes"
+elif bd show {{source_bead}} 2>/dev/null | grep -qiE 'test.*(pass|ok|green|red)'; then
+    EVIDENCE_FOUND="notes"; EVIDENCE_PATH="bd:{{source_bead}} notes"
+fi
+```
+
+**5. Record intake results for compose-body (root-bead notes are the hand-off
+channel):**
+```bash
+bd update {{source_bead}} --notes "pr-pipeline-briefed intake:
+  repo_root: $REPO_ROOT
+  branch: $BRANCH
+  base_repo: ${BASE_REPO:-<none>}
+  base_sha: $BASE_SHA
+  range: $RANGE
+  commit_count: $COMMIT_COUNT
+  issue_number: {{issue_number}}
+  evidence_found: $EVIDENCE_FOUND
+  evidence_path: $EVIDENCE_PATH
+  pr_template: $REPO_ROOT/.github/pull_request_template.md"
+```
+
+**Exit criteria:** branch/base/range resolved on a feature branch, evidence
+located (or explicitly marked not-found), results in root-bead notes. OR:
+fail-closed BLOCK note written + drain-ack.
+"""
+
+[[steps]]
+id = "compose-body"
+needs = ["intake"]
+title = "Assemble the template-complete PR body"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Assemble a paste-ready, template-COMPLETE PR body and write it to
+`$GC_WORK_DIR/{{brief_slug}}-pr-body.md`. Match the target repo's LIVE
+`.github/pull_request_template.md` section structure EXACTLY — read it from the
+checkout at runtime (do not hardcode a template; it is repo-owned and may change).
+
+**0. Re-enter the checkout and read intake hand-off + the live template:**
+```bash
+# Same pr_work_dir discipline as intake (READ-ONLY).
+PR_WORK_DIR="{{pr_work_dir}}"
+[ -n "$PR_WORK_DIR" ] && cd "$PR_WORK_DIR"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) && cd "$REPO_ROOT"
+INTAKE=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].notes // ""' | grep -A20 'pr-pipeline-briefed intake:')
+BRANCH=$(echo "$INTAKE" | sed -n 's/.*branch: //p' | head -1)
+RANGE=$(echo "$INTAKE"  | sed -n 's/.*range: //p'  | head -1)
+EVIDENCE_FOUND=$(echo "$INTAKE" | sed -n 's/.*evidence_found: //p' | head -1)
+EVIDENCE_PATH=$(echo "$INTAKE"  | sed -n 's/.*evidence_path: //p'  | head -1)
+TEMPLATE="$REPO_ROOT/.github/pull_request_template.md"
+```
+
+**1. FAIL CLOSED if there is no recorded focused-test evidence** — the Testing
+section is evidence-only and must never be fabricated:
+```bash
+if [ "$EVIDENCE_FOUND" = "no" ]; then
+    echo "[pr-pipeline-briefed] BLOCKED: no recorded focused-test evidence at $EVIDENCE_PATH — refusing to fabricate a Testing section"
+    bd update {{source_bead}} --notes "pr-pipeline-briefed compose-body BLOCKED: no recorded focused-test evidence (Testing is evidence-only). Run the focused tests + record evidence at {{evidence_source}} or in {{source_bead}} notes, then re-dispatch."
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**2. Assemble the body.** If `$TEMPLATE` exists, mirror its exact headings and
+order; if it does not, use the canonical Summary / Testing / Checklist shape.
+Fill each section from REAL sources only:
+
+- **## Summary** — synthesize from the commit-message BODY across `$RANGE`
+  (`git log --format='%b' $RANGE`), i.e. the real mechanism explanation the
+  author already wrote. Not the subject line alone; not invented rationale.
+- **## Testing** — the recorded focused-test evidence ONLY (from
+  `$EVIDENCE_PATH`): test name(s) + pass/fail + RED/GREEN where recorded. Mark
+  check-docs / test-integration `n/a` with a reason when they do not apply.
+  NEVER fabricate a result that is not in the evidence.
+- **## Checklist** — real state: linked issue (`Closes #{{issue_number}}` when
+  set, else the linkage from intake), tests-added yes/no (from the diff),
+  docs n/a-or-updated, breaking-changes none-or-description.
+
+Write it:
+```bash
+cat > "$GC_WORK_DIR/{{brief_slug}}-pr-body.md" << 'EOF'
+<the fully-filled PR body, matching $TEMPLATE section structure exactly>
+EOF
+```
+
+**3. Surface (do NOT fix) the P5.5 Co-Authored-By warning** — a commit-level
+concern out of scope here (belongs to gsp-7njh):
+```bash
+if git log --format='%b' $RANGE | grep -qi 'Co-Authored-By:.*Claude'; then
+    bd update {{source_bead}} --notes "pr-pipeline-briefed compose-body WARNING: a Co-Authored-By: Claude trailer is present in the commit range. This formula does NOT strip it (P5.5 is commit-level; see gsp-7njh). Surface only."
+fi
+```
+
+**4. Record the draft location:**
+```bash
+bd update {{source_bead}} --notes "pr-pipeline-briefed compose-body: template-complete PR body drafted at $GC_WORK_DIR/{{brief_slug}}-pr-body.md (Summary<-commit body; Testing<-recorded evidence; Checklist<-real state)."
+```
+
+**Exit criteria:** a template-complete PR body written to $GC_WORK_DIR, or a
+fail-closed BLOCK note (missing evidence) + drain-ack. This step NEVER runs
+`git push` or `gh pr create`.
+"""
+
+[[steps]]
+id = "file-brief"
+needs = ["compose-body"]
+title = "File the PR body as a decision brief for {{source_bead}}"
+metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "pr-pipeline-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+description = """
+File a decision brief presenting the paste-ready PR body for the human adjudicator to approve
+before the PR is opened. This is the terminal briefed slot — it EMITS into the
+brief pipeline (brief-shuffle is the only writer to stack/, so write to .pile/).
+
+```bash
+BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
+mkdir -p "{{artifact_root}}/.pile"
+PR_BODY=$(cat "$GC_WORK_DIR/{{brief_slug}}-pr-body.md")
+```
+
+The brief MUST contain:
+- `status: approved` frontmatter
+- `brief_bead: {{source_bead}}`
+- `brief_slug: {{brief_slug}}`
+- `producer_contract: brief-producer.v1`
+- `source_formula: pr-pipeline-briefed`
+- `source_step: file-brief`
+- `routing_path: "{{routing_path}}"`
+- `review_gate: approved`
+- `unlock_count: <int>`
+- `priority: P0|P1|P2|P3|P4`
+- `server_touching: false`
+- `user_skill_touching_override: false`
+- A one-paragraph summary of the change (from the commit body)
+- The **full paste-ready PR body** (the content of
+  `$GC_WORK_DIR/{{brief_slug}}-pr-body.md`) as a fenced markdown block, ready to
+  paste verbatim when the PR is opened
+- The upstream target (base repo/branch) and the branch/commit range it describes
+- Any surfaced warnings (e.g. the P5.5 Co-Authored-By note)
+- Recommended verdict (A = approve; open the PR with this body — OR — C = revise the body)
+- A complete `## Gate Evidence` section for the active gate profile, including
+  this machine-readable G9 line:
+  `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=the human adjudicator PR-body approval required before opening the PR; proposed_registry_extension=none`
+
+This formula does NOT push and does NOT open the PR. On APPROVE, the agent
+executing the verdict opens the PR (per the normal verdict edge) pasting this
+exact body.
+
+After filing:
+
+```bash
+bd update {{source_bead}} --notes "pr-pipeline-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (no PR opened)."
+gc runtime drain-ack
+```
+"""

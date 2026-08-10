@@ -1,0 +1,38 @@
+# gsp-1pv (historical): artifact_root was migrated to ~/.gc/mathcity/briefs
+# (absolute home-relative path) and the order made city-scoped. That global
+# root was retired by gsp-5h17: the pipeline is rig-relative per
+# assets/brief-pipeline/paths.toml, so the city-scoped $HOME/.gc check
+# never fired.
+#
+# gsp-3al3: scope=rig with a rig-relative pile path (mirrors the
+# brief-review-patrol gsp-fqo fix). Rig-scoped condition checks run with the
+# rig root as cwd (the gc order runtime sets the check's working directory to
+# the rig path), so `.beads/briefs/.pile` resolves against each rig —
+# matching brief-shuffle's artifact_root default. The formula's empty-pile
+# route (gsp-3al3) guarantees a run that finds nothing exits cleanly and
+# releases the shuffler lock.
+[order]
+description = "Promote or reject one brief whenever the pile has pending markdown briefs"
+scope = "rig"
+formula = "brief-shuffle"
+trigger = "condition"
+# Pile items are FLAT .pile/<slug>.md files — that is what brief-prep's
+# submit-to-pile step actually deposits (formulas/brief-prep.toml:136 sets
+# gc.brief.path = "{{artifact_root}}/.pile/{{brief_slug}}.md") and what the
+# live stack holds. The prior depth-2 <slug>/brief.md glob was a MISDIAGNOSIS
+# (gsp-*, Mayor session S10 shuffler audit): the earlier depth-1 check found
+# nothing because of the pre-gsp-3al3 scope/deadlock defects, not the glob —
+# depth-1-flat matches brief-prep output; depth-2 matched NOTHING, so the
+# order never fired and pile→stack promotion was universally dead. This
+# reverts to depth-1 flat. paths.toml [filenames].brief="brief.md" (subdir
+# intent) is unused by the pile/stack — behavior wins (P5.4), FLAT is
+# canonical.
+# P1.17 invariant: the order's pile glob MUST match the shape brief-prep's
+# submit-to-pile step writes (gc.brief.path in formulas/brief-prep.toml) —
+# change them together or not at all.
+# Depth-1 -type f never descends, so .rejected/ and .no-brainer/ subdirs are
+# excluded structurally; ! -name '.*' skips hidden/partial files.
+check = "find .beads/briefs/.pile -maxdepth 1 -type f -name '*.md' ! -name '.*' 2>/dev/null | grep -q ."
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true

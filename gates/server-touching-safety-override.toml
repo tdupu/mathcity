@@ -1,0 +1,83 @@
+description = """
+Hard gate: briefs flagged server_touching: true require explicit human adjudication.
+
+Any brief whose frontmatter declares `server_touching: true` (Magma server work,
+UPF dispatch, Dolt server, gt/gc CLI, long-running jobs, persistent daemons)
+MUST NOT be auto-dispatched or auto-approved.  This is the machine form of the
+prose safety override in `brief-prep` §"Safety overrides" (Override 1 — he-lele
+cat-E) and `present-it` §"Compact form" NEVER rules.
+
+The gate is poka-yoke by design: the check is purely mechanical (frontmatter
+grep), never judgment-bearing.  Any disposition that requires judgment is
+explicitly routed to the human adjudicator; nothing here pretends to be judgment.
+
+Trigger paths (any match → server_touching: true in brief frontmatter):
+  - magma/scripts/dispatch.sh, magma/make/dispatch/* (UPF dispatch loop)
+  - gt-dolt* / gt-upf* (CLI machinery)
+  - <city-root>/.gc/daemon* (any persistent daemon path)
+  - <city-root>/.dolt-data/*, ~/.dolt-data/* (Dolt storage)
+  - .gc/agent-bridge/* (agent-bridge daemon)
+  - any ssh-write-cmd to aia-s27 or UPF deploy targets
+  - any change to gt/gc CLI machinery that ships across rigs
+
+Source of truth: `brief-prep` SKILL.md §"Safety overrides" Override 1 and
+`present-it` SKILL.md §"Compact form" NEVER rules.
+
+Enforcement sequence (from brief-prep §"Order at gate-check time"):
+  1. No-brainer category match (he-lele A/B/C/D classifier)
+  2. THIS GATE — server-touching override (cat-E) — REJECTS auto-merge if match
+  3. User-skill-touching override (sibling gate)
+  4. Auto-merge kill switch (only consulted if steps 2 + 3 pass)
+"""
+formula = "gate"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "server-touching-safety-override"
+description = "Block auto-dispatch/auto-approve for server_touching: true briefs; require explicit human adjudication."
+tags = ["gate", "safety-override", "server-touching", "hard-gate"]
+
+[vars]
+[vars.brief_path]
+description = "Path to the brief markdown file to check."
+required = true
+
+[vars.operator_target]
+description = "Run target for the gate check."
+default = "gc.run-operator"
+
+[[steps]]
+id = "check-server-touching"
+title = "Enforce server-touching safety override"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}" }
+description = """
+Read `{{brief_path}}` and check for:
+
+1. Frontmatter key `server_touching: true` — if present, FAIL immediately.
+2. Gate evidence line `G5 Server-touching: FAIL` or `G5 Server-touching: BLOCKED`
+   — if present, FAIL.
+
+If FAIL: the brief MUST NOT proceed through any automated dispatch, approval,
+or no-brainer shortcut path.  It must be routed to the human adjudicator for explicit
+adjudication.  Record the failure reason in the brief's gate evidence section
+as `G5 Server-touching: FAIL — server_touching: true; human adjudication
+required`.
+
+If PASS (frontmatter says `server_touching: false` or key absent AND G5 gate
+evidence is PASS or N/A): the gate is satisfied; downstream steps may proceed.
+
+This gate is STOP-class: a FAIL must never be silently overridden by an agent.
+Only the human adjudicator can grant an explicit adjudication bypass (must be cited in §7 of
+the brief with a quoted authorization and date).
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-server-touching-safety.sh"
+timeout = "30s"

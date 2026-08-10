@@ -1,0 +1,15 @@
+[order]
+# Auto-armed on a cooldown (gsp-2bowrk): was trigger="manual" and NEVER fired
+# — the classify->resling half of the reclaim loop was silently dead. idempotent
+# + fingerprint-grouped + threshold-gated, so re-firing is safe.
+description = "Roll up lost-bead classifications into downstream filter-rule decision briefs (auto-armed cooldown)."
+scope = "city"
+formula = "lost-bead-classification-rollup"
+trigger = "cooldown"
+interval = "10m"
+pool = "mathcity.brief-operator"
+timeout = "2m"
+idempotent = true
+
+[vars]
+threshold = "3"

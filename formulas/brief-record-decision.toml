@@ -1,0 +1,213 @@
+description = """
+Record the human adjudicator's decision for a presented brief and archive the run.
+"""
+formula = "brief-record-decision"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-record-decision"
+description = "Write a canonical decision record and archive brief artifacts."
+
+[vars]
+[vars.brief_slug]
+description = "Slug of the stack brief being decided."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.decision]
+description = "the human adjudicator's decision."
+required = true
+enum = ["approve", "reject", "revise", "defer"]
+
+[vars.reason]
+description = "Short reason or decision note."
+default = ""
+
+[vars.no_brainer_leak]
+description = "Whether the human adjudicator marked this surfaced brief as an obvious case that should have been filtered."
+default = "false"
+enum = ["true", "false"]
+
+[vars.no_brainer_leak_reason]
+description = "the human adjudicator's reason when no_brainer_leak=true."
+default = ""
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for decision bookkeeping."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[[steps]]
+id = "write-decision"
+title = "Write the decision record"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.decision" = "{{decision}}", "gc.brief.decision_path" = "{{artifact_root}}/decisions/{{brief_slug}}.toml" }
+description = """
+Write `{{artifact_root}}/decisions/{{brief_slug}}.toml` with:
+
+- brief slug
+- decision: `{{decision}}`
+- reason: `{{reason}}`
+- decision maker: the human adjudicator
+- timestamp
+- stack path
+- artifact paths
+- `source_bead` — the id of the bead this brief decides on. Copy it from the
+  brief's manifest entry: find the line in `{{artifact_root}}/stack/.index.jsonl`
+  whose `slug` equals `{{brief_slug}}` and read its `source` field (the shuffle
+  manifest's `source` key carries the source bead id, propagated from the
+  brief-prep intake `source` var). Write it verbatim as
+  `source_bead = "<id>"`. This is REQUIRED — the downstream
+  brief-decision-dispatch formula keys the approve/reject/revise routing on
+  `source_bead`, and a missing value makes the approve path a silent no-op. If
+  the manifest entry has no `source` (legacy brief), fall back to the
+  brief-record bead's `source_bead` metadata; if neither is available, record
+  `source_bead = ""` and note the gap in `reason`.
+
+One-bead model (brief-system POLICY.md B2.2): the brief bead IS the decision
+bead (`type=decision`). Record the verdict ON the brief bead itself — verdict,
+authorizer, one-line rationale, date (plus confidence/category for
+auto-executions) — then close the brief bead. Do NOT create a separate
+decision bead for the brief. The `.toml` decision record written above is a
+redundancy channel (B2.8: files are cache), not the canonical record.
+
+If the human adjudicator marked this surfaced brief as a no-brainer leak, also write the
+durable leak event and replay cache:
+
+```bash
+if [ "{{no_brainer_leak}}" = "true" ]; then
+  mkdir -p "{{artifact_root}}/no-brainer-leaks"
+  leak_reason_raw=$(cat <<'LEAK_REASON_EOF'
+{{no_brainer_leak_reason}}
+LEAK_REASON_EOF
+)
+  leak_reason_toml=$(printf '%s' "$leak_reason_raw" | jq -Rs .)
+  source_bead="${SOURCE_BEAD:-}"
+  brief_bead="${BRIEF_BEAD:-}"
+  previous_state="${G9_CLASSIFIER_STATE:-}"
+  cat > "{{artifact_root}}/no-brainer-leaks/$(date +%Y-%m-%d)-{{brief_slug}}.toml" <<EOF
+[leak]
+brief_slug = "{{brief_slug}}"
+brief_bead = "$brief_bead"
+source_bead = "$source_bead"
+ordinary_verdict = "{{decision}}"
+no_brainer_leak = true
+reason = $leak_reason_toml
+
+[classifier]
+previous_state = "$previous_state"
+
+[safety]
+server_touching = ${SERVER_TOUCHING:-false}
+user_skill_touching = ${USER_SKILL_TOUCHING:-false}
+latex_execution_sensitive = ${LATEX_EXECUTION_SENSITIVE:-false}
+
+[repair]
+status = "unreviewed"
+candidate_fingerprint = ""
+EOF
+
+  event_payload=$(jq -n \
+    --arg slug "{{brief_slug}}" \
+    --arg verdict "{{decision}}" \
+    --arg reason "$leak_reason_raw" \
+    --arg brief "$brief_bead" \
+    --arg source "$source_bead" \
+    --arg previous "$previous_state" \
+    '{brief_slug:$slug, ordinary_verdict:$verdict, reason:$reason, brief_bead:$brief, source_bead:$source, previous_classifier_state:$previous, repair_status:"unreviewed"}')
+  event_id=$(bd create "no-brainer leak: {{brief_slug}}" \
+    --type event \
+    --event-category no_brainer_leak \
+    --event-target "${brief_bead:-{{brief_slug}}}" \
+    --event-payload "$event_payload" \
+    --metadata "$event_payload" \
+    --silent)
+  [ -n "$event_id" ] || { echo "failed to create durable no_brainer_leak event bead" >&2; exit 1; }
+  if [ -n "$brief_bead" ]; then
+    bd dep relate "$event_id" "$brief_bead"
+  fi
+  if [ -n "$source_bead" ]; then
+    bd dep relate "$event_id" "$source_bead"
+  fi
+fi
+```
+
+Populate `brief_bead` when the brief bead id is known; populate `source_bead`
+from the same manifest/metadata lookup used for the decision record. Copy
+`previous_state` from the G9 `classifier_state` evidence line when present.
+Copy safety flags from frontmatter/gate evidence when present; otherwise keep
+the explicit empty-string or `false` defaults so missing evidence is visible.
+The Beads event bead is the durable append-only event; the TOML file is the
+replay cache. Do not rewrite an existing bead's description, notes, or metadata
+for this signal.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-decision-record-required.sh"
+timeout = "1m"
+
+[[steps]]
+id = "emit-decided-event"
+title = "Ring the brief.decided bell"
+needs = ["write-decision"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.decision" = "{{decision}}" }
+description = """
+Emit the city event that wakes the post-decision file-or-sendback gate
+(event-driven per the human adjudicator 2026-06-30 — ring the bell, no polling):
+
+    gc event emit brief.decided \\
+      --subject "{{brief_slug}}" \\
+      --message "brief {{brief_slug}} decided: {{decision}}" \\
+      --payload '{"brief_slug":"{{brief_slug}}","decision":"{{decision}}"}'
+
+Best-effort by design: `gc event emit` always exits 0, and the event bus
+does not guarantee durable persistence. The decision record written in
+write-decision is the source of truth; this event is only the wake-up.
+The post-decision-file-or-sendback order catches this type and pours
+file-or-sendback-route, which scans decision records on disk — so a lost
+event is recovered by the next bell.
+
+The refinery emits the same event type after merge-time decisions once
+the refinery-role expansion lands (gsp-itx).
+"""
+
+[[steps]]
+id = "archive-brief"
+title = "Archive the brief and staged artifacts"
+needs = ["write-decision"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Move the decided brief and its staging directory under
+`{{artifact_root}}/archive/{{brief_slug}}/`. Keep the decision record in
+`{{artifact_root}}/decisions/` as the indexable canonical record.
+"""
+
+[[steps]]
+id = "update-manifest"
+title = "Update manifest decision state"
+needs = ["archive-brief"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Mark the manifest entry for `{{brief_slug}}` by setting its `status` key
+(allowed values: `decided` or `archived`) without removing historical stack
+information. The drain reader (brief-drain-manifest.sh) filters out entries
+whose `status` is `decided` or `archived`. The manifest must remain valid JSONL.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-manifest-current.sh"
+timeout = "1m"

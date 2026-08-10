@@ -1,0 +1,18 @@
+# Event-trigger order — archive a sent-back brief immediately.
+#
+# `brief.archive_requested` is rung by file-or-sendback-route when a
+# decision routes SEND-BACK (self-contained adjudication, no follow-up).
+# Catching it here means sent-back briefs are tidied within minutes
+# instead of waiting for the 24h cooldown sweep, which remains in place
+# as the backstop for lost events (events are best-effort, not durable).
+
+[order]
+description = "Archive sent-back brief artifacts as soon as routing requests it"
+scope = "city"
+formula = "brief-archive-sweep"
+trigger = "event"
+on = "brief.archive_requested"
+# Retarget: gastown-vestige pool "gc.run-operator" -> pack-local mathcity.brief-operator (the human adjudicator 2026-07-13, example-owner/gascity-packs#4)
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true

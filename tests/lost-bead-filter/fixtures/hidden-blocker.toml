@@ -1,0 +1,19 @@
+schema = "lost-bead-classification.v1"
+bead_id = "gsp-test-hidden-blocker"
+observed_at = "2026-07-25T00:00:00Z"
+observer = "fixture"
+
+[finding]
+lost_class = "hidden_blocker"
+evidence = ["bd ready listed the bead", "body says needs the human adjudicator sign-off"]
+
+[disposition]
+recommendation = "encode_dependency"
+rationale = "The blocker should be encoded as a dependency or human marker instead of prose."
+reversible = true
+
+[root_cause]
+class = "hidden_human_decision_dependency"
+suspected_source = "manual"
+repair_candidate = true
+fingerprint = "ready_but_needs_taylor_signoff_in_body"

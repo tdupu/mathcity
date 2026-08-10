@@ -1,0 +1,12 @@
+#!/bin/bash
+# lmfdb-server.conf.example — SSH and compute-server connection.
+# Copy to your project ROOT as lmfdb-server.conf, fill in, and GITIGNORE the copy.
+# Never commit real values. See mathcity-lmfdb.configure-server to generate this file.
+
+REMOTE_HOST=compute.example.edu
+REMOTE_USER=youruser
+REMOTE_REPO=/home/youruser/yourproject
+SSH_JUMP=            # optional jump host, leave empty if none
+SSH_KEY=~/.ssh/id_ed25519
+MAX_PARALLEL=4
+ALERT_EMAILS=you@example.edu

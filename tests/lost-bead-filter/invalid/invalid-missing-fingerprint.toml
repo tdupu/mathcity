@@ -1,0 +1,18 @@
+schema = "lost-bead-classification.v1"
+bead_id = "gsp-test-invalid"
+observed_at = "2026-07-25T00:00:00Z"
+observer = "fixture"
+
+[finding]
+lost_class = "immediate_strand"
+evidence = ["fixture deliberately omits root_cause.fingerprint"]
+
+[disposition]
+recommendation = "resling"
+rationale = "This fixture should fail validation."
+reversible = true
+
+[root_cause]
+class = "no_worker_claimed"
+suspected_source = "mathcity.work"
+repair_candidate = true

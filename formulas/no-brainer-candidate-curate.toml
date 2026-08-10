@@ -1,0 +1,52 @@
+description = """
+Curate accumulated no-brainer leaks and candidate descriptors into a repair decision brief.
+This formula proposes category or classifier changes; it never edits policy, gates, or skills directly.
+"""
+formula = "no-brainer-candidate-curate"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "no-brainer-candidate-curate"
+description = "Summarize no-brainer leak/candidate patterns and file a human repair brief."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for curation."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "gather-candidates"
+title = "Gather no-brainer leak and candidate examples"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Resolve the candidate descriptor root before reading descriptors: use `{{artifact_root}}/.gates-candidate-pile` when it exists, use `.beads/.gates-candidate-pile` when that exists, and fail loudly with both checked paths when neither exists. If both roots exist and contain candidates, read both and record the source root for each example.
+Read `{{artifact_root}}/no-brainer-leaks/*.toml` and the resolved `*-candidate.md` descriptors.
+Group examples by candidate fingerprint or proposed category. Ignore groups with fewer than 3 distinct briefs unless a stop-gate safety issue is present.
+Write a batch summary under `{{artifact_root}}/.curation/no-brainer-candidates.md`.
+"""
+
+[[steps]]
+id = "file-repair-brief"
+title = "File no-brainer repair decision brief"
+needs = ["gather-candidates"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+For each group at threshold, file one decision brief into `{{artifact_root}}/.pile/`.
+The brief asks the human adjudicator whether to promote, merge, reject, or hold the candidate category.
+It must include examples, counterexamples, stop gates, fixture updates, and the exact files to change after approval.
+It must use the normal brief artifact shape expected by `brief-shuffle`:
+frontmatter with `status: approved`, `brief_slug`, `brief_bead` or a source
+link when known, `unlock_count`, `priority`, and `review_gate: approved`; a
+Decision-at-Top body; and a complete `## Gate Evidence` section including a
+machine-readable G9 line with `classifier_state=candidate`,
+`classified_at=<ISO-8601-utc>`, `category=none`, `confidence=<float>`,
+`stop_gates_clear=false`, `reason=curation-required`, and
+`proposed_registry_extension=<candidate-summary>`.
+"""

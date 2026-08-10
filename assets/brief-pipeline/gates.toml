@@ -1,0 +1,242 @@
+# MACHINE JOIN-LAYER ONLY (PP4.1). Gate DEFINITIONS — id, name, kind,
+# purpose, rules mapping — are owned by the gate-inventory table in
+# mathcity/subdomains/brief-system/POLICY.md; that table is authoritative.
+# This file carries only the executable wiring (profiles, required flags,
+# `rules` join keys, evidence keys) and MUST match the policy table. Any
+# mismatch is PP1.7 drift: repair THIS file to match the table (never the
+# reverse). check-brief-policy audits the diff mechanically.
+[registry]
+name = "brief-pipeline-gates"
+version = 1
+source = "mathcity/subdomains/brief-system/POLICY.md gate-inventory table (definitions); historically derived from agent-skills/docs/brief-bundle plus he-xkq3 gate registry"
+default_profile = "standard"
+fail_closed = true
+evidence_heading = "Gate Evidence"
+
+[[gates]]
+id = "G1"
+name = "test-evidence"
+kind = "mechanical"
+required = true
+rules = ["T1", "T3"]
+evidence_key = "G1 Test-evidence"
+policy = "test-evidence-required.md"
+description = "Any claim about tests must include the exact command, scope, result, and date, or an explicit N/A with surface-check evidence."
+
+[[gates]]
+id = "G2"
+name = "good-test"
+kind = "review"
+required = true
+rules = ["T6"]
+evidence_key = "G2 Good-test"
+policy = "is-good-test/SKILL.md"
+description = "A named reviewer judges that the test meaningfully tests the claimed behavior."
+
+[[gates]]
+id = "G3"
+name = "shell-scripts-testable"
+kind = "mechanical"
+required = true
+# rules per the POLICY.md gate-inventory table (G3 -> T1, B1.4)
+rules = ["T1", "B1.4"]
+evidence_key = "G3 Shell-scripts-testable"
+description = "Shell-script changes name runnable validation, or explicitly state that no script surface is touched."
+
+[[gates]]
+id = "G4"
+name = "critical-review"
+kind = "review"
+required = true
+rules = ["B1.6"]
+evidence_key = "G4 Critical-review"
+policy = "critical-review/SKILL.md"
+description = "An external critical-review pass hunting correctness risks, policy misses, missing evidence, and forced follow-up questions."
+
+[[gates]]
+id = "G5"
+name = "server-touching-exclusion"
+kind = "stop"
+required = true
+rules = ["S7", "N3", "B1.3"]
+evidence_key = "G5 Server-touching"
+description = "Server-touching work cannot pass through the shortcut path without explicit the human adjudicator authorization."
+
+[[gates]]
+id = "G5b"
+name = "user-skill-touching-exclusion"
+kind = "stop"
+required = true
+rules = ["N3", "B1.3"]
+evidence_key = "G5b User-skill-touching"
+description = "User skill changes cannot pass through shortcut automation without explicit the human adjudicator authorization."
+
+[[gates]]
+id = "G6"
+name = "latex-gate"
+kind = "manual"
+required = true
+rules = ["L1", "L2", "L3", "L4"]
+evidence_key = "G6 LaTeX-gate"
+policy = "latex-gate-policy.md"
+description = "LaTeX-bearing work needs the LaTeX gate outcome or an explicit no-LaTeX surface check."
+
+[[gates]]
+id = "G7"
+name = "artifacts-staging"
+kind = "mechanical"
+required = true
+rules = ["E6"]
+evidence_key = "G7 Artifacts-staging"
+description = "Artifacts must be staged under the brief run directory and referenced from the brief."
+
+[[gates]]
+id = "G8"
+name = "brief-record-bookkeeping"
+kind = "mechanical"
+required = true
+rules = ["B1.7", "B2.9", "B3.3", "N7"]
+evidence_key = "G8 Brief-record"
+description = "Bead records (brief bead type=decision), source links, pile membership, and recorded-verdict/archive records all consistent (one-bead model)."
+
+[[gates]]
+id = "G9"
+name = "no-brainer-filter"
+kind = "review"
+required = true
+# rules per the POLICY.md gate-inventory table (G9 -> N1-N4, N6)
+rules = ["N1", "N2", "N3", "N4", "N6"]
+evidence_key = "G9 No-brainer-filter"
+policy = "no-brainer-brief-filter.md"
+description = "No-brainer classifier evidence must record exactly one state: known_no_brainer, known_non_no_brainer, candidate, capability_blocker, or safety_blocked. Missing, malformed, or stale classification evidence blocks shortcut handling and stack promotion."
+
+[[gates]]
+id = "G10"
+name = "improve-readme"
+kind = "mechanical"
+required = true
+rules = ["D1", "B4.3"]
+evidence_key = "G10 Improve-README"
+policy = "improve-readme-every-iteration.md"
+description = "Each qualifying iteration must show the README improvement or explain why no README surface exists."
+
+[[gates]]
+id = "G11"
+name = "breadcrumb"
+kind = "mechanical"
+required = true
+rules = ["D4", "E6"]
+evidence_key = "G11 Breadcrumb"
+policy = "experiment-breadcrumbs.md"
+description = "Experiment or deferred work must leave a durable breadcrumb to the source, artifacts, and next owner."
+
+[[gates]]
+id = "G12"
+name = "auto-merge-kill-switch"
+kind = "stop"
+required = true
+rules = ["N5"]
+evidence_key = "G12 Auto-merge-kill-switch"
+# N5 (Adopted 2026-07-12): auto-execute is the DEFAULT; kill switches are
+# safety brakes. This supersedes the earlier fail-closed/opt-in semantics
+# (ALLOW_NO_BRAINER_AUTO_EXECUTE existence-enables). Switch locations are
+# declared in paths.toml (kill_switch_city, kill_switch_rig).
+description = "Automation must check the two-level kill-switch hierarchy before executing: city-wide <city-root>/.beads/auto_merge_enabled, then <rig_root>/.beads/auto_merge_enabled. A switch that exists and reads `false` halts auto-execution (halted no-brainers route to the pile in compact form); absent or `true` proceeds — auto-execute is the default (N5)."
+
+[[gates]]
+id = "G13"
+name = "stale-claim"
+kind = "mechanical"
+required = true
+# rules per the POLICY.md gate-inventory table (G13 -> B1.5)
+rules = ["B1.5"]
+evidence_key = "G13 Stale-claim"
+description = "Briefs must not rely on stale claims; claim freshness or revalidation must be recorded."
+
+[[gates]]
+id = "G14"
+name = "test-execution-silent"
+kind = "mechanical"
+required = true
+rules = ["T7"]
+evidence_key = "G14 Test-execution-silent"
+policy = "test-execution-request-brief-type.md"
+gate_skill = "gate-test-execution-silent"
+improve_skill = "improve-test-execution-silent"
+description = "Brief must carry a non-silent test-execution tri-state declaration (PASSED/NOT APPLICABLE/REQUIRED). Silent or absent declaration auto-throwbacks the brief. Source: he-8akk."
+
+[[gates]]
+id = "G15"
+name = "improve-readme-silent"
+kind = "mechanical"
+required = true
+rules = ["D2", "B4.3"]
+evidence_key = "G15 Improve-README-silent"
+description = "A missing README improvement cannot be silent; the brief must record applied or N/A evidence."
+
+[[gates]]
+id = "G16"
+name = "master-current-for-test-evidence"
+kind = "mechanical"
+required = true
+rules = ["T2"]
+evidence_key = "G16 Master-current"
+description = "Test evidence that depends on main/master state must record the base ref used."
+
+[profiles.standard]
+gates = [
+  "G1",
+  "G2",
+  "G3",
+  "G4",
+  "G5",
+  "G5b",
+  "G6",
+  "G7",
+  "G8",
+  "G9",
+  "G10",
+  "G11",
+  "G12",
+  "G13",
+  "G14",
+  "G15",
+  "G16",
+]
+
+[profiles.no_brainer]
+gates = [
+  "G1",
+  "G5",
+  "G5b",
+  "G7",
+  "G8",
+  "G9",
+  "G12",
+  "G13",
+  "G14",
+  "G16",
+]
+
+[profiles.test_execution]
+gates = [
+  "G1",
+  "G2",
+  "G4",
+  "G8",
+  "G13",
+  "G14",
+  "G16",
+]
+
+[profiles.experiment]
+gates = [
+  "G1",
+  "G2",
+  "G4",
+  "G7",
+  "G8",
+  "G11",
+  "G13",
+  "G16",
+]

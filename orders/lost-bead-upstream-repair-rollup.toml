@@ -1,0 +1,14 @@
+[order]
+# Auto-armed on a cooldown (gsp-2bowrk): was trigger="manual" and NEVER fired.
+# Upstream repair is less time-critical than the resling rollup, so a slower cadence.
+description = "Roll up classified lost-bead signals into upstream repair decision briefs (auto-armed cooldown)."
+scope = "city"
+formula = "lost-bead-upstream-repair-rollup"
+trigger = "cooldown"
+interval = "30m"
+pool = "mathcity.brief-operator"
+timeout = "2m"
+idempotent = true
+
+[vars]
+threshold = "3"

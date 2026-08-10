@@ -1,0 +1,13 @@
+schema = "dispatch-provenance.v1"
+bead_id = "gsp-test-strand-1"
+observed_at = "2026-07-25T00:00:00Z"
+observer = "fixture"
+
+[dispatch]
+source = "mathcity.work"
+created_at = "2026-07-25T00:00:00Z"
+rig = "gascity-packs"
+target = "gascity-packs/gc.run-operator"
+formula = "work-briefed"
+preflight_result = "passed"
+routing_reason = "fixture dispatch through the default work router"

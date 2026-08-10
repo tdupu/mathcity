@@ -1,0 +1,67 @@
+description = """
+Dispatch a task to the codex-worker for cross-model critical review,
+creative design, or large-plan analysis.
+
+## When to pour
+
+Pour explicitly — this formula is NEVER fired by an automated order.
+Use it when:
+- A prior agent attempt failed and an independent perspective is needed.
+- A design decision warrants cross-model review before committing.
+- The task is a proof, large plan, or theoretical analysis that benefits
+  from a non-Anthropic model's judgment.
+
+Sparse by design: target less than one call per brief cycle on average.
+
+## How it works
+
+A single step bead is created and routed to the codex-worker pool
+(`codex:codex-worker`). The codex-worker claims it, performs the task
+described in `task`, optionally reads the paths/beads in `context`,
+then closes the step and drain-acks.
+
+the human adjudicator or the mayor reads the result from the closed bead's notes.
+"""
+formula = "codex-dispatch"
+version = 1
+
+[catalog]
+name = "codex-dispatch"
+description = "Dispatch a task to the codex-worker for explicit cross-model review or creative design."
+
+[vars]
+[vars.task]
+description = "The specific task the codex-worker should perform. Be precise: state the question, the artifact to review, and what output is expected."
+required = true
+
+[vars.context]
+description = "Optional context: file paths, bead IDs, or brief slugs the worker should read before starting. Leave empty if not applicable."
+default = ""
+
+[vars.codex_target]
+description = "Run target for the codex-worker pool."
+default = "codex:codex-worker"
+
+[[steps]]
+id = "codex-task"
+title = "Codex worker: {{task}}"
+metadata = { "gc.run_target" = "{{codex_target}}" }
+description = """
+You are the codex-worker. Perform the following task:
+
+---
+{{task}}
+---
+
+{{context}}
+
+When the task is complete:
+1. Record your findings or output in this bead's notes (`bd update <this-bead-id> --notes "<output>"`).
+2. Close this step bead (`bd close <this-bead-id>`).
+3. Call `gc runtime drain-ack`.
+
+If you are blocked and cannot proceed without human input, file an
+escalation bead using the escalate helper at
+`.gc/scripts/escalate.sh`
+before stopping.
+"""

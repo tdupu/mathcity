@@ -1,0 +1,36 @@
+[watchdog]
+low_water = 2
+high_water = 5
+max_new_briefs_per_run = 3
+cooldown = "30m"
+# Event trigger: scripts/brief-stack-low.sh emits brief.stack-low when any
+# combined signal (approved / total / unlock_count>0) drops to <= this value.
+stack_low_trigger = 1
+
+[shuffle]
+max_promotions_per_run = 1
+lock_timeout = "10m"
+fail_closed = true
+
+[no_brainer]
+# N5 (POLICY.md, Adopted 2026-07-12): auto-execute is the DEFAULT; kill
+# switches are safety brakes. Executors must still check the two-level
+# hierarchy declared in paths.toml (kill_switch_city, then kill_switch_rig):
+# a flag file that exists AND reads `false` halts auto-execution; absent or
+# `true` proceeds. (Replaces the superseded opt-in require_kill_switch /
+# ALLOW_NO_BRAINER_AUTO_EXECUTE existence-enables semantics.)
+enabled = true
+check_kill_switch_hierarchy = true
+max_auto_exec_per_run = 1
+
+[archive]
+decision_retention = "168h"
+rejected_retention = "168h"
+
+[stack_low]
+# Ring brief.stack_low when ANY combo signal (approved / total /
+# unlock_pos) over stack/*.md drops to <= threshold. Checked by
+# assets/scripts/checks/brief-stack-low-check.sh (STACK_LOW_THRESHOLD
+# env overrides; this entry is the canonical documented value).
+threshold = 1
+

@@ -1,0 +1,9 @@
+[order]
+description = "Record producer-failure signals after brief-shuffle rejects a brief."
+scope = "city"
+formula = "brief-producer-failure-record"
+trigger = "event"
+on = "brief.gate_rejected"
+pool = "mathcity.brief-operator"
+timeout = "120s"
+idempotent = true

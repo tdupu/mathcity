@@ -1,0 +1,134 @@
+description = """
+Drain all pending stack briefs in one session.
+
+This formula implements the accumulate-and-drain UX (HQ decision gt-3x2d):
+one manual run presents every pending brief in the manifest queue. No-brainer-
+classified briefs are collapsed into one-line items in a single consolidated
+block. Full briefs are presented via the existing grill-and-present / present-it
+rendering steps. A presentation record is written per brief.
+
+Gate semantics, shuffle, and decision recording are unchanged.
+"""
+formula = "brief-present-next"
+version = 2
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-present-next"
+description = "Drain all pending stack briefs: no-brainers as one-line items, full briefs via grill-and-present/present-it."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.presenter_target]
+description = "Run target for presenting the brief."
+# No gc.* role maps to a human-facing presenter; mathcity.brief-operator is the
+# routable default. Cities importing the gastown pack may pass gastown.mayor.
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[[steps]]
+id = "read-manifest"
+title = "Read manifest and partition pending briefs"
+metadata = { "gc.run_target" = "{{presenter_target}}", "gc.brief.root" = "{{artifact_root}}", "gc.brief.manifest" = "{{artifact_root}}/stack/.index.jsonl" }
+description = """
+Run `.gc/scripts/checks/brief-drain-manifest.sh` against
+`{{artifact_root}}/stack/.index.jsonl`.
+
+The script reads all manifest entries, filters out entries with
+`status: decided` or `status: archived`, sorts the remaining entries by
+`unlock_count` ascending, and writes two output files into a working
+directory under `{{artifact_root}}/.drain-run/`:
+
+- `no-brainer-slugs.txt` — one slug per line (gate_profile = no_brainer)
+- `full-brief-slugs.txt` — one slug per line (all other profiles)
+
+If both output files are empty there are no pending briefs; stop cleanly
+without error. Do not reorder the manifest.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-drain-manifest.sh"
+timeout = "1m"
+
+[[steps]]
+id = "consolidate-no-brainers"
+title = "Present no-brainer classified briefs as one-line items"
+needs = ["read-manifest"]
+metadata = { "gc.run_target" = "{{presenter_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Read `{{artifact_root}}/.drain-run/no-brainer-slugs.txt`. For each slug in
+the file (in the listed order), load the brief record and render it as a
+one-line item using the `mathcity.present-it` compact template:
+
+```
+DECISION:  <one sentence — what is being decided>
+CONTEXT:   <one sentence — why this exists / what triggered it>
+RECOMMEND: <verb + object — e.g., "DELETE branch polecat/foo (superseded by bar)">
+CONFIRM:   y / n / grill-me-further
+```
+
+The compact form is valid ONLY when the brief record carries
+`compact_eligible: true` (from `mathcity.catch-no-brainer`) AND both safety
+override booleans (`server_touching`, `user_skill_touching_override`) are
+false AND the shape is not `capability-blocker`. If a slug fails these
+conditions, promote it to the full-brief queue rather than emitting compact.
+
+Present all eligible no-brainer entries in one consolidated block. If the file
+is empty, emit a brief note that there are no no-brainer classified briefs
+pending.
+"""
+
+[[steps]]
+id = "present-full-briefs"
+title = "Present full briefs via grill-and-present / present-it"
+needs = ["read-manifest"]
+metadata = { "gc.run_target" = "{{presenter_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Read `{{artifact_root}}/.drain-run/full-brief-slugs.txt`. Also promote any
+no-brainer slugs from `consolidate-no-brainers` that failed compact-form
+eligibility. For each slug (ascending unlock_count):
+
+1. Load `{{artifact_root}}/stack/<slug>.md`.
+2. Use `mathcity.grill-and-present` and `mathcity.present-it` (pack
+   skills, v1.1+) to present the brief, its gate evidence, and the exact
+   required decision. The brief MUST follow the grill-with-docs shape:
+   §1 decision → §2 recommend → §3 assumptions → §4 alternatives → §5 risks
+   → §6 evidence → §7 gates.
+3. Verify the Decision-at-Top INVARIANT: the first content after the artifact
+   header is the decision statement. If a brief violates this, surface the
+   invariant violation to the human adjudicator rather than presenting the brief as-is.
+4. Do not collapse open questions into recommendations; the human adjudicator is the final
+   judge on each.
+
+Present each full brief sequentially. If the file is empty, emit a brief note
+that there are no full briefs pending.
+"""
+
+[[steps]]
+id = "record-presentations"
+title = "Record per-brief presentation metadata"
+needs = ["consolidate-no-brainers", "present-full-briefs"]
+metadata = { "gc.run_target" = "{{presenter_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+For each slug that was presented in this session (both no-brainer and full
+brief slugs), write a presentation record in
+`{{artifact_root}}/presentations/<slug>-presented.toml` containing:
+
+- brief_slug
+- presented_at (ISO-8601 timestamp)
+- session_type: "no-brainer-consolidated" or "full"
+- manifest_path: `{{artifact_root}}/stack/.index.jsonl`
+
+Each brief gets its own record (per-brief). The next step for the human adjudicator to act
+on any brief is a separate `brief-record-decision` run with an explicit
+decision for each slug.
+"""

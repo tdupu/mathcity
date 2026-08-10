@@ -1,0 +1,46 @@
+# Event-trigger order — dispatch the approval=merge back edge after a brief
+# decision is recorded.
+#
+# DIVISION OF LABOR (two brief.decided consumers): this order (dispatch) ACTS
+# on the decision — reassign the source bead on approve, create a follow-up
+# bead on reject/revise, mark-only on defer. The sibling order
+# post-decision-file-or-sendback handles FOLLOW-UP BRIEFING routing only (it
+# decides whether a successor gets re-briefed or the brief archives). The two
+# do not overlap: dispatch never routes briefing, file-or-sendback never
+# reassigns or merges.
+#
+# `brief.decided` is emitted by brief-record-decision's `emit-decided-event`
+# step (and by the refinery after merge-time decisions once gsp-itx lands).
+# This order catches the bell and pours brief-decision-dispatch, which reads
+# the undispatched decision records on disk and acts:
+#   approve  → set branch + target metadata, reassign source bead to refinery
+#   reject   → create a follow-up bead with the rejection reason
+#   revise   → create a follow-up bead with the revision feedback
+#   defer    → mark dispatched, no further action
+#
+# The formula is idempotent: it compares decision/*.toml slugs against
+# ~/.gc/mathcity/briefs/decisions-dispatched.jsonl and skips already-dispatched
+# entries. Coalesced or repeated events are therefore safe.
+#
+# If gc event emit is unavailable in a given environment, the condition
+# fallback is to compare decisions/*.toml against the dispatch ledger
+# directly in the check script (brief-decisions-undispatched.sh). The
+# event trigger is preferred since brief-record-decision already rings
+# brief.decided, giving near-zero latency dispatch.
+
+[order]
+description = "Dispatch approve/reject/revise/defer actions after a brief decision is recorded."
+scope = "city"
+formula = "brief-decision-dispatch"
+trigger = "event"
+on = "brief.decided"
+# gsp-f79: import-qualified CITY pool. Bare "polecat" could never resolve for
+# a city order (polecats are rig-scoped), so routing decoration silently
+# dropped and nothing ever staffed the pour. The formula is phase=vapor, so
+# the poured root is demand-visible and the reconciler wakes a dog for it;
+# the formula itself scans every rig's brief root (rig-scoped event orders
+# would fan out once per rig on each city event — deliberately avoided).
+# Retarget: gastown-vestige pool "gc.run-operator" -> pack-local mathcity.brief-operator (the human adjudicator 2026-07-13, example-owner/gascity-packs#4)
+pool = "mathcity.brief-operator"
+timeout = "120s"
+idempotent = true

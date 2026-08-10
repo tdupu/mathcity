@@ -1,0 +1,105 @@
+description = """
+Formal request workflow for test execution that should not happen silently.
+"""
+formula = "test-execution-request"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "test-execution-request"
+description = "Classify, review, and record explicit test-execution requests."
+
+[vars]
+[vars.request_slug]
+description = "Stable slug for the test execution request."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.test_command]
+description = "Exact command requested."
+required = true
+
+[vars.risk]
+description = "Execution risk."
+default = "normal"
+enum = ["low", "normal", "high"]
+
+[vars.reason]
+description = "Reason the command is needed."
+default = ""
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for deterministic request bookkeeping."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[vars.review_target]
+description = "Run target for policy/risk review."
+default = "gc.review-synthesizer"
+
+[[steps]]
+id = "write-request"
+title = "Write the test execution request"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.test.request_slug" = "{{request_slug}}", "gc.test.command" = "{{test_command}}", "gc.test.risk" = "{{risk}}", "gc.test.request_path" = "{{artifact_root}}/test-execution/{{request_slug}}.toml" }
+description = """
+Write `{{artifact_root}}/test-execution/{{request_slug}}.toml` with the exact
+command, reason, risk, expected cost/duration, affected repo, and required
+authorization.
+
+Requested command:
+`{{test_command}}`
+
+Reason:
+`{{reason}}`
+"""
+
+[[steps]]
+id = "review-risk"
+title = "Review execution risk"
+needs = ["write-request"]
+metadata = { "gc.run_target" = "{{review_target}}", "gc.test.request_slug" = "{{request_slug}}", "gc.test.risk" = "{{risk}}" }
+description = """
+Apply `test-execution-request-brief-type.md`, `test-evidence-required.md`, and
+`never-leak-keys.md`.
+
+High-risk commands require explicit human authorization before execution.
+Normal and low-risk commands still require the command, scope, and expected
+evidence to be recorded before execution.
+"""
+
+[[steps]]
+id = "human-authorization"
+title = "Record human authorization for high-risk execution"
+needs = ["review-risk"]
+condition = "{{risk}} == high"
+metadata = { "gc.run_target" = "{{review_target}}", "gc.test.request_slug" = "{{request_slug}}", "gc.test.risk" = "{{risk}}" }
+description = """
+Stop here until the human adjudicator explicitly authorizes this high-risk test execution.
+Record the authorization in the request TOML. Without that record, the check
+step must fail closed.
+"""
+
+[[steps]]
+id = "record-request"
+title = "Record executable request state"
+needs = ["review-risk", "human-authorization"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.test.request_slug" = "{{request_slug}}", "gc.test.risk" = "{{risk}}", "gc.test.request_path" = "{{artifact_root}}/test-execution/{{request_slug}}.toml" }
+description = """
+Finalize the request record. Do not run the command from this formula; this
+formula only makes the requested execution explicit and auditable.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-test-execution-record-required.sh"
+timeout = "1m"
+

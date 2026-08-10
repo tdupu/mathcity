@@ -1,0 +1,474 @@
+description = """
+Brief-decision dispatch: for each undispatched decision record, execute the
+routing action dictated by the decision field and mark the record dispatched.
+
+Division of labor (two brief.decided consumers): this formula ACTS on the
+decision (reassign source bead on approve; follow-up bead on reject/revise;
+mark-only on defer). The sibling formula file-or-sendback-route handles
+FOLLOW-UP BRIEFING routing only (FILE re-brief vs SEND-BACK archive). They do
+not overlap.
+
+Routing contract (approve=merge back edge — HQ decision gt-r4ou):
+
+  approve  → Read the source bead's existing metadata (`gc bd update` idioms
+             below). Three-way branch-metadata check (fail-closed — gt-yv8p2):
+             (1) If `gc bd show` FAILS (non-zero exit) or output is not
+             parseable JSON → record a retryable failure (pending_retry line,
+             no dispatched_at); do NOT reassign; retry on next wake.
+             (2) If `gc bd show` succeeds AND the bead has NO `branch` metadata
+             (direct-commit bead: mol-do-work / mol-polecat-commit, work is
+             already on the default branch) → record a SUCCESS ledger line with
+             action "approve-recorded: source_bead <id> has no branch metadata
+             (direct-commit); decision recorded, no publisher handoff" and
+             settle. No reassignment, no target write, no bead mutation.
+             (3) If `gc bd show` succeeds AND `branch` is non-empty → the full
+             publisher handoff path: ensure the source branch exists on origin
+             — push it from the rig checkout if it is local-only (refineries
+             merge from origin; a local-only branch bounces). Fill `target`
+             only if missing — never clobber — using the rig's DETECTED default
+             branch (origin/HEAD, then origin main/master probe, then
+             GC_DEFAULT_BRANCH or "main" as last resort). On success,
+             `gc bd update <id> --assignee <rig>/<merge_target>` moves the work
+             into the owning rig's merge queue. This is the approval=merge back
+             edge. Metadata/assignee use `gc bd update <id> --set-metadata k=v`
+             and `gc bd update <id> --assignee <name>` (the current bd idioms).
+  reject   → Create a follow-up bead in the source rig titled
+             `[rejected] <brief_slug>` carrying the decision reason; no merge
+             action.
+  revise   → Create a follow-up bead in the source rig titled
+             `[revise] <brief_slug>` carrying the decision reason so the
+             author can act on the feedback; no merge action.
+             (Rig resolved from the source_bead prefix via the rig registry;
+             records with no source_bead file at HQ.)
+  defer    → No-op beyond marking the record dispatched (the brief stays in
+             the archive; no follow-up bead created).
+
+Idempotency + retry: a slug counts as dispatched only when a SUCCESS ledger
+line (one carrying `dispatched_at`) names it. Failed dispatches append a
+diagnostic line with `pending_retry: true` and NO `dispatched_at`, which the
+scan and check treat as still-pending — so the next brief.decided wake retries
+them. Dispatching an already-succeeded decision is a no-op. The check script
+(brief-decision-dispatched-check.sh) verifies each pending slug has a SUCCESS
+line in the ledger (~/.gc/mathcity/briefs/decisions-dispatched.jsonl); a lone
+pending_retry line does NOT satisfy it. The scan-undispatched step pre-filters
+succeeded slugs, so a run where ALL pending decisions already succeeded
+completes as a safe no-op.
+
+## Claim contract (vapor wisp)
+
+This formula pours as a single root-only vapor wisp routed to the city dog
+pool (gsp-f79: the reconciler's demand-scaler wakes a pool worker for any
+ready, unassigned, routed, actionable root — poured molecule containers and
+step beads are invisible to it by design; and rig-scoped event orders fan
+out once per rig on every city-bus event, so the order stays city-scoped
+and THIS FORMULA scans every rig itself). After claiming this wisp:
+
+```bash
+gc formula show brief-decision-dispatch --json
+```
+
+Follow the step descriptions in order (scan-undispatched, then
+dispatch-decisions) inside ONE session — state crosses steps via each rig's
+decisions dir and dispatch ledger on disk, not via bead handoffs. The scan
+step discovers per-rig brief roots; run the dispatch step once per rig root
+that has pending slugs. When finished, close this bead with a summary of
+dispatched/retryable slugs per rig, then run:
+
+```bash
+gc runtime drain-ack
+```
+"""
+formula = "brief-decision-dispatch"
+version = 2
+# phase=vapor (not [requires] formula_compiler): a graph-v2 root is a blocked
+# container the demand probe never counts; a vapor root is the one shape gc
+# 1.3 demonstrably staffs to pools via orders (cf. bd pack mol-dog-*).
+phase = "vapor"
+
+[catalog]
+name = "brief-decision-dispatch"
+description = "Dispatch approve/reject/revise/defer actions from decision records and record dispatch in the ledger."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = "~/.gc/mathcity/briefs"
+
+[vars.default_branch]
+description = "Default merge target branch (approve path). Falls back to GC_DEFAULT_BRANCH env var, then 'main'."
+default = "main"
+
+[vars.merge_target]
+description = "Session template (rig-qualified at dispatch) that approved source beads are reassigned to for merge-queue pickup."
+# gc.publisher is the gc-roles merge/land role; override merge_target to use a different merge-queue session.
+default = "gc.publisher"
+
+[[steps]]
+id = "scan-and-dispatch"
+title = "Scan for undispatched decisions and execute routing actions"
+metadata = { "gc.brief.root" = "{{artifact_root}}", "gc.brief.dispatch_ledger" = "{{artifact_root}}/decisions-dispatched.jsonl" }
+description = """
+Run everything in ONE shell session so derived values (PENDING_SLUGS)
+survive from scan to dispatch without crossing step boundaries.
+
+**Phase 1 — scan.** Find decision records that have not yet been dispatched.
+A record is UNDISPATCHED when `{{artifact_root}}/decisions/<slug>.toml` exists
+but no SUCCESS line in `{{artifact_root}}/decisions-dispatched.jsonl` carries
+that slug. The artifact_root is a global path (W2 migration); the `~` prefix
+is expanded to $HOME at runtime.
+
+This wisp is claimed by a CITY dog; the global artifact_root is the single
+scan point. The ledger makes repeat runs safe (idempotent).
+
+**Phase 2 — dispatch.** For each pending slug: read the decision record,
+execute the routing action, and append one JSONL line to the ledger. The rig
+checkout RIG_DIR and rig name are resolved from the source_bead ID prefix via
+the city's rig registry (`gc rig list --json`; longest-prefix match, HQ
+included). No per-rig knowledge lives in this formula.
+
+**Retry semantics (C3c):** the ledger is append-only with two line shapes. A
+SUCCESS line has `"dispatched_at"` set — treated as dispatched, never
+re-acted. A FAILURE line has `"pending_retry": true` and NO `"dispatched_at"`
+— still pending, so the next wake retries it. Failed approves never count as
+dispatched and are retried until they succeed. defer/reject/revise are always
+success lines.
+
+**Terminalization (unbounded-loop guard):** before dispatching any slug,
+count its existing `pending_retry` lines in the ledger. Two special cases:
+
+1. **Missing source_bead (approve only):** terminalize immediately on FIRST
+   encounter — no 3-retry grace — with reason `missing-source-bead`.
+2. **Retry limit reached:** if a slug already has >= 3 `pending_retry` lines,
+   do NOT retry. Terminalize it.
+
+Terminalizing: append a TERMINAL ledger line carrying `dispatched_at` (so
+the scan treats it as settled) with `action = "undispatchable"`, then invoke
+the escalation helper:
+```
+.gc/scripts/escalate.sh \
+  --title "[undispatchable] brief decision <slug>" \
+  --body "<reason>" --priority 2
+```
+(P2 = accumulates, no immediate ping.) If `escalate.sh` is absent, note it
+in the ledger line and continue.
+
+Run this as one shell script:
+
+```bash
+set -euo pipefail
+CITY="${GC_CITY_PATH:-${GC_CITY:-$HOME/gt}}"
+DEFAULT_BRANCH="${GC_DEFAULT_BRANCH:-{{default_branch}}}"
+ESCALATE=".gc/scripts/escalate.sh"
+WORK_BEAD="${GC_BEAD_ID:-}"
+
+# Helper functions use ROOT, LEDGER, RIG_DIR set in the main scan block.
+
+# Detect the SOURCE RIG's actual default branch. Hardcoded "main" is wrong for
+# repos whose default is master (gt-vtab dud-2 bug B2): prefer origin/HEAD,
+# then probe main/master on origin, then fall back to the var/env default.
+detect_default_branch() {
+  db="$(git -C "$RIG_DIR" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+  if [ -z "$db" ]; then
+    for cand in main master; do
+      if git -C "$RIG_DIR" show-ref --verify --quiet "refs/remotes/origin/$cand"; then
+        db="$cand"; break
+      fi
+    done
+  fi
+  [ -n "$db" ] && printf '%s' "$db" || printf '%s' "$DEFAULT_BRANCH"
+}
+
+# Resolve a bead id -> owning rig via gc's AUTHORITATIVE registry
+# (city.toml [[rigs]] surfaced by `gc rig list --json`). Mirrors gc's own
+# resolver (cmd_bd.go resolveBdScopeTarget/bdRigForArg + handler_beads.go
+# beadIDHasConfiguredPrefix): longest configured prefix wins; the HQ row
+# ("gt") is included, so HQ beads resolve to the city root checkout.
+RIG_REGISTRY_JSON=""
+load_rig_registry() {
+  [ -n "$RIG_REGISTRY_JSON" ] && return 0
+  RIG_REGISTRY_JSON="$(gc rig list --json 2>/dev/null)" || RIG_REGISTRY_JSON=""
+  [ -n "$RIG_REGISTRY_JSON" ]
+}
+# resolve_rig <bead-id> -> two lines: name, then path. Empty output = no match.
+resolve_rig() {
+  load_rig_registry || return 1
+  printf '%s' "$RIG_REGISTRY_JSON" | jq -r --arg id "$1" '
+    [(.rigs // [])[] | select(.prefix as $p | $id | startswith($p + "-"))]
+    | sort_by(.prefix | length) | last // empty
+    | select(. != null) | .name, .path'
+}
+
+# A slug is dispatched only when a SUCCESS line (has dispatched_at) names it.
+is_dispatched() {
+  [ -f "$LEDGER" ] || return 1
+  grep "\"brief_slug\":[[:space:]]*\"$1\"" "$LEDGER" 2>/dev/null \
+    | grep -q '"dispatched_at"'
+}
+
+# Count pending_retry lines in the ledger for a given slug.
+pending_retry_count() {
+  [ -f "$LEDGER" ] || { echo 0; return; }
+  grep "\"brief_slug\":[[:space:]]*\"$1\"" "$LEDGER" 2>/dev/null \
+    | grep -c '"pending_retry"' || true
+}
+
+# Terminalize a slug: write a SUCCESS-shaped ledger line with action=undispatchable
+# so the scan and check treat it as settled, then escalate to the human adjudicator (P2).
+terminalize_slug() {
+  slug="$1"
+  reason="$2"
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo 'unknown')"
+  escalate_note=""
+  if [ -x "$ESCALATE" ]; then
+    rc=0
+    "$ESCALATE" \
+      --title "[undispatchable] brief decision $slug" \
+      --body "$reason" \
+      --priority 2 2>/dev/null || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      escalate_note=" (escalate.sh failed: exit $rc)"
+    fi
+  else
+    escalate_note=" (escalate.sh absent)"
+  fi
+  printf '%s\n' "$(jq -n \
+    --arg slug "$slug" \
+    --arg reason "$reason" \
+    --arg ts "$ts" \
+    --arg note "$escalate_note" \
+    '{brief_slug: $slug, action: "undispatchable", undispatchable_reason: $reason, escalate_note: $note, dispatched_at: $ts}' -c)" \
+    >> "$LEDGER"
+  echo "TERMINAL $slug: $reason$escalate_note"
+}
+
+dispatch_slug() {
+  slug="$1"
+  rec="$ROOT/decisions/$slug.toml"
+  [ -f "$rec" ] || { echo "WARN: missing record for $slug"; return; }
+
+  # Idempotency guard: re-check ledger before acting (handles re-entry).
+  if is_dispatched "$slug"; then
+    echo "already dispatched (re-entry guard): $slug"
+    return
+  fi
+
+  # Read fields from the TOML record (one key=value per line; values quoted).
+  decision="$(grep '^decision[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+  reason="$(grep '^reason[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+  source_bead="$(grep '^source_bead\b[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+
+  # Terminalization guard (unbounded-loop prevention):
+  # Special case: approve with missing/empty source_bead can NEVER succeed —
+  # terminalize immediately on first encounter, no 3-retry grace.
+  if [ "$decision" = "approve" ] && [ -z "$source_bead" ]; then
+    terminalize_slug "$slug" "missing-source-bead"
+    return
+  fi
+  # General case: >= 3 prior pending_retry lines → retry limit reached.
+  retries="$(pending_retry_count "$slug")"
+  if [ "$retries" -ge 3 ]; then
+    last_reason="$(grep "\"brief_slug\":[[:space:]]*\"$slug\"" "$LEDGER" 2>/dev/null \
+      | grep '"pending_retry"' | tail -n1 \
+      | grep -o '"action":"[^"]*"' | sed 's/"action":"//;s/"//' 2>/dev/null \
+      || echo "unknown after $retries retries")"
+    terminalize_slug "$slug" "retry-limit-reached after $retries failures: $last_reason"
+    return
+  fi
+
+  action_taken=""
+  follow_up_bead=""
+  outcome="success"   # flip to "failure" to write a pending_retry line
+
+  case "$decision" in
+    approve)
+      # Resolve rig name + checkout from the source_bead prefix via the city's
+      # authoritative rig registry (no per-rig knowledge in this formula).
+      rig_info="$(resolve_rig "$source_bead")"
+      RIG_NAME="$(printf '%s' "$rig_info" | sed -n 1p)"
+      RIG_DIR="$(printf '%s' "$rig_info" | sed -n 2p)"
+      if [ -z "$RIG_DIR" ] || [ ! -d "$RIG_DIR" ]; then
+        outcome="failure"
+        action_taken="approve failed: unknown rig for source_bead $source_bead (registry resolve empty or dir missing)"
+      else
+      # Approval = merge back edge. Fail-closed three-state branch check
+      # (gt-yv8p2): distinguish bd-show error from genuine no-branch.
+      # source_bead is guaranteed non-empty by the terminalize guard above.
+      meta_json=""
+      bd_show_ok=true
+      if ! meta_json="$(gc bd show "$source_bead" --json 2>/dev/null)"; then
+        bd_show_ok=false
+      fi
+      existing_branch=""
+      existing_target=""
+      if $bd_show_ok && [ -n "$meta_json" ] && command -v jq >/dev/null 2>&1; then
+        existing_branch="$(printf '%s' "$meta_json" | jq -r '.[0].metadata.branch // empty' 2>/dev/null)" || bd_show_ok=false
+        existing_target="$(printf '%s' "$meta_json" | jq -r '.[0].metadata.target // empty' 2>/dev/null)" || true
+      fi
+      if ! $bd_show_ok; then
+        # State 1: bd show failed or JSON not parseable — retry (fail-closed;
+        # do NOT conflate with no-branch or we silently skip the publisher handoff).
+        outcome="failure"
+        action_taken="approve failed: could not read metadata for $source_bead (bd show error); will retry"
+      elif [ -z "$existing_branch" ]; then
+        # State 2: bd show succeeded AND no branch metadata — direct-commit bead
+        # (mol-do-work / mol-polecat-commit: work already on default branch).
+        # Record the decision and settle; no reassignment, no bead mutation.
+        action_taken="approve-recorded: source_bead $source_bead has no branch metadata (direct-commit); decision recorded, no publisher handoff"
+      else
+        ok=true
+        # Publish the source branch before handing to the refinery (gt-vtab
+        # dud-2 bug B1): the refinery merges from origin, so a local-only
+        # branch bounces with "not found on origin". Push it if origin lacks
+        # it; if the branch exists nowhere, that's a retryable failure.
+        if ! git -C "$RIG_DIR" ls-remote --exit-code origin "refs/heads/$existing_branch" >/dev/null 2>&1; then
+          if git -C "$RIG_DIR" show-ref --verify --quiet "refs/heads/$existing_branch"; then
+            git -C "$RIG_DIR" push origin "$existing_branch" >/dev/null 2>&1 || ok=false
+          else
+            ok=false
+          fi
+        fi
+        # Only fill target if the bead is missing it; never clobber. Use the
+        # rig's detected default branch, not a blind "main" (bug B2).
+        if [ -z "$existing_target" ]; then
+          set_target="$(detect_default_branch)"
+          gc bd update "$source_bead" --set-metadata target="$set_target" 2>/dev/null || ok=false
+        else
+          set_target="$existing_target"
+        fi
+        # Reassign to the owning rig's merge-queue session ({{merge_target}},
+        # default gc.publisher). Rig-qualify the name: a bare session name does
+        # not match the rig session's queue query (run-2 of the gt-vtab dispatch
+        # test sat unpicked; run-1's working assignment was rig-qualified).
+        rig_name="$RIG_NAME"
+        gc bd update "$source_bead" --assignee "$rig_name/{{merge_target}}" 2>/dev/null || ok=false
+        if $ok; then
+          action_taken="reassigned-to-refinery (branch=$existing_branch target=$set_target)"
+        else
+          outcome="failure"
+          action_taken="approve failed: bd update error (branch=$existing_branch target=$set_target)"
+        fi
+      fi
+      fi  # close RIG_DIR check
+      ;;
+    reject|revise)
+      # Follow-up bead carries the decision context. bd create takes metadata as
+      # a single JSON blob (--metadata), NOT repeatable --set-metadata (which bd
+      # create does not accept). A "brief_slug" key marks the bead as
+      # dispatch-created so file-or-sendback-route can exclude it (I1b).
+      # The follow-up is created IN THE SOURCE RIG (routing contract): resolve
+      # the rig from source_bead and pass --rig. A non-empty source_bead that
+      # does not resolve is a retryable failure — never silently fall back to
+      # HQ. An empty source_bead (record shape allows it) files at HQ by
+      # design, noted in the action string.
+      case "$decision" in reject) tag="[rejected]" ;; revise) tag="[revise]" ;; esac
+      rig_scope_args=""
+      hq_note=""
+      resolve_ok=true
+      if [ -n "$source_bead" ]; then
+        RIG_NAME="$(resolve_rig "$source_bead" | sed -n 1p)"
+        if [ -z "$RIG_NAME" ]; then
+          resolve_ok=false
+          outcome="failure"
+          action_taken="$decision failed: unknown rig for source_bead $source_bead (registry resolve empty); will retry"
+        else
+          rig_scope_args="--rig $RIG_NAME"
+        fi
+      else
+        hq_note=" (no source_bead — follow-up filed at HQ)"
+      fi
+      if $resolve_ok; then
+        meta="$(jq -n --arg sb "$source_bead" --arg slug "$slug" --arg r "$reason" \
+          '{brief_slug: $slug, decision_reason: $r} + (if $sb == "" then {} else {source_bead: $sb} end)')"
+        # rig_scope_args is intentionally word-split (empty or "--rig <name>")
+        # shellcheck disable=SC2086
+        follow_up_bead="$(gc bd $rig_scope_args create \
+          --type=task \
+          --title="$tag $slug" \
+          --metadata "$meta" \
+          --json 2>/dev/null | jq -r '.id // empty' 2>/dev/null)"
+        if [ -n "$follow_up_bead" ]; then
+          action_taken="created $decision follow-up bead: $follow_up_bead$hq_note"
+        else
+          outcome="failure"
+          action_taken="$decision failed: follow-up bead not created"
+        fi
+      fi
+      ;;
+    defer)
+      action_taken="deferred: no dispatch action"
+      ;;
+    *)
+      outcome="failure"
+      action_taken="unknown decision type '$decision'; skipping action"
+      ;;
+  esac
+
+  echo "dispatched $slug ($decision): $action_taken [$outcome]"
+
+  # Append to dispatch ledger — append-only, never rewrite. Success lines carry
+  # dispatched_at (scan treats slug as done). Failure lines carry
+  # pending_retry:true and NO dispatched_at (scan keeps the slug pending so the
+  # next wake retries it) — C3c.
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo 'unknown')"
+  if [ "$outcome" = "success" ]; then
+    printf '%s\n' "$(jq -cn \
+      --arg slug "$slug" \
+      --arg decision "$decision" \
+      --arg action "$action_taken" \
+      --arg follow_up "${follow_up_bead:-}" \
+      --arg ts "$ts" \
+      --arg source "$source_bead" \
+      '{brief_slug: $slug, decision: $decision, source_bead: $source, action: $action, follow_up_bead: $follow_up, dispatched_at: $ts}')" \
+      >> "$LEDGER"
+  else
+    printf '%s\n' "$(jq -cn \
+      --arg slug "$slug" \
+      --arg decision "$decision" \
+      --arg action "$action_taken" \
+      --arg ts "$ts" \
+      --arg source "$source_bead" \
+      '{brief_slug: $slug, decision: $decision, source_bead: $source, action: $action, pending_retry: true, failed_at: $ts}')" \
+      >> "$LEDGER"
+  fi
+}
+
+# Main scan+dispatch — global brief root (W2: absolute artifact_root).
+overall_dispatched=0
+overall_pending_retry=0
+
+ROOT="{{artifact_root}}"
+ROOT="${ROOT/#\\~/$HOME}"
+LEDGER="$ROOT/decisions-dispatched.jsonl"
+
+if [ -d "$ROOT/decisions" ]; then
+  pending=""
+  for f in "$ROOT/decisions/"*.toml; do
+    [ -f "$f" ] || continue
+    slug="$(basename "$f" .toml)"
+    if is_dispatched "$slug"; then
+      echo "already dispatched: $slug"
+      continue
+    fi
+    pending="$pending $slug"
+    echo "undispatched: $slug"
+  done
+
+  for slug in $pending; do
+    [ -n "$slug" ] || continue
+    dispatch_slug "$slug"
+    overall_dispatched=$((overall_dispatched + 1))
+  done
+fi
+
+echo "scan-and-dispatch complete: dispatched=$overall_dispatched"
+
+# Close the wisp; drain-ack tells the controller this session is done.
+if [ -n "$WORK_BEAD" ]; then
+  bd close "$WORK_BEAD" --reason "brief-decision-dispatch: dispatched=$overall_dispatched"
+fi
+gc runtime drain-ack
+```
+
+Append-only; never rewrite existing lines. The ledger is the durable audit
+trail for the human adjudicator.
+"""

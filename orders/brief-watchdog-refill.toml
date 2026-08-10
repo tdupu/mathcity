@@ -1,0 +1,11 @@
+[order]
+description = "Check whether the brief stack needs refill work"
+scope = "city"
+formula = "brief-watchdog-refill"
+trigger = "cooldown"
+interval = "30m"
+# Retarget: gastown-vestige pool "gc.run-operator" -> pack-local mathcity.brief-operator (the human adjudicator 2026-07-13, example-owner/gascity-packs#4)
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true
+

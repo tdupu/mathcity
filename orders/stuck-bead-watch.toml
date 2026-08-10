@@ -1,0 +1,23 @@
+# mathcity/orders/stuck-bead-watch.toml
+#
+# Named workaround (P1.17) for a missing gascity-core per-dispatch liveness
+# hook — see gt-c4g63 (P1.17 cross-link, Task 1 of
+# docs/superpowers/plans/2026-07-28-stuck-bead-waiting-room.md) and the
+# design note <city-root>/plans/gc-claim-priority-design-note-2026-07-15.md. This
+# order polls every 90s as a mathcity-pack-scoped approximation of "check
+# after every dispatch"; it is retired once the core mechanism lands.
+#
+# exec (not formula): the detection/escalation logic is a pure Python
+# script with zero LLM/pool-session cost per tick — see
+# docs/superpowers/specs/2026-07-28-stuck-bead-waiting-room-design.md
+# "Architecture" for why this stays out of the formula/pool-dispatch path
+# entirely except for the pre-existing lost-bead-classification-rollup
+# formula this feeds, which only fires past the grace window.
+[order]
+description = "Detect routed beads that never made progress; escalate past a priority-scaled grace window into the lost-bead-classification pipeline"
+scope = "city"
+trigger = "cooldown"
+interval = "90s"
+exec = "python3 $PACK_DIR/assets/scripts/stuck-bead-watch.py --cache-dir .beads/stuck-bead-watch --classification-root .beads/lost-bead-classifications --grace-p0 300 --grace-p1 600 --grace-p2 1200 --grace-p3 2700 --grace-p4 2700"
+timeout = "60s"
+idempotent = false

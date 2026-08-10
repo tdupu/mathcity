@@ -1,0 +1,147 @@
+description = """
+Patrol the brief stack for briefs stuck at the Phase 5 review gate and
+advance them.
+
+## Why this exists
+
+Brief-prep polecats sometimes exit after depositing a brief without running
+Phase 5 (the external coordinate-review gate). The brief then sits in the
+stack with `review_gate: pending` forever — pull-ineligible, invisible to
+the present pipeline, silently congesting the stack. This patrol is the
+structural backstop: it finds those briefs and runs the missing Phase 5 on
+them, exactly as brief-prep would have.
+
+This formula never fabricates approval. A brief is only promoted when a
+genuine coordinate-review loop returns APPROVING. Failures are recorded as
+`review-failed` and surfaced to the Mayor — never retried into oblivion,
+never silently dropped.
+
+## Idempotence
+
+Only briefs with `review_gate: pending` are candidates. On success the gate
+becomes `approved`; on failure it becomes `review-failed`. Either way the
+brief leaves the candidate set, so repeated or coalesced patrol runs are
+safe. A grace period ({{stale_after}}) prevents the patrol from stealing a
+brief whose own brief-prep worker is still mid-pipeline.
+"""
+formula = "brief-review-patrol"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-review-patrol"
+description = "Auto-advance stack briefs stuck at review_gate: pending through Phase 5 (coordinate-review)."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for patrol scan, frontmatter patching, and bookkeeping."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[vars.stale_after]
+description = "Grace period: a pending brief younger than this (by deposited_at, falling back to file mtime) is presumed still in-pipeline and skipped."
+default = "30m"
+
+[vars.max_reviews_per_run]
+description = "Upper bound on Phase 5 reviews launched per patrol run. Remaining stuck briefs wait for the next patrol."
+default = "3"
+
+[[steps]]
+id = "scan-stuck-briefs"
+title = "Scan stack for briefs stuck at the review gate"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Scan `{{artifact_root}}/stack/*.md` frontmatter for briefs where
+`review_gate: pending`.
+
+For each hit, apply the grace period: parse `deposited_at` from frontmatter
+(fall back to file mtime if absent or unparsable). Skip briefs younger than
+{{stale_after}} — their own brief-prep worker may still be running Phase 5.
+
+Record the candidate list (path + artifact + deposited_at) in the run notes.
+If the candidate list is empty, note "no stuck briefs" and skip directly to
+`record-patrol-state`.
+"""
+
+[[steps]]
+id = "run-phase5-reviews"
+title = "Run Phase 5 (coordinate-review) on each stuck brief"
+needs = ["scan-stuck-briefs"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+For each candidate brief, up to {{max_reviews_per_run}} per run:
+
+Spawn a subagent (Agent tool, model override: haiku — this is a mechanical
+gate task per the immediate-work model guide) that runs the
+`mathcity.coordinate-review` skill on the brief:
+
+```
+coordinate-review
+  artifact={{artifact_root}}/stack/<brief-file>.md
+  reviewer_persona=<artifact-typed persona per brief-prep Phase 5 defaults>
+  cap=4
+  store_beads=false
+```
+
+The subagent must return the review VERDICT (APPROVING or the failure
+condition) plus the iteration count. Enforce a wall-clock bound per review
+(15 minutes, the META-FP formula default); a review that exceeds it counts
+as a timeout.
+
+Do NOT patch frontmatter in this step — collect per-brief verdicts and hand
+them to `patch-or-escalate`. Do NOT lower the review bar: a patrol review is
+the same Phase 5 gate brief-prep enforces, run late.
+"""
+
+[[steps]]
+id = "patch-or-escalate"
+title = "Patch approved briefs; escalate failed ones"
+needs = ["run-phase5-reviews"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+For each reviewed brief, exactly one of:
+
+**On APPROVING** — patch the brief's frontmatter in place:
+- `review_gate: pending` → `review_gate: approved`
+- `status: pending-review` (or `in-review-iter-N`) → `status: approved`
+Leave all other frontmatter fields untouched. The brief is now
+pull-eligible.
+
+**On failure, non-convergence within cap=4, or timeout** — patch:
+- `review_gate: pending` → `review_gate: review-failed`
+and surface to the Mayor: file an escalation bead via
+`.gc/scripts/escalate.sh
+--title "[brief-review-patrol] Phase 5 failed: <brief-slug>"
+--body "<verdict summary + last reviewer objections>" --priority 2`.
+Do not delete, archive, or retry the brief; `review-failed` removes it from
+the patrol candidate set and a human or Mayor decides its fate.
+"""
+
+[[steps]]
+id = "record-patrol-state"
+title = "Record patrol state"
+needs = ["patch-or-escalate"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Write a patrol record to `{{artifact_root}}/patrol/patrol-<ISO8601-UTC>.md`
+containing: briefs scanned, candidates found (with skip reasons for any
+grace-period skips), reviews run, per-brief verdicts, frontmatter patches
+applied, and escalation bead IDs filed. If no stuck briefs were found,
+record that explicitly — an empty patrol is a healthy signal, not a no-op
+to hide. The record must let tomorrow's operator reconstruct why each brief
+did or did not advance.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-review-patrol-record-required.sh"
+timeout = "1m"

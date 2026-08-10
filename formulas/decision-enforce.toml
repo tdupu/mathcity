@@ -1,0 +1,208 @@
+description = """
+Enforce the bd-decision-canonical principle at formula call sites.
+
+Two mechanical enforcement checks, one routing step for failures:
+
+  CHECK-A — Decision-record existence: verify that a `bd decision` bead (type
+  `decision`) was created for the adjudicated brief or work item before any
+  downstream formula acts on it. A bead-state change without a corresponding
+  `bd decision` record is non-compliant. Exit 0 = record found. Exit 1 = no
+  record → block all downstream work until the record is filed via the
+  mathcity.adjudicate-brief skill.
+
+  CHECK-B — Verdict/bead alignment: verify that the source bead's current
+  state (status, assignee, branch metadata) is consistent with the recorded
+  decision verdict (approve → reassigned-to-refinery; reject/revise → follow-up
+  bead exists; defer → still open). Exit 0 = aligned. Exit 1 = misaligned →
+  block and escalate; alignment corrections are judgment-bearing and route to
+  Mayor/the human adjudicator, NOT fixed here.
+
+Poka-yoke: both checks are binary/mechanical. The formula never infers intent,
+never resolves ambiguity, and never auto-corrects alignment. Any case requiring
+judgment routes to Mayor/the human adjudicator via the resolve-violations step.
+
+Division of labor:
+- This formula ENFORCES compliance at call time.
+- mathcity.adjudicate-brief (skill) RECORDS decisions.
+- brief-record-decision (formula) WRITES decision records inside the brief pipeline.
+- brief-decision-dispatch (formula) ACTS on approve/reject/revise/defer routing.
+
+Architecture principle:
+  AP2 — `bd decision` canonical: standalone decisions use `bd create -t
+  decision` per `adjudicate-brief` skill. No parallel decision stores.
+  (gascity triage 2026-06-26, LD #10 + W2.8b).
+  One-bead model (brief-system POLICY.md B2.2, 2026-07-12): for BRIEF
+  adjudications the brief bead IS the decision bead — the verdict is recorded
+  on the brief bead and the bead is closed; no second bead is created.
+"""
+formula = "decision-enforce"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "decision-enforce"
+description = "Enforce bd-decision-canonical: verify that a bd decision record exists for an adjudicated brief and that the source bead state matches the recorded verdict."
+tags = ["gate", "decision", "enforcement", "mechanical"]
+
+[vars]
+[vars.source_bead]
+description = "ID of the bead being adjudicated or already decided (used for both checks)."
+required = true
+pattern = "^[A-Za-z0-9_-]+$"
+
+[vars.brief_slug]
+description = "Brief slug whose decision record to verify. If empty, CHECK-A skips the brief-pipeline record check and only verifies the bd type=decision bead (the brief bead itself under the one-bead model)."
+default = ""
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root (for brief-pipeline decision files)."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.expected_verdict]
+description = "Expected verdict from the decision record (approve/reject/revise/defer). Leave empty to accept any recorded verdict — CHECK-B then only verifies internal consistency (bead state matches the RECORDED verdict, whatever it is)."
+default = ""
+enum = ["", "approve", "reject", "revise", "defer"]
+
+[vars.operator_target]
+description = "Run target for mechanical enforcement checks."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[vars.mayor_target]
+description = "Run target for violations requiring judgment — Mayor/the human adjudicator."
+# Human-facing escalation routing; no gc.* role maps to a presenter, so
+# gc.run-operator is the routable default. Cities importing the gastown pack
+# may pass gastown.mayor.
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+# ---------------------------------------------------------------------------
+# Step 1 — CHECK-A: decision record existence
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "check-record-exists"
+title = "CHECK-A — Verify a bd decision record exists for the adjudicated bead"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.bead.id" = "{{source_bead}}", "gc.brief.slug" = "{{brief_slug}}" }
+description = """
+Run the mechanical decision-record-exists check against `{{source_bead}}`.
+
+The check uses `bd list --type decision --json` and inspects whether any
+`decision`-type bead in the local rig references `{{source_bead}}` in its
+metadata (`source_bead` key) or description. It also checks
+`{{artifact_root}}/decisions/{{brief_slug}}.toml` when `{{brief_slug}}` is
+non-empty (brief-pipeline decision records are a second surface to verify).
+
+Exit 0 = at least one canonical `bd decision` record found → proceed.
+  (Under the one-bead model the brief bead itself — `type=decision`, closed
+  with verdict fields — satisfies this.)
+Exit 1 = no decision record found → BLOCK: the work item cannot advance until
+  the verdict is recorded on the brief bead and the bead closed (one-bead
+  model, B2.2) — or, for standalone non-brief decisions, until
+  `mathcity.adjudicate-brief` files it via `bd create -t decision`.
+Exit 2 = `bd` unavailable or query error → fail closed (treat as missing).
+
+When this step exits non-zero, downstream steps are blocked and the
+resolve-violations step routes the gap to Mayor/the human adjudicator.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/decision-record-exists.sh"
+timeout = "1m"
+
+# ---------------------------------------------------------------------------
+# Step 2 — CHECK-B: verdict / bead-state alignment
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "check-alignment"
+title = "CHECK-B — Verify bead state matches the recorded verdict"
+needs = ["check-record-exists"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.bead.id" = "{{source_bead}}", "gc.brief.slug" = "{{brief_slug}}", "gc.decision.expected" = "{{expected_verdict}}" }
+description = """
+Verify that the source bead's current state is consistent with the decision
+verdict recorded in `bd decision` (and, when non-empty, `{{brief_slug}}.toml`).
+
+Alignment rules (mechanical — no judgment):
+
+  approve  → source bead must be assigned to the owning rig's merge-queue
+             session — `<rig>/<merge_target>` per brief-decision-dispatch
+             (default `gc.publisher`; gastown cities may use
+             `gastown.refinery`) — or status must be `in_progress` with an
+             assignee matching that merge-queue session.
+             A bead still assigned to a polecat or sitting `open` after an
+             approval decision is MISALIGNED.
+  reject   → a follow-up bead with title matching `[rejected] {{brief_slug}}`
+             must exist (`bd list --json | jq` check), OR the source bead
+             must be closed with reason containing "rejected".
+  revise   → a follow-up bead with title matching `[revise] {{brief_slug}}`
+             must exist, OR the source bead status must be `open` (returned
+             for revision).
+  defer    → source bead must be open (deferred = no-op; bead stays open).
+
+When `{{expected_verdict}}` is empty: read the verdict FROM the most-recent
+`decision`-type bead linked to `{{source_bead}}` and apply the rule above.
+When `{{expected_verdict}}` is set: also verify the recorded verdict MATCHES
+it — a mismatch is a misalignment (wrong verdict was recorded).
+
+Exit 0 = aligned.
+Exit 1 = misaligned (state and verdict disagree) → BLOCK.
+Exit 2 = cannot determine alignment (bd error, missing data) → fail closed.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/decision-alignment-check.sh"
+timeout = "1m"
+
+# ---------------------------------------------------------------------------
+# Step 3 — route violations to Mayor/the human adjudicator
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "resolve-violations"
+title = "Route enforcement failures to Mayor/the human adjudicator for resolution"
+needs = ["check-record-exists", "check-alignment"]
+metadata = { "gc.run_target" = "{{mayor_target}}", "gc.bead.id" = "{{source_bead}}", "gc.brief.slug" = "{{brief_slug}}" }
+description = """
+This step runs ONLY when a preceding check exited non-zero (i.e. an
+enforcement failure was detected). It is a judgment-routing step, not a
+fix step — do NOT attempt to auto-correct alignment or create missing records.
+
+Present the violation to Mayor/the human adjudicator:
+
+1. **CHECK-A failure (no decision record):**
+   - State: bead `{{source_bead}}` (brief `{{brief_slug}}`) has no canonical
+     `bd decision` bead and no brief-pipeline decision file.
+   - Required action: the human adjudicator or Mayor must invoke `mathcity.adjudicate-brief`
+     to file the verdict before this formula can proceed.
+   - Blocking work: list any downstream formulas or orders that were blocked
+     by this enforcement (derived from the formula's pending wisp chain if
+     accessible).
+
+2. **CHECK-B failure (verdict/state misalignment):**
+   - State: source bead `{{source_bead}}` has a recorded verdict but its
+     current bead state does not match the routing rules.
+   - Required action: Mayor or the human adjudicator must reconcile — either correct the
+     bead state to match the verdict, or supersede the decision record via
+     the supersede pattern in `mathcity.adjudicate-brief`.
+   - NEVER auto-correct here: alignment corrections may themselves require
+     a new `bd decision` record (e.g., "we decided to change the verdict").
+
+Format the violation report as a numbered list and escalate using:
+
+    .gc/scripts/escalate.sh \\
+      --title "[decision-enforce] violation: {{source_bead}}" \\
+      --body "<violation details>" \\
+      --priority 2
+
+If `escalate.sh` is absent, print the violation to stderr and exit 1 so
+the orchestrator surfaces it as a failed step for manual follow-up.
+
+Do NOT close or reassign the source bead — that is Mayor/the human adjudicator's decision.
+"""

@@ -1,0 +1,14 @@
+[order]
+description = "Remove orphaned prepare-item-worktree checkouts for CLOSED beads (do-work/implementation-base never tear these down)"
+trigger = "cooldown"
+interval = "30m"
+exec = "bash $PACK_DIR/scripts/reap-prepare-item-worktrees.sh"
+scope = "city"
+timeout = "180s"
+# Stopgap for gsp-qsw4qh: prepare-worktree.md (gascity/formulas,
+# upstream read-only) runs `git worktree add ... --detach HEAD` but no step in
+# do-work.formula.toml / implementation-base.formula.toml ever removes it;
+# close-source-anchor.md explicitly closes the bead without touching the
+# worktree. Confirmed leaking 389G in <city-root>/hecke alone (2026-07-25 incident),
+# plus smaller leaks in gascity-packs and gascity. This order only removes
+# worktrees whose bead is CLOSED — OPEN/IN_PROGRESS work is never touched.

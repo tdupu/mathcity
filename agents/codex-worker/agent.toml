@@ -1,0 +1,5 @@
+description = "Simple Codex worker for mathematics pack and brief workflow tasks"
+scope = "rig"
+provider = "codex"
+fallback = true
+option_defaults = { permission_mode = "no-approval-sandboxed" }

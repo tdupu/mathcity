@@ -1,0 +1,107 @@
+description = """
+Batch brief-prep cycle: fan-out produce across pending source beads, then
+single-writer shuffle.
+
+The produce stage fans out as a drain — one brief-prep formula instance per
+pending source bead, all running in parallel. The shuffle stage is gated on the
+produce fan-in and runs only after every source brief has settled in .pile
+(succeeded or failed). Shuffle acquires the single-writer lock before touching
+.pile or stack/.index.jsonl.
+"""
+formula = "math-brief-prep"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "math-brief-prep"
+description = "Fan-out brief-prep per pending source bead, then single-writer shuffle into stack."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = ".beads/briefs"
+
+[vars.prep_target]
+description = "Run target for brief preparation bookkeeping and shuffler."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[vars.review_target]
+description = "Run target for judgment-bearing brief review."
+default = "gc.review-synthesizer"
+
+[[steps]]
+id = "select-sources"
+title = "Select pending source beads for brief preparation"
+metadata = { "gc.run_target" = "{{prep_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Identify source beads that are ready for brief preparation. A source bead
+qualifies when:
+- it carries the `needs-decision` label, AND
+- it does not already have a pending or completed brief in `.staging`, `.pile`,
+  or `stack` (dedup: key on slug or source bead id), AND
+- it passes the stale-claim gate (`assets/brief-pipeline/gates.toml` G13).
+
+Do not select more than `max_new_briefs_per_run` from
+`assets/brief-pipeline/thresholds.toml`. If no eligible source is found, stop
+cleanly — emit a short note and do not error. Record the selected set in the
+step notes for the produce drain.
+"""
+
+[[steps]]
+id = "produce"
+title = "Produce briefs in parallel (fan-out drain)"
+needs = ["select-sources"]
+metadata = { "gc.run_target" = "{{review_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Fan out across the selected source beads. For each convoy member, one
+brief-prep formula instance runs with:
+
+- `source` = the convoy member's source bead id
+- `brief_slug` = derived from the source bead id per the slug naming policy
+- `artifact_root` = `{{artifact_root}}`
+- `prep_target` = `{{prep_target}}`
+- `review_target` = `{{review_target}}`
+
+Each instance executes the full brief-prep pipeline
+(initialize-staging -> draft-brief -> attach-test-evidence -> coordinate-review
+-> submit-to-pile) in its own separate session. All instances run in parallel.
+
+The fan-in happens at the `shuffle` step's `needs = ["produce"]` dependency:
+shuffle begins only after every produce instance has settled. On per-item
+failure, record the failure with the source bead id and continue — successfully
+prepared briefs must not be blocked from reaching the shuffle.
+"""
+
+[steps.drain]
+context = "separate"
+formula = "brief-prep"
+member_access = "exclusive"
+on_item_failure = "continue"
+
+[[steps]]
+id = "shuffle"
+title = "Shuffle prepared briefs into stack (single-writer, fan-in)"
+needs = ["produce"]
+metadata = { "gc.run_target" = "{{prep_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+After the produce fan-in, run the `brief-shuffle` formula against
+`{{artifact_root}}/.pile` for briefs submitted during this produce run.
+`brief-shuffle` is the only writer to `{{artifact_root}}/stack/` and
+`{{artifact_root}}/stack/.index.jsonl`; this fan-in step must not move briefs
+to stack or append index records directly.
+
+If the shuffler lock is held by a live concurrent shuffler, stop cleanly — the
+`brief-shuffle-pile` order will handle remaining items. If briefs fail or block
+their gates, let `brief-shuffle` move them to `.pile/.rejected/` with the
+rejection record.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-shuffle-result-required.sh"
+timeout = "2m"

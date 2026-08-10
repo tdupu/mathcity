@@ -1,0 +1,16 @@
+[pack]
+name = "mathcity-dev"
+version = "0.1.0"
+schema = 2
+description = "Pack-development workflow for the owned mathcity pack family: the Pack Portability & Boundary Policy (POLICY.md) and, later, the check-hygiene plan/convoy/audit gate built from it."
+
+[imports]
+  # P1.18: named-session fleet for city-scope (gt-) build-basic work.
+  # Any city root that imports mathcity-dev also gets the gascity/roles
+  # [[named_session]] entries (implementation-worker, requirements-planner,
+  # task-decomposer, design-author, implementation-reviewer, etc.) registered
+  # at the root scope. Child rigs get this fleet via defaults.rig.imports.gc
+  # in city.toml; the city root pack is separate and needs this transitive import.
+  [imports.gc-roles]
+    source = "https://github.com/gastownhall/gascity-packs/tree/main/gascity/roles"
+    version = "sha:3b3b89f2011e06d84459aa7bea1552382f13930a"

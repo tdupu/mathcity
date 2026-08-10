@@ -1,0 +1,140 @@
+description = """
+Classify and optionally process no-brainer briefs.
+
+This formula classifies candidates and records the result. Shortcut execution
+is allowed only for a known registry category with confidence at or above the
+threshold, all stop gates clear, and no N5 kill switch engaged. Auto-execute is
+the default when those checks pass; a city or rig switch file that exists and
+reads `false` halts execution.
+"""
+formula = "no-brainer-classify"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "no-brainer-classify"
+description = "Apply the no-brainer brief filter without bypassing stop gates."
+
+[vars]
+[vars.brief_path]
+description = "Optional path to a brief. Empty means select the next no-brainer candidate from the pile."
+default = ""
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.mode]
+description = "Classification only or attempt guarded execution."
+default = "classify"
+enum = ["classify", "guarded-execute"]
+
+[vars.operator_target]
+description = "Run target for no-brainer classification."
+# Judgment-bearing classification (the model IS the classifier); gc.review-synthesizer
+# is the routable default. Cities importing the gastown pack may pass gastown.mayor.
+default = "gc.review-synthesizer"
+
+[[steps]]
+id = "load-candidate"
+title = "Load no-brainer candidate"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Load `{{brief_path}}`. If it is empty, select one candidate brief from
+`{{artifact_root}}/.pile` or `{{artifact_root}}/stack` that asks for
+no-brainer classification. Do not process more than one candidate in a run.
+"""
+
+[[steps]]
+id = "enforce-safety-exclusions"
+title = "Enforce no-brainer safety exclusions"
+needs = ["load-candidate"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Apply server-touching, user-skill-touching, test-execution, LaTeX, and N5
+kill-switch exclusions. Stop gates force `safety_blocked`; a city-wide or
+rig-level `auto_merge_enabled` file that exists and reads `false` halts
+guarded execution and routes the brief to the human adjudicator. Absent or `true` switches do
+not block classification.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-no-brainer-execute-safety.sh"
+timeout = "1m"
+
+[[steps]]
+id = "classify"
+title = "Classify the candidate"
+needs = ["enforce-safety-exclusions"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Use `mathcity.catch-no-brainer` (pack skill, v0.3+) and the registry at
+`assets/brief-pipeline/no-brainer-categories.toml`.
+
+The classifier runs four checks in order (first match wins):
+1. Server-touching — `{no_brainer: false, reason: "cat-E-server-touching"}`
+2. User-skill-touching (as-wjv override) — `{no_brainer: false, reason: "user-skill-touching-override"}`
+3. Capability-blocker shape — `{no_brainer: false, category: "capability-blocker", reason: "resolve <blocker>, then re-classify"}`
+4. Registry-backed no-brainer category, including the he-lele stale-branch
+   shape and later promoted categories — `{no_brainer: true, category: "<registry-id>", confidence: <float>, compact_eligible: true}`
+5. Else — `{no_brainer: "candidate", confidence: <float>, compact_eligible: false, proposed_registry_extension: "<one-line criterion>"}`
+
+Record exactly one `classifier_state`:
+
+- `known_no_brainer` (registry category, `confidence >= 0.85`, compact eligible if stop gates clear)
+- `known_non_no_brainer` (not in a registry category; include a reason)
+- `candidate` (novel shape; include `proposed_registry_extension`)
+- `capability_blocker` (routes to capability resolution, then re-classify)
+- `safety_blocked` (G5, G5b, or L4 stop condition)
+
+Also record the `category`, `confidence`, `compact_eligible`, `classified_at`,
+and G9 evidence line from the verdict. Category IDs for known no-brainers must
+exist in `assets/brief-pipeline/no-brainer-categories.toml`. The
+classification must cite the gate evidence that permits or blocks shortcut
+handling.
+"""
+
+[[steps]]
+id = "guarded-execute"
+title = "Guarded no-brainer execution"
+needs = ["classify"]
+condition = "{{mode}} == guarded-execute"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Execute only if classification is `no-brainer`, all stop gates are clear, and
+no N5 kill switch is engaged. Kill-switch hierarchy (POLICY.md N5, Adopted
+2026-07-12; auto-execute is the DEFAULT): check `<city-root>/.beads/auto_merge_enabled`
+(city-wide), then `<rig_root>/.beads/auto_merge_enabled` (rig-level) — a flag
+file that exists and reads `false` halts execution and routes the brief to the
+pile in compact form for the human adjudicator; absent or `true` proceeds. Stop gates and
+non-no-brainer classifications route the brief to the human adjudicator as before.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-no-brainer-safety.sh"
+timeout = "1m"
+
+[[steps]]
+id = "record-classification"
+title = "Record no-brainer classification"
+needs = ["classify", "guarded-execute"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Record the classification and any guarded execution result in the brief record.
+Include the `compact_eligible` field from the `mathcity.catch-no-brainer`
+verdict so downstream presentation consumers can select the compact form when
+appropriate.
+If execution did not occur, leave the brief in the normal human presentation
+path.
+"""

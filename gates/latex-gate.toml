@@ -1,0 +1,148 @@
+description = """
+LaTeX HARD GATE (F1b).
+
+Enforces the standing LaTeX-gate policy (he-jwmy / he-86wu / he-hsoc): any edit
+to notes.tex or any notes-tier .tex file on the main branch of the
+differential-valuations, hecke, homog, or jacobi rigs requires the human adjudicator's
+EXPLICIT approval of the SPECIFIC diff before it may be pushed or merged.
+
+The gate is a STOP gate. It blocks auto-dispatch and auto-merge for a covered
+diff and routes the diff to the human adjudicator with a check-latex evidence block attached.
+It fails CLOSED: a covered .tex diff with no check-latex evidence, or with no
+human approval pinned to that exact diff sha, cannot pass.
+
+Live consumer: he-0rk2 sub-task 8 (notes.tex fillout for §6979 Sigma_18), which
+is approved for overnight sling but was previously unenforced. This gate closes
+that hole.
+
+Registry lineage: this is the runnable form of gate G6 (latex-gate) in
+assets/brief-pipeline/gates.toml (kind=manual, evidence_key="G6 LaTeX-gate").
+"""
+formula = "latex-gate"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "latex-gate"
+description = "Block push/merge of any covered notes-tier .tex diff until the human adjudicator approves the specific diff, with check-latex evidence attached."
+
+[vars]
+[vars.tex_file]
+description = "Path to the covered .tex file under evaluation (e.g. latex/notes/notes.tex)."
+required = true
+
+[vars.base_ref]
+description = "Merge-base / branch-point git ref the diff is taken against."
+default = "HEAD"
+
+[vars.repo_dir]
+description = "Repo directory containing the .tex file (one of the four covered rigs for the gate to fire)."
+default = "."
+
+[vars.bead_id]
+description = "Bead this LaTeX edit belongs to; locates the evidence dir <city-root>/tmp-for-review/<bead_id>/."
+required = true
+
+[vars.evidence_dir]
+description = "Directory holding check-latex-report.{json,md} + tex.diff + latex-approval.toml."
+default = "{{env.HOME}}/gt/tmp-for-review/{{bead_id}}"
+
+[vars.operator_target]
+description = "Run target for the mechanical gate check."
+default = "gc.run-operator"
+
+[vars.review_target]
+description = "Run target for human-only approval routing."
+# Presents evidence to the human adjudicator for approval; no gc.* role maps to a human-facing
+# presenter, so gc.run-operator is the routable default. Cities importing the
+# gastown pack may pass gastown.mayor.
+default = "gc.run-operator"
+
+# ---------------------------------------------------------------------------
+# Step 1 — Produce the check-latex evidence block (F1a skill).
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "check-latex-evidence"
+title = "Run check-latex to produce the evidence block"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.tex.file" = "{{tex_file}}", "gc.bead.id" = "{{bead_id}}" }
+description = """
+Invoke the check-latex skill against `{{tex_file}}`:
+
+    subdomains/latex/skills/check-latex/check-latex.sh {{tex_file}} \\
+        --base {{base_ref}} --out {{evidence_dir}} --bead {{bead_id}}
+
+This writes `check-latex-report.{json,md}`, `tex.diff`, and `compile.log` under
+`{{evidence_dir}}`. Compile status degrades to `toolchain-unavailable` when no
+TeX build tool is present; it is NEVER faked. This step produces evidence only —
+it does not approve, merge, or push.
+"""
+
+# ---------------------------------------------------------------------------
+# Step 2 — HARD GATE (STOP). Fail closed unless the human adjudicator approved THIS diff.
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "latex-hard-gate"
+title = "LaTeX HARD GATE — block until the human adjudicator approves this specific diff"
+needs = ["check-latex-evidence"]
+metadata = { "gc.run_target" = "{{review_target}}", "gc.tex.file" = "{{tex_file}}", "gc.bead.id" = "{{bead_id}}", "gc.gate.kind" = "stop", "gc.gate.blocks" = "auto-dispatch,auto-merge,push" }
+description = """
+STOP gate. This step BLOCKS auto-dispatch and auto-merge of any covered
+notes-tier .tex diff and routes it to the human adjudicator.
+
+The gate is satisfied ONLY when the mechanical check below passes, i.e. when
+BOTH hold for the covered diff:
+
+  1. A check-latex evidence block exists at
+     `{{evidence_dir}}/check-latex-report.{json,md}`, AND
+  2. `{{evidence_dir}}/latex-approval.toml` names the human adjudicator as approver AND carries
+     an `approved_diff_sha` that matches the sha of `{{evidence_dir}}/tex.diff`
+     (the diff under evaluation). A stale or blanket approval for a different
+     diff does NOT satisfy the gate.
+
+To route to the human adjudicator: present the `check-latex-report.md` evidence block. On
+the human adjudicator's explicit approval of THIS diff, record it via the record-decision
+skill AND write `{{evidence_dir}}/latex-approval.toml` with:
+
+    approver = "the human adjudicator"
+    approved_diff_sha = "<sha of tex.diff>"
+
+Only then may the branch be pushed or merged. If the diff touches no covered
+notes-tier .tex file in {differential-valuations, hecke, homog, jacobi}, the
+check reports N/A and the gate passes automatically.
+"""
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/latex-gate-approval-required.sh"
+timeout = "5m"
+# The check script reads its inputs from the ambient environment (same
+# convention as brief-check.sh reading GC_BEAD_ID). The runner must export:
+#   GC_BEAD_ID={{bead_id}}  (locates {{evidence_dir}} for evidence + approval)
+# Optional overrides if the run target's cwd is not the repo:
+#   LATEX_GATE_REPO={{repo_dir}}  LATEX_GATE_BASE={{base_ref}}
+#   LATEX_GATE_EVIDENCE={{evidence_dir}}
+
+# ---------------------------------------------------------------------------
+# Step 3 — Record the gate disposition on the bead.
+# ---------------------------------------------------------------------------
+[[steps]]
+id = "gate-disposition"
+title = "Record LaTeX-gate disposition"
+needs = ["latex-hard-gate"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.bead.id" = "{{bead_id}}" }
+description = """
+Record the gate outcome on the bead's Gate Evidence line:
+
+- `G6 LaTeX-gate: PASS`   — covered diff, the human adjudicator approved this exact sha.
+- `G6 LaTeX-gate: N/A`    — diff touches no covered notes-tier .tex file.
+- `G6 LaTeX-gate: BLOCKED` — covered diff without evidence or per-diff approval;
+  the branch stays on its polecat/ or feat/ namespace (mayor does not push).
+
+Use the record-decision skill for the human approval itself (canonical
+`bd decision`); this step only stamps the gate result onto the brief/bead.
+"""

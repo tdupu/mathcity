@@ -1,0 +1,175 @@
+description = """
+Post-decision file-or-sendback gate: log the routing choice for a decided
+brief and fire the downstream work (the human adjudicator 2026-06-30, event-driven model).
+
+Division of labor (two brief.decided consumers): this formula handles FOLLOW-UP
+BRIEFING routing only (FILE re-brief a successor vs SEND-BACK archive). The
+sibling formula brief-decision-dispatch ACTS on the decision (reassign source
+bead / follow-up bead / defer). They do not overlap: this formula never
+reassigns or merges.
+
+This is the consumer + logger of the brief-decided bell. It does NOT decide
+on its own when a decision emission already exists: the refinery (or any
+caller) runs the lean-investigation formula and writes the FILE/SEND-BACK
+emission; this formula logs that emission to the audit log and acts on it.
+Only when no emission exists does the inline fallback logic apply.
+
+Choices:
+- FILE       — a successor bead is known and ready; fire brief-prep for it.
+- SEND-BACK  — the adjudication is self-contained; the brief archives.
+
+the human adjudicator's constraint: MINIMIZE send-back cycles (re-briefing costs tokens),
+but NEVER lose follow-up beads. Every choice is recorded with its reason in
+`decisions/file-or-sendback.jsonl` — durable, reviewable post-hoc, not
+surfaced proactively (daily digest cancelled per the human adjudicator 2026-06-30 17:33).
+"""
+formula = "file-or-sendback-route"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "file-or-sendback-route"
+description = "Log FILE/SEND-BACK for decided briefs and fire downstream brief-prep or archive."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.operator_target]
+description = "Run target for deterministic scanning and bookkeeping."
+default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown retired 2026-07-09 ba2ff381)
+
+[vars.decide_target]
+description = "Run target for the judgment-bearing routing fallback."
+default = "gc.review-synthesizer"
+
+[[steps]]
+id = "scan-pending"
+title = "Scan for unrouted decisions"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}", "gc.brief.route_log" = "{{artifact_root}}/decisions/file-or-sendback.jsonl" }
+description = """
+Find decided briefs that have not been routed yet.
+
+A decision is PENDING when `{{artifact_root}}/decisions/<slug>.toml` exists
+but no line in `{{artifact_root}}/decisions/file-or-sendback.jsonl` has that
+`brief_slug`. Process ALL pending decisions in this run, not just the one
+that rang the bell — the brief.decided event is a wake-up signal, not a work
+queue; events may coalesce, and the durable decision records on disk are the
+source of truth.
+
+If nothing is pending, skip the remaining steps' actions (still append
+nothing, emit nothing) and let the wisp complete. This makes the formula
+idempotent and safe to fire repeatedly.
+"""
+
+[[steps]]
+id = "resolve-and-log"
+title = "Resolve FILE/SEND-BACK and append the audit log"
+needs = ["scan-pending"]
+metadata = { "gc.run_target" = "{{decide_target}}", "gc.brief.root" = "{{artifact_root}}", "gc.brief.route_log" = "{{artifact_root}}/decisions/file-or-sendback.jsonl" }
+description = """
+For each pending decision, resolve the routing choice and append one JSONL
+entry to `{{artifact_root}}/decisions/file-or-sendback.jsonl`.
+
+**Resolution order (do not re-decide what is already decided):**
+
+1. **Consume an existing emission.** If the decision record at
+   `{{artifact_root}}/decisions/<slug>.toml` carries `route_choice`
+   (with optional `route_target_bead` and `route_reason`), the
+   lean-investigation formula or the refinery already decided. Log it
+   with `source` set to the emitter (`lean-investigation` or `refinery`).
+2. **Inline fallback (no emission present).** Apply the lean rules:
+   - FILE only if a successor bead is KNOWN and READY. Be defensive about
+     successor detection: check the decision record and archived brief for
+     a follow-up reference, then check the source bead (`bd show`) for
+     open dependents, `follow_up` metadata, or child beads that are ready.
+     EXCLUDE beads created by brief-decision-dispatch: its [rejected]/[revise]
+     follow-up beads carry a `brief_slug` metadata key. A candidate whose
+     `brief_slug` metadata is set is a dispatch artifact, not a genuine
+     successor — skip it so the two brief.decided consumers do not double-route
+     the same follow-up.
+   - Otherwise SEND-BACK: the adjudication is self-contained and the brief
+     archives. Default to SEND-BACK when uncertain — but record WHY, and
+     never SEND-BACK a decision whose record names a follow-up bead.
+   Log with `source = "inline-fallback"`.
+
+**Audit entry shape** (see assets/brief-pipeline/file-or-sendback-log-spec.md):
+
+    {"bead_id": "<source bead or empty>", "brief_slug": "<slug>",
+     "decision": "approve|reject|revise|defer", "choice": "FILE|SEND-BACK",
+     "target_bead_id": "<successor bead; required for FILE>",
+     "reason": "<one line>", "confidence": "high|medium|low",
+     "source": "lean-investigation|refinery|inline-fallback",
+     "timestamp": "<RFC3339 UTC>", "agent_id": "<your identity>"}
+
+Append-only; never rewrite existing lines. The log is the durable review
+trail for the human adjudicator — reviewable on request, not proactively surfaced.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+# TODO(Phase 2): absolute path required — gc resolves relative check paths against the work dir and rejects ../ traversal; replace when a pack-root mechanism exists (plan Global Constraints carve-out).
+path = ".gc/scripts/checks/brief-file-or-sendback-log-required.sh"
+timeout = "1m"
+
+[[steps]]
+id = "route-downstream"
+title = "Fire downstream work per choice"
+needs = ["resolve-and-log"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Act on each logged choice:
+
+**FILE** — pour a persistent brief-prep run for the successor:
+
+    bd mol pour brief-prep \\
+      --var source=<target_bead_id> \\
+      --var brief_slug=<new-slug-for-successor>
+
+Route the poured mol to the polecat pool the same way the watchdog
+dispatches brief-prep work. One pour per FILE entry; do not batch
+multiple successors into one brief.
+
+**SEND-BACK** — request the archive sweep by ringing its bell:
+
+    gc event emit brief.archive_requested \\
+      --subject <brief_slug> \\
+      --message "brief <brief_slug> sent back: archive requested"
+
+The brief-archive-on-request order catches this and pours
+brief-archive-sweep in the dog pool. The 24h cooldown sweep remains as
+backstop, so a lost event is tidied within a day.
+"""
+
+[[steps]]
+id = "stack-check"
+title = "Check stack depth and ring stack-low if needed"
+needs = ["route-downstream"]
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Single hook, dual event emit (shared contract with the stack-low trigger
+work, gsp-i9j): after routing, measure the ripe stack and ring the
+stack-low bell if any combo signal is at or below threshold.
+
+    if out=$(BRIEF_ROOT={{artifact_root}} \\
+        mathcity/assets/scripts/checks/brief-stack-low-check.sh); then
+      gc event emit brief.stack_low \\
+        --subject brief-stack \\
+        --message "brief stack low after routing" \\
+        --payload "$out"
+    fi
+
+The check script exits 0 when LOW (approved, total, or unlock_pos count
+<= threshold; see assets/brief-pipeline/thresholds.toml [stack_low]) and
+prints the counts JSON either way — attach it as the event payload. The
+brief-watchdog-refill event order (gsp-i9j) catches brief.stack_low and
+refills. Do NOT pour the watchdog directly from here; emitting the event
+keeps refill policy in one place.
+"""

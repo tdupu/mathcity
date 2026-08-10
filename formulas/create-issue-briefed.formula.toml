@@ -1,0 +1,229 @@
+description = """
+Draft a template-COMPLETE upstream ISSUE body and route it through the brief
+pipeline for human adjudication — the issue-filing analogue of
+pr-pipeline-briefed. It NEVER runs `gh issue create`.
+
+WHY THIS EXISTS: the same gap that pr-pipeline-briefed closes for PRs applies to
+new issues — a hand-filed issue tends to arrive with the repo's issue template
+(`.github/ISSUE_TEMPLATE/bug_report.yml` etc.) half-filled or ignored. This
+formula drafts a template-complete issue body from a real description + the
+target repo's live issue template, then EMITS it as a decision brief so the human adjudicator
+approves the exact text before any issue is filed. On APPROVE, the agent
+executing the verdict runs `gh issue create` with the approved body.
+
+SHAPE — standalone briefed-terminal (POLICY-formulas.md F8.1: terminal step =
+file-brief). Sibling of pr-pipeline-briefed; same three-step skeleton, different
+intake (an issue is NOT tied to a branch/commit — it drafts from a description +
+the repo's issue template).
+
+STEPS:
+  1. intake        — resolve the target repo + the live issue template to match;
+                     read the issue description from the source bead / context.
+                     Fail-closed if the description is empty.  [gc.run-operator]
+  2. compose-body  — fill the template's fields from the real description; never
+                     invent reproduction steps or evidence not supplied. Match
+                     the chosen template's structure exactly.  [gc.run-operator]
+  3. file-brief    — file the paste-ready issue body as a decision brief for
+                     the human adjudicator via the brief pipeline (brief-producer.v1). TERMINAL.
+                     [mathcity.brief-operator]
+
+Does NOT file the issue. Upstream repos are READ-ONLY here (only the issue
+template is read). After adjudication, the verdict-executing agent files the
+issue with the approved body.
+"""
+formula = "create-issue-briefed"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "create-issue-briefed"
+description = "Draft a template-complete upstream issue body (filled from a real description against the repo's live issue template) and file it as a human decision brief. Never files the issue — the approved body is filed on adjudication."
+
+[vars]
+[vars.source_bead]
+description = "Bead carrying the issue description / context to draft the upstream issue from. Its notes/description are the real source text."
+required = true
+
+[vars.brief_slug]
+description = "Stable filename stem for the brief artifact (e.g. gsp-abc-issue-body)."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.target_repo]
+description = "Upstream repo the issue targets, as owner/name (e.g. gastownhall/gascity). Default empty = resolve from the checkout's GitHub parent at intake."
+default = ""
+
+[vars.template]
+description = "Issue template basename to match under .github/ISSUE_TEMPLATE/ (e.g. bug_report.yml, feature_request.yml). Default empty = pick the closest by the description, or the plain body if none."
+default = ""
+
+[vars.repo_dir]
+description = "Absolute path to a local checkout of the target repo, used only to READ .github/ISSUE_TEMPLATE/. Default empty = current work_dir if it is a git checkout of the target."
+default = ""
+
+[vars.artifact_root]
+description = "Root for the brief artifact."
+default = ".beads/briefs"
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to final producer (brief routing metadata)."
+default = "create-issue-briefed"
+
+[vars.operator_target]
+description = "Fleet agent for the intake + compose-body steps. Fleet ADDRESS, never a model name."
+default = "gc.run-operator"
+
+[vars.brief_operator]
+description = "Fleet agent for the terminal file-brief step. Fleet ADDRESS, never a model name."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "intake"
+title = "Resolve target repo + issue template and read the description"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Resolve the target repo, locate the issue template to match, and read the real
+issue description. READ-ONLY; performs no upstream write.
+
+**1. Enter the repo checkout (READ-ONLY, only to read the issue template):**
+```bash
+REPO_DIR="{{repo_dir}}"
+[ -n "$REPO_DIR" ] && cd "$REPO_DIR"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+[ -n "$REPO_ROOT" ] && cd "$REPO_ROOT"
+```
+
+**2. Resolve the target repo (owner/name):**
+```bash
+TARGET_REPO="{{target_repo}}"
+if [ -z "$TARGET_REPO" ]; then
+  TARGET_REPO=$(gh repo view --json parent --jq 'if .parent then (.parent.owner.login + "/" + .parent.name) else "NO_PARENT" end' 2>/dev/null || echo "NO_PARENT")
+  [ "$TARGET_REPO" = "NO_PARENT" ] && TARGET_REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
+fi
+if [ -z "$TARGET_REPO" ]; then
+    echo "[create-issue-briefed] BLOCKED: could not resolve target repo (pass --var target_repo=owner/name)"
+    bd update {{source_bead}} --notes "create-issue-briefed intake BLOCKED: target repo unresolved (pass target_repo=owner/name)"
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**3. Locate the issue template to match (READ-ONLY):**
+```bash
+TPL_DIR="${REPO_ROOT:-.}/.github/ISSUE_TEMPLATE"
+TEMPLATE="{{template}}"
+TEMPLATE_PATH=""
+if [ -n "$TEMPLATE" ] && [ -f "$TPL_DIR/$TEMPLATE" ]; then
+    TEMPLATE_PATH="$TPL_DIR/$TEMPLATE"
+elif [ -d "$TPL_DIR" ]; then
+    TEMPLATE_PATH=$(ls "$TPL_DIR"/*.y*ml "$TPL_DIR"/*.md 2>/dev/null | head -1)
+fi
+# TEMPLATE_PATH may be empty — compose-body then uses a plain issue body.
+```
+
+**4. Read the real issue description (fail-closed if empty):**
+```bash
+DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
+if [ -z "$DESC" ]; then
+    echo "[create-issue-briefed] BLOCKED: {{source_bead}} has no description to draft an issue from"
+    bd update {{source_bead}} --notes "create-issue-briefed intake BLOCKED: source bead has no description text to draft the issue from"
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**5. Record intake results for compose-body:**
+```bash
+bd update {{source_bead}} --notes "create-issue-briefed intake:
+  target_repo: $TARGET_REPO
+  template_path: ${TEMPLATE_PATH:-<none — plain body>}"
+```
+
+**Exit criteria:** target repo + template located, description confirmed
+non-empty, results in root-bead notes. OR: fail-closed BLOCK note + drain-ack.
+"""
+
+[[steps]]
+id = "compose-body"
+needs = ["intake"]
+title = "Fill the issue template from the real description"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Fill the resolved issue template's fields from the REAL description and write the
+result to `$GC_WORK_DIR/{{brief_slug}}-issue-body.md`. Match the template's
+structure exactly. NEVER invent reproduction steps, versions, or evidence that
+the description does not supply — leave a field marked `<unknown — needs input>`
+rather than fabricating it.
+
+```bash
+INTAKE=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].notes // ""' | grep -A5 'create-issue-briefed intake:')
+TEMPLATE_PATH=$(echo "$INTAKE" | sed -n 's/.*template_path: //p' | head -1)
+DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
+```
+
+- If `$TEMPLATE_PATH` is a `.yml` GitHub form: map the description onto each
+  form field's label (Summary/What happened, Steps to reproduce, Expected,
+  Version, etc.); unknown fields → `<unknown — needs input>`.
+- If it is a `.md` template: fill its sections in order.
+- If there is no template: produce a plain `## Summary` + `## Details` body from
+  the description.
+
+```bash
+cat > "$GC_WORK_DIR/{{brief_slug}}-issue-body.md" << 'EOF'
+<the fully-filled issue body, matching $TEMPLATE_PATH structure exactly>
+EOF
+bd update {{source_bead}} --notes "create-issue-briefed compose-body: template-complete issue body drafted at $GC_WORK_DIR/{{brief_slug}}-issue-body.md"
+```
+
+**Exit criteria:** a template-complete issue body written to $GC_WORK_DIR. This
+step NEVER runs `gh issue create`.
+"""
+
+[[steps]]
+id = "file-brief"
+needs = ["compose-body"]
+title = "File the issue body as a decision brief for {{source_bead}}"
+metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "create-issue-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+description = """
+File a decision brief presenting the paste-ready issue body for the human adjudicator to approve
+before any issue is filed. Terminal briefed slot — emit into the brief pipeline
+(write to .pile/; brief-shuffle is the only writer to stack/).
+
+```bash
+BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
+mkdir -p "{{artifact_root}}/.pile"
+ISSUE_BODY=$(cat "$GC_WORK_DIR/{{brief_slug}}-issue-body.md")
+```
+
+The brief MUST contain:
+- `status: approved` frontmatter
+- `brief_bead: {{source_bead}}`
+- `brief_slug: {{brief_slug}}`
+- `producer_contract: brief-producer.v1`
+- `source_formula: create-issue-briefed`
+- `source_step: file-brief`
+- `routing_path: "{{routing_path}}"`
+- `review_gate: approved`
+- `unlock_count: <int>`
+- `priority: P0|P1|P2|P3|P4`
+- `server_touching: false`
+- `user_skill_touching_override: false`
+- The target repo the issue would be filed against
+- The **full paste-ready issue body** (content of
+  `$GC_WORK_DIR/{{brief_slug}}-issue-body.md`) as a fenced markdown block
+- Any `<unknown — needs input>` fields flagged for the human adjudicator to fill
+- Recommended verdict (A = approve; file the issue with this body — OR — C = revise)
+- A complete `## Gate Evidence` section for the active gate profile, including
+  this machine-readable G9 line:
+  `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=the human adjudicator issue-body approval required before filing; proposed_registry_extension=none`
+
+This formula does NOT file the issue. On APPROVE, the verdict-executing agent
+runs `gh issue create` with this exact body.
+
+After filing:
+
+```bash
+bd update {{source_bead}} --notes "create-issue-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (no issue filed)."
+gc runtime drain-ack
+```
+"""

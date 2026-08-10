@@ -1,0 +1,9 @@
+#!/bin/bash
+# lmfdb-pipeline.conf.example — LMFDB database and pipeline configuration.
+# Copy to your project ROOT as lmfdb-pipeline.conf, fill in, and GITIGNORE the copy.
+# Never commit real values. See mathcity-lmfdb.configure-database to generate this file.
+
+PGDATABASE=lmfdb
+PGSCHEMA=lmfdb
+DATA_DIR=DATA            # project-relative flat-file cache dir
+SCHEMA_MD=schema.md      # path to project schema.md (type definitions, table descriptions)

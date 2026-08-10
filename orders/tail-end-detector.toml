@@ -1,0 +1,30 @@
+# mathcity/orders/tail-end-detector.toml
+#
+# Catches the lost class stuck-bead-watch cannot see: READY-BUT-NEVER-
+# DISPATCHED work beads (ready+unblocked, no routing metadata, idle past the
+# >3d age trigger). Companion to stuck-bead-watch.toml (which catches
+# dispatched-then-frozen beads). Together they cover both halves of the
+# CONSERVATION INVARIANT on gsp-2bowrk.
+#
+# exec (not formula): pure Python, stdlib only, zero LLM/pool-session cost per
+# tick. It emits lost-bead-classification.v1 records into the SAME
+# classification-root consumed by the lost-bead-classification-rollup formula
+# (Fork 2 -- reuse, no parallel pipeline); that 10m rollup turns the records
+# into resling/close decision briefs. Distinct fingerprints
+# (ready_idle_tail_superseded / ready_idle_tail_resling) keep the buckets
+# grouped apart. Records are written as {bead_id}.tail.toml so they never
+# clobber stuck-bead-watch's {bead_id}.toml records in the shared root.
+#
+# Batch caps (Fork 3) drain a large tail at a fleet-absorbing cadence instead
+# of dumping it: at most 10 resling + 25 superseded-close candidates emitted
+# per 15m tick. Fail-loud (Fork 4 / P6.1): a subprocess hang exits nonzero; a
+# growing actionable-tail emits a heartbeat event bead; the count prints every
+# run.
+[order]
+description = "Catch ready-but-never-dispatched idle work beads (>3d); emit lost-bead-classification records (superseded->close / stranded->resling, batch-capped) into the existing rollup pipeline"
+scope = "city"
+trigger = "cooldown"
+interval = "15m"
+exec = "python3 $PACK_DIR/assets/scripts/tail-end-detector.py --base-dir . --cache-dir .beads/tail-end-detector --classification-root .beads/lost-bead-classifications --min-idle-days 3 --resling-cap 10 --supersede-cap 25"
+timeout = "5m"
+idempotent = false

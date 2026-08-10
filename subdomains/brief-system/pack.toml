@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-brief-system"
+version = "0.1.0"
+schema = 2
+description = "The mathcity decision pipeline: brief formulas, 16-hurdle registry, orders, and review agents that drive the brief → decision workflow."

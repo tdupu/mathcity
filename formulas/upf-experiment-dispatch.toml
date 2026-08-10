@@ -1,0 +1,91 @@
+description = """
+Dispatch and breadcrumb an experiment that belongs on UPF.
+"""
+formula = "upf-experiment-dispatch"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "upf-experiment-dispatch"
+description = "Qualify an experiment, dispatch it to UPF, and leave durable breadcrumbs."
+
+[vars]
+[vars.experiment_slug]
+description = "Stable slug for the experiment."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.source]
+description = "Source bead, brief, or artifact that motivates the experiment."
+required = true
+
+[vars.question]
+description = "Experiment question to answer."
+required = true
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+default = ".beads/briefs"
+
+[vars.experiment_target]
+description = "Run target for experiment qualification and handoff."
+# Judgment-bearing qualification (is-good-experiment); gc.review-synthesizer is
+# the routable default. Cities importing the gastown pack may pass gastown.mayor.
+default = "gc.review-synthesizer"
+
+[[steps]]
+id = "qualify-experiment"
+title = "Qualify the experiment"
+metadata = { "gc.run_target" = "{{experiment_target}}", "gc.experiment.slug" = "{{experiment_slug}}", "gc.experiment.source" = "{{source}}" }
+description = """
+Use `is-good-experiment` and `experiments-on-upf.md`.
+
+Question:
+`{{question}}`
+
+Confirm the work belongs on UPF, has a falsifiable outcome, and names the
+artifact contract before dispatch.
+"""
+
+[[steps]]
+id = "write-upf-contract"
+title = "Write UPF artifact contract"
+needs = ["qualify-experiment"]
+metadata = { "gc.run_target" = "{{experiment_target}}", "gc.experiment.slug" = "{{experiment_slug}}", "gc.experiment.path" = "{{artifact_root}}/experiments/{{experiment_slug}}/contract.toml" }
+description = """
+Write `{{artifact_root}}/experiments/{{experiment_slug}}/contract.toml` with
+the source, question, success criteria, artifact paths, and callback owner.
+"""
+
+[[steps]]
+id = "dispatch-upf"
+title = "Dispatch experiment to UPF"
+needs = ["write-upf-contract"]
+metadata = { "gc.run_target" = "{{experiment_target}}", "gc.experiment.slug" = "{{experiment_slug}}" }
+description = """
+Dispatch the experiment according to the current UPF procedure. Record the
+destination, bead id or session id, and expected pickup path in the contract.
+"""
+
+[[steps]]
+id = "record-breadcrumb"
+title = "Record experiment breadcrumb"
+needs = ["dispatch-upf"]
+metadata = { "gc.run_target" = "{{experiment_target}}", "gc.experiment.slug" = "{{experiment_slug}}", "gc.experiment.breadcrumb_path" = "{{artifact_root}}/experiments/{{experiment_slug}}/breadcrumb.toml" }
+description = """
+Write `{{artifact_root}}/experiments/{{experiment_slug}}/breadcrumb.toml`.
+The breadcrumb must point from source work to UPF dispatch, artifacts, and
+pickup owner.
+"""
+
+[steps.check]
+max_attempts = 2
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-breadcrumb-required.sh"
+timeout = "1m"
+

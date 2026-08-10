@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-computing"
+version = "0.1.0"
+schema = 2
+description = "Dispatch and track heavy computations (Magma/Sage/PARI runs, UPF rig jobs) and collect results as mathcity briefs."

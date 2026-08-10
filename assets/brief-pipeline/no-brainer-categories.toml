@@ -1,0 +1,59 @@
+[registry]
+schema = "no-brainer-categories.v1"
+policy_source = "mathcity/subdomains/brief-system/POLICY.md N1-N8"
+default_min_confidence = 0.85
+
+[[category]]
+id = "stale-branch"
+name = "stale branch cleanup"
+status = "active"
+min_confidence = 0.85
+required_evidence = ["parent_closed", "supersession_documented", "scratch_only_diff", "no_downstream_references"]
+stop_gates = ["G5", "G5b"]
+auto_execute_allowed = true
+positive_examples = ["skills/catch-no-brainer/fixtures/stale-branch-A.md"]
+negative_examples = ["skills/catch-no-brainer/fixtures/server-touching.md"]
+
+[[category]]
+id = "defer-ratify-held"
+name = "ratify existing held state"
+status = "active"
+min_confidence = 0.85
+required_evidence = ["recommended_defer", "already_held", "no_new_work"]
+stop_gates = ["G5", "G5b"]
+auto_execute_allowed = true
+positive_examples = ["skills/catch-no-brainer/fixtures/defer-ratify-held.md"]
+negative_examples = ["skills/catch-no-brainer/fixtures/novel-shape.md"]
+
+[[category]]
+id = "close-done-cited-commit"
+name = "close already done with cited commit"
+status = "active"
+min_confidence = 0.85
+required_evidence = ["recommended_close_done", "commit_cited", "already_merged_or_present"]
+stop_gates = ["G5", "G5b"]
+auto_execute_allowed = true
+positive_examples = ["skills/catch-no-brainer/fixtures/close-done-cited-commit.md"]
+negative_examples = ["skills/catch-no-brainer/fixtures/novel-shape.md"]
+
+[[category]]
+id = "execution-confirmation-proof"
+name = "confirm already executed action with proof"
+status = "active"
+min_confidence = 0.85
+required_evidence = ["recommended_confirm", "mechanical_proof", "no_new_judgment"]
+stop_gates = ["G5", "G5b"]
+auto_execute_allowed = true
+positive_examples = ["skills/catch-no-brainer/fixtures/execution-confirmation-proof.md"]
+negative_examples = ["skills/catch-no-brainer/fixtures/novel-shape.md"]
+
+[[category]]
+id = "capability-blocker"
+name = "would-be no-brainer blocked on capability"
+status = "active"
+min_confidence = 1.0
+required_evidence = ["capability_blocker"]
+stop_gates = ["G5", "G5b"]
+auto_execute_allowed = false
+positive_examples = ["skills/catch-no-brainer/fixtures/capability-blocker.md"]
+negative_examples = ["skills/catch-no-brainer/fixtures/stale-branch-A.md"]

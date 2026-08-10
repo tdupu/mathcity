@@ -1,0 +1,13 @@
+[order]
+description = "Manually classify one no-brainer candidate under the shortcut policy"
+scope = "city"
+formula = "no-brainer-classify"
+trigger = "manual"
+# Retarget: gastown-vestige pool "gc.run-operator" -> pack-local mathcity.brief-operator (the human adjudicator 2026-07-13, example-owner/gascity-packs#4)
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true
+
+[vars]
+mode = "guarded-execute"
+
