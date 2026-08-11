@@ -55,10 +55,11 @@ for the rules):
 
 > **Upstream contribution policy (enforcement context for P3.1–P3.4):**
 > - PRs to `gastownhall/gascity`, `gastownhall/gascity-packs`, or
->   `gastownhall/beads` MUST use `mol-pr-from-issue` via the pr-pipeline.
->   Direct `gh pr create` is forbidden.
+>   `gastownhall/beads` MUST use `pr-pipeline-briefed` for the PR body brief.
+>   Direct `gh pr create` without an approved brief is forbidden.
 > - Filing issues against the same three upstream repos MUST go through the
->   contributing skills (never `gh issue create` directly).
+>   `create-issue-briefed` issue-body brief. Direct `gh issue create` without
+>   an approved brief is forbidden.
 > - Any plan that includes a direct PR or issue creation for these repos → **revise** (cite P3.1).
 
 ## Output format

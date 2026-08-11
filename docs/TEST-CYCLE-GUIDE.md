@@ -1,5 +1,7 @@
 # mathcity brief-and-work system — test suite & triage
 
+Parent: [../README-development.md](../README-development.md)
+
 > **DO NOT ABRIDGE OR TRUNCATE THE CONTENTS OF THIS FILE WITHOUT EXPLICIT USER AUTHORIZATION.**
 > Correct errors in place (P5.4); every section has been verified correct across multiple Mayor sessions.
 
@@ -111,7 +113,7 @@ PENDING — human decisions 🅣
 Everything hecke/#335 stays DOWNSTREAM of TRUST and is dogfood — not this round.
 
 **Policy gates (check-plan-hygiene, S6):**
-- **A6-Option-1 & gsp-mbon are OUTSIDE the owned set** (gc core / materialization machinery) → MUST route through the pr-pipeline (`mol-pr-from-issue`), never a direct push (P3.1/P3.2); rebuild via `update-gascity-from-source` (P1.6). Route through the repo-side landing lane, outside-agent context (P3.5).
+- **A6-Option-1 & gsp-mbon are OUTSIDE the owned set** (gc core / materialization machinery) → MUST route through a briefed handoff (`pr-pipeline-briefed` for PR text after branch/test evidence exists, or `create-issue-briefed` for a new upstream issue), never a direct push (P3.1/P3.2); rebuild via `update-gascity-from-source` (P1.6). Route through the repo-side landing lane, outside-agent context (P3.5).
 - **A7 (gsp-rqv0) is INSIDE the owned set** (`mathcity/formulas/brief-decision-dispatch.toml`) — direct edit OK, but the installed copies are pinned real files (gsp-mbon) → a live change needs a deliberate copy-refresh of the 32 pinned files (repo-side landing agent, S5).
 - **Patrol-off (city.toml override)** cleared as a NAMED WORKAROUND (P1.17): root cause = gsp-ntoi, re-enable tracked on that bead, disable source-verified.
 

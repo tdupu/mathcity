@@ -1,8 +1,10 @@
 # mathcity — skills index
 
+Parent: [README.md](./README.md)
+
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-120 skills across the parent pack and 7 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+132 skills across the parent pack and 7 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -11,7 +13,7 @@
 
 _Regenerate/verify with `/update-README`._
 
-### Parent pack — `mathcity/skills/`  (50)
+### Parent pack — `mathcity/skills/`  (54)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -22,7 +24,7 @@ _Regenerate/verify with `/update-README`._
 | `check-briefs` | `mathcity.check-briefs` | Report the current brief stack — compact table (Rig, Artifact, unlock_count, Age, Epic/linked) sorted by unlock_count descending |
 | `check-mayor-mail` | `mathcity.check-mayor-mail` | Mayor-facing mail triage routine — scan the gc mail inbox, surface [ESCALATE CRITICAL/HIGH] first, and catch escalations the fleet raised into a void |
 | `check-molecules` | `mathcity.check-molecules` | Complete molecule accounting across all rigs, by status and in order — BEING WORKED ON (live worker), STRANDED (in_progress, no worker — reclaim backlog), READY (dispatchable, priority-ranked); writes the full accounting to the configured city-side molecules directory and prints a capped per-status summary |
-| `check-stack` | `mathcity.check-stack` | Report the current brief stack status — count and table of actionable briefs (approved, bead not yet closed) sorted by unlock_count descending |
+| `check-on-agent` | `mathcity.check-on-agent` | Check in on ONE running gc-managed worker session to answer what it is doing, whether its artifact landed, or whether it is stalled; observe first and only message after activity genuinely stops |
 | `check-work` | `mathcity.check-work` | Decide whether the fleet is ACTUALLY doing work — the signal-trust hierarchy and anti-patterns for reading fleet state, plus routing to the right per-purpose checker |
 | `catch-no-brainer` | `mathcity.catch-no-brainer` | PRELIMINARY v0.2 — classify a brief against the he-lele 5-criterion no-brainer test, plus recognize the capability-blocker shape (would-be no-brainer stalled by a permission/capability gap) and signal compact-form eligibility to downstre… |
 | `communicate-with-other-agent` | `mathcity.communicate-with-other-agent` | Send and read messages between concurrent Claude Code agents via the shared city agent inbox |
@@ -51,6 +53,8 @@ _Regenerate/verify with `/update-README`._
 | `intercept-bead` | `mathcity.intercept-bead` | Coordinator/Mayor-side skill for catching an INFLIGHT bead — a new bead that may supersede or affect an existing (old) bead — before it lands and gets lost, duplicated, or auto-dispatched |
 | `is-good-experiment` | `mathcity.is-good-experiment` | Critical-review variant specialized for experiment proposals |
 | `is-good-test` | `mathcity.is-good-test` | Thin wrapper around is-good-experiment specialized for test files |
+| `mayor-math-handoff` | `mathcity.mayor-math-handoff` | Session-end handoff for the math-city Mayor: writes the chained handoff bead, run-log expansion, session-catalog entry, and restart prompt update |
+| `mayor-math-prime` | `mathcity.mayor-math-prime` | Prime a fresh math-city Mayor session from the restart prompt, durable operation docs, session catalog, and handoff bead |
 | `mayor-math-restart` | `mathcity.mayor-math-restart` | Full Mayor session orientation |
 | `mayor-math` | `mathcity.mayor-math` | Supplement to gc.mayor for Gas Town (gt HQ) context |
 | `nudge-city` | `mathcity.nudge-city` | Revive city workers that are stalled/asleep after a usage-limit reset by nudging each one to resume, finish its task, and free its run-operator slot |
@@ -65,13 +69,15 @@ _Regenerate/verify with `/update-README`._
 | `revise-artifact` | `mathcity.revise-artifact` | Apply a set of action items to an artifact (SKILL.md, plan, code, LaTeX, theorem, etc.) and produce a revised version |
 | `simple-work` | `mathcity.simple-work` | Dispatch a bounded, well-scoped task via simple-work-briefed (execute → file brief → finalize) when the work is a single operation (script run, repair, verification) and does not need the full build-basic-briefed lifecycle |
 | `wake-city` | `mathcity.wake-city` | Actually WAKE a stalled Gas City — diagnose WHY the fleet is dead (tmux down, Dolt down, suspended rig, dead dispatcher, session- vs weekly-limit zombies), apply the correct revival per cause, and VERIFY work resumes; unlike nudge-city, handles weekly-limit-dead zombies (close-to-free-slot) and fails loud on capacity blocks |
+| `work` | `mathcity.work` | Feed a bead or ready bead set into the math-city fleet through the S14-verified dispatch path, with formula selection, verify-assignee, and slow-build-not-strand checks |
 | `xkcd-927` | `mathcity.xkcd-927` | Reconcile or fix an issue that is spread across several beads / plans / PERTs / policy docs that duplicate, contradict, or prose-supersede each other — by CONSOLIDATING into the single existing source of truth, NEVER by writing a fresh a… |
 
-### Brief-system — `subdomains/brief-system/skills/`  (2)
+### Brief-system — `subdomains/brief-system/skills/`  (3)
 
 | Skill | Alias | What it does |
 |---|---|---|
 | `check-brief-policy` | `mathcity-brief-system.check-brief-policy` | Audit the current brief pipeline state against the brief-system POLICY.md (PP1.1 trinity, B2.x structure/ordering/resurface/freshness, B3.x decision records, N5 kill-switch, PP4.1 gate registry) |
+| `decisions-to-briefs` | `mathcity-brief-system.decisions-to-briefs` | Convert pending decisions from conversation, a running list, or a durable decision inbox into adjudicable brief artifacts with machine-readable consequence blocks |
 | `new-brief-policy` | `mathcity-brief-system.new-brief-policy` | Propose and apply an amendment to the brief-system POLICY.md (mathcity/subdomains/brief-system/POLICY.md) |
 
 ### Computing — `subdomains/computing/skills/`  (9)
@@ -88,11 +94,11 @@ _Regenerate/verify with `/update-README`._
 | `profile-magma` | `mathcity-computing.profile-magma` | Wrap the Magma code the user is working on in a profiling harness to find bottlenecks (slow intrinsics, memory hogs) |
 | `update-issue` | `mathcity-computing.update-issue` | Replace a GitHub issue's body with a single up-to-date canonical statement, consolidating all prior body versions into ONE archive comment per issue (folded via HTML <details> blocks) |
 
-### Pack development / hygiene — `subdomains/dev/skills/`  (23)
+### Pack development / hygiene — `subdomains/dev/skills/`  (26)
 
 | Skill | Alias | What it does |
 |---|---|---|
-| `adjust-workers` | `mathcity-dev.adjust-workers` | Scale the number of concurrent run-operators on a Gas City rig — reads live session counts, proposes a max_active_sessions patch, and routes it through the pack PR pipeline (city-toml-via-packs-not-hand policy). |
+| `adjust-workers` | `mathcity-dev.adjust-workers` | Scale the number of concurrent run-operators on a Gas City rig — reads live session counts, proposes a max_active_sessions patch, and routes it through the briefed pack-change path (city-toml-via-packs-not-hand policy). |
 | `audit-recent-work` | `mathcity-dev.audit-recent-work` | Produce a full accounting of work adjudicated in a session or date range — brief-record beads, decision beads, stack archives, and in-flight molecules — across all rigs. Distinguishes mid-flight build-basic-briefed molecules from genuine dispatch gaps. |
 | `city-status` | `mathcity-dev.city-status` | Read-only Gas City fleet and work-queue snapshot — checks tmux liveness, active sessions, in-progress beads (with lease/heartbeat status), molecule step tables (steps done, +1h change, start/completion times), brief pipeline state (.pile/.stack counts, shuffler lock), and Dolt health. |
 | `formula-creator-math` | `mathcity-dev.formula-creator-math` | Create a mathcity formula TOML with enforced briefed-terminal-step convention (all mathcity formulas must end with a brief gate before merge/publish) |
@@ -100,13 +106,16 @@ _Regenerate/verify with `/update-README`._
 | `check-build-formulas-and-skills` | `mathcity-dev.check-build-formulas-and-skills` | Completeness audit for the mathcity formula and skill catalogs — checks every formula TOML appears in README-formulas.md, every skill appears in README-skills.md, and every formula passes F-rule hygiene (briefed terminal step, no model-name run_target) |
 | `check-build-hygiene` | `mathcity-dev.check-build-hygiene` | Audit the CURRENT live install — gc/bd binaries, the three source repos, pack imports, and skill sinks — against the Pack Portability & Boundary Policy (mathcity/subdomains/dev/POLICY.md) |
 | `check-city-policy` | `mathcity-dev.check-city-policy` | Audit a plan, diff, or the live running-city state against the City Operations Policy (mathcity/subdomains/dev/POLICY-city.md, CT-rules); reports PASS/PASS-WITH-NOTES/FAIL per CT-rule |
+| `check-documentation-policy` | `mathcity-dev.check-documentation-policy` | Audit mathcity documentation against POLICY-documentation.md; reports stale behavior, local/private path leaks, missing parent links, missing examples/tests, and index drift |
 | `check-formula-hygiene` | `mathcity-dev.check-formula-hygiene` | Audit a formula TOML or formula-creation skill against POLICY-formulas.md (mathcity formula policy); reports PASS/FAIL for each F-rule |
 | `check-plan-hygiene` | `mathcity-dev.check-plan-hygiene` | Gate a plan doc or beads convoy against the Pack Portability & Boundary Policy (mathcity/subdomains/dev/POLICY.md) BEFORE any build starts |
 | `check-wheel` | `mathcity-dev.check-wheel` | Gate a plan, implementation, or data artifact against the "no reinventing the wheel" invariant — detects existing resources that cover the proposed work, then produces a hygienic import recommendation via check-plan-hygiene when reinvention is found. |
 | `check-zero` | `mathcity-dev.check-zero` | Wheel-check — survey existing gascity formulas/skills/orders, prior beads, code, Magma intrinsics, math databases (LMFDB, Stacks), Python packages, and known theorems before building anything from scratch. |
 | `check-defer` | `mathcity-dev.check-defer` | Framework-cognition compliance checker — scans a skill, formula, or pipeline artifact and flags every place a framework makes a reasoning decision that should be a model call. |
 | `hourly-check` | `mathcity-dev.hourly-check` | 12-hour city health watchdog — fires every hour, shows fleet/molecule/brief/Dolt snapshot, raises a prominent inline alert to the invoking session if stalls or usage limits are detected. |
+| `improve-documentation` | `mathcity-dev.improve-documentation` | Update mathcity documentation hygienically after user-facing feature, formula, skill, policy, setup, or workflow changes; keeps examples, tests, parent links, and indexes aligned |
 | `new-city-policy` | `mathcity-dev.new-city-policy` | Propose and apply an amendment to the City Operations Policy (mathcity/subdomains/dev/POLICY-city.md, CT-rules) — sole write path, human-gated |
+| `new-documentation-policy` | `mathcity-dev.new-documentation-policy` | Propose and apply human-approved amendments to POLICY-documentation.md; sole write path for DOC rules |
 | `new-formula-policy` | `mathcity-dev.new-formula-policy` | Propose and apply an amendment to the mathcity formula policy (mathcity/README-formulas.md + formula-creator-math hygiene gate) |
 | `new-hygiene-policy` | `mathcity-dev.new-hygiene-policy` | Propose and apply an amendment to the mathcity hygiene policy (mathcity/subdomains/dev/POLICY.md) |
 | `push-the-fleet` | `mathcity-dev.push-the-fleet` | Saturate the city fleet — finds all ready, unblocked beads across rigs and dispatches them via build-basic-briefed (mathcity.work pattern) until active workers reach TARGET (default 10). |

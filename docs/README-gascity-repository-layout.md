@@ -1,5 +1,7 @@
 # Gascity Repository Layout
 
+Parent: [../README-development.md](../README-development.md)
+
 This document explains how gascity rig repositories and the HQ repository (where `gc init` is run) differs from a remote repository where gascity operates. Suppose that we have two repositories `<workspace>/repo1` and `<workspace>/repo2` that we are working on and that we create a new directory `<workspace>/HQ` where we will run `gc init` to create our gascity.
 
 ---

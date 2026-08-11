@@ -1,5 +1,7 @@
 # Mathcity Testing Guide
 
+Parent: [../README-development.md](../README-development.md)
+
 > Policy: `mathcity/POLICY-formulas.md` rule **F6.1** — every new formula (and
 > by extension every mathcity artifact) must have a passing smoke test before
 > its deploy brief is filed. This document explains what testing looks like,

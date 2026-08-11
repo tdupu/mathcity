@@ -1,5 +1,7 @@
 # Mathcity Policy Governance
 
+Parent: [README.md](./README.md)
+
 | Field | Value |
 | --- | --- |
 | Date | 2026-07-12 |

@@ -1,5 +1,7 @@
 # Bead Types Reference (mathcity)
 
+Parent: [README.md](./README.md)
+
 Reference document for the bd bead types and their intended use in the mathcity ecosystem. This is a reference, not a policy — the binding rules live in [POLICY-beads.md](POLICY-beads.md) (rules BP1.x–BP4.x).
 
 ## The 9 bd types

@@ -1,5 +1,7 @@
 # Mayor Onboarding — operate the Gas City the way it's working now
 
+Parent: [../README-mayor.md](../README-mayor.md)
+
 > Canonical, regression-proofing onboarding for every Mayor session (the math-city Mayor).
 > This context was derived painfully over 11 generations — it is gold; do not
 > throw it away. When something here proves wrong at source, correct it here in

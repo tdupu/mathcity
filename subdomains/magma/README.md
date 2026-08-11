@@ -1,9 +1,11 @@
 # mathcity-magma
 
+Parent: [../../README-subdomains.md](../../README-subdomains.md)
+
 Standards for Magma packages in mathcity-governed project repos
 (reference implementation: `hecke`'s `magma/` tree). Nested child pack of
 `mathcity/` per
-[ADR 0002](../../../docs/adr/0002-mathcity-subdomain-pack-model.md).
+[ADR 0002](../../docs/adr/0002-mathcity-subdomain-pack-model.md).
 
 Contents:
 
@@ -34,5 +36,5 @@ Import independently of the parent pack:
 
 ```toml
 [imports."mathcity-magma"]
-source = "https://github.com/tdupu/mathcity/tree/main/subdomains/magma"
+source = "https://github.com/<github-owner>/mathcity/tree/main/subdomains/magma"
 ```

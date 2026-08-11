@@ -1,5 +1,7 @@
 # Beads and LaTeX — Scratch / Ideas
 
+Parent: [../README-beads.md](../README-beads.md)
+
 > **STATUS: SCRATCH DOCUMENT — NOT ENFORCED POLICY.**
 >
 > This is a parking lot for ideas pulled out of the old LaTeX bead workflow

@@ -1,5 +1,9 @@
 # Dolt Remote Setup
 
+Parent: [../README-dolt.md](../README-dolt.md)
+
+Root quickstart: [README-dolt.md](../README-dolt.md).
+
 Each rig runs a Dolt-backed bead store. Beads hold internal operational
 context — decision records, brief history, bead metadata — that must not be
 exposed publicly even when the code repo is public. Back up bead data to a

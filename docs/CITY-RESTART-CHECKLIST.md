@@ -1,5 +1,7 @@
 # Gascity Restart & Brief System Verification Checklist
 
+Parent: [../README-mayor.md](../README-mayor.md)
+
 > **DO NOT ABRIDGE OR TRUNCATE THE CONTENTS OF THIS FILE WITHOUT EXPLICIT USER AUTHORIZATION.**
 > Correct errors in place (P5.4); every section has been verified correct across multiple Mayor sessions.
 
@@ -48,13 +50,13 @@
   ```
   Expected: all imports report OK. Errors here mean a pack source path is broken or missing — fix the path in city.toml before starting.
 
-  > **Note:** Packs are configured as local paths (`<repos-root>/gascity-packs/...`) in city.toml. Binary rebuilds do NOT require reinstalling packs — they are read live from disk.
+  > **Note:** Packs are configured as local paths in city.toml. Gas City base packs live under `<repos-root>/gascity-packs/...`; mathcity lives at `<repos-root>/mathcity`. Binary rebuilds do NOT require reinstalling packs — they are read live from disk.
 
 - [ ] **Review import status**
   ```bash
   gc import status
   ```
-  Expected: shows `gc`, `gc-base`, `pr-pipeline`, `mathcity`, `contributing` present for defaults, plus hecke-scoped duplicates of `mathcity` and `pr-pipeline`. (P5.4 update 2026-07-21 Q23: `contributing` pack added to defaults.rig.imports per the human adjudicator standing requirement.)
+  Expected: shows `gc`, `gc-base`, `mathcity`, `contributing` present for defaults, plus the hecke-scoped `mathcity` import. (P5.4 update 2026-07-21 Q23: `contributing` pack added to defaults.rig.imports per the human adjudicator standing requirement.)
 
 ---
 
@@ -133,11 +135,11 @@
 - [ ] **Confirm formulas are visible**
   ```bash
   gc formula list | grep brief
-  gc formula list | grep mol-pr
+  gc formula list | grep -E 'pr-pipeline-briefed|create-issue-briefed'
   ```
   Expected `brief-*`: `brief-prep`, `brief-shuffle`, `brief-archive-sweep`, `brief-record-decision`, `brief-watchdog-refill`, `brief-review-patrol`, `brief-gate-keep`, `brief-present-next` (legacy, OK if present), `math-brief-prep`, `no-brainer-classify`, `on-merge-brief-record`, `file-or-sendback-route`.
 
-  Expected `mol-pr-*`: exactly 6 — `mol-pr-blast-radius`, `mol-pr-from-issue`, `mol-pr-review`, `mol-pr-ship`, `mol-pr-start`, `mol-pr-triage`.
+  Expected briefed GitHub handoffs: `pr-pipeline-briefed`, `create-issue-briefed`.
 
 ---
 
@@ -184,7 +186,8 @@ gc formula list
 
 # Inspect a compiled formula recipe (shows steps)
 gc formula show brief-prep
-gc formula show mol-pr-from-issue
+gc formula show pr-pipeline-briefed
+gc formula show create-issue-briefed
 
 # Check if a running bead's formula version matches what's on disk
 gc formula version-check <bead-id>
@@ -366,30 +369,31 @@ gc order history brief-shuffle-pile
 
 ---
 
-## Phase 8 — PR Pipeline Verification
+## Phase 8 — Briefed GitHub Handoff Verification
 
-- [ ] **Confirm all 6 mol-pr formulas are present**
+- [ ] **Confirm both briefed handoff formulas are present**
   ```bash
-  gc formula list | grep mol-pr
+  gc formula list | grep -E 'pr-pipeline-briefed|create-issue-briefed'
   ```
-  Expected: `mol-pr-blast-radius`, `mol-pr-from-issue`, `mol-pr-review`, `mol-pr-ship`, `mol-pr-start`, `mol-pr-triage`
+  Expected: `pr-pipeline-briefed`, `create-issue-briefed`
 
-- [ ] **Inspect the from-issue formula**
+- [ ] **Inspect both formulas**
   ```bash
-  gc formula show mol-pr-from-issue
+  gc formula show pr-pipeline-briefed
+  gc formula show create-issue-briefed
   ```
 
-- [ ] **Dry-run a sling to confirm routing resolves**
+- [ ] **Dry-run the briefed PR handoff to confirm routing resolves**
   ```bash
-  gc sling hecke/gc.run-operator mol-pr-from-issue --formula --dry-run
+  gc sling hecke/gc.run-operator pr-pipeline-briefed --formula --dry-run
   ```
   Expected: shows what would be dispatched, no error about unresolvable target.
 
-- [ ] **Use the pr-pipeline command surface**
+- [ ] **Dry-run the briefed issue handoff to confirm routing resolves**
   ```bash
-  gc pr-pipeline --help
-  gc pr-pipeline pr plan <issue-num> --rig hecke
+  gc sling hecke/gc.run-operator create-issue-briefed --formula --dry-run
   ```
+  Expected: shows what would be dispatched, no error about unresolvable target.
 
 - [ ] **File Work D bead (TimeLimit patch — independent, no server touch, can run in parallel)**
   ```bash
@@ -421,7 +425,7 @@ gc status
 | `core.control-dispatcher` | 1 per rig | 1 | 1 | Per-rig order routing |
 | `gc.run-operator` | on-demand | 0 | N | Dispatched formula runs |
 
-**Assessment:** For a personal dev setup with brief-system + pr-pipeline on 2–3 active rigs, 2 brief-operators is adequate. Surge capacity: temporarily raise `max_active_sessions = 3` in `<mathcity-pack-root>/agents/brief-operator/agent.toml` and run `gc reload`.
+**Assessment:** For a personal dev setup with the brief system and briefed PR/issue handoffs on 2–3 active rigs, 2 brief-operators is adequate. Surge capacity: temporarily raise `max_active_sessions = 3` in `<mathcity-pack-root>/agents/brief-operator/agent.toml` and run `gc reload`.
 
 - [ ] **Check for pool exhaustion signals**
   ```bash
@@ -437,32 +441,20 @@ gc status
 
 ## Phase 10 — PR Lifecycle: Open to Merge
 
-> Confirms the full author-side PR workflow ends with a merged commit and a closed source bead.
-> Run after Phase 8 PR pipeline verification smoke tests pass.
+> Confirms the briefed PR/issue handoff path produces approved GitHub text before a human or verdict-executing agent performs the write.
+> Run after Phase 8 briefed handoff verification smoke tests pass.
 
-- [ ] **Run mol-pr-from-issue for the real issue**
+- [ ] **Run `pr-pipeline-briefed` for the real branch**
   ```bash
-  gc sling hecke/gc.run-operator mol-pr-from-issue --formula --var issue_number=335
+  gc sling hecke/gc.run-operator pr-pipeline-briefed --formula --var source_bead=<bead-id> --var brief_slug=<slug>
   ```
-  Expected: formula chains plan → blast-radius → ship steps; produces a branch-ready PR report.
-  Does NOT push by default (`auto_push=false`). Add `--var auto_push=true` only when the human adjudicator explicitly authorizes.
+  Expected: formula composes a template-complete PR body from the current branch and recorded focused-test evidence, then files a decision brief. It does not push or open a PR.
 
-- [ ] **Run PR self-review scorecard**
+- [ ] **Run `create-issue-briefed` when the GitHub write is a new issue**
   ```bash
-  cd <repos-root>/hecke
-  gc pr-pipeline pr review <PR-number-or-branch>
-  # Or via formula:
-  gc sling hecke/gc.run-operator mol-pr-review --formula
+  gc sling hecke/gc.run-operator create-issue-briefed --formula --var source_bead=<bead-id> --var brief_slug=<slug>
   ```
-  Expected: 11-category scorecard; all categories pass or have documented exceptions.
-
-- [ ] **Run pre-push ship gate**
-  ```bash
-  gc pr-pipeline pr ship
-  # Or via formula:
-  gc sling hecke/gc.run-operator mol-pr-ship --formula
-  ```
-  Expected: simplify → review → checks → readiness report passes before push.
+  Expected: formula drafts a template-complete issue body from the source bead and target repo template, then files a decision brief. It does not file the issue.
 
 - [ ] **Push branch and open PR** (after the human adjudicator approves ship gate output)
   ```bash

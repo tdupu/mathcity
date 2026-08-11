@@ -72,7 +72,7 @@ git -C <repos-root>/gascity-packs rev-list fork/main..main --count    # unpushed
 
 gascity-packs is **fork-canonical** (gt-5cye): fork deliberately ahead of
 upstream; upstream must be *contained in* main (merged), never mirrored
-over it. Mathcity is a standalone source checkout backed by `tdupu/mathcity`;
+over it. Mathcity is a standalone source checkout backed by `<github-owner>/mathcity`;
 `main` and `origin/main` must match for a reproducible city. Remediation: the
 matching `update-*-from-source` skill, including `update-mathcity-from-source`;
 never resolve divergence by force-push.
@@ -82,17 +82,17 @@ never resolve divergence by force-push.
 If the build under audit includes any recently created PR or issue targeting
 `gastownhall/gascity`, `gastownhall/gascity-packs`, or `gastownhall/beads`:
 
-- Every PR to those three repos must have been created via `mol-pr-from-issue`
-  (pr-pipeline), NOT by a bare `gh pr create`. Check:
+- Every PR to those three repos must have an approved `pr-pipeline-briefed`
+  body brief, NOT a bare `gh pr create`. Check:
   ```bash
   gh pr list --repo gastownhall/gascity-packs --author @me --json title,body,url | head
-  # Look for pipeline-generated body (linked bead, hygiene checklist)
+  # Look for the approved brief linkage and template-complete body
   ```
-  Hand-crafted PR bodies without the pipeline template → **revise** (P3.1).
-  Reference: https://github.com/<github-owner>/gascity-packs/blob/main/pr-pipeline/README.md
+  Hand-crafted PR bodies without approved brief evidence → **revise** (P3.1).
 
-- Every issue filed against those repos must have been created through the
-  contributing skills, not `gh issue create` directly. A plain issue body
+- Every issue filed against those repos must have an approved
+  `create-issue-briefed` issue-body brief, not a direct `gh issue create`.
+  A plain issue body
   missing contributing-skill metadata → flag for remediation (P3.4).
   Reference: https://github.com/<github-owner>/gascity-packs/tree/main/contributing
 
@@ -100,7 +100,7 @@ If the build under audit includes any recently created PR or issue targeting
 
 ```bash
 grep -A1 'imports' <city-root>/city.toml | grep 'source'
-grep -Hn 'source = ".*gascity-packs/mathcity' <city-root>/city.toml <city-root>/pack.toml \
+grep -Hn 'source = ".*gascity-packs.*/mathcity' <city-root>/city.toml <city-root>/pack.toml \
   && echo "P1.4 FAIL: mathcity import uses stale gascity-packs path"
 grep -Hn 'source = ".*repos/mathcity' <city-root>/city.toml <city-root>/pack.toml \
   || echo "P1.4 FAIL: no standalone mathcity import found"
@@ -109,8 +109,8 @@ grep -Hn 'source = ".*repos/mathcity' <city-root>/city.toml <city-root>/pack.tom
 For each local-path import target: its repo must be clean (check 2) and
 its HEAD pushed to the canonical remote (check 3). A city standing on
 unpushed content can't be recreated elsewhere. Mathcity imports specifically
-must resolve to `<repos-root>/mathcity`; `<repos-root>/gascity-packs/mathcity`
-is stale and fails P1.4 even if the directory still exists locally.
+must resolve to `<repos-root>/mathcity`; the legacy nested checkout path is
+stale and fails P1.4 even if the directory still exists locally.
 
 **5. Skill exposure hygiene (P1.8, P1.3).**
 

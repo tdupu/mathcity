@@ -8,7 +8,7 @@ description: >-
   bead is invisible in the target store until the push, and the instant it
   arrives the patrol can hand it to a worker. This skill holds it, reconciles
   it against the old bead (supersede / affect / duplicate), and routes it
-  deliberately via the pr-pipeline. Trigger phrases: "intercept this bead",
+  deliberately via the briefed handoff path. Trigger phrases: "intercept this bead",
   "intercept-bead", "a new bead supersedes/affects an old one", "catch the
   inflight bead", "hold the incoming handoff bead", "reconcile the synced bead
   against the existing one". NOT for creating the handoff bead itself (use
@@ -67,10 +67,12 @@ Decide the relationship, then act:
 Verify against the actual bead bodies — never assume from titles alone.
 
 ### 6. Release deliberately
-Never let the reconciled bead auto-fire. Route it through the **pr-pipeline**
-per P3.6 (handoff-rides-pipeline): a decided handoff gets a proper review, not
-blind execution. Reassign off the `<rig>/mayor` hold (or clear the blocking
-dep) only when you are dispatching it on purpose.
+Never let the reconciled bead auto-fire. Route it through the **briefed
+handoff path**: use `create-issue-briefed` for upstream issue text,
+`pr-pipeline-briefed` for upstream PR body text, or `mathcity.work` /
+`work-briefed` for ordinary fleet execution. A decided handoff gets a proper
+review, not blind execution. Reassign off the `<rig>/mayor` hold (or clear the
+blocking dep) only when you are dispatching it on purpose.
 
 ## Failsafe — it arrived READY
 If step 2 was missed and the bead lands ready, your arrival query (step 4) is

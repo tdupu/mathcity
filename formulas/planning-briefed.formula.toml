@@ -86,8 +86,9 @@ else
     --description "planning-briefed molecule for {{source_bead}} needs {{plan_target}}
 but this pool is not configured in the city.
 
-Action: gc agent create {{plan_target}} --model opus --rig gascity-packs
-Or verify gascity/roles/pack.toml contains a [[named_session]] entry with template={{plan_target##*.}}.
+Action: configure a rig-qualified Opus-class planning agent for {{plan_target}}
+in the owning rig's pack/city config, or verify the imported roles pack already
+contains a [[named_session]] entry with template={{plan_target##*.}}.
 
 Once configured, re-sling planning-briefed for {{source_bead}}.")
 

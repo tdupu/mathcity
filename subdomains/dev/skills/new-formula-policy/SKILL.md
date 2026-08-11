@@ -14,7 +14,7 @@ description: >
 
 Propose and commit an amendment to the mathcity formula index policy. The
 two enforcement surfaces are:
-- **`mathcity/README-formulas.md`** — the canonical index every formula must
+- **[README-formulas.md](../../../../README-formulas.md)** — the canonical index every formula must
   appear in; gate enforced by `formula-creator-math` Step 6 and `formula-work`
   approve-verdict step.
 - **`formula-creator-math` SKILL.md Step 5** — the hygiene gate that checks
@@ -122,7 +122,7 @@ done
 
 ## Cross-references
 
-- `mathcity/README-formulas.md` — the document this maintains
+- [README-formulas.md](../../../../README-formulas.md) — the document this maintains
 - `formula-creator-math` SKILL.md — enforces README-formulas.md gate at creation time
 - `formula-work` SKILL.md — enforces README-formulas.md gate at approve-verdict time
 - `check-formula-hygiene` — run after any amendment

@@ -1,5 +1,7 @@
 # Mathcity Installation Guide
 
+Parent: [../SETUP.md](../SETUP.md)
+
 This guide installs the standalone `mathcity` pack into a Gas City city. The
 pack provides the mathematical brief pipeline, review skills, gate policy,
 orders, and math-domain subpacks.
@@ -22,8 +24,8 @@ tooling depending on which subdomain skills you use.
 ## Create A City
 
 ```sh
-gc init ~/my-city
-cd ~/my-city
+gc init <city-root>
+cd <city-root>
 gc start
 bd init
 gc doctor
@@ -38,7 +40,7 @@ Mathcity formulas extend the public Gas City base pack and route some work to
 Gas City role agents. Add the city-scope base pack and the rig-scope roles pack:
 
 ```sh
-cd ~/my-city
+cd <city-root>
 gc import add --name gc https://github.com/gastownhall/gascity-packs/tree/main/gascity \
   --version sha:3b3b89f2011e06d84459aa7bea1552382f13930a
 ```
@@ -58,13 +60,13 @@ After the registry entry exists, prefer the registry handle:
 
 ```sh
 gc pack registry refresh
-gc import add --name mathcity tdupu/mathcity
+gc import add --name mathcity mathcity
 ```
 
 Until then, import the GitHub source directly:
 
 ```sh
-gc import add --name mathcity https://github.com/tdupu/mathcity/tree/main
+gc import add --name mathcity https://github.com/<github-owner>/mathcity/tree/main
 ```
 
 Mathcity also needs rig-scope coverage for orders that run once per rig. Add
@@ -72,7 +74,7 @@ the same pack source under `[defaults.rig.imports.mathcity]`:
 
 ```toml
 [defaults.rig.imports.mathcity]
-source = "https://github.com/tdupu/mathcity/tree/main"
+source = "https://github.com/<github-owner>/mathcity/tree/main"
 ```
 
 Run the import installer after editing:
@@ -88,8 +90,8 @@ gc import status
 Register each research repository as a rig:
 
 ```sh
-git clone https://github.com/you/my-math-project.git ~/my-math-project
-cd ~/my-math-project
+git clone https://github.com/<github-owner>/<repo>.git <repo-root>
+cd <repo-root>
 gc rig add .
 gc rig list
 ```
@@ -156,18 +158,17 @@ Actions can also publish through the registry's OIDC flow.
 Dry-run the package before publishing:
 
 ```sh
-gc pack registry publish /path/to/mathcity --name tdupu/mathcity --dry-run
+gc pack registry publish /path/to/mathcity --name mathcity --dry-run
 ```
 
 Then publish the same pushed commit:
 
 ```sh
-gc pack registry publish /path/to/mathcity --name tdupu/mathcity
+gc pack registry publish /path/to/mathcity --name mathcity
 ```
 
-Use `--name tdupu/mathcity` when publishing this repository. The pack manifest
-keeps `[pack].name = "mathcity"` so local imports can still bind the pack under
-the simple `mathcity` name.
+The publish name must match `[pack].name` in `pack.toml`; this pack declares
+`mathcity`.
 
 ## Troubleshooting
 

@@ -1,25 +1,24 @@
 description = """
 Compose a template-COMPLETE upstream PR body and route it through the brief
 pipeline for human adjudication — the mathcity-owned, briefed analogue of the
-pr-pipeline PR-open step. It NEVER runs `git push` or `gh pr create`.
+PR-body handoff step. It NEVER runs `git push` or `gh pr create`.
 
-WHY THIS EXISTS (gsp-n2chl1): the upstream pr-pipeline (mol-pr-ship /
-mol-pr-from-issue) deliberately never opens the PR — a human opens it via the
-compare URL, and GitHub auto-appends `.github/pull_request_template.md` UNFILLED
-(the raw `## Summary — Explain the change` placeholder + empty Testing/Checklist).
-No filled body is ever produced for the human to paste (observed on #4865, #4868;
-the human adjudicator hand-fixed both). This formula closes that gap: at the PR-handoff point it
-EMITS a paste-ready, template-complete PR body AS A DECISION BRIEF, so the human
-pastes a finished body instead of GitHub's blank template.
+WHY THIS EXISTS (gsp-n2chl1): the older unbriefed PR handoff left the human
+opening GitHub's compare URL, where GitHub auto-appended an unfilled
+`.github/pull_request_template.md` (raw Summary / Testing / Checklist
+placeholders). No filled body was produced for the human to paste (observed on
+#4865 and #4868; the human adjudicator hand-fixed both). This formula closes
+that gap: at the PR-handoff point it EMITS a paste-ready, template-complete PR
+body AS A DECISION BRIEF, so the human pastes a finished body instead of
+GitHub's blank template.
 
 SHAPE — standalone briefed-terminal (POLICY-formulas.md F8.1: terminal step =
 file-brief). Modeled on mathcity/formulas/planning-briefed.formula.toml (the
-standalone briefed precedent), NOT `extends`. Rationale: extending mol-pr-ship /
-mol-pr-from-issue would inherit and RE-RUN the whole pre-push gate
-(simplify / review-iterate / contributor-check) AND the open-pr push step —
-contradicting this variant's scope, which owns ONLY the PR-BODY fill. It borrows
-mol-pr-from-issue's v6 READ-ONLY mechanisms (pr_work_dir guard,
-upstream-base resolution) for the intake step; it never mutates git.
+standalone briefed precedent), NOT `extends`. Rationale: extending or calling a
+larger PR workflow would inherit pre-push and PR-open responsibilities,
+contradicting this variant's scope, which owns ONLY the PR-BODY fill. It uses
+read-only intake guards (pr_work_dir guard, upstream-base resolution) and never
+mutates git.
 
 STEPS:
   1. intake        — resolve branch + upstream base + commit range + source
@@ -39,9 +38,8 @@ STEPS:
 
 Does NOT commit, push, or open a PR. After adjudication, the agent executing
 that verdict opens the PR (per the normal verdict edge) with the approved body.
-Upstream pr-pipeline is READ-ONLY here (frozen / load-bearing via
-BART's <repos-root> import; gascity-pack-readonly) — this formula only reads the
-mol-pr-ship report or root-bead notes for evidence; it never writes there.
+This formula only reads recorded focused-test evidence or root-bead notes; it
+never writes to any external PR workflow.
 
 Out of scope: the P5.5 Co-Authored-By trailer is a COMMIT-level defect a PR body
 cannot remove (separate item gsp-7njh) — surface a warning, never fix it here.
@@ -79,8 +77,8 @@ description = "Absolute path to the git checkout the PR branch lives in. intake 
 default = ""
 
 [vars.evidence_source]
-description = "Where recorded focused-test evidence is READ from (Testing section is evidence-only). Relative to the checkout root. Default is the mol-pr-ship report dir; root-bead notes are the fallback."
-default = ".gc/pr-pipeline/ship"
+description = "Where recorded focused-test evidence is READ from (Testing section is evidence-only). Relative to the checkout root. Default is the branch-keyed PR body evidence directory; root-bead notes are the fallback."
+default = ".gc/pr-body-evidence"
 
 [vars.artifact_root]
 description = "Root for the brief artifact."
@@ -107,8 +105,8 @@ Resolve everything compose-body needs, READ-ONLY. This step performs NO git
 mutation — no checkout, no commit, no push. Fail closed on any missing input so
 the formula never composes a body from a bad or empty state.
 
-**1. Enter the PR checkout and confirm it is a git repo (pr_work_dir guard,
-borrowed READ-ONLY from mol-pr-from-issue v6):**
+**1. Enter the PR checkout and confirm it is a git repo (read-only
+pr_work_dir guard):**
 ```bash
 PR_WORK_DIR="{{pr_work_dir}}"
 if [ -n "$PR_WORK_DIR" ]; then
@@ -135,12 +133,11 @@ if [ -z "$BRANCH" ] || [ "$BRANCH" = "$DEFAULT" ] || [ "$BRANCH" = "main" ] || [
 fi
 ```
 
-**3. Resolve the upstream base SHA (READ-ONLY, no remote mutation — same
-mechanism as mol-pr-from-issue v6). `origin` may be a fork whose main diverged
-from upstream, so resolve the base from the fork's GitHub parent; fall back to
-this repo when there is no parent (this repo already IS upstream). Fetch by
-explicit URL and use FETCH_HEAD — never `git remote add` (remotes are shared
-across linked worktrees):**
+**3. Resolve the upstream base SHA (READ-ONLY, no remote mutation). `origin`
+may be a fork whose main diverged from upstream, so resolve the base from the
+fork's GitHub parent; fall back to this repo when there is no parent (this repo
+already IS upstream). Fetch by explicit URL and use FETCH_HEAD — never
+`git remote add` (remotes are shared across linked worktrees):**
 ```bash
 BASE_REPO=$(gh repo view --json parent --jq 'if .parent then (.parent.owner.login + "/" + .parent.name) else "NO_PARENT" end' 2>/dev/null || echo "NO_PARENT")
 if [ "$BASE_REPO" = "NO_PARENT" ] || [ -z "$BASE_REPO" ]; then
@@ -165,8 +162,8 @@ fi
 
 **4. LOCATE recorded focused-test evidence (do not read it into a body yet —
 compose-body does that). Testing is evidence-only; if none exists, compose-body
-will fail closed.** Look in `{{evidence_source}}` (the mol-pr-ship report dir,
-keyed by branch) first, then root-bead notes:
+will fail closed.** Look in `{{evidence_source}}` (branch-keyed) first, then
+root-bead notes:
 ```bash
 SAFE=$(echo "$BRANCH" | tr '/' '_')
 EVIDENCE_PATH="{{evidence_source}}/${SAFE}.md"

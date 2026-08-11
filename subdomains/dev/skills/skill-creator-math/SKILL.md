@@ -9,6 +9,9 @@ Create a skill in the **mathcity pack family** and make it discoverable through
 the pack. Mathcity is a standalone repository; do not assume it lives inside a
 larger pack monorepo.
 
+Canonical skill table: [README-skills.md](../../../../README-skills.md).
+Every shipped skill must have exactly one row there.
+
 ## Pick The Destination
 
 Set `<mathcity-pack-root>` to the checkout or imported pack root containing
@@ -73,7 +76,7 @@ Run /<setup-skill> or <specific setup action> to configure it.
 
 ## Update Indexes
 
-Update `README-skills.md` in the pack root:
+Update [README-skills.md](../../../../README-skills.md) in the pack root:
 
 - Add one row in the correct section.
 - Keep rows alphabetized by skill name within that section.

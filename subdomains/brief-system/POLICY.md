@@ -1,5 +1,7 @@
 # Brief-System Policy
 
+Parent: [README.md](./README.md)
+
 | Field | Value |
 | --- | --- |
 | Status | Adopted (2026-07-12) — self-contained rewrite per the human adjudicator directive (session Mayor session); supersedes the same-day adopted revision |

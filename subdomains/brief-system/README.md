@@ -1,5 +1,7 @@
 # The Brief System — a walkthrough for mathematicians
 
+Parent: [../../README-subdomains.md](../../README-subdomains.md)
+
 This document explains, in plain language, the decision pipeline a human operator uses
 to review work produced by AI agents. It assumes zero prior knowledge of Gas
 City, beads, or any of the local tooling. The formal rulebook is
@@ -232,6 +234,9 @@ gc bd show he-x8dk           # same, via the city tooling
   `new-brief-policy` skill. It is the sole write path for changes to POLICY.md
   (PP1.4) — editing POLICY.md directly without going through this skill is a
   policy violation.
+- **Decision backlog:** the `decisions-to-briefs` skill converts pending
+  decisions from conversation, a running list, or a durable decision inbox into
+  adjudicable brief artifacts.
 - **Remember:** the bead store is canonical. The directories under
   `.beads/briefs/` (pile, stack, archive — layout in
   `mathcity/assets/brief-pipeline/paths.toml`) are a regenerable cache; if a

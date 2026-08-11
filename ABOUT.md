@@ -1,5 +1,7 @@
 # Mathcity
 
+Parent: [README.md](./README.md)
+
 **A shared toolkit for AI-assisted mathematics research — skills, formulas, MCPs, and workflows you can plug into your own setup.**
 
 Mathcity is a [Gas City](https://github.com/gastownhall/gascity) pack built specifically for working mathematicians. If you haven't encountered Gas City before, the quickest orientation is Steve Yegge's [Welcome to Gas Town](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04). The short version: Gas City is an orchestrator — a team of agents that coordinate to carry out work, with human oversight, and "slop prevention". The building blocks are **skills**, **formulas** (TOML workflow templates that compose skills and agents into structured sequences: plan → implement → review → brief), and **orchestration** (the coordination layer that routes work between agents, tracks state, handles crashes, and surfaces decisions that need a human). A **pack** is a composable bundle of these — agents, skills, formulas, hooks, and configuration — that you can import into any Gas City setup. 

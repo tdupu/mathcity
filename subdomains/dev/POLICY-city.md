@@ -1,16 +1,21 @@
 # City Operations Policy
 
+Parent: [README.md](./README.md)
+
 | Field | Value |
 | --- | --- |
 | Status | **Draft** — compiled 2026-07-23 from the human adjudicator's city-behavior directives; rules marked **PROPOSED** are Claude suggestions not yet adopted and require a grilling pass |
 | Date | 2026-07-28 |
 | Decided | the pack owner (directives, 2026-07-23 session); PROPOSED rules pending |
-| Applies to | The running gt city instance: dispatch, scheduling, molecules, formulas, and every rig the city manages |
+| Applies to | The running Gas City instance: dispatch, scheduling, molecules, formulas, and every rig the city manages |
 | Rule prefix | **CT** (City Operations) — reserved in [rule-prefix-registry.md](../../docs/rule-prefix-registry.md); distinct from the Computing domain's `C` prefix |
 | Enforced by | `check-city-policy` |
 | Amended by | `new-city-policy` |
 | Consumers | Mayor priming (`mayor-math`); dispatch formulas and orders; `check-hygiene`-family skills; any agent planning or slinging work |
 | Siblings | [POLICY.md](./POLICY.md) (pack portability & boundary, P-rules); `<city-root>/POLICY.md` (dated standing directives); brief-system POLICY.md (B/G-rules) |
+
+System mechanics reference:
+[../../docs/TECHNICAL-SPEC.md](../../docs/TECHNICAL-SPEC.md).
 
 Governs how the city **behaves as a factory**: how work is admitted, queued,
 dispatched, tracked, interrupted, judged, and cleaned up. The sibling P-rules
@@ -678,8 +683,7 @@ test-outcome labels, not artifact or review verdicts.
 - `<city-root>/POLICY.md` — dated standing directives (PR pipeline, upstream issues)
 - Brief-system POLICY.md (B/G-rules) — the human-adjudication pipeline CT5.3
   surfaces
-- [OUTSIDE-AGENTS.md](../../../OUTSIDE-AGENTS.md) — lane boundaries assumed
-  throughout
+- Operator-local context files — lane boundaries assumed throughout
 - Steve Yegge, ["Welcome to Gas Town"](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04)
   (Jan 2026) — GUPP/physics-over-politeness (CT1.5), completion-over-uptime
   (CT1.6), patrol backoff (CT1.7), graceful degradation (CT11)

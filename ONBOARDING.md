@@ -1,5 +1,7 @@
 # Getting Started with Gas City: Field Notes for New Users
 
+Parent: [SETUP.md](./SETUP.md)
+
 These are practical notes from a first real build with Gas City (`gascity`), `beads`, `gascity-packs`, and `mathcity`. They're written for someone about to set up their first city from scratch. Nothing here is official Gas City documentation — it's one user's hard-won lessons, written up so the next person doesn't have to relearn them. A few items are flagged below as unverified and worth an independent fact-check before you treat them as gospel.
 
 ## 1. Build from source, and keep your build separate

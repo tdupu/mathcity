@@ -1,9 +1,11 @@
 # Pack Portability & Boundary Policy
 
+Parent: [README.md](./README.md)
+
 | Field | Value |
 | --- | --- |
 | Status | Adopted |
-| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency; amended 2026-08-10: standalone mathcity source checkout) |
+| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency; amended 2026-08-10: standalone mathcity source checkout; amended 2026-08-11: documentation workflow) |
 | Decided | the pack owner, via grilling session (three open questions resolved; record at bottom) |
 | Applies to | All packs the human adjudicator owns in this repo — the **owned pack set** (§ Scope) |
 | Consumers | `check-hygiene` skill (to be built via skill-creator); mayor priming (`mayor-math`); any agent planning work in this repo |
@@ -21,7 +23,7 @@ an ID and a pass/fail criterion a skill can cite.
 
 - `mathcity/` and every nested child pack under it — currently
   `mathcity/subdomains/{brief-system,computing,proof-assist,latex,lmfdb}/`
-  (per [ADR 0002](../../../docs/adr/0002-mathcity-subdomain-pack-model.md)).
+  (per [ADR 0002](../../docs/adr/0002-mathcity-subdomain-pack-model.md)).
 - Any future pack the human adjudicator creates in this repo, added by amending this list.
 
 The `check-hygiene` skill takes the owned-pack roots as input; it does not
@@ -51,14 +53,14 @@ recreate what you're running; upstream must remain pullable.*
   hand-edits.)
 - **P1.3 Never edit a materialized skill sink.** `.claude/skills/**` and
   `.codex/skills/**` are generated symlinks
-  ([docs/skills-materialization.md](../../../docs/skills-materialization.md)).
+  ([docs/skills-materialization.md](../../docs/skills-materialization.md)).
   Edit the pack source under the owned set and let materialization
   propagate (`gc pack refresh` / next supervisor tick). Creating or
   modifying files *in* a sink → **fail**.
 - **P1.4 Local-path imports must be remote-backed.** Local-path imports
   (decision gt-ths6) are legitimate standing config, not just a dev-loop
   hack — **provided** the import target is a clean git checkout whose HEAD
-  is pushed to the canonical remote (`tdupu/mathcity` for mathcity;
+  is pushed to the canonical remote (`<github-owner>/mathcity` for mathcity;
   `<github-owner>` fork for non-mathcity `gascity-packs` content).
   Then another machine reproduces the city by cloning the fork at that
   commit and using the same import. A local-path import whose target has
@@ -67,7 +69,7 @@ recreate what you're running; upstream must remain pullable.*
   reproducibility is proven by the registry machinery: a
   `validate_registry.py` content-hash-validated release plus the
   release-compatibility gates
-  ([README-contributing.md](../../../README-contributing.md)). A plan that claims
+  ([docs/INSTALL.md](../../docs/INSTALL.md)). A plan that claims
   "published" while skipping these → **fail**.
 - **P1.6 Binaries match source.** The installed `gc` and `bd` must be clean
   builds of a synced HEAD: `go version -m <binary>` shows `vcs.revision`
@@ -300,8 +302,8 @@ recreate what you're running; upstream must remain pullable.*
 
 - **P2.1 Direct edits only inside the owned set.** Everything else —
   `gascity/`, `bmad/`, `pr-pipeline/`, `contributing/`, any other pack,
-  gascity core, beads — is read-only (matches the scope boundary in
-  [OUTSIDE-AGENTS.md](../../../OUTSIDE-AGENTS.md)).
+  gascity core, beads — is read-only. This matches the outside-agent scope
+  boundary documented in operator-local context.
 - **P2.2 Never edit under any `vendor/**` tree.** Vendored trees mirror an
   upstream project (Superpowers, bmad-method, gstack,
   compound-engineering-plugin); hand edits create silent fork drift the
@@ -312,7 +314,7 @@ recreate what you're running; upstream must remain pullable.*
 - **P2.4 Scope discipline (= review rule B10).** Inside the owned set, fix
   what the plan scopes; note adjacent refactors as out-of-scope follow-ups.
   This is the same rule as
-  [`contributing/skills/review`](../../../contributing/skills/review/SKILL.md)
+  [`contributing/skills/review`](https://github.com/gastownhall/gascity-packs/tree/main/contributing/skills/review)
   B10 — that skill enforces it at PR time; this policy enforces it at plan
   time. One rule, two gates.
 
@@ -323,9 +325,11 @@ you. Allowed — through the front door only.*
 
 - **P3.1 PR only, never direct push** to anything outside the owned set —
   even trivial-looking fixes (per OUTSIDE-AGENTS.md).
-- **P3.2 All upstream PRs go through mol-pr-from-issue — two steps.**
-  `mol-pr-from-issue` is the correct mechanism for every upstream PR (bugs,
-  docs, features). The process is always:
+- **P3.2 All upstream issue and PR handoffs go through briefed formulas.**
+  `create-issue-briefed` is the correct mechanism for drafting upstream issue
+  bodies. `pr-pipeline-briefed` is the correct mechanism for drafting upstream
+  PR bodies. Both route the final text through the brief pipeline before
+  anything is published to GitHub. The process is always:
 
   **Step 1 — File a GitHub issue using the appropriate template.**
   All upstream issues for `gastownhall/gascity` and `gastownhall/gascity-packs`
@@ -339,20 +343,33 @@ you. Allowed — through the front door only.*
   Every required field in the chosen template must be filled out completely
   before submitting.
 
-  **Step 2 — Run mol-pr-from-issue with the issue number.**
+  **Step 2 — Draft and adjudicate the issue body.**
   ```
-  gc sling <rig>/<agent> mol-pr-from-issue --formula --var issue_number=<N>
+  gc sling <rig>/<agent> create-issue-briefed --formula \
+    --var source_bead=<bead-id> --var brief_slug=<bead-id>-issue
   ```
-  This chains: plan → blast-radius mapping → scorecard self-review →
-  pre-push gate.
+  The formula files a paste-ready issue body as a decision brief. After an
+  APPROVE verdict, the authorized filing step creates the issue with the
+  approved text.
 
-  An upstream PR opened without a corresponding fully-completed GitHub issue,
-  or filed without going through `mol-pr-from-issue` → **fail**. No
-  scattershot exploratory diffs against someone else's pack.
+  **Step 3 — Draft and adjudicate the PR body.**
+  ```
+  gc sling <rig>/<agent> pr-pipeline-briefed --formula \
+    --var source_bead=<bead-id> --var issue_number=<N> \
+    --var brief_slug=<bead-id>-pr-body
+  ```
+  The formula never pushes and never opens the PR. It files a template-complete
+  PR body as a decision brief. After an APPROVE verdict, the authorized filing
+  step opens the PR with the approved body.
+
+  An upstream issue filed without a completed template and approved
+  `create-issue-briefed` brief, or an upstream PR opened without a corresponding
+  fully-completed issue and approved `pr-pipeline-briefed` brief → **fail**.
+  No scattershot exploratory diffs against someone else's pack.
 - **P3.3 Features: adoption-review bar.** README updated in the same PR, a
   `contributing/skills/review` scorecard pass, and — if it touches the
   `build-base` workflow contract — checked against
-  [`gascity/REQUIREMENTS.md`](../../../gascity/REQUIREMENTS.md), since
+  [`gascity/REQUIREMENTS.md`](https://github.com/gastownhall/gascity-packs/tree/main/gascity/REQUIREMENTS.md), since
   methodology packs are a shared contract other packs stand on.
 - **P3.4 Tracked as a bead.** "Just this once, outside the PR record" is
   the failure mode this policy exists to prevent.
@@ -361,6 +378,15 @@ you. Allowed — through the front door only.*
   assigned scope) or an *outside agent* (conservative git policy, never
   commits/pushes without explicit say-so, never pushes outside the owned
   set). Ambiguity about which context executes the plan → **revise**.
+- **P3.6 Feature work runs improve-documentation.** Any feature, formula,
+  skill, policy, setup, or user-facing workflow change must run
+  `improve-documentation` before completion. The documentation pass updates
+  the right README surface, examples, tests, formula/skill/subdomain indexes,
+  parent links, and planned-issue links, or records a precise N/A reason.
+  Pass: the brief, PR body, or handoff names the documentation pass and its
+  result. Fail: a user-facing change lands with no documentation pass, no
+  examples/tests where required by `POLICY-documentation.md`, or no explicit
+  N/A reason → **revise**.
 
 ## Pillar 4 — Impact review at plan time
 
@@ -490,7 +516,9 @@ inside gascity core); this is the pack-level, plan-time analogue.*
 - No upstream PR without a corresponding GitHub issue filed first using the
   appropriate template (`bug_report.yml` / `docs_report.yml` /
   `feature_request.yml`) with every required field completed (P3.2).
-- No upstream PR opened without going through `mol-pr-from-issue` (P3.2).
+- No upstream issue filed without an approved `create-issue-briefed` brief
+  (P3.2).
+- No upstream PR opened without an approved `pr-pipeline-briefed` brief (P3.2).
 - Docs+scorecard review for features (P3.3).
 - No undeclared working-tree patches feeding a build; no dirty binaries
   (`vcs.modified=false` or it doesn't ship) (P1.6).
@@ -567,37 +595,40 @@ no parallel vocabulary is introduced:
 
 ## References
 
-- [OUTSIDE-AGENTS.md](../../../OUTSIDE-AGENTS.md) — outside-agent role, git authority, scope boundary this policy extends
-- [docs/adr/0002](../../../docs/adr/0002-mathcity-subdomain-pack-model.md) — owned pack set layout
-- [docs/skills-materialization.md](../../../docs/skills-materialization.md) — why sinks are generated, not source
-- [README-contributing.md](../../../README-contributing.md) — registry publishing, content-hash validation, release-compat gates
-- [gascity/REQUIREMENTS.md](../../../gascity/REQUIREMENTS.md) — the `build-base` contract (Pillar 3/4 downstream surface)
-- [contributing/skills/review](../../../contributing/skills/review/SKILL.md) (B10) and [map-blast-radius](../../../contributing/skills/map-blast-radius/SKILL.md) — the PR-time gates this plan-time gate complements
-- `~/.agents/skills/update-{gascity,beads,gascity-packs,mathcity}-from-source` — the sanctioned update procedures whose invariants P1.6/P1.7 encode
+- Operator-local context files — outside-agent role, git authority, and scope boundary this policy extends
+- [docs/adr/0002](../../docs/adr/0002-mathcity-subdomain-pack-model.md) — owned pack set layout
+- [docs/skills-materialization.md](../../docs/skills-materialization.md) — why sinks are generated, not source
+- [docs/INSTALL.md](../../docs/INSTALL.md) — registry publishing and import checks
+- [gascity/REQUIREMENTS.md](https://github.com/gastownhall/gascity-packs/tree/main/gascity/REQUIREMENTS.md) — the `build-base` contract (Pillar 3/4 downstream surface)
+- [contributing/skills/review](https://github.com/gastownhall/gascity-packs/tree/main/contributing/skills/review) (B10) and [map-blast-radius](https://github.com/gastownhall/gascity-packs/tree/main/contributing/skills/map-blast-radius) — the PR-time gates this plan-time gate complements
+- The update-from-source skills — the sanctioned update procedures whose invariants P1.6/P1.7 encode
 
 ---
 
 ## Change Log
 
+### 2026-08-11 — P3.6 added: feature work runs improve-documentation
+Feature, formula, skill, policy, setup, and user-facing workflow changes must
+run `improve-documentation` before completion. Triggered by: the human
+adjudicator directive that docs must stay source-aligned, example-backed, and
+not drift into slop. Exceptions: precise N/A reason recorded in the brief or
+handoff.
+
 ### 2026-08-10 — P1.4/P1.6/P1.7 clarified: standalone mathcity source checkout
 Mathcity pack imports now source from the standalone `<repos-root>/mathcity`
-checkout, backed by `tdupu/mathcity`, rather than from
-`<repos-root>/gascity-packs/mathcity`. The sanctioned update path includes
+checkout, backed by `<github-owner>/mathcity`, rather than from the legacy
+nested checkout path. The sanctioned update path includes
 `update-mathcity-from-source`, and reproducibility checks include the
 `<repos-root>/mathcity` origin/local-main invariant. Triggered by: the human
 adjudicator directive to import from mathcity, not gascity-packs. Exceptions:
 none.
 
-### 2026-07-20 — P3.2 expanded: upstream issue template required before pr-pipeline
-`mol-pr-from-issue` requires a GitHub issue number as input; the correct issue
-must be filed first using the upstream repo's appropriate template
-(`bug_report.yml` for bugs, `docs_report.yml` for docs) with every required
-field completed (gc version, environment, reproduction steps, expected/actual
-behavior, pre-submission checklist). Filing a PR via pr-pipeline without a
-properly completed upstream issue → **fail**. Triggered by: Track C upstream
-PRs (gt-2x8t0) pending issue filing; the human adjudicator clarified that pr-pipeline is the
-correct mechanism (not a workaround) and that issue templates must be filled
-out in full.
+### 2026-08-11 — P3.2 updated: upstream issue and PR text are briefed handoffs
+Upstream issue bodies now route through `create-issue-briefed`, and upstream PR
+bodies route through `pr-pipeline-briefed`. Both formulas file decision briefs
+and never publish to GitHub directly; an authorized filing step uses the
+approved body after adjudication. The older unbriefed handoff rule was replaced
+so issue and PR text share the same human-adjudicated boundary.
 
 ### 2026-07-15 — P1.19 added: append, don't edit beads
 New information about an existing bead is recorded by appending a new linked

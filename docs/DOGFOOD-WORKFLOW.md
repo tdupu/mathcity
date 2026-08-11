@@ -1,5 +1,7 @@
 # DOGFOOD-WORKFLOW — mathcity hotfix → hygienic loop (authoritative)
 
+Parent: [../README-development.md](../README-development.md)
+
 > **DO NOT ABRIDGE OR TRUNCATE THE CONTENTS OF THIS FILE WITHOUT EXPLICIT USER AUTHORIZATION.**
 > Correct errors in place (P5.4); every section has been verified correct across multiple Mayor sessions.
 

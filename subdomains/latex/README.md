@@ -1,5 +1,7 @@
 # mathcity-latex
 
+Parent: [../../README-subdomains.md](../../README-subdomains.md)
+
 Notes-tier `.tex` screening, LaTeX-bead workflow policy, and literature
 search.
 

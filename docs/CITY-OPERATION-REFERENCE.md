@@ -1,5 +1,7 @@
 # Gascity Restart: Context Reference
 
+Parent: [../README-mayor.md](../README-mayor.md)
+
 > **DO NOT ABRIDGE OR TRUNCATE THE CONTENTS OF THIS FILE WITHOUT EXPLICIT USER AUTHORIZATION.**
 > Correct errors in place (P5.4); every section has been verified correct across multiple Mayor sessions.
 
@@ -34,10 +36,10 @@ grep "guarded-execute" <mathcity-pack-root>/orders/no-brainer-process.toml
 **Gascity** is a multi-agent orchestration framework. The city at `<city-root>` is a personal
 development city managed by the `gc` binary (built from source at `<repos-root>/gascity`).
 
-The city config lives at `<city-root>/city.toml`. All pack imports use **local filesystem paths**
-(not remote git refs), so `<repos-root>/gascity-packs/` is the live source for all pack content.
-This means rebuilding the `gc` binary does **not** require reinstalling packs — they are read
-from disk on every gc invocation.
+The city config lives at `<city-root>/city.toml`. Pack imports use **local filesystem paths**
+(not remote git refs). Gas City base packs still live under `<repos-root>/gascity-packs/`;
+mathcity lives at `<repos-root>/mathcity`. This means rebuilding the `gc` binary does
+**not** require reinstalling packs — they are read from disk on every gc invocation.
 
 ### Pack Imports (city-wide defaults, all rigs)
 
@@ -45,10 +47,9 @@ from disk on every gc invocation.
 |-----------|-------------|---------|
 | `gc` | `<gascity-pack-root>/roles` | Base agent roles (polecats, run-operators, dispatchers) |
 | `gc-base` | `<gascity-pack-root>` | Base formulas (build-base, build-basic, all gc primitives) |
-| `pr-pipeline` | `<repos-root>/gascity-packs/pr-pipeline` | PR author-side workflow formulas (6 mol-pr-* formulas) |
 | `mathcity` | `<mathcity-pack-root>` | Brief pipeline orders/formulas, gate registry, math agents |
 
-Hecke additionally imports `mathcity` and `pr-pipeline` at rig scope (D3 pilot, gsp-w88z).
+Hecke additionally imports `mathcity` at rig scope for the brief-pipeline pilot.
 
 ---
 
@@ -289,23 +290,19 @@ category, and `user_skill_touching_override: true` in the brief record.
 
 ---
 
-## PR Pipeline
+## Briefed PR And Issue Handoffs
 
-> **Note on "pr-pipeline branch":** `pr-pipeline` here refers to the **pack** at `<repos-root>/gascity-packs/pr-pipeline/` — a subdirectory of gascity-packs, not a git branch. The pack is already imported city-wide via `city.toml`. There is no separate `pr-pipeline` git branch to switch to; all mol-pr-* formulas are live on disk at that path.
-
-Six formulas shipped in `<repos-root>/gascity-packs/pr-pipeline/`, already imported city-wide:
+Mathcity owns the GitHub text handoff formulas that require human adjudication.
+They prepare complete GitHub bodies and file them as decision briefs; neither
+formula performs the GitHub write itself.
 
 | Formula | Command surface | Purpose |
 |---------|----------------|---------|
-| `mol-pr-start` | `gc pr-pipeline pr plan <issue>` | Issue → structured plan (no code written) |
-| `mol-pr-blast-radius` | `gc pr-pipeline pr blast-radius "<scope>"` | Map impact surface of a proposed change |
-| `mol-pr-review` | `gc pr-pipeline pr review <pr>` | 11-category outgoing-PR self-review scorecard |
-| `mol-pr-ship` | `gc pr-pipeline pr ship` | Pre-push gate: simplify → review → checks → readiness report |
-| `mol-pr-triage` | (sling directly) | Scan/classify open upstream issues into ranked work-queue |
-| `mol-pr-from-issue` | `gc sling <rig>/gc.run-operator mol-pr-from-issue --formula --var issue_number=<N>` | Macro chain: issue → plan → ship → branch-ready PR |
+| `pr-pipeline-briefed` | `gc sling <rig>/gc.run-operator pr-pipeline-briefed --formula --var source_bead=<id> --var brief_slug=<slug>` | Compose a template-complete upstream PR body from a feature branch and recorded test evidence. |
+| `create-issue-briefed` | `gc sling <rig>/gc.run-operator create-issue-briefed --formula --var source_bead=<id> --var brief_slug=<slug>` | Draft a template-complete upstream issue body from a source bead and the target repo's live issue template. |
 
-`mol-pr-from-issue` is the full author-side macro. It does NOT push or open a PR by default
-(`auto_push=false`). Add `--var auto_push=true` only when the human adjudicator has explicitly authorized.
+On approval, the verdict-executing agent opens the PR or files the issue with
+the approved body. On reject/revise/defer, normal brief routing applies.
 
 ---
 
@@ -351,23 +348,15 @@ The `mathcity` pack is organized into subdomains under `<mathcity-pack-root>/sub
 | `brief-archive-sweep` | `brief-archive-sweep.toml` | Moves decided/rejected artifacts to archive (vapor phase) |
 | `brief-gate-keep` | `brief-gate-keep.toml` | Runs gate registry against a staged brief |
 | `brief-watchdog-refill` | `brief-watchdog-refill.toml` | Measures stack depth; opens brief-prep work if needed |
+| `create-issue-briefed` | `create-issue-briefed.formula.toml` | Drafts a template-complete upstream issue body and files it as a decision brief |
+| `no-brainer-candidate-curate` | `no-brainer-candidate-curate.toml` | Curates candidate briefs for the no-brainer classifier |
 | `no-brainer-classify` | `no-brainer-classify.toml` | Classifies brief candidate; optionally auto-executes (guarded) |
 | `brief-review-patrol` | `brief-review-patrol.toml` | Advances stuck `review_gate: pending` briefs |
 | `codex-dispatch` | `codex-dispatch.toml` | Dispatches task to codex-worker for cross-model review; **never fired by automated orders** |
+| `pr-pipeline-briefed` | `pr-pipeline-briefed.formula.toml` | Composes a template-complete upstream PR body and files it as a decision brief |
 | `upf-experiment-dispatch` | `upf-experiment-dispatch.toml` | Qualifies and dispatches experiment to UPF with breadcrumbs |
 | `test-execution-request` | `test-execution-request.toml` | Formal test-execution request workflow |
 | `decision-enforce` | `decision-enforce.toml` | Enforces bd-decision-canonical principle (record existence + verdict/bead alignment) |
-
-### PR Pipeline Formulas (`<repos-root>/gascity-packs/pr-pipeline/formulas/`)
-
-| Formula | Source file | When used |
-|---------|-------------|-----------|
-| `mol-pr-start` | `mol-pr-start.formula.toml` | Issue → structured plan (no code written) |
-| `mol-pr-blast-radius` | `mol-pr-blast-radius.formula.toml` | Map impact surface; standalone or composed |
-| `mol-pr-review` | `mol-pr-review.formula.toml` | 11-category outgoing-PR scorecard |
-| `mol-pr-ship` | `mol-pr-ship.formula.toml` | Pre-push gate; produces readiness report |
-| `mol-pr-triage` | `mol-pr-triage.formula.toml` | Scan/classify open upstream issues |
-| `mol-pr-from-issue` | `mol-pr-from-issue.formula.toml` | Macro chain: issue → branch-ready PR |
 
 ### Key Events
 
@@ -478,7 +467,8 @@ gc sling mayor "write a README for hecke"
 
 # Dispatch a formula (--formula makes second arg a formula name)
 gc sling hecke/gc.run-operator brief-prep --formula --var source=he-xxxx --var brief_slug=he-xxxx-brief
-gc sling hecke/gc.run-operator mol-pr-from-issue --formula --var issue_number=335
+gc sling hecke/gc.run-operator pr-pipeline-briefed --formula --var source_bead=he-xxxx --var brief_slug=he-xxxx-pr-body
+gc sling hecke/gc.run-operator create-issue-briefed --formula --var source_bead=he-xxxx --var brief_slug=he-xxxx-issue-body
 
 # Route existing bead and attach a formula (required for v2 formulas with {{convoy_id}} or drain steps)
 gc sling hecke/gc.run-operator <bead-id> --on <formula-name>
@@ -551,7 +541,7 @@ gc session list --template mathcity.brief-operator
 
 # 7. Verify orders are visible
 gc order list | grep brief
-gc formula list | grep mol-pr
+gc formula list | grep -E 'pr-pipeline-briefed|create-issue-briefed'
 ```
 
 ---

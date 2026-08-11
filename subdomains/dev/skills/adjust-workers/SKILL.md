@@ -1,13 +1,13 @@
 ---
 name: adjust-workers
-description: Scale up (or down) the number of concurrent workers on a Gas City rig. Use when the human adjudicator says "more workers on <rig>", "scale up <rig>", "I need more capacity for hecke", "add workers to gascity-packs", or when gc session list shows a rig has fewer active run-operators than open work items. Reads current session counts, proposes a max_active_sessions patch, and guides the pack PR path (city-toml-via-packs-not-hand policy).
+description: Scale up (or down) the number of concurrent workers on a Gas City rig. Use when the human adjudicator says "more workers on <rig>", "scale up <rig>", "I need more capacity for hecke", or when gc session list shows a rig has fewer active run-operators than open work items. Reads current session counts, proposes a max_active_sessions patch, and guides the briefed pack-change path (city-toml-via-packs-not-hand policy).
 ---
 
 # adjust-workers
 
 Scale the number of concurrent run-operators (or any named agent template) on a
 Gas City rig. Reads the live session state, computes the gap, proposes a
-`max_active_sessions` patch, and routes it through the pack PR pipeline
+`max_active_sessions` patch, and routes it through the briefed pack-change path
 (per `city-toml-via-packs-not-hand` policy — never hand-edit city.toml).
 
 **Scope:** outside-agent only (the human adjudicator's Claude Code session). Does NOT dispatch
@@ -99,17 +99,22 @@ Wait for the human adjudicator to confirm or adjust the numbers before proceedin
 Per `city-toml-via-packs-not-hand` policy, the patch must come from a pack
 update, not a direct hand-edit.
 
-**Option A — File a gsp- bead and route through pr-pipeline (canonical):**
+**Option A — File a bead and route through briefed GitHub handoffs (canonical):**
 
 ```bash
 bd create -t feature -p 1 \
   --title "[infra] Raise gc.run-operator max_active_sessions to <N> on <rig>" \
   --description "Add [[patches.agent]] block to mathcity pack (or gascity/roles pack) for <rig>/gc.run-operator with max_active_sessions=<N>, min_active_sessions=1. Bottleneck: <current-count> workers for <open-count> in_progress beads." \
-  --rig gascity-packs
-# Record the resulting bead ID (gsp-XXXXX)
+  --rig <owning-rig>
+# Record the resulting bead ID.
 
-gc sling gascity-packs/gc.run-operator <bead-id> --on mol-pr-from-issue \
-  --var issue_number=<bead-id>
+gc sling <rig>/gc.run-operator create-issue-briefed --formula \
+  --var source_bead=<bead-id> --var brief_slug=<bead-id>-issue
+
+# After the issue body is approved and filed, draft the PR body brief:
+gc sling <rig>/gc.run-operator pr-pipeline-briefed --formula \
+  --var source_bead=<bead-id> --var issue_number=<N> \
+  --var brief_slug=<bead-id>-pr-body
 ```
 
 **Option B — Lever A immediate workaround (no config change, per gc-increase-capacity):**
@@ -138,7 +143,7 @@ mode = "on_demand"
 ```
 
 This is the Lever B pattern from `gc-increase-capacity`. Route via the same
-mol-pr-from-issue PR flow.
+briefed GitHub handoff flow.
 
 ## Step 6 — Gate on authorize-git-operation
 
@@ -164,7 +169,8 @@ Hand the proposed patch block to repo-side landing agent with the bead ID and pr
 - `gc-increase-capacity` — canonical runbook this skill operationalizes
 - `gc-check-capacity` — run-first diagnostic (what needs scaling)
 - `authorize-git-operation` — gate before any push
-- `mol-pr-from-issue` — the PR routing mechanism
+- `create-issue-briefed` — issue body brief
+- `pr-pipeline-briefed` — PR body brief
 
 ## See also
 

@@ -1,5 +1,7 @@
 # Magma Packages Policy
 
+Parent: [README.md](./README.md)
+
 | Field | Value |
 | --- | --- |
 | Status | Draft — pending the human adjudicator adoption |

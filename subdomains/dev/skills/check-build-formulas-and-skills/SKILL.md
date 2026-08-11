@@ -16,6 +16,12 @@ description: >
 Completeness and policy audit across the full mathcity pack family.
 Report-only by default — never edits, never commits.
 
+Canonical tables:
+- [README-formulas.md](../../../../README-formulas.md) — every formula TOML in
+  `formulas/` must appear here exactly once.
+- [README-skills.md](../../../../README-skills.md) — every `SKILL.md` under
+  `skills/` or `subdomains/*/skills/` must appear here exactly once.
+
 **Companion tools:**
 - `check-formula-hygiene` — per-formula F-rule check (read POLICY-formulas.md)
 - `new-formula-policy` — amend POLICY-formulas.md when a rule is missing

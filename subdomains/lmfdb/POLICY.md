@@ -1,5 +1,7 @@
 # LMFDB Subdomain Policy
 
+Parent: [README.md](./README.md)
+
 | Field | Value |
 | --- | --- |
 | Status | Draft — pending human adjudication |

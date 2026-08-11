@@ -237,7 +237,8 @@ If the terminal-step assertion fails, fix before committing. No exceptions.
 
 ## Step 6 — Update README-formulas.md (REQUIRED — hard gate)
 
-Every new mathcity formula MUST have a row in `mathcity/README-formulas.md`
+Every new mathcity formula MUST have a row in
+[README-formulas.md](../../../../README-formulas.md)
 before the brief is filed. This is a hard gate — do not file the brief until
 this check passes:
 

@@ -1,5 +1,7 @@
 # mathcity-computing
 
+Parent: [../../README-subdomains.md](../../README-subdomains.md)
+
 [Magma](http://magma.maths.usyd.edu.au/magma/) (and Sage/PARI) computation
 workflow: the notebook⇄mag⇄package development loop, profiling and
 dispatching heavy runs (including UPF rig jobs), and maintaining the Magma

@@ -11,6 +11,12 @@ back in sync. This is the pack-dev analogue of
 + README-tests in sync with its intrinsics; this one keeps the *pack
 family's* READMEs + exposure in sync with its skills.
 
+Canonical tables:
+- [README-skills.md](../../../../README-skills.md) — every skill in the
+  mathcity pack family.
+- [README-formulas.md](../../../../README-formulas.md) — every formula TOML in
+  `formulas/`.
+
 Scope: the owned pack set (POLICY.md § Scope) — `mathcity/` and its
 subdomain child packs.
 

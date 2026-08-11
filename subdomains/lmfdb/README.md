@@ -1,5 +1,7 @@
 # mathcity-lmfdb
 
+Parent: [../../README-subdomains.md](../../README-subdomains.md)
+
 Query the LMFDB, cross-check computed mathematical data, and run the full
 contribute-to-LMFDB pipeline: serialize Magma objects to flat files,
 load them into a PostgreSQL `lmfdb` schema, and plan new object types for

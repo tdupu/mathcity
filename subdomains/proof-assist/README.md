@@ -1,5 +1,7 @@
 # mathcity-proof-assist
 
+Parent: [../../README-subdomains.md](../../README-subdomains.md)
+
 Lean/Coq/Isabelle proof checking and arXiv bibliography for mathematics claims.
 
 This sub-namespace (`mathcity-proof-assist.*` (ADR 0002 alias)) is the escalation target for
@@ -11,6 +13,7 @@ Lean build is the strongest possible G4 (critical-review) evidence. Formulas:
 
 | Skill | Purpose |
 |-------|---------|
+| `install-loogle` | Install and configure a Loogle / Mathlib4 search MCP server when hosted lookup is not enough. |
 | `search-arxiv` | arXiv ID or keyword → title / abstract / authors / BibTeX. Adopted upstream: [`blazickjp/arxiv-mcp-server`](https://github.com/blazickjp/arxiv-mcp-server). |
 | `search-mathlib` | Lean 4 / Mathlib4 declaration search via the hosted Loogle engine. Query by name, type signature, subexpression, or conclusion pattern. Direct JSON API path (no MCP required); fail-soft on downtime. See §Loogle below. |
 | `search-stacks` | Stacks Project (algebraic geometry / commutative algebra) — tag lookup and keyword search via the `mcp__stacks__*` MCP tools. |
