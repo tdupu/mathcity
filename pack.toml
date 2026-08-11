@@ -8,6 +8,9 @@ description = "portable mathematical work pack, including the brief pipeline for
 source = "https://github.com/gastownhall/gascity-packs/tree/main/gascity"
 version = "sha:3b3b89f2011e06d84459aa7bea1552382f13930a"
 
+[imports.superpowers]
+source = "../gascity-packs/superpowers"
+
 [providers.codex]
 base = "builtin:codex"
 options_schema_merge = "by_key"

@@ -4,9 +4,9 @@ Parent: [README.md](./README.md)
 
 | Field | Value |
 |---|---|
-| Version | 1.5 |
+| Version | 1.6 |
 | Status | Draft |
-| Date | 2026-07-24 |
+| Date | 2026-08-11 |
 | Prefix | F |
 | Subordinate to | `mathcity/subdomains/dev/POLICY.md` |
 | Applies to | All formula TOMLs in every mathcity pack (mathcity/ and all subdomains) |
@@ -284,15 +284,15 @@ without surfacing the match to the Mayor.
 
 ---
 
-## Pillar 8 — Briefed terminal discipline
+## Pillar 8 — Work-boundary brief discipline
 
-*Every `-briefed` formula exists to route work through a human decision
-brief. Its final step must be part of the brief cycle — never a bare
-implementation, push, or merge step. The brief IS the gate before anything
-is merged or published.*
+*The `mathcity.work` boundary must never lose the human decision gate. Imported
+or internal methodology formulas may be composed as building blocks, but work
+accepted through `mathcity.work` must end in a commission brief, a result
+brief, or a route to another graph that is guaranteed to produce one.*
 
-**F8.1 — Every `-briefed` formula must terminate in the brief cycle.**
-A formula whose name ends in `-briefed` must have a terminal step that either
+**F8.1 — Every MathCity-owned `-briefed` formula must terminate in the brief cycle.**
+A MathCity-owned formula whose name ends in `-briefed` must have a terminal step that either
 (a) files or produces a decision brief, or (b) is a router step that delegates
 to another `-briefed` formula. The allowed terminal step ids are:
 
@@ -319,6 +319,34 @@ human decision gate. A briefed formula that ends in a raw push or merge
 silently bypasses adjudication — the exact failure the brief pipeline exists
 to prevent.
 
+**F8.2 — Anything dispatched through `mathcity.work` must end in a briefed graph.**
+The user-facing `mathcity.work` path must route every accepted source bead into
+one of two shapes:
+
+1. **Continue known work:** the bead already carries a clear approved graph or
+   bounded task, and the selected child formula ends in a result brief or routes
+   to another briefed formula.
+2. **Commission fresh work:** the bead is fresh, ambiguous, design-shaped, or
+   duplicate-prone; `mathcity.work` must first route it to a commissioning
+   formula that files an approval brief showing the objective, existing-work
+   reconciliation, proposed graph, formulas, test gates, brief gates, and
+   approve/revise/reject/defer continuation.
+
+Pass: `mathcity.work` either delegates to a terminal-briefed child formula, or
+delegates to a commissioning formula whose terminal step files a commission
+brief before implementation dispatch. APPROVE continuation is recorded in
+machine-readable form so post-decision dispatch can execute it.
+
+Fail: `mathcity.work` slings an implementation, imported formula, or raw
+Superpowers workflow without a guaranteed terminal brief or commission brief.
+
+**F8.3 — Imported non-briefed formulas are capabilities, not terminal MathCity work.**
+Imported formulas from packs such as Superpowers may be used as methodology
+pieces inside a commissioned graph. They do not need to be renamed or copied
+into `superpowers-*-briefed` variants merely to exist. They become valid
+`mathcity.work` endpoints only when wrapped or composed by a MathCity-owned
+briefed graph satisfying F8.1 and F8.2.
+
 ---
 
 ## Change Log
@@ -331,3 +359,4 @@ to prevent.
 | 1.3 | 2026-07-23 | Add F6.1 — Pillar 6 testing discipline: new formulas require a basic smoke test before dispatch. The human adjudicator directive (Mayor session Q27). |
 | 1.4 | 2026-07-23 | Add F7.1 + F7.2 — Pillar 7 dispatch idempotency: pre-sling assignee check required; bead-creating steps must prevent logical duplicates. The human adjudicator directive (Mayor session Q27). |
 | 1.5 | 2026-07-24 | Add F8.1 — Pillar 8 briefed terminal discipline: every `-briefed` formula must terminate in the brief cycle (allowed terminals: file-brief, brief-finalize, workflow-finalize, publish, route). Reconciles the stale formula-creator-math allowed-set (adds publish + route). The human adjudicator directive. |
+| 1.6 | 2026-08-11 | Amend Pillar 8 around the `mathcity.work` boundary: imported formulas are capabilities, while work accepted through `mathcity.work` must end in a commission/result brief or a route to a briefed graph. Add F8.2 and F8.3 for commissioning and imported Superpowers composition. |

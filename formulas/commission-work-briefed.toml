@@ -1,0 +1,264 @@
+description = """
+Commission fresh or ambiguous work before dispatch.
+
+This formula turns a user request or source bead into an approval-ready
+dispatch plan. It is deliberately not an implementation formula: it preserves
+the original request, normalizes the objective, checks for existing work,
+designs the proposed work graph, reviews the graph for brief/test gates, and
+files a commission brief. Actual work dispatch happens only after that brief
+is approved. Low-risk no-brainer approval may be automatic, but it still flows
+through the brief decision machinery.
+
+Use this when `mathcity.work` cannot safely continue an already well-defined
+work graph. If a bead already carries a clear approved graph, use the continue
+path in `mathcity.work` instead of recommissioning it.
+"""
+formula = "commission-work-briefed"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "commission-work-briefed"
+description = "Design and review a dispatch graph for fresh or ambiguous work, then file an approval brief. Does not dispatch implementation before approval."
+
+[vars]
+[vars.source_bead]
+description = "Bead or epic ID carrying the work request to commission."
+required = true
+
+[vars.brief_slug]
+description = "Stable filename stem for the commission brief artifact."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.commission_mode]
+description = "Fresh commissioning is the default. continue-known validates an existing graph and briefs continuation."
+default = "fresh"
+enum = ["fresh", "continue-known"]
+
+[vars.plan_target]
+description = "High-tier fleet agent for objective translation, existing-work reconciliation, and dispatch design. Fleet address, never a model name."
+default = "gc.design-author"
+enum = ["gc.design-author", "gc.review-synthesizer", "gc.requirements-planner"]
+
+[vars.review_target]
+description = "High-tier fleet agent for adversarial review of the proposed dispatch graph."
+default = "gc.review-synthesizer"
+enum = ["gc.review-synthesizer", "gc.design-author"]
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = ".beads/briefs"
+
+[vars.context]
+description = "Optional extra context: file paths, bead IDs, GitHub issue URLs, or user notes to preserve during objective translation."
+default = ""
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to this producer."
+default = "mathcity.work,commission-work-briefed"
+
+[[steps]]
+id = "intake-objective"
+title = "Translate {{source_bead}} into a checked objective"
+metadata = { "gc.run_target" = "{{plan_target}}" }
+description = """
+Read the source bead and preserve the user's request before normalizing it.
+
+```bash
+bd show {{source_bead}}
+{{#if context}}
+# Additional context to preserve:
+{{context}}
+{{/if}}
+```
+
+Write `$GC_WORK_DIR/{{brief_slug}}-commission.md` with:
+
+- `## Original Request` — quote or summarize the exact source text and any
+  supplied context. Do not drop user qualifiers.
+- `## Interpreted Objective` — one clean objective.
+- `## Verifiable Goals` — concrete completion criteria.
+- `## Translation Check` — assumptions, out-of-scope items, and what would
+  count as misunderstanding the request.
+- `## Mode` — `{{commission_mode}}`, adjusted only if the bead already carries
+  a clear approved work graph.
+
+If the source is too vague to commission, write the missing questions into the
+artifact, update the bead notes, and drain without filing a dispatch brief.
+"""
+
+[[steps]]
+id = "reconcile-existing-work"
+needs = ["intake-objective"]
+title = "Find existing work to attach, reuse, or supersede"
+metadata = { "gc.run_target" = "{{plan_target}}" }
+description = """
+Before designing new work, search for existing work covering the same
+objective. Start with the current rig and any math-facing rigs or GitHub issues
+named by the source bead. Do not use GasCity infrastructure examples to shape
+math work unless the source bead explicitly asks for GasCity infrastructure.
+
+Minimum checks:
+
+```bash
+bd search "<keywords from objective>" --readonly
+bd dep tree {{source_bead}} --readonly || true
+bd dep list {{source_bead}} --readonly || true
+```
+
+Also check relevant branches, convoys, prior briefs, and detached worktrees
+when the source mentions them.
+
+Append to `$GC_WORK_DIR/{{brief_slug}}-commission.md`:
+
+- `## Existing Work Reconciliation`
+- Existing beads/issues/briefs/branches found
+- Whether each item is attached, reused, superseded, or irrelevant
+- Any duplicate-work risk that approval must see
+
+This step is mandatory. Redundant work detection is part of commissioning,
+not a cleanup pass after dispatch.
+"""
+
+[[steps]]
+id = "design-dispatch-plan"
+needs = ["reconcile-existing-work"]
+title = "Design the proposed dispatch graph"
+metadata = { "gc.run_target" = "{{plan_target}}" }
+description = """
+Enumerate the live formula catalog at runtime. Do not rely on Mayor prompt
+lore or a hardcoded skill table.
+
+```bash
+gc formula list 2>/dev/null | sort
+gc agent list 2>/dev/null | sort
+```
+
+Design a dispatch graph that uses available formulas and packs, including
+imported Superpowers formulas when they fit. Keep the graph basic and
+math-facing for ordinary MathCity work. Good first examples are:
+
+- formula-design work: `gsp-qeh98`, `gsp-6txvfg`, `gsp-47hj4l`
+- math experiment/reconciliation work: `he-k8e3xv`, `he-1530pl`,
+  `he-mlzku`, `he-a4d`, `he-40nbsb`
+
+If selecting a Superpowers formula, verify the full import surface first.
+From a MathCity checkout, the canonical check is:
+
+```bash
+RUN_LIVE_GC=1 bash tests/superpowers-availability/smoke_test.sh
+```
+
+Do not propose a Superpowers continuation when its formula exists but its
+`superpowers.*` worker targets are absent from the live agent catalog. Mark
+that as unavailable follow-up work instead.
+
+Append to `$GC_WORK_DIR/{{brief_slug}}-commission.md`:
+
+- `## Proposed Dispatch Graph`
+- A titled plaintext graph, for example `Dependency Graph For <source_bead>`
+- Formula names for each graph node
+- Brief gates and test gates
+- What happens on APPROVE, REVISE, REJECT, and DEFER
+- A machine-readable continuation block named `commission-dispatch.v1`
+
+The continuation block must specify:
+
+```toml
+[continuation]
+contract = "commission-dispatch.v1"
+action = "gc_sling"
+source_bead = "{{source_bead}}"
+run_target = "<rig-qualified target or auto>"
+formula = "<formula-to-sling-after-approval>"
+routing_path = "{{routing_path}},<formula-to-sling-after-approval>"
+terminal_brief_required = true
+
+[continuation.vars]
+# key = "value"
+```
+
+Do not execute this continuation. The brief approval path executes it.
+"""
+
+[[steps]]
+id = "review-dispatch-plan"
+needs = ["design-dispatch-plan"]
+title = "Review the dispatch graph for gates, tests, and meaning preservation"
+metadata = { "gc.run_target" = "{{review_target}}" }
+description = """
+Review `$GC_WORK_DIR/{{brief_slug}}-commission.md` before it reaches the pile.
+
+The review must check:
+
+1. The interpreted objective still matches the original request.
+2. Existing work was searched and attached/reused/superseded explicitly.
+3. The graph is acyclic or clearly explains shared/repeated nodes.
+4. The proposed formulas exist in the live catalog and their required
+   `gc.run_target` agents exist in the live agent catalog, or they are
+   explicitly marked as unavailable follow-up work.
+5. Brief gates appear where human approval/adjudication is needed.
+6. Tests or verification gates appear before implementation is called done.
+7. The final dispatched work path ends in a result brief.
+8. APPROVE/REVISE/REJECT/DEFER continuations are explicit.
+
+If the graph fails review, fix the commission artifact in place and record the
+fixes. If it cannot be fixed, update the source bead with the blocker and drain
+without filing a commission brief.
+"""
+
+[[steps]]
+id = "file-brief"
+needs = ["review-dispatch-plan"]
+title = "File commission brief for {{source_bead}}"
+metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "commission-work-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+description = """
+File a commission decision brief. The brief asks whether the proposed dispatch
+graph is what the user meant and whether the city should execute it.
+
+```bash
+BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
+mkdir -p "{{artifact_root}}/.pile"
+```
+
+The brief MUST contain:
+
+- `status: approved` frontmatter
+- `brief_bead: {{source_bead}}`
+- `brief_slug: {{brief_slug}}`
+- `producer_contract: brief-producer.v1`
+- `source_formula: commission-work-briefed`
+- `source_step: file-brief`
+- `routing_path: "{{routing_path}}"`
+- `continuation_contract: commission-dispatch.v1`
+- `review_gate: approved`
+- `unlock_count: <int>`
+- `priority: P0|P1|P2|P3|P4`
+- `server_touching: false`
+- `user_skill_touching_override: false`
+- The original request and interpreted objective
+- Verifiable goals and translation check
+- Existing-work reconciliation
+- The titled plaintext dispatch graph
+- Formula list actually selected for the graph
+- Brief/test gates in the proposed graph
+- The full `commission-dispatch.v1` continuation block
+- Recommended verdict:
+  - APPROVE: execute the continuation block
+  - REVISE: send back to commissioning with requested changes
+  - REJECT: close or park the commissioned work with reason
+  - DEFER: leave the graph unexecuted
+- A complete `## Gate Evidence` section for the active gate profile, including
+  this machine-readable G9 line:
+  `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=commission approval required before dispatch; proposed_registry_extension=none`
+
+After filing:
+
+```bash
+bd update {{source_bead}} --notes "commission-work-briefed file-brief: commission brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting approval before dispatch"
+gc runtime drain-ack
+```
+"""

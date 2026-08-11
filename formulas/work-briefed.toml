@@ -1,170 +1,181 @@
 description = """
-Routing wrapper: auto-selects between simple-work-briefed and build-basic-briefed.
+`mathcity.work` boundary router.
 
-A single `route` step reads the source bead, assesses complexity, and
-re-dispatches it to the right formula:
+There are two ways to do work:
 
-  - SIMPLE  → simple-work-briefed (execute-task + file-brief, 2 steps)
-  - FULL    → build-basic-briefed (full 37-step factory)
+1. Continue already well-defined work with a clear graph. The bead already
+   says what formula/graph should run, or it is a bounded task whose briefed
+   path is mechanically obvious.
+2. Commission fresh or ambiguous work. The city first produces a commission
+   brief that preserves the original request, normalizes the objective, checks
+   existing work, proposes a dispatch graph, and waits for approval before any
+   implementation dispatch occurs.
 
-Use this formula instead of choosing between simple-work-briefed and
-build-basic-briefed by hand. The router decides. The source bead is dispatched
-once and only once — the routing step dispatches the child molecule and exits.
-
-## Routing heuristic (applied by the worker in the `route` step)
-
-SIMPLE when ALL of the following hold:
-  - The task is a single bounded operation with a clear, unambiguous output.
-  - No planning, decomposition, or multi-step implementation is needed.
-  - Examples: run a script, apply a one-file patch, verify a condition,
-    generate a text artifact from a known template, record a result.
-
-FULL when ANY of the following hold:
-  - The task requires understanding requirements, planning, or design.
-  - The task decomposes into sub-tasks that need independent implementation.
-  - The task touches multiple files/systems with interdependencies.
-  - The output will need starter review (acceptance, test-evidence, simplicity).
-
-When in doubt, route FULL. SIMPLE is only for tasks where the bead description
-already contains every input needed for a single-shot subagent execution.
+The route step does not implement work. It delegates to a `-briefed` formula:
+simple/full known work continues directly, while fresh/ambiguous work delegates
+to `commission-work-briefed`.
 """
 formula = "work-briefed"
-version = 1
+version = 2
 
 [requires]
 formula_compiler = ">=2.0.0"
 
 [catalog]
 name = "work-briefed"
-description = "Auto-routes to simple-work-briefed (bounded tasks) or build-basic-briefed (full cycle) based on bead complexity assessment."
+description = "mathcity.work router: continue clear work directly, or commission fresh/ambiguous work through an approval brief before dispatch."
 
 [vars]
 [vars.source_bead]
-description = "The work bead ID to route. The router reads this bead's description to assess complexity."
+description = "The work bead ID to route. The router reads this bead's description, notes, and dependencies."
 required = true
 
 [vars.artifact_root]
-description = "Build artifact root (passed to build-basic-briefed for full-path; brief pipeline root for simple-path)."
+description = "Build or brief artifact root. For builds, scope per bead (for example <rig-root>/.gc-builds/<bead>)."
 required = true
 
 [vars.brief_slug]
-description = "Stable slug for the brief artifact (used by simple-path via simple-work-briefed)."
+description = "Stable slug for the brief artifact."
 required = true
 pattern = "^[A-Za-z0-9._-]+$"
 
+[vars.task]
+description = "Optional exact task text for bounded simple work. If empty, the router derives task context from the bead title/description."
+default = ""
+
+[vars.context]
+description = "Optional extra context for commission or direct simple work."
+default = ""
+
 [vars.model]
-description = "Model for simple-path task execution. Ignored on full-path. Default haiku: sufficient for bounded work."
+description = "Model for simple-path task execution. Ignored by commissioned and full-build paths."
 default = "haiku"
 enum = ["haiku", "sonnet", "opus"]
 
 [vars.brief_type]
-description = "Brief type for simple-path filing. Ignored on full-path (build-basic-briefed always files a decision brief)."
+description = "Brief type for simple-path filing."
 default = "standard"
 enum = ["standard", "decision", "no-brainer"]
 
 [vars.interaction_mode]
-description = "Interaction posture passed to build-basic-briefed on full-path."
+description = "Interaction posture passed to build-basic-briefed on full-build path."
 default = "autonomous"
 
 [vars.review_mode]
-description = "Review authority passed to build-basic-briefed on full-path."
+description = "Review authority passed to build-basic-briefed on full-build path."
 default = "report"
 
 [vars.drain_policy]
-description = "Implementation drain policy passed to build-basic-briefed on full-path."
+description = "Implementation drain policy passed to build-basic-briefed on full-build path."
 default = "separate"
 
 [vars.push]
-description = "Whether to allow final push. Passed to build-basic-briefed on full-path."
+description = "Whether to allow final push. Passed only to formulas that support it. Default false: brief-only."
 default = "false"
 
 [vars.open_pr]
-description = "Whether to open a PR. Passed to build-basic-briefed on full-path."
+description = "Whether to open a PR. Passed only to formulas that support it. Default false: brief-only."
 default = "false"
 
 [vars.child_run_target]
-description = "Child dispatch target. Use auto to resolve <owning-rig>/gc.run-operator from source_bead via gc rig list --json; override only with an explicit rig-qualified fleet address."
+description = "Child dispatch target. Use auto to resolve <owning-rig>/gc.run-operator from source_bead via gc rig list --json."
 default = "auto"
 
 [vars.routing_path]
 description = "Comma-separated route prefix for nested routers."
-default = "work-briefed"
+default = "mathcity.work"
 
 [[steps]]
 id = "route"
-title = "Route {{source_bead}}: assess complexity and dispatch to the right formula"
+title = "Route {{source_bead}} through mathcity.work"
 metadata = { "gc.run_target" = "mathcity.brief-operator" }
 description = """
-You are the routing gate for `work-briefed`. Your job: read the source bead,
-assess its complexity, and dispatch it to the appropriate formula by re-slinging.
-You do NOT perform the work yourself — you choose the path and hand off.
+You are the routing gate for `mathcity.work`. Read the source bead, enumerate
+live formulas, and either continue a clear work graph or commission a dispatch
+plan. Do not perform implementation yourself.
 
-## Step 1 — Read the bead
+## Step 1 — Read source state
 
 ```bash
 bd show {{source_bead}}
+bd dep tree {{source_bead}} --readonly || true
 ```
 
-Read the full description, title, and any existing notes.
+## Step 2 — Enumerate the live formula catalog
 
-## Step 2 — Apply the routing heuristic
+```bash
+FORMULAS="$(gc formula list 2>/dev/null || true)"
+printf '%s\n' "$FORMULAS" | sort
+```
 
-**SIMPLE** when ALL of:
-  - Single bounded operation, clear unambiguous output
-  - No planning, decomposition, or multi-step implementation needed
-  - Bead description already contains every input for a single-shot execution
+The dispatch-planning formula owns formula selection for fresh work. This
+router only chooses whether work is already clear enough to continue.
 
-**FULL** when ANY of:
-  - Requires requirements gathering, planning, or design
-  - Decomposes into sub-tasks needing independent implementation
-  - Touches multiple files/systems with interdependencies
-  - Needs starter review (acceptance, test-evidence, simplicity)
+## Step 3 — Choose a route
 
-When in doubt: FULL.
+Choose **COMMISSION** when any of these are true:
 
-## Step 3 — Record verdict
+- The user request is fresh, ambiguous, or likely to lose meaning in translation.
+- The work needs formula selection, experiment routing, decomposition, or graph design.
+- Existing work may already cover the objective and must be folded in.
+- A plan/design brief should confirm what the user meant before dispatch.
+- The bead does not already contain explicit formula/graph/test/brief gates.
+
+Choose **SIMPLE_CONTINUE** only when all of these are true:
+
+- It is a single bounded operation with a clear output.
+- No planning, decomposition, experiment qualification, or duplicate-work
+  reconciliation is needed.
+- The result can be briefed immediately after execution.
+- `simple-work-briefed` is present in the live catalog.
+
+Choose **FULL_CONTINUE** only when the bead is already a well-defined
+implementation request and the graph shape is clear enough for the full
+requirements → plan → decompose → implement → review → result-brief path.
+If the question is "what should the graph be?", choose COMMISSION.
+
+Choose **EXPLICIT_CONTINUE** when the bead already names an approved formula
+and vars to sling, and that formula is present in the live catalog.
+
+## Step 4 — Record the route event
 
 ```bash
 for cmd in bd gc jq; do
   command -v "$cmd" >/dev/null 2>&1 || {
     echo "I'm sorry, I can't do that — required command '$cmd' is missing." >&2
-    echo "Install '$cmd' or run the appropriate setup/update skill before routing work-briefed." >&2
     exit 1
   }
 done
 
 route_payload="$(jq -nc \
-  --arg schema "work-briefed-route.v1" \
+  --arg schema "mathcity-work-route.v2" \
   --arg source_bead "{{source_bead}}" \
-  --arg route "<SIMPLE-or-FULL>" \
-  --arg child_formula "<simple-work-briefed-or-build-basic-briefed>" \
-  --arg routing_path "{{routing_path}},<simple-work-briefed-or-build-basic-briefed>" \
-  --arg reason "<one-line reason from the heuristic>" \
-  '{schema:$schema,source_bead:$source_bead,route:$route,child_formula:$child_formula,routing_path:$routing_path,reason:$reason}')"
-route_event="$(bd create "work-briefed route for {{source_bead}}" \
+  --arg route "<COMMISSION|SIMPLE_CONTINUE|FULL_CONTINUE|EXPLICIT_CONTINUE>" \
+  --arg child_formula "<commission-work-briefed|simple-work-briefed|build-basic-briefed|explicit-formula>" \
+  --arg reason "<one-line reason>" \
+  '{schema:$schema,source_bead:$source_bead,route:$route,child_formula:$child_formula,reason:$reason}')"
+route_event="$(bd create "mathcity.work route for {{source_bead}}" \
   --type=event \
-  --event-category work_briefed.route \
+  --event-category mathcity_work.route \
   --event-target "{{source_bead}}" \
   --event-payload "$route_payload" \
   --silent)"
 bd dep relate "$route_event" "{{source_bead}}"
 ```
 
-Do not write a route note to `{{source_bead}}`; the linked event bead is the
-append-only route record.
-
-## Step 4 — Dispatch to the right formula
-
-Before either child `gc sling`, verify the source bead is not already actively
-assigned:
+## Step 5 — Verify no active worker already owns the bead
 
 ```bash
 assignee="$(bd show "{{source_bead}}" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
 if [ -n "$assignee" ]; then
-  echo "ALREADY DISPATCHED — bead {{source_bead}} has active assignee: $assignee; aborting work-briefed child dispatch" >&2
+  echo "ALREADY DISPATCHED — bead {{source_bead}} has active assignee: $assignee; aborting duplicate mathcity.work dispatch" >&2
   exit 1
 fi
+```
 
+## Step 6 — Resolve child run target
+
+```bash
 resolve_child_run_target() {
   requested="{{child_run_target}}"
   if [ "$requested" != "auto" ]; then
@@ -191,9 +202,32 @@ resolve_child_run_target() {
 CHILD_RUN_TARGET="$(resolve_child_run_target)" || exit 1
 ```
 
-**If SIMPLE** — dispatch via simple-work-briefed:
+## Step 7 — Dispatch the selected child formula
+
+If **COMMISSION**, dispatch commissioning only. This files a commission brief
+and does not dispatch implementation before approval:
 
 ```bash
+printf '%s\n' "$FORMULAS" | awk '{print $1}' | grep -qx 'commission-work-briefed' || {
+  echo "ROUTE TARGET FAILED — commission-work-briefed is not in the live formula catalog" >&2
+  exit 1
+}
+gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on commission-work-briefed \
+  --var source_bead={{source_bead}} \
+  --var brief_slug={{brief_slug}} \
+  --var commission_mode=fresh \
+  --var artifact_root={{artifact_root}} \
+  --var context="{{context}}" \
+  --var routing_path="{{routing_path}},commission-work-briefed"
+```
+
+If **SIMPLE_CONTINUE**, dispatch simple-work-briefed:
+
+```bash
+TASK="{{task}}"
+if [ -z "$TASK" ]; then
+  TASK="$(bd show {{source_bead}} | head -20)"
+fi
 gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on simple-work-briefed \
   --var source_bead={{source_bead}} \
   --var brief_slug={{brief_slug}} \
@@ -201,13 +235,11 @@ gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on simple-work-briefed \
   --var brief_type={{brief_type}} \
   --var artifact_root={{artifact_root}} \
   --var routing_path="{{routing_path}},simple-work-briefed" \
-  --var task="$(bd show {{source_bead}} | head -5)"
+  --var task="$TASK" \
+  --var context="{{context}}"
 ```
 
-Note: `task` is populated from the bead title + first lines. If the bead
-description is richer, adjust the extraction command accordingly.
-
-**If FULL** — dispatch via build-basic-briefed:
+If **FULL_CONTINUE**, dispatch build-basic-briefed:
 
 ```bash
 gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on build-basic-briefed \
@@ -220,29 +252,25 @@ gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on build-basic-briefed \
   --var routing_path="{{routing_path}},build-basic-briefed"
 ```
 
-After either child `gc sling`, verify that assignment became visible:
+If **EXPLICIT_CONTINUE**, execute the already-approved command/vars from the
+source bead. Before running it, verify the named formula appears in `$FORMULAS`
+and that its terminal path is briefed or explicitly routes to a briefed formula.
+
+## Step 8 — Verify assignment
 
 ```bash
 sleep 5
 child_assignee="$(bd show "{{source_bead}}" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
 if [ -z "$child_assignee" ]; then
-  echo "DISPATCH VERIFY FAILED — bead {{source_bead}} has no assignee after work-briefed child sling" >&2
+  echo "DISPATCH VERIFY FAILED — bead {{source_bead}} has no assignee after mathcity.work child sling" >&2
   exit 1
 fi
 ```
 
-## Step 5 — Close this routing step
+Then close this routing step and drain:
 
 ```bash
-bd update <this-step-bead-id> --notes "Dispatched {{source_bead}} via <simple-work-briefed|build-basic-briefed>. Route molecule started."
+bd update <this-step-bead-id> --notes "Dispatched {{source_bead}} via <child formula>. Route molecule started."
 gc runtime drain-ack
-```
-
-If `gc sling` fails, escalate before exiting:
-
-```bash
-.gc/scripts/escalate.sh \
-  --title "work-briefed routing failed for {{source_bead}}" \
-  --priority 2
 ```
 """

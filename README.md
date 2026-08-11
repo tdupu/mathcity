@@ -91,6 +91,8 @@ The technical details live in [docs/TECHNICAL-SPEC.md](./docs/TECHNICAL-SPEC.md)
 
 | Work shape | Current surface | Notes |
 | --- | --- | --- |
+| Normal Mayor dispatch | `mathcity.work` -> `work-briefed` | Continue clear work directly, or commission fresh/ambiguous work before dispatch. |
+| Fresh or ambiguous work | `commission-work-briefed` | Files a commission brief with objective, existing-work reconciliation, proposed graph, formulas, test gates, brief gates, and approval continuation. |
 | Bounded task | `simple-work-briefed` | Lightweight execute-and-brief path. |
 | Full feature work | `build-basic-briefed` | Requirements, plan, decompose, implement, review, and terminal decision brief. |
 | Planning first | `planning-briefed` | Produces a plan/design/PERT brief before implementation. |
@@ -111,6 +113,8 @@ Planned surfaces are tracked in the issue tracker and summarized in
 | Draft an issue body brief | Gas City formula | configured city, `gc`, `bd`, imported mathcity pack | `gc sling <rig>/gc.run-operator create-issue-briefed --formula --var source_bead=<bead> --var brief_slug=<slug>` | `tests/create-issue-briefed/smoke_test.sh` | current | none |
 | Draft a PR body brief | Gas City formula | configured city, source bead with branch/evidence context | `gc sling <rig>/gc.run-operator pr-pipeline-briefed --formula --var source_bead=<bead> --var brief_slug=<slug>` | `tests/pr-pipeline-briefed/smoke_test.sh` | current | none |
 | Verify work routing | local shell | shell | `bash tests/work-briefed-routing/smoke_test.sh` | `tests/work-briefed-routing/smoke_test.sh` | current | none |
+| Verify commissioning formula | local shell | shell, Python 3.11+ | `bash tests/commission-work-briefed/smoke_test.sh` | `tests/commission-work-briefed/smoke_test.sh` | current | none |
+| Verify Superpowers availability | local shell or live city | shell, Python 3.11+, `rg`; optional `gc` for live catalog check | `bash tests/superpowers-availability/smoke_test.sh`; live: `RUN_LIVE_GC=1 bash tests/superpowers-availability/smoke_test.sh` | `tests/superpowers-availability/smoke_test.sh` | current | `mc-fe7.1` tracks hygienic pinned import |
 | Audit documentation policy | Codex or Claude Code | mathcity checkout | `/check-documentation-policy` | acceptance check in this documentation refactor | current | none |
 
 ## Development And Tests

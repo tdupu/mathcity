@@ -8,9 +8,23 @@ mark-only on defer). The sibling formula file-or-sendback-route handles
 FOLLOW-UP BRIEFING routing only (FILE re-brief vs SEND-BACK archive). They do
 not overlap.
 
-Routing contract (approve=merge back edge — HQ decision gt-r4ou):
+Routing contract:
 
-  approve  → Read the source bead's existing metadata (`gc bd update` idioms
+  approve with continuation_contract = "commission-dispatch.v1"
+           → Execute the approved continuation block from the decision record.
+             This is the commission-work approval path: a commission brief
+             designed the dispatch graph, and APPROVE is the hard trigger that
+             slings the selected formula. Validate before acting: contract must
+             be `commission-dispatch.v1`, action must be `gc_sling`, formula
+             must exist in `gc formula list`, source_bead must match the
+             decision source, terminal_brief_required must be true, and the
+             target bead must have no active assignee. Then run the approved
+             `gc sling` with the block's vars and append the normal SUCCESS
+             ledger line. Do not fall through to publisher handoff for a
+             commission continuation.
+
+  approve without continuation_contract
+           → Read the source bead's existing metadata (`gc bd update` idioms
              below). Three-way branch-metadata check (fail-closed — gt-yv8p2):
              (1) If `gc bd show` FAILS (non-zero exit) or output is not
              parseable JSON → record a retryable failure (pending_retry line,
@@ -290,6 +304,61 @@ dispatch_slug() {
         outcome="failure"
         action_taken="approve failed: unknown rig for source_bead $source_bead (registry resolve empty or dir missing)"
       else
+      continuation_contract="$(grep '^continuation_contract[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+      if [ "$continuation_contract" = "commission-dispatch.v1" ]; then
+        # Commission approval path. The decision record must carry the
+        # machine-readable block copied from the commission brief. Fail closed:
+        # a malformed continuation is retryable and never falls through to the
+        # publisher handoff.
+        cont_action="$(grep '^action[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+        cont_source="$(grep '^source_bead[[:space:]]*=' "$rec" | tail -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+        cont_run_target="$(grep '^run_target[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+        cont_formula="$(grep '^formula[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+        cont_terminal="$(grep '^terminal_brief_required[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+
+        ok=true
+        if [ "$cont_action" != "gc_sling" ] || [ "$cont_source" != "$source_bead" ] || [ "$cont_terminal" != "true" ]; then
+          ok=false
+        fi
+        if ! gc formula list 2>/dev/null | awk '{print $1}' | grep -qx "$cont_formula"; then
+          ok=false
+        fi
+        active_assignee="$(gc bd show "$source_bead" --json 2>/dev/null | jq -r '.[0].assignee // empty' 2>/dev/null || echo "")"
+        if [ -n "$active_assignee" ]; then
+          ok=false
+          action_taken="approve failed: commission source_bead $source_bead already assigned to $active_assignee"
+        fi
+
+        if $ok; then
+          if [ -z "$cont_run_target" ] || [ "$cont_run_target" = "auto" ]; then
+            cont_run_target="$RIG_NAME/gc.run-operator"
+          fi
+          vars_args="$(awk '
+            /^\\[continuation.vars\\]/ { in_vars=1; next }
+            /^\\[/ { in_vars=0 }
+            in_vars && /^[A-Za-z0-9_.-]+[[:space:]]*=/ {
+              key=$1
+              sub(/[[:space:]]*=.*/, "", key)
+              val=$0
+              sub(/^[^=]*=[[:space:]]*/, "", val)
+              gsub(/^"|"$/, "", val)
+              printf " --var %s=%s", key, val
+            }
+          ' "$rec")"
+          # shellcheck disable=SC2086 # vars_args is produced from continuation.vars.
+          if gc sling "$cont_run_target" "$source_bead" --on "$cont_formula" $vars_args; then
+            action_taken="commission-continuation-dispatched (formula=$cont_formula target=$cont_run_target)"
+          else
+            outcome="failure"
+            action_taken="approve failed: commission continuation sling failed (formula=$cont_formula target=$cont_run_target)"
+          fi
+        elif [ -z "$action_taken" ]; then
+          outcome="failure"
+          action_taken="approve failed: malformed commission-dispatch.v1 continuation"
+        else
+          outcome="failure"
+        fi
+      else
       # Approval = merge back edge. Fail-closed three-state branch check
       # (gt-yv8p2): distinguish bd-show error from genuine no-branch.
       # source_bead is guaranteed non-empty by the terminalize guard above.
@@ -348,6 +417,7 @@ dispatch_slug() {
           action_taken="approve failed: bd update error (branch=$existing_branch target=$set_target)"
         fi
       fi
+      fi  # close commission continuation branch
       fi  # close RIG_DIR check
       ;;
     reject|revise)

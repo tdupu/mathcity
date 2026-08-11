@@ -70,6 +70,15 @@ Write `{{artifact_root}}/decisions/{{brief_slug}}.toml` with:
   brief-record bead's `source_bead` metadata; if neither is available, record
   `source_bead = ""` and note the gap in `reason`.
 
+- `continuation_contract` and continuation sections when present. Commission
+  briefs may carry `continuation_contract = "commission-dispatch.v1"` in
+  frontmatter plus a fenced `commission-dispatch.v1` TOML block describing the
+  approved dispatch. Write the contract string as a top-level decision field,
+  then append the continuation block as real TOML sections (`[continuation]`
+  and `[continuation.vars]`) in the decision record. This makes APPROVE
+  executable by `brief-decision-dispatch`; do not leave the continuation only
+  in prose or inside an opaque string payload.
+
 One-bead model (brief-system POLICY.md B2.2): the brief bead IS the decision
 bead (`type=decision`). Record the verdict ON the brief bead itself — verdict,
 authorizer, one-line rationale, date (plus confidence/category for

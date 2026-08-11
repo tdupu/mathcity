@@ -15,9 +15,11 @@ description: >
 
 # formula-creator-math
 
-Create a **mathcity formula TOML** with the enforced briefed-terminal-step
-convention. All mathcity formulas MUST end with a step that files a decision
-brief for human adjudication — this skill enforces that invariant.
+Create a **MathCity-owned briefed/work-boundary formula TOML** with the enforced
+briefed-terminal-step convention. Use this skill for formulas that are meant to
+be dispatched through MathCity's human-adjudicated work surfaces. Imported
+methodology formulas from other packs may remain non-briefed capabilities, but
+anything exposed through `mathcity.work` must route through a briefed graph.
 
 Extends [formula-creator](<mathcity-pack-root>/skills/formula-creator/SKILL.md)
 with mathcity-specific rules. Read formula-creator first for base TOML
@@ -37,13 +39,13 @@ Every mathcity formula produced by this skill MUST end with one of:
 | `publish` | The full-factory decision-brief terminal slot (as in `build-basic-briefed`) |
 | `route` | Router terminal that delegates to another `-briefed` formula (as in `work-briefed`) |
 
-**Never ship a mathcity formula whose last step is a pure implementation
+**Never ship a MathCity-owned `-briefed` or `mathcity.work` boundary formula whose last step is a pure implementation
 step** (e.g., `git-push`, `run-script`, `commit`). The brief IS the gate
 before anything is merged or published.
 
-This invariant is policy: **POLICY-formulas.md F8.1** (every `-briefed` formula
-must terminate in the brief cycle). The allowed set here and the Step 5 gate
-below MUST match F8.1's table — amend all three together if it ever changes.
+This invariant is policy: **POLICY-formulas.md F8.1-F8.3**. The allowed set
+here and the Step 5 gate below MUST match F8.1's table — amend all three
+together if it ever changes.
 
 ---
 

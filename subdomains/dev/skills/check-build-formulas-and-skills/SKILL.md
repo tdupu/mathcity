@@ -4,8 +4,9 @@ description: >
   Completeness audit for the mathcity formula and skill catalogs. Checks:
   (1) every formula TOML in mathcity/formulas/ has a row in README-formulas.md,
   (2) every skill dir in mathcity/**/skills/ has a row in README-skills.md,
-  (3) every formula passes check-formula-hygiene (briefed terminal step, no
-  model-name run_target, policy conformance). Reports all gaps and routes
+  (3) every MathCity-owned briefed/work-boundary formula passes
+  check-formula-hygiene (briefed terminal step, no model-name run_target,
+  policy conformance). Reports all gaps and routes
   to repair skills. Trigger phrases: "check build", "check formulas and
   skills", "check-build-formulas-and-skills", "are all formulas indexed",
   "are all skills indexed", "formula/skill coverage audit".
@@ -104,8 +105,8 @@ Stale entries → `update-README`.
 
 ## Phase 3 — Formula policy hygiene (F-rule sweep)
 
-For each formula TOML, run check-formula-hygiene inline.
-Critical F-rule shortcuts — scan all at once:
+For each MathCity-owned briefed/work-boundary formula TOML, run
+check-formula-hygiene inline. Critical F-rule shortcuts — scan all at once:
 
 ### 3a. Briefed terminal step (mandatory)
 
@@ -113,6 +114,10 @@ Critical F-rule shortcuts — scan all at once:
 PACK=<mathcity-pack-root>
 for f in "$PACK/formulas/"*.toml; do
   name=$(basename "$f" .toml)
+  case "$name" in
+    *-briefed|work-briefed|commission-work-briefed) ;;
+    *) echo "SKIP  $name  (not a briefed/work-boundary formula)"; continue ;;
+  esac
   # Extract the last step id
   last_id=$(python3 -c "
 import tomllib, sys
@@ -121,10 +126,10 @@ steps = d.get('steps', [])
 print(steps[-1]['id'] if steps else 'NO-STEPS')
 " 2>/dev/null)
   case "$last_id" in
-    file-brief|brief-finalize|workflow-finalize|brief-record-decision|file-or-sendback-route)
+    file-brief|brief-finalize|workflow-finalize|publish|route)
       echo "PASS  $name  (terminal: $last_id)" ;;
     *)
-      echo "FAIL  $name  (terminal: $last_id — must be a briefed terminal step)" ;;
+      echo "FAIL  $name  (terminal: $last_id — must be a briefed/work-boundary terminal step)" ;;
   esac
 done
 ```
