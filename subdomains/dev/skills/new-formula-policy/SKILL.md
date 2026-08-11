@@ -90,11 +90,11 @@ After the human adjudicator approves:
    ```
 4. Commit both files together:
    ```bash
-   cd <repos-root>/gascity-packs
-   git add mathcity/README-formulas.md \
-           mathcity/subdomains/dev/skills/formula-creator-math/SKILL.md
+   cd <mathcity-pack-root>
+   git add README-formulas.md \
+           subdomains/dev/skills/formula-creator-math/SKILL.md
    git commit -m "policy(mathcity): <one-line summary of amendment>"
-   git push fork main
+   git push origin main
    ```
 
 ## Step 4 — Verify

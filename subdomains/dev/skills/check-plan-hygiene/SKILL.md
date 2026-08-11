@@ -1,6 +1,6 @@
 ---
 name: check-plan-hygiene
-description: Gate a plan doc or beads convoy against the Pack Portability & Boundary Policy (mathcity/subdomains/dev/POLICY.md) BEFORE any build starts. Use when the user says "check plan hygiene", "hygiene-check this plan/convoy", "run check-plan-hygiene", when a convoy is about to be slung, or when a plan claims work inside gascity-packs. Returns a brief-cycle verdict (approve / revise / reject / defer); on revise or reject it names the violated P-rules, the triggering file/directory per violation, and a compact re-derivation brief. Plan-time counterpart of check-build-hygiene (which audits the live install instead of a plan).
+description: Gate a plan doc or beads convoy against the Pack Portability & Boundary Policy (mathcity/subdomains/dev/POLICY.md) BEFORE any build starts. Use when the user says "check plan hygiene", "hygiene-check this plan/convoy", "run check-plan-hygiene", when a convoy is about to be slung, or when a plan claims work inside mathcity or gascity-packs. Returns a brief-cycle verdict (approve / revise / reject / defer); on revise or reject it names the violated P-rules, the triggering file/directory per violation, and a compact re-derivation brief. Plan-time counterpart of check-build-hygiene (which audits the live install instead of a plan).
 ---
 
 # check-plan-hygiene

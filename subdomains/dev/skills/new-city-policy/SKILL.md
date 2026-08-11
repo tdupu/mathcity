@@ -140,13 +140,12 @@ gitleaks detect --no-git \
 
 Any leak → STOP, do not commit; report it. gitleaks FAIL is blocking.
 
-> **Git note (outside agent):** in `<repos-root>/gascity-packs`, an OUTSIDE agent
+> **Git note (outside agent):** in `<mathcity-pack-root>`, an OUTSIDE agent
 > does not commit or push on its own — report the changed file and the exact
 > proposed commit/push commands and let the human (or the calling
-> orchestrator/repo-side landing agent) run them. If you are a gascity-managed inside worker
-> operating under an explicit standing authorization, commit + push to the
-> fork per that authorization; NEVER push to `gastownhall/gascity-packs`
-> upstream.
+> orchestrator/repo-side landing agent) run them. If you are a gascity-managed
+> inside worker operating under an explicit standing authorization, commit and
+> push only to an authorized mathcity remote and branch.
 
 ## Step 4 — Verify with check-city-policy
 

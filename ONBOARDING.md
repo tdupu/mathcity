@@ -1,10 +1,10 @@
 # Getting Started with Gas City: Field Notes for New Users
 
-These are practical notes from a first real build with Gas City (`gascity`), `beads`, and `gascity-packs`. They're written for someone about to set up their first city from scratch. Nothing here is official Gas City documentation — it's one user's hard-won lessons, written up so the next person doesn't have to relearn them. A few items are flagged below as unverified and worth an independent fact-check before you treat them as gospel.
+These are practical notes from a first real build with Gas City (`gascity`), `beads`, `gascity-packs`, and `mathcity`. They're written for someone about to set up their first city from scratch. Nothing here is official Gas City documentation — it's one user's hard-won lessons, written up so the next person doesn't have to relearn them. A few items are flagged below as unverified and worth an independent fact-check before you treat them as gospel.
 
 ## 1. Build from source, and keep your build separate
 
-Build `gascity`, `beads`, and `gascity-packs` from source rather than relying on whatever version a package manager hands you. Keep the three source checkouts in their own repo/directory that you manage yourself, separate from any city you actually run.
+Build `gascity`, `beads`, `gascity-packs`, and `mathcity` from source rather than relying on whatever version a package manager hands you. Keep the source checkouts in their own repo/directory that you manage yourself, separate from any city you actually run.
 
 Two traps to avoid on your first city:
 
@@ -13,13 +13,18 @@ Two traps to avoid on your first city:
 
 ### Suggested skills: automate your "from source" updates
 
-Rather than re-running the build steps by hand, create three skills:
+Rather than re-running the build steps by hand, create four skills:
 
 - `update-gascity-from-source`
 - `update-beads-from-source`
 - `update-gascity-packs-from-source`
+- `update-mathcity-from-source`
 
-Each one should clear out old binaries before rebuilding (so you're never accidentally running a stale binary alongside a fresh one) and should run the relevant `doctor` skill/check at the end of the install to confirm the install is healthy before you rely on it.
+The binary skills should clear out old binaries before rebuilding (so you're
+never accidentally running a stale binary alongside a fresh one). The pack
+skills should verify the city imports the intended local source checkout:
+`gascity-packs` for non-mathcity packs, `mathcity` for the standalone mathcity
+pack.
 
 ## 2. Read the docs — all of them — before your first run
 

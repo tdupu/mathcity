@@ -1,6 +1,6 @@
 ---
 name: check-build-hygiene
-description: Audit the CURRENT live install — gc/bd binaries, the three source repos, pack imports, and skill sinks — against the Pack Portability & Boundary Policy (mathcity/subdomains/dev/POLICY.md). Use when the user says "check build hygiene", "run check-build-hygiene", "is my install reproducible", "can I share this setup", "audit the city against the policy", or before sharing the setup with a collaborator / rebuilding on another machine. Returns approve / revise / defer with a drift list and per-item remediation. Current-state counterpart of check-plan-hygiene (which gates plans/convoys before build).
+description: Audit the CURRENT live install — gc/bd binaries, source repos including standalone mathcity, pack imports, and skill sinks — against the Pack Portability & Boundary Policy (mathcity/subdomains/dev/POLICY.md). Use when the user says "check build hygiene", "run check-build-hygiene", "is my install reproducible", "can I share this setup", "audit the city against the policy", or before sharing the setup with a collaborator / rebuilding on another machine. Returns approve / revise / defer with a drift list and per-item remediation. Current-state counterpart of check-plan-hygiene (which gates plans/convoys before build).
 ---
 
 # check-build-hygiene
@@ -43,7 +43,7 @@ binaries, and re-verify).
 **2. Working trees clean, deviations declared (P1.6).**
 
 ```bash
-for r in <repos-root>/gascity <repos-root>/beads <repos-root>/gascity-packs; do
+for r in <repos-root>/gascity <repos-root>/beads <repos-root>/gascity-packs <repos-root>/mathcity; do
   echo "== $r"; git -C "$r" status --porcelain; cat "$r/.git/info/exclude"
 done
 ```
@@ -51,9 +51,9 @@ done
 Untracked/modified files that a build or the city depends on fail unless
 declared (listed in `.git/info/exclude` AND encoded in the corresponding
 update skill — precedent: the `go.work` beads-lockstep file in
-`<repos-root>/gascity`). Uncommitted pack content in `gascity-packs` is
-work-in-progress, not a violation — but flag it (P1.4: the city depends on
-it and it isn't pushed).
+`<repos-root>/gascity`). Uncommitted non-mathcity pack content in
+`gascity-packs` or mathcity content in `mathcity` is work-in-progress, not a
+violation — but flag it (P1.4: the city depends on it and it isn't pushed).
 
 **3. Remote lockstep — upstream stays pullable (P1.7).**
 
@@ -62,6 +62,8 @@ git -C <repos-root>/gascity fetch origin fork -q &&
   git -C <repos-root>/gascity rev-parse main origin/main fork/main   # all equal
 git -C <repos-root>/beads fetch origin -q &&
   git -C <repos-root>/beads rev-parse main origin/main               # equal
+git -C <repos-root>/mathcity fetch origin -q &&
+  git -C <repos-root>/mathcity rev-parse main origin/main            # equal
 git -C <repos-root>/gascity-packs fetch upstream fork -q &&
   git -C <repos-root>/gascity-packs merge-base --is-ancestor upstream/main main \
   && echo "upstream contained" || echo "UPSTREAM NOT MERGED"
@@ -70,8 +72,10 @@ git -C <repos-root>/gascity-packs rev-list fork/main..main --count    # unpushed
 
 gascity-packs is **fork-canonical** (gt-5cye): fork deliberately ahead of
 upstream; upstream must be *contained in* main (merged), never mirrored
-over it. Remediation: the matching `update-*-from-source` skill; never
-resolve divergence by force-push.
+over it. Mathcity is a standalone source checkout backed by `tdupu/mathcity`;
+`main` and `origin/main` must match for a reproducible city. Remediation: the
+matching `update-*-from-source` skill, including `update-mathcity-from-source`;
+never resolve divergence by force-push.
 
 **3a. Upstream contribution hygiene — PRs and issues (P3.1, see `<city-root>/POLICY.md`).**
 
@@ -96,11 +100,17 @@ If the build under audit includes any recently created PR or issue targeting
 
 ```bash
 grep -A1 'imports' <city-root>/city.toml | grep 'source'
+grep -Hn 'source = ".*gascity-packs/mathcity' <city-root>/city.toml <city-root>/pack.toml \
+  && echo "P1.4 FAIL: mathcity import uses stale gascity-packs path"
+grep -Hn 'source = ".*repos/mathcity' <city-root>/city.toml <city-root>/pack.toml \
+  || echo "P1.4 FAIL: no standalone mathcity import found"
 ```
 
 For each local-path import target: its repo must be clean (check 2) and
 its HEAD pushed to the canonical remote (check 3). A city standing on
-unpushed content can't be recreated elsewhere.
+unpushed content can't be recreated elsewhere. Mathcity imports specifically
+must resolve to `<repos-root>/mathcity`; `<repos-root>/gascity-packs/mathcity`
+is stale and fails P1.4 even if the directory still exists locally.
 
 **5. Skill exposure hygiene (P1.8, P1.3).**
 
@@ -135,8 +145,8 @@ for s in <mathcity-pack-root>/skills/* <mathcity-pack-root>/subdomains/*/skills/
   done
 done
 # P1.10 — private values in pack content
-cd <repos-root>/gascity-packs && gitleaks detect --no-git --source mathcity | tail -1
-grep -rInE '[a-z0-9_]+@[a-z0-9.-]+\.(edu|com|org|net)|ssh [a-z]+@|BEGIN.*KEY|/(Users|home)/[a-z]+/' mathcity --include='*.md' --include='*.example' | grep -vi 'lmfdb.org\|example\.' | head
+gitleaks detect --no-git --source <mathcity-pack-root> | tail -1
+grep -rInE '[a-z0-9_]+@[a-z0-9.-]+\.(edu|com|org|net)|ssh [a-z]+@|BEGIN.*KEY|/(Users|home)/[a-z]+/' <mathcity-pack-root> --include='*.md' --include='*.example' | grep -vi 'lmfdb.org\|example\.' | head
 # P1.11 — bead sync targets: dedicated -dolt repos, verified private
 for p in <city-root> <city-root>/*/; do [ -d "$p/.beads" ] || continue
   r=$(cd "$p" && bd config get sync.remote 2>/dev/null)

@@ -3,13 +3,13 @@
 | Field | Value |
 | --- | --- |
 | Status | Adopted |
-| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency) |
+| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency; amended 2026-08-10: standalone mathcity source checkout) |
 | Decided | the pack owner, via grilling session (three open questions resolved; record at bottom) |
 | Applies to | All packs the human adjudicator owns in this repo — the **owned pack set** (§ Scope) |
 | Consumers | `check-hygiene` skill (to be built via skill-creator); mayor priming (`mayor-math`); any agent planning work in this repo |
 
 Governs how work on an owned pack is planned, executed, and audited inside
-`gascity-packs` — and, more broadly, how the whole local gascity install
+the standalone `mathcity` source checkout — and, more broadly, how the whole local gascity install
 (`gc`/`bd` binaries, pack content, city config) stays **reproducible on a
 fresh machine, shareable with collaborators, and mergeable with upstream**.
 Written as the source-of-truth for a plan/convoy/audit gate: every rule has
@@ -58,7 +58,8 @@ recreate what you're running; upstream must remain pullable.*
 - **P1.4 Local-path imports must be remote-backed.** Local-path imports
   (decision gt-ths6) are legitimate standing config, not just a dev-loop
   hack — **provided** the import target is a clean git checkout whose HEAD
-  is pushed to the canonical remote (`<github-owner>` fork for `gascity-packs`).
+  is pushed to the canonical remote (`tdupu/mathcity` for mathcity;
+  `<github-owner>` fork for non-mathcity `gascity-packs` content).
   Then another machine reproduces the city by cloning the fork at that
   commit and using the same import. A local-path import whose target has
   uncommitted or unpushed content that the city depends on → **fail**.
@@ -72,7 +73,8 @@ recreate what you're running; upstream must remain pullable.*
   builds of a synced HEAD: `go version -m <binary>` shows `vcs.revision`
   equal to the checkout's HEAD and `vcs.modified=false`. Builds and updates
   go through the sanctioned skills — `update-gascity-from-source`,
-  `update-beads-from-source`, `update-gascity-packs-from-source` — which
+  `update-beads-from-source`, `update-gascity-packs-from-source`, and
+  `update-mathcity-from-source` — which
   enforce exactly this. A dirty build, a binary from an untracked patch, or
   a stale binary shadowing the install on `$PATH` → **fail**. A
   working-tree artifact the build genuinely needs is legal **only if
@@ -83,6 +85,7 @@ recreate what you're running; upstream must remain pullable.*
   hold or be restorable by the update skills:
   `<repos-root>/gascity` origin = fork = local main;
   `<repos-root>/beads` origin = local main;
+  `<repos-root>/mathcity` origin = local main;
   `<repos-root>/gascity-packs` **fork-canonical** — the fork is deliberately
   ahead of upstream (gt-5cye); upstream is *merged in*, never mirrored over.
   Work that would make a future upstream merge structurally impossible —
@@ -570,11 +573,20 @@ no parallel vocabulary is introduced:
 - [README-contributing.md](../../../README-contributing.md) — registry publishing, content-hash validation, release-compat gates
 - [gascity/REQUIREMENTS.md](../../../gascity/REQUIREMENTS.md) — the `build-base` contract (Pillar 3/4 downstream surface)
 - [contributing/skills/review](../../../contributing/skills/review/SKILL.md) (B10) and [map-blast-radius](../../../contributing/skills/map-blast-radius/SKILL.md) — the PR-time gates this plan-time gate complements
-- `~/.claude/skills/update-{gascity,beads,gascity-packs}-from-source` — the sanctioned update procedures whose invariants P1.6/P1.7 encode
+- `~/.agents/skills/update-{gascity,beads,gascity-packs,mathcity}-from-source` — the sanctioned update procedures whose invariants P1.6/P1.7 encode
 
 ---
 
 ## Change Log
+
+### 2026-08-10 — P1.4/P1.6/P1.7 clarified: standalone mathcity source checkout
+Mathcity pack imports now source from the standalone `<repos-root>/mathcity`
+checkout, backed by `tdupu/mathcity`, rather than from
+`<repos-root>/gascity-packs/mathcity`. The sanctioned update path includes
+`update-mathcity-from-source`, and reproducibility checks include the
+`<repos-root>/mathcity` origin/local-main invariant. Triggered by: the human
+adjudicator directive to import from mathcity, not gascity-packs. Exceptions:
+none.
 
 ### 2026-07-20 — P3.2 expanded: upstream issue template required before pr-pipeline
 `mol-pr-from-issue` requires a GitHub issue number as input; the correct issue
