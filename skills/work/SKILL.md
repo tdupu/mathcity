@@ -67,6 +67,9 @@ At this surface, only verify that `work-briefed` is available before slinging.
 
 Run from the source bead's rig directory so `bd` resolves the bead correctly.
 Use a bead-scoped artifact root; never use a shared bare rig root.
+For build paths, the required shape is
+`artifact_root=<rig-root>/.gc-builds/<bead>`; when running from the rig root,
+`.gc-builds/$SOURCE_BEAD` is that same per-bead path.
 
 ```bash
 SOURCE_BEAD=<bead-id>
@@ -105,6 +108,47 @@ bd show "$SOURCE_BEAD" | grep -i assignee
 The assignee must be non-empty. If it is still empty after 30-60 seconds, do
 not assume the fleet is healthy. Record a dispatch-provenance event and
 escalate or run the appropriate city-status/check-work skill.
+
+## Dispatch Provenance Event
+
+Every `gc sling` outcome gets a linked event bead. Use
+`dispatch-provenance.v1` so downstream lost-bead filters can distinguish a
+healthy claim from an immediate strand.
+
+Healthy claim:
+
+```toml
+schema = "dispatch-provenance.v1"
+source_bead = "<bead>"
+dispatch_command = "gc sling <rig>/gc.run-operator <bead> --on work-briefed ..."
+formula = "work-briefed"
+verified_assignee = true
+assignee_state = "non_empty"
+classification_hint = "healthy"
+fingerprint = "verified_sling_claimed"
+observed_at = "YYYY-MM-DDTHH:MM:SSZ"
+```
+
+Empty assignee after the verification window:
+
+```toml
+schema = "dispatch-provenance.v1"
+source_bead = "<bead>"
+dispatch_command = "gc sling <rig>/gc.run-operator <bead> --on work-briefed ..."
+formula = "work-briefed"
+verified_assignee = false
+assignee_state = "empty_after_60s"
+classification_hint = "immediate_strand"
+fingerprint = "empty_assignee_after_verified_sling"
+observed_at = "YYYY-MM-DDTHH:MM:SSZ"
+```
+
+Create and relate the event before escalating:
+
+```bash
+event_bead="$(bd create "dispatch provenance for <bead>" --type event --event-category dispatch.provenance --event-target <bead> --event-payload '<dispatch-provenance.v1 TOML or JSON>' --silent)"
+bd dep relate "$event_bead" <bead>
+```
 
 ## Commission Briefs
 

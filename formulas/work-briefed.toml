@@ -101,15 +101,19 @@ bd show {{source_bead}}
 bd dep tree {{source_bead}} --readonly || true
 ```
 
-## Step 2 — Enumerate the live formula catalog
+## Step 2 — Enumerate the live formula and agent catalogs
 
 ```bash
 FORMULAS="$(gc formula list 2>/dev/null || true)"
+AGENTS="$(gc agent list 2>/dev/null || true)"
 printf '%s\n' "$FORMULAS" | sort
+printf '%s\n' "$AGENTS" | sort
 ```
 
 The dispatch-planning formula owns formula selection for fresh work. This
-router only chooses whether work is already clear enough to continue.
+router only chooses whether work is already clear enough to continue. A
+continue path is executable only when the selected formula appears in
+`$FORMULAS` and the selected `gc.run_target` appears in `$AGENTS`.
 
 ## Step 3 — Choose a route
 
@@ -163,7 +167,7 @@ route_event="$(bd create "mathcity.work route for {{source_bead}}" \
 bd dep relate "$route_event" "{{source_bead}}"
 ```
 
-## Step 5 — Verify no active worker already owns the bead
+## Step 5 — Verify no active worker or child workflow already owns the bead
 
 ```bash
 assignee="$(bd show "{{source_bead}}" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
@@ -171,7 +175,14 @@ if [ -n "$assignee" ]; then
   echo "ALREADY DISPATCHED — bead {{source_bead}} has active assignee: $assignee; aborting duplicate mathcity.work dispatch" >&2
   exit 1
 fi
+bd dep list "{{source_bead}}" --readonly || true
 ```
+
+Review the dependency/dependent list for an active child workflow already
+routed from this source bead. If an open or in-progress child workflow exists
+for this objective, abort instead of dispatching a duplicate. If the child graph
+is stale, ambiguous, closed-but-incomplete, or missing routing metadata, choose
+COMMISSION so the approval brief can reconcile it explicitly.
 
 ## Step 6 — Resolve child run target
 
@@ -200,6 +211,11 @@ resolve_child_run_target() {
 }
 
 CHILD_RUN_TARGET="$(resolve_child_run_target)" || exit 1
+
+printf '%s\n' "$AGENTS" | grep -F "$CHILD_RUN_TARGET" >/dev/null 2>&1 || {
+  echo "ROUTE TARGET FAILED — $CHILD_RUN_TARGET is not in the live agent catalog" >&2
+  exit 1
+}
 ```
 
 ## Step 7 — Dispatch the selected child formula

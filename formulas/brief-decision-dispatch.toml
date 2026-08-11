@@ -18,10 +18,12 @@ Routing contract:
              be `commission-dispatch.v1`, action must be `gc_sling`, formula
              must exist in `gc formula list`, source_bead must match the
              decision source, terminal_brief_required must be true, and the
-             target bead must have no active assignee. Then run the approved
-             `gc sling` with the block's vars and append the normal SUCCESS
-             ledger line. Do not fall through to publisher handoff for a
-             commission continuation.
+             target bead must have no active assignee, and the run target must
+             exist in `gc agent list`. Then run the approved `gc sling` with
+             the block's vars and append the normal SUCCESS ledger line. If
+             APPROVE dispatch fails, create a visible blocked work item linked
+             to the source bead before writing the retry ledger line. Do not
+             fall through to publisher handoff for a commission continuation.
 
   approve without continuation_contract
            → Read the source bead's existing metadata (`gc bd update` idioms
@@ -333,6 +335,14 @@ dispatch_slug() {
           if [ -z "$cont_run_target" ] || [ "$cont_run_target" = "auto" ]; then
             cont_run_target="$RIG_NAME/gc.run-operator"
           fi
+          if ! gc agent list 2>/dev/null | grep -F "$cont_run_target" >/dev/null 2>&1; then
+            ok=false
+            outcome="failure"
+            action_taken="approve failed: commission run target $cont_run_target not in live agent catalog"
+          fi
+        fi
+
+        if $ok; then
           vars_args="$(awk '
             /^\\[continuation.vars\\]/ { in_vars=1; next }
             /^\\[/ { in_vars=0 }
@@ -357,6 +367,32 @@ dispatch_slug() {
           action_taken="approve failed: malformed commission-dispatch.v1 continuation"
         else
           outcome="failure"
+        fi
+
+        if [ "$outcome" = "failure" ]; then
+          if [ "$retries" -eq 0 ]; then
+            blocked_meta="$(jq -n \
+              --arg sb "$source_bead" \
+              --arg slug "$slug" \
+              --arg formula "$cont_formula" \
+              --arg target "$cont_run_target" \
+              --arg reason "$action_taken" \
+              '{source_bead: $sb, brief_slug: $slug, formula: $formula, run_target: $target, decision_dispatch_failure: $reason}')"
+            blocked_work_item="$(gc bd --rig "$RIG_NAME" create \
+              --type=bug \
+              --priority=2 \
+              --title="[blocked] commission approval dispatch $slug" \
+              --metadata "$blocked_meta" \
+              --json 2>/dev/null | jq -r '.id // empty' 2>/dev/null || true)"
+            if [ -n "$blocked_work_item" ]; then
+              gc bd --rig "$RIG_NAME" dep relate "$blocked_work_item" "$source_bead" 2>/dev/null || true
+              action_taken="$action_taken; blocked work item: $blocked_work_item"
+            else
+              action_taken="$action_taken; blocked work item creation failed"
+            fi
+          else
+            action_taken="$action_taken; blocked work item already requested on prior retry"
+          fi
         fi
       else
       # Approval = merge back edge. Fail-closed three-state branch check

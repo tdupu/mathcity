@@ -20,8 +20,14 @@ grep -q 'default = "auto"' "$FORMULA" \
   || fail "child_run_target does not default to auto"
 grep -q 'gc rig list --json' "$FORMULA" \
   || fail "formula does not consult the rig registry"
+grep -q 'gc agent list' "$FORMULA" \
+  || fail "formula does not consult the live agent catalog"
 grep -q 'startswith($p + "-")' "$FORMULA" \
   || fail "formula does not use bead-prefix matching"
+grep -q 'active child workflow' "$FORMULA" \
+  || fail "formula does not guard against duplicate active child workflows"
+grep -q 'terminal path is briefed' "$FORMULA" \
+  || fail "formula does not require explicit continue paths to end in a briefed path"
 grep -q 'gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on simple-work-briefed' "$FORMULA" \
   || fail "simple child dispatch does not use resolved target"
 grep -q 'gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on build-basic-briefed' "$FORMULA" \

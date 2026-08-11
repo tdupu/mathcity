@@ -160,9 +160,16 @@ Append to `$GC_WORK_DIR/{{brief_slug}}-commission.md`:
 
 - `## Proposed Dispatch Graph`
 - A titled plaintext graph, for example `Dependency Graph For <source_bead>`
+- `## Selected Formulas`
 - Formula names for each graph node
+- `## Live Catalog Evidence`
+- The `gc formula list` and `gc agent list` evidence relevant to the selected
+  graph
+- `## Test Gates`
+- `## Brief Gates`
 - Brief gates and test gates
 - What happens on APPROVE, REVISE, REJECT, and DEFER
+- `## Continuation`
 - A machine-readable continuation block named `commission-dispatch.v1`
 
 The continuation block must specify:
@@ -243,9 +250,12 @@ The brief MUST contain:
 - Verifiable goals and translation check
 - Existing-work reconciliation
 - The titled plaintext dispatch graph
-- Formula list actually selected for the graph
-- Brief/test gates in the proposed graph
-- The full `commission-dispatch.v1` continuation block
+- `## Selected Formulas` — formula list actually selected for the graph
+- `## Live Catalog Evidence` — runtime formula and agent catalog evidence for
+  selected formulas and targets
+- `## Test Gates` — verification gates in the proposed graph
+- `## Brief Gates` — adjudication gates in the proposed graph
+- `## Continuation` — the full `commission-dispatch.v1` continuation block
 - Recommended verdict:
   - APPROVE: execute the continuation block
   - REVISE: send back to commissioning with requested changes
