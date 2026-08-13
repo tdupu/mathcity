@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical index of every formula in the mathcity pack.**
 
-32 formulas in `mathcity/formulas/`. This file is the ONE complete list. When in doubt, **this file wins**.
+33 formulas in `mathcity/formulas/`. This file is the ONE complete list. When in doubt, **this file wins**.
 
 **Maintenance (single source of truth):**
 - `formula-creator-math` appends the new formula's row here as a required step before filing the brief.
@@ -15,7 +15,7 @@ _Regenerate/verify with `/update-README`._
 
 ---
 
-## Formulas — `mathcity/formulas/`  (32)
+## Formulas — `mathcity/formulas/`  (33)
 
 | Formula | Shape | What it does |
 |---|---|---|
@@ -41,6 +41,7 @@ _Regenerate/verify with `/update-README`._
 | `lost-bead-classification-rollup` | do-work | Group lost-bead classifications by fingerprint and prepare downstream filter-rule proposals. |
 | `lost-bead-upstream-repair-rollup` | do-work | Create upstream repair-brief candidates from repeated lost-bead fingerprints. |
 | `math-brief-prep` | do-work | Batch brief-prep cycle: fan-out produce across pending source beads, then file. |
+| `mathcity-issue-briefed` | do-work | Draft a template-complete issue body for an explicitly declared target repo (default `tdupu/mathcity`) and file it as a human decision brief. Thin adapter over `create-issue-briefed`; never files the issue. |
 | `no-brainer-candidate-curate` | do-work | Curate candidate briefs for the no-brainer classifier. |
 | `no-brainer-classify` | do-work | Classify and optionally process no-brainer briefs. |
 | `on-merge-brief-record` | do-work | Post-merge brief-record duty: inspect recently closed beads and file brief records for those that lacked one. |
