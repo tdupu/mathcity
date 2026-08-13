@@ -4,10 +4,34 @@ wake_mode = "fresh"
 work_dir = "{{.AgentBase}}"
 nudge = "Run gc hook --claim --json now; if it returns a brief-pipeline machine step, execute the claimed formula immediately."
 idle_timeout = "2h"
-# Persistent city-scope pool so brief-pipeline orders staff deterministically
-# without relying on on_demand dispatch (open bug gs-7mr). At least one
-# session stays warm; scale up to twelve under load (raised 2->6 hotfix
-# 2026-07-15, then 6->12 gt-gwb30 2026-07-28 after sustained brief-operator
-# saturation — ALL rigs' brief-pipeline formulas funnel into this one pool).
-min_active_sessions = 1
+# MUST stay 0 while wake_mode = "fresh". Do not "restore the warm session" by
+# raising this — that pairing is self-defeating and wedges the pool at zero
+# members (issue #10).
+#
+# Why: min_active_sessions >= 1 creates standing pool demand, so whenever the
+# member is not live the reconciler issues a RESUME against the existing
+# session bead. wake_mode = "fresh" makes that resume replay a stale/dead
+# session's pre_start hook, which hangs and is killed at the ~30s resume
+# deadline. Every following reconcile re-attempts the identical doomed resume,
+# so a live member is never materialized.
+#
+# gascity guards exactly this case in cmd/gc/pool_desired_state.go
+# (gastownhall/gascity#4849), but only when the session bead is in StateAsleep.
+# Sessions wedged this way are observed in `creating` / `start-pending` and
+# never reach `asleep`, so the guard does not fire for us.
+#
+# The prior value of 1 was introduced to keep "at least one session warm" and
+# avoid on_demand dispatch (open bug gs-7mr). It did the opposite: it
+# guaranteed ZERO sessions, permanently — strictly worse than the on_demand
+# path it was working around. gs-7mr's current status was NOT re-verified when
+# this was changed; if on_demand staffing misbehaves again, fix it there or
+# broaden the gascity guard, but do NOT re-pair min >= 1 with wake_mode
+# "fresh". Enforced by tests/brief-operator-pool-config/smoke_test.sh.
+#
+# Trade-off accepted: no always-warm member, so the first brief-pipeline step
+# after an idle period pays a cold start.
+min_active_sessions = 0
+# Scale up to twelve under load (raised 2->6 hotfix 2026-07-15, then 6->12
+# gt-gwb30 2026-07-28 after sustained brief-operator saturation — ALL rigs'
+# brief-pipeline formulas funnel into this one pool).
 max_active_sessions = 12
