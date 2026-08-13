@@ -12,11 +12,24 @@ or modifies any bead.
 ## Pre-flight
 
 ```bash
-gc dolt health 2>&1 | head -3
+# Do NOT `head -n` this — the compaction-quarantine block is printed LAST and
+# gets truncated away. THREE-valued exit; see template-fragments/dolt-preflight.md.
+_dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
+printf '%s\n' "$_dolt_out" | sed -n '1,3p'
+printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p'
+echo "dolt health exit: $_dolt_rc"
 ```
 
-If Dolt is unreachable: report `DOLT DOWN — most bd commands will fail`.
-Continue with tmux/session checks only.
+Report by exit code:
+
+- **0** — Dolt healthy. Proceed.
+- **2** — `DOLT QUARANTINED — reachable, but auto-GC is blocked` on the databases
+  named in the quarantine block. **Not** a connectivity failure: `bd` resolves
+  beads normally, so continue the full status run. Surface the quarantined
+  database names and how long each has been held; reclamation is `gc dolt
+  compact` after an operator clears the marker.
+- **1 or other** — `DOLT DOWN — most bd commands will fail`. Continue with
+  tmux/session checks only.
 
 ## Procedure
 
@@ -166,6 +179,10 @@ Key metrics to surface:
 - Latency (warn ≥ 1000ms, critical ≥ 3000ms)
 - Connections (warn ≥ 50, critical ≥ 200)
 - Disk (warn ≥ 1G per DB)
+- **Compaction quarantine** — the last block of the output (`Compaction
+  quarantine: N (auto-GC blocked)`). Any standing marker is a warn; held > 7d is
+  critical, because the flatten step that bounds store growth is refused for the
+  whole hold. Name each database and its hold time.
 
 High latency during concurrent `gc sling` runs is NORMAL and transient.
 Sustained high latency with low connection count warrants `gc dolt logs`.

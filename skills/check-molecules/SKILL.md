@@ -25,14 +25,21 @@ The enumeration script probes its dependencies and fails loud if missing:
 - Dolt reachable (`gc dolt health`) — bd cannot resolve beads otherwise; the
   script tells you to run `gc dolt start` / `gc start`.
 
-If either check fails the script exits with the standard P1.14 message; fix the
+The Dolt probe is **three-valued**, not boolean
+(`template-fragments/dolt-preflight.md`): exit 0 is healthy, exit **2** means
+the server is reachable but a compaction quarantine is standing — non-fatal, so
+the script prints a warning naming the quarantined databases and **proceeds**.
+Only exit 1 (or a missing `gc`) aborts, with the standard P1.14 message; fix the
 dependency and re-run. (Do NOT trust `gc status` for this — bug `gs-0cy2`.)
 
 ## Run it
 
 ```bash
-bash <city-root>/.claude/skills/check-molecules/scripts/enumerate-molecules.sh
+bash <city-root>/.claude/skills/mathcity.check-molecules/scripts/enumerate-molecules.sh
 ```
+
+(Skills install under their pack-namespaced directory, hence the `mathcity.`
+prefix — `.claude/skills/check-molecules/` does not exist.)
 
 (or the pack path
 `<mathcity-pack-root>/skills/check-molecules/scripts/enumerate-molecules.sh`).

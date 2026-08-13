@@ -17,12 +17,20 @@ One command, one table, zero side effects. Reports all actionable briefs
 ## Pre-flight (P1.14)
 
 ```bash
-gc dolt health >/dev/null 2>&1 || {
-  echo "I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads)."
-  echo "Run 'gc dolt status' / 'gc dolt start' and retry."
-  echo "(check-briefs reads bead status from the live store to filter already-closed briefs.)"
-  exit 1
-}
+# `gc dolt health` is THREE-valued: 0 healthy, 2 reachable-but-quarantined
+# (non-fatal), 1/other unreachable. See template-fragments/dolt-preflight.md.
+_dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
+case "$_dolt_rc" in
+  0) ;;
+  2) echo "WARNING: Dolt is up, but auto-GC is blocked by a standing compaction quarantine:"
+     printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p' | sed 's/^/  /'
+     echo "  Not fatal: bd works. Reclaim with 'gc dolt compact' once an operator clears the marker."
+     ;;
+  *) echo "I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads)."
+     echo "Run 'gc dolt status' / 'gc dolt start' and retry."
+     echo "(check-briefs reads bead status from the live store to filter already-closed briefs.)"
+     exit 1 ;;
+esac
 ```
 
 ## Execution

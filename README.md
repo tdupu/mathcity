@@ -115,6 +115,7 @@ Planned surfaces are tracked in the issue tracker and summarized in
 | Verify work routing | local shell | shell | `bash tests/work-briefed-routing/smoke_test.sh` | `tests/work-briefed-routing/smoke_test.sh` | current | none |
 | Verify commissioning formula | local shell | shell, Python 3.11+ | `bash tests/commission-work-briefed/smoke_test.sh` | `tests/commission-work-briefed/smoke_test.sh` | current | none |
 | Verify Superpowers availability | local shell or live city | shell, Python 3.11+, `rg`; optional `gc` for live catalog check | `bash tests/superpowers-availability/smoke_test.sh`; live: `RUN_LIVE_GC=1 bash tests/superpowers-availability/smoke_test.sh` | `tests/superpowers-availability/smoke_test.sh` | current | `mc-fe7.1` tracks hygienic pinned import |
+| Verify Dolt pre-flight exit codes | local shell | shell (no live `gc`, `bd`, or Dolt server needed — uses stubs) | `bash tests/dolt-preflight-exit-codes/smoke_test.sh` | `tests/dolt-preflight-exit-codes/smoke_test.sh` | current | `#7`, `#8` |
 | Audit documentation policy | Codex or Claude Code | mathcity checkout | `/check-documentation-policy` | acceptance check in this documentation refactor | current | none |
 
 ## Development And Tests

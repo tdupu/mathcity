@@ -62,7 +62,14 @@ IMPL=$(gc session list --state active 2>/dev/null | grep "gc\.implementation-wor
 
 **Dolt:**
 ```bash
-LATENCY=$(gc dolt health 2>/dev/null | grep -oE '[0-9]+ms' | head -1)
+# Capture the WHOLE report once. THREE-valued exit: 0 healthy, 2 reachable but
+# compaction-quarantined (non-fatal), 1/other unreachable.
+# See template-fragments/dolt-preflight.md.
+DOLT_OUT=$(gc dolt health 2>/dev/null); DOLT_RC=$?
+# Latency lives on the `Server: running (... latency Nms)` line — anchor there
+# rather than taking the first `Nms` anywhere in the report.
+LATENCY=$(printf '%s\n' "$DOLT_OUT" | grep -m1 '^Server:' | grep -oE '[0-9]+ms' | tail -1)
+QUARANTINE=$(printf '%s\n' "$DOLT_OUT" | sed -n '/^Compaction quarantine:/,$p')
 ```
 
 **Molecules** — for each active run-operator or implementation-worker session,
@@ -91,7 +98,8 @@ right place to surface this so the human can act directly.
 | Condition | Alert reason |
 |---|---|
 | `TMUX_COUNT` == 0 | City is DOWN — no tmux sessions |
-| `LATENCY` >= 3000ms (or Dolt unreachable) | Dolt critical — city may stall |
+| `LATENCY` >= 3000ms, or `DOLT_RC` is 1/other (unreachable) | Dolt critical — city may stall |
+| `DOLT_RC` == 2 (`QUARANTINE` non-empty) | Compaction quarantined — auto-GC blocked on the named DBs; NOT a stall, but the store grows unbounded until an operator clears the marker and re-runs `gc dolt compact`. Alert once per hold, naming each DB and its hold time. |
 | Any session last-active > 2h AND it holds a shuffler lock | Shuffler stall |
 | Any molecule with +1h == 0 AND running for > 3h | Molecule stalled |
 | `PILE` > 0 AND no active brief-operators | Shuffler dead with pile backlog |
@@ -113,7 +121,7 @@ Emit a single copy-pastable block:
 ---
 1. Fleet: <N> tmux sessions (ground truth) — <stable/STALLED>. <N> dispatchers, <N> brief-operators <active/idle>, <N> run-operators, <N> impl-workers. [Use `gc session list` counts, NOT `gc status` running count — see gs-0cy2]
 
-2. Dolt: ✅ <N>ms — healthy. / ⚠️ <N>ms — WARN latency. / ❌ DOWN.
+2. Dolt: ✅ <N>ms — healthy. / ⚠️ <N>ms — WARN latency. / ⚠️ <N>ms — up, COMPACTION QUARANTINED: <db> (held <T>), … / ❌ DOWN.
 
 3. Molecules:
 | Molecule           | Steps    | +1h | Status       | Started    | Completed   |
@@ -151,7 +159,12 @@ On `FIRING == 1` only:
 ## Stall diagnosis hints
 
 - **No tmux sessions**: city crashed. Run `/prime-outsider` then restart sequence.
-- **Dolt DOWN**: run `gc dolt status`; if stopped, `gc dolt start`.
+- **Dolt DOWN** (`DOLT_RC` 1/other): run `gc dolt status`; if stopped, `gc dolt start`.
+- **Dolt QUARANTINED** (`DOLT_RC` == 2): do **not** run `gc dolt start` — the
+  server is already up. Auto-GC is refused for the named databases until an
+  operator inspects and clears the marker under
+  `.gc/runtime/packs/dolt/compact-quarantine/<db>`; reclamation is then `gc dolt
+  compact`. Report it; never clear a marker from this watchdog.
 - **Shuffler lock stale**: check `gc session list` for brief-operator sessions; if none, `rm <city-root>/.beads/briefs/.shuffle.lock`.
 - **Molecule +1h == 0 for > 3h**: `gc session peek <session-id>` to confirm. If stuck, report to the human adjudicator.
 - **Usage limit hit**: city agents pause on API rate limits. Alert text: "usage limit suspected — agents may be paused. Run /city-status to confirm, then wait or re-nudge sessions."

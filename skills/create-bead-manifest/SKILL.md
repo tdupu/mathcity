@@ -18,15 +18,32 @@ Produce a dated, noise-filtered bead manifest at
 
 ## Pre-flight (check-zero)
 
-Before doing anything, confirm:
-1. `gc dolt health >/dev/null 2>&1` — Dolt is reachable (bd needs it).
-2. `bd list --help >/dev/null 2>&1` — bd CLI is functional.
+Before doing anything, confirm Dolt is reachable and the bd CLI works. Use the
+canonical three-valued Dolt probe (`template-fragments/dolt-preflight.md`) — a
+`gc dolt health` exit of **2** means "reachable, compaction quarantined", which
+is **non-fatal**; only exit 1 (or a missing `gc`) means Dolt is down:
 
-If either fails:
-```
-I'm sorry, I can't do that — <Dolt/bd> is unreachable.
-Run 'gc dolt status' / 'gc dolt start' to bring Dolt up, then retry.
-(create-bead-manifest needs Dolt to resolve bead metadata.)
+```bash
+# `gc dolt health` is THREE-valued: 0 healthy, 2 reachable-but-quarantined
+# (non-fatal), 1/other unreachable. See template-fragments/dolt-preflight.md.
+_dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
+case "$_dolt_rc" in
+  0) ;;
+  2) echo "WARNING: Dolt is up, but auto-GC is blocked by a standing compaction quarantine:"
+     printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p' | sed 's/^/  /'
+     echo "  Not fatal: bd works. Reclaim with 'gc dolt compact' once an operator clears the marker."
+     ;;
+  *) echo "I'm sorry, I can't do that — Dolt is unreachable."
+     echo "Run 'gc dolt status' / 'gc dolt start' to bring Dolt up, then retry."
+     echo "(create-bead-manifest needs Dolt to resolve bead metadata.)"
+     exit 1 ;;
+esac
+bd list --help >/dev/null 2>&1 || {
+  echo "I'm sorry, I can't do that — the bd CLI is not functional."
+  echo "Run the Beads install/update step and retry."
+  echo "(create-bead-manifest enumerates open beads via bd.)"
+  exit 1
+}
 ```
 
 ## Step 1 — Determine output path

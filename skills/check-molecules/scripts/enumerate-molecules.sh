@@ -18,10 +18,20 @@ command -v bd >/dev/null 2>&1 || {
   echo "I'm sorry, I can't do that — bd is not on PATH."
   echo "Run the Beads install/update step and retry."
   echo "(This skill enumerates molecule status via bd.)"; exit 1; }
-gc dolt health >/dev/null 2>&1 || {
-  echo "I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads)."
-  echo "Run 'gc dolt start' (or 'gc start') and retry."
-  echo "(This skill needs the live bead store.)"; exit 1; }
+# `gc dolt health` is THREE-valued: 0 healthy, 2 reachable-but-compaction-
+# quarantined (non-fatal — bd works), 1/other unreachable. Never test it as a
+# boolean. Canonical block: template-fragments/dolt-preflight.md.
+_dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
+case "$_dolt_rc" in
+  0) ;;
+  2) echo "WARNING: Dolt is up, but auto-GC is blocked by a standing compaction quarantine:"
+     printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p' | sed 's/^/  /'
+     echo "  Not fatal: bd works. Reclaim with 'gc dolt compact' once an operator clears the marker."
+     ;;
+  *) echo "I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads)."
+     echo "Run 'gc dolt start' (or 'gc start') and retry."
+     echo "(This skill needs the live bead store.)"; exit 1 ;;
+esac
 
 tmp_dir="$(mktemp -d)"; trap 'rm -rf "$tmp_dir"' EXIT
 LIVE_IDS="$tmp_dir/live_ids"; WORKED="$tmp_dir/worked"; WORKED2="$tmp_dir/worked2"

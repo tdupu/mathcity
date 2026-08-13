@@ -54,7 +54,16 @@ higher one is true):
 tmux -L gt ls >/dev/null 2>&1 && echo "tmux: UP" || echo "tmux: DOWN"
 
 # B. Is Dolt reachable? (bd can't resolve beads otherwise — use gc dolt, NOT gc status)
-gc dolt health >/dev/null 2>&1 && echo "dolt: UP" || echo "dolt: DOWN"
+#    THREE-valued: 0 = UP, 2 = UP but compaction-quarantined (NOT a stall cause),
+#    1/other = genuinely DOWN. See template-fragments/dolt-preflight.md.
+_dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
+case "$_dolt_rc" in
+  0) echo "dolt: UP" ;;
+  2) echo "dolt: UP (compaction quarantined — auto-GC blocked, NOT a stall cause)"
+     printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p' | sed 's/^/  /'
+     echo "  Reclaim with 'gc dolt compact' once an operator clears the marker." ;;
+  *) echo "dolt: DOWN" ;;
+esac
 
 # C. Per-rig: is the rig suspended? (reconciler intentionally skips its agents)
 gc rig list 2>/dev/null
