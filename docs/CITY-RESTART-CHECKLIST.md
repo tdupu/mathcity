@@ -108,7 +108,7 @@ Parent: [../README-mayor.md](../README-mayor.md)
   ```
   Look for:
   - `Controller: running`
-  - `mathcity.brief-operator scaled (min=1, max=12)` — one of the slots should start warming up
+  - `mathcity.brief-operator scaled (min=0, max=3)` — pool starts empty; a member spins up on demand (first claim pays a cold start)
   - All rig dispatchers listed (not all need to be running yet)
 
 - [ ] **Wait for brief-operator to come up** (within ~60s)
@@ -419,13 +419,13 @@ gc status
 
 | Agent | Type | Min | Max | Purpose |
 |---|---|---|---|---|
-| `mathcity.brief-operator` | scaled pool | 1 | 2 | Brief pipeline machine steps |
+| `mathcity.brief-operator` | scaled pool | 1 | 3 | Brief pipeline machine steps |
 | `bd.dog` | scaled pool | 0 | 2 | Bead watchdog / health |
 | `codex-worker` | on-demand | 0 | N | Codex-dispatched work |
 | `core.control-dispatcher` | 1 per rig | 1 | 1 | Per-rig order routing |
 | `gc.run-operator` | on-demand | 0 | N | Dispatched formula runs |
 
-**Assessment:** For a personal dev setup with the brief system and briefed PR/issue handoffs on 2–3 active rigs, 2 brief-operators is adequate. Surge capacity: temporarily raise `max_active_sessions = 3` in `<mathcity-pack-root>/agents/brief-operator/agent.toml` and run `gc reload`.
+**Assessment:** For a personal dev setup with the brief system and briefed PR/issue handoffs on 2–3 active rigs, 3 brief-operators is the current temporary cap. Workaround `gt-rr2gz1` tracks retiring or justifying this cap after the gascity/runtime order-history and startup root causes are resolved.
 
 - [ ] **Check for pool exhaustion signals**
   ```bash

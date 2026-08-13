@@ -31,7 +31,10 @@ idle_timeout = "2h"
 # Trade-off accepted: no always-warm member, so the first brief-pipeline step
 # after an idle period pays a cold start.
 min_active_sessions = 0
-# Scale up to twelve under load (raised 2->6 hotfix 2026-07-15, then 6->12
-# gt-gwb30 2026-07-28 after sustained brief-operator saturation — ALL rigs'
-# brief-pipeline formulas funnel into this one pool).
-max_active_sessions = 12
+# TEMPORARY workaround gt-rr2gz1 (brief #92, Option B, 2026-08-13): cap at three
+# is NOT a derived capacity number — it is a holding value while the pool keeps
+# getting trapped. Removal trigger: tdupu/mathcity#9 (brief-shuffle
+# workflow-finalize head-close hard-quarantines every run and traps operators;
+# deployed gc lacks upstream #5020). Re-derive or retire this cap once #9's
+# finalize-quarantine fix is deployed.
+max_active_sessions = 3

@@ -124,7 +124,7 @@ Rules:
 
 | Agent | Pool size | Scope | Role |
 |-------|-----------|-------|------|
-| `mathcity.brief-operator` | min=1, max=12 | city | Runs deterministic brief-pipeline machine steps (shuffle, watchdog, decision dispatch, archive sweeps, no-brainer classification). **Never adjudicates, never presents.** Wake mode: fresh (each claim is a new session). Idle timeout: 2h. |
+| `mathcity.brief-operator` | min=0, max=3 | city | Runs deterministic brief-pipeline machine steps (shuffle, watchdog, decision dispatch, archive sweeps, no-brainer classification). **Never adjudicates, never presents.** Wake mode: fresh (each claim is a new session). Idle timeout: 2h. Temporary cap tracked by `gt-rr2gz1`. |
 | `bd.dog` | min=0, max=2 | city | Beads daemon; min=0 means it only starts under load. |
 
 ### Per-Rig Persistent Agents (one per rig)
@@ -659,7 +659,7 @@ With the city running:
 
 | Pool | Min | Max | Notes |
 |------|-----|-----|-------|
-| `mathcity.brief-operator` | 1 | 2 | Always-warm; handles all brief-pipeline machine steps |
+| `mathcity.brief-operator` | 1 | 3 | Always-warm; handles all brief-pipeline machine steps; temporary cap tracked by `gt-rr2gz1` |
 | `bd.dog` | 0 | 2 | Starts under load only |
 | `codex-worker` | 0 | 1 (per rig) | Fallback=true; on-demand only |
 | Per-rig `core.control-dispatcher` | 1 | 1 | ~13 rigs |
@@ -669,9 +669,9 @@ With the city running:
 **Is this enough?** For the hello-world smoke test (2 rigs, sequential briefs), yes.
 For high-throughput scenarios (many concurrent brief-preps), `math-brief-prep` fans out
 as many `gc.run-operator` sessions as there are pending briefs — the controller manages
-the queue. The `mathcity.brief-operator` pool at max=12 is the potential bottleneck for
-the city-scope machine steps; `brief-review-patrol` and `brief-shuffle-pile` rig-scope
-steps use `gc.run-operator` (on-demand, unbounded effectively).
+the queue. The `mathcity.brief-operator` pool at max=3 is an intentional temporary
+bottleneck while city startup/order-history latency is under investigation; `brief-review-patrol`
+and `brief-shuffle-pile` rig-scope steps use `gc.run-operator` (on-demand, unbounded effectively).
 
 Pools (min/max_active_sessions in agent.toml) **are still a first-class concept** in gascity.
 The `fallback=true` flag in `agent.toml` (as seen in codex-worker) is distinct — it means
