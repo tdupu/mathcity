@@ -1,0 +1,202 @@
+description = """
+MathCity-targeted issue-filing adapter. Drafts a template-complete issue body for an
+EXPLICITLY DECLARED target repo — default `tdupu/mathcity` — and routes it through
+the brief pipeline for human adjudication. It NEVER files the issue.
+
+WHY THIS EXISTS: the investigation discipline we want lives upstream in
+`contributing/skills/write-issue`, which hardcodes `gastownhall/gascity` in nine
+places; every MathCity use has to re-substitute the repo by hand, and issues #7-#11
+on `tdupu/mathcity` were filed correctly only because each dispatched agent was TOLD
+in its prompt to substitute. This adapter makes the target a declared, enum-validated
+parameter with a default, so routing is never an assumption in prose.
+
+SHAPE - adapter over base (`github-issue-fix` / `github-issue-triage` pattern):
+a thin wrapper that `extends` an existing formula and replaces ONLY what it
+customizes. The base here is `create-issue-briefed`, which already drafts from the
+target repo's live `.github/ISSUE_TEMPLATE/*.yml` and already never runs the
+issue-create verb before approval. This wrapper overrides:
+
+  - `[vars.target_repo]` - default `tdupu/mathcity`, enum-restricted to the
+    recognized targets (base default was "", meaning "guess from the checkout").
+  - `[vars.issue_kind]`, `[vars.investigation_standard]` - new.
+  - step `intake` - adds target validation, kind-driven template selection, and the
+    investigation-evidence gate.
+
+Steps `compose-body` and `file-brief` are INHERITED unchanged, so the terminal step
+id remains `file-brief` (POLICY-formulas.md F8.1) and the brief-producer.v1 contract
+metadata is inherited with it. NOTE for anyone extending this further: resolved
+child steps that are NOT id-overrides append AFTER the parent's steps
+(gascity `internal/formula/parser.go`, `mergeSteps`), so a new step appended here
+would land after `file-brief` and break F8.1. Override by id; do not append.
+
+A NEW TARGET REPO IS A SMALL OVERRIDE, NOT A FORK: add
+`extends = ["mathcity-issue-briefed"]` and override `[vars.target_repo]` (and its
+enum). Do not copy this file.
+
+WHAT THIS FORMULA DOES NOT DO: it does not perform the investigation. Stages 1-7 of
+`template-fragments/issue-investigation-standard.md` require judgment and a repo
+checkout; this formula GATES on investigation evidence already recorded on the
+source bead (by a human, by the `write-issue-targeted` skill, or by a prior planning
+step) and fails closed when it is absent. Filing an issue whose investigation was
+invented by the drafting agent is the exact failure the standard exists to prevent.
+
+STEPS:
+  1. intake        - validate the declared target repo, select the issue template by
+                     kind from the target's LIVE .github/ISSUE_TEMPLATE/, read the
+                     description, and gate on investigation evidence. OVERRIDDEN.
+                     [gc.run-operator]
+  2. compose-body  - INHERITED from create-issue-briefed. Fills the template's fields
+                     from the real description; invents nothing.  [gc.run-operator]
+  3. file-brief    - INHERITED from create-issue-briefed. Files the paste-ready body
+                     as a decision brief. TERMINAL.  [mathcity.brief-operator]
+
+KNOWN LIMITATION: the inherited `file-brief` step routes to `mathcity.brief-operator`,
+a pool currently wedged at 0 sessions (tdupu/mathcity#10). Until that lands, the
+terminal briefed step cannot be exercised end-to-end; static conformance is covered
+by `tests/mathcity-issue-briefed/smoke_test.sh`.
+"""
+formula = "mathcity-issue-briefed"
+extends = ["create-issue-briefed"]
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "mathcity-issue-briefed"
+description = "Draft a template-complete issue body for an explicitly declared target repo (default tdupu/mathcity) and file it as a human decision brief. Adapter over create-issue-briefed; never files the issue."
+
+[vars]
+
+[vars.target_repo]
+description = "Target repo the issue is filed against, as owner/name. DECLARED, never guessed. Default tdupu/mathcity; the alternatives are explicit. gc/bd binary bugs go to gastownhall/gascity; upstream-owned gascity-packs content also goes to gastownhall/gascity (subdomains/dev/POLICY.md P3.2), so tdupu/gascity-packs is for fork-local content only."
+default = "tdupu/mathcity"
+enum = ["tdupu/mathcity", "tdupu/gascity-packs", "gastownhall/gascity", "tdupu/gascity"]
+
+[vars.issue_kind]
+description = "Kind of issue, which selects the template in the target repo's .github/ISSUE_TEMPLATE/. Drives both template selection and the required-MRE gate (bug requires an MRE)."
+default = "bug"
+enum = ["bug", "feature", "docs"]
+
+[vars.investigation_standard]
+description = "Repo-relative path to the shared investigation standard both MathCity issue surfaces read. Overriding this points the gate at a different standard; it does not disable it."
+default = "template-fragments/issue-investigation-standard.md"
+
+[[steps]]
+id = "intake"
+title = "Validate the declared target, select its live template, and gate on investigation evidence"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+OVERRIDES the base `create-issue-briefed` intake. READ-ONLY; performs no write to
+any target repo.
+
+Read `{{investigation_standard}}` first — it is the standard this step gates on, and
+its stage 0 table is the routing authority for the target repo.
+
+**1. Validate the DECLARED target repo (no guessing):**
+```bash
+TARGET_REPO="{{target_repo}}"
+case "$TARGET_REPO" in
+  tdupu/mathcity|tdupu/gascity-packs|gastownhall/gascity|tdupu/gascity) : ;;
+  *)
+    echo "[mathcity-issue-briefed] BLOCKED: target_repo '$TARGET_REPO' is not a recognized target"
+    bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: unrecognized target_repo '$TARGET_REPO' (recognized: tdupu/mathcity, tdupu/gascity-packs, gastownhall/gascity, tdupu/gascity)"
+    gc runtime drain-ack; exit 0 ;;
+esac
+```
+The base formula resolved an empty target by guessing the checkout's GitHub parent.
+That guess is what this adapter exists to remove: an unset target now means the
+default `tdupu/mathcity`, and an unrecognized one fails closed (P6.1) instead of
+silently filing somewhere else.
+
+**2. Enter the local checkout, if one was supplied (READ-ONLY):**
+```bash
+REPO_DIR="{{repo_dir}}"
+[ -n "$REPO_DIR" ] && cd "$REPO_DIR"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+[ -n "$REPO_ROOT" ] && cd "$REPO_ROOT"
+```
+
+**3. Select the issue template BY KIND from the target's LIVE template set:**
+```bash
+ISSUE_KIND="{{issue_kind}}"
+TPL_DIR="${REPO_ROOT:-.}/.github/ISSUE_TEMPLATE"
+TEMPLATE="{{template}}"
+TEMPLATE_PATH=""
+if [ -n "$TEMPLATE" ] && [ -f "$TPL_DIR/$TEMPLATE" ]; then
+    TEMPLATE_PATH="$TPL_DIR/$TEMPLATE"
+elif [ -d "$TPL_DIR" ]; then
+    case "$ISSUE_KIND" in
+      bug)     TEMPLATE_PATH=$(ls "$TPL_DIR"/bug*.y*ml 2>/dev/null | head -1) ;;
+      feature) TEMPLATE_PATH=$(ls "$TPL_DIR"/feat*.y*ml 2>/dev/null | head -1) ;;
+      docs)    TEMPLATE_PATH=$(ls "$TPL_DIR"/doc*.y*ml 2>/dev/null | head -1) ;;
+    esac
+    [ -z "$TEMPLATE_PATH" ] && TEMPLATE_PATH=$(ls "$TPL_DIR"/*.y*ml "$TPL_DIR"/*.md 2>/dev/null | grep -v '/config.y' | head -1)
+fi
+```
+The templates are the enforcement point and they change without telling you — read
+them, never restate them. `config.yml` is the chooser config, not a submission
+template, and is excluded. If no local checkout is available, list the live set with
+`gh api "repos/$TARGET_REPO/contents/.github/ISSUE_TEMPLATE" --jq '.[].name'` and
+record which template you matched. TEMPLATE_PATH may end up empty — `compose-body`
+then produces a plain body.
+
+**4. Read the real issue description (fail-closed if empty):**
+```bash
+DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
+if [ -z "$DESC" ]; then
+    echo "[mathcity-issue-briefed] BLOCKED: {{source_bead}} has no description to draft an issue from"
+    bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: source bead has no description text to draft the issue from"
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**5. Investigation-evidence gate (fail-closed):**
+
+This formula does not investigate; it refuses to draft without evidence that someone
+did. Read the source bead's description and notes and confirm each of the following
+is PRESENT. Judge presence, not quality — a caveated stage honestly marked
+"not run, no checkout" is present; a stage silently missing is not.
+
+| Evidence | Standard | Required for |
+|---|---|---|
+| Duplicate search against `$TARGET_REPO`, open and closed, with the result | stage 2 | all kinds |
+| The problem confirmed on `$TARGET_REPO`'s current main, or an explicit "not run" with the reason | stage 3 | all kinds |
+| Design/policy corpus checked for the target, or an explicit "none applies" | stage 4 | all kinds |
+| A minimum reproducible example | stage 5 | **`bug` only** |
+| At least two fix candidates with trade-offs | stage 7 | `bug`, `feature` |
+
+Stage 2's duplicate search is also this formula's F4.1 reinvention gate: for a
+deliverable that IS a new issue, "does this already exist upstream" is exactly what
+`/check-zero` and `/check-wheel` ask. Record its verdict as `NO REINVENTION` or as
+the duplicate found.
+
+On any missing item:
+```bash
+echo "[mathcity-issue-briefed] BLOCKED: investigation evidence missing: <list the stages>"
+bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: investigation evidence missing for stage(s) <list> per {{investigation_standard}}. Run the write-issue-targeted skill (or record the evidence on this bead) before re-dispatching."
+gc runtime drain-ack; exit 0
+```
+
+**6. Record intake results for compose-body:**
+```bash
+bd update {{source_bead}} --notes "create-issue-briefed intake:
+  target_repo: $TARGET_REPO
+  template_path: ${TEMPLATE_PATH:-<none — plain body>}
+  issue_kind: $ISSUE_KIND
+  investigation_gate: PASS (per {{investigation_standard}})
+  duplicate-search verdict (F4.1): <NO REINVENTION | duplicate #N found>"
+```
+The `create-issue-briefed intake:` marker and the `target_repo` / `template_path`
+line order are a COMPATIBILITY CONTRACT with the inherited `compose-body` step,
+which greps for that literal marker and reads `template_path` from within the
+following five lines. Changing the marker or pushing `template_path` past the fifth
+line silently breaks template selection downstream — the body would be composed
+against no template at all, which is precisely the half-filled-template failure this
+pipeline exists to prevent.
+
+**Exit criteria:** target validated against the enum, template selected by kind,
+description confirmed non-empty, investigation evidence gate PASSED, results written
+to the root bead's notes under the compatibility marker. OR: fail-closed BLOCK note
++ drain-ack.
+"""
