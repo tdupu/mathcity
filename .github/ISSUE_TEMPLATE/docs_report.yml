@@ -1,0 +1,87 @@
+name: Documentation issue
+description: Report documentation that is wrong, missing, or misleading.
+title: "docs: "
+labels: ["kind/docs", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For docs in this repo — `README*.md`, `docs/`, `POLICY*.md`, `SETUP.md`,
+        `ONBOARDING.md`, and the prose inside a `SKILL.md` or formula TOML.
+
+        **Title:** `docs: <area>: <correction>` — e.g.
+        `docs: README-formulas: index missing create-issue-briefed`.
+
+        This form is deliberately the lightest of the three: a doc bug you don't
+        report because the form was long is worse than a doc bug reported tersely.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched open **and closed** issues and did not find a duplicate.
+          required: true
+
+  - type: input
+    id: doc
+    attributes:
+      label: Which document?
+      description: Repo path, plus the heading or line number if you have it.
+      placeholder: "README-formulas.md, § Catalog (line 88)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: wrong
+    attributes:
+      label: What does it say now?
+      description: |
+        Quote the current text verbatim, so the fix can be diffed against something
+        rather than searched for. If the problem is an omission, quote the
+        surrounding passage where the missing content belongs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: correct
+    attributes:
+      label: What should it say?
+      description: |
+        The corrected content, as close to paste-ready as you can manage.
+
+        If the doc contradicts the code, cite the source `file:line` that settles
+        it — `subdomains/dev/POLICY.md` P5.4 (truth is in the code) makes source the
+        tiebreaker, so a citation here converts an opinion into a verified fix.
+    validations:
+      required: true
+
+  - type: textarea
+    id: misleads
+    attributes:
+      label: Where did it mislead you?
+      description: |
+        What you or an agent actually did because of this text — a command that
+        failed, a wrong assumption carried into a plan, an onboarding step that
+        dead-ended. Docs that are merely incomplete rank below docs that actively
+        cause wrong action, and this field is how the two get told apart.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested priority
+      options:
+        - "P1 — actively causes wrong action or blocks onboarding"
+        - "P2 — misleading, but recoverable once noticed"
+        - "P3 — incomplete, stale, or unclear"
+        - "Unsure — please triage"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Related issues, bead IDs, or the commit that introduced the drift.

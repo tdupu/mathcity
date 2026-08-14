@@ -1,0 +1,197 @@
+name: Bug report
+description: Report a reproducible bug or regression in the mathcity pack.
+title: "bug: "
+labels: ["kind/bug", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For reproducible bugs and regressions in **this pack** — skills, formulas,
+        orders, gates, agent configs, and the docs that describe them.
+
+        **Wrong place?** A bug in the `gc` or `bd` binaries themselves belongs on
+        [gastownhall/gascity](https://github.com/gastownhall/gascity/issues), not here
+        (`subdomains/dev/POLICY.md`, P3.2). If a mathcity skill *misreads* something
+        `gc` reports, that half is a mathcity bug and belongs here — file both and
+        cross-link them.
+
+        **Title:** `bug: <surface>: <symptom>` — e.g.
+        `bug: check-molecules: Dolt pre-flight misreads exit 2 as unreachable`.
+
+        This form asks for the investigation a maintainer would otherwise have to
+        redo. It is the [`write-issue`](https://github.com/gastownhall/gascity-packs/tree/main/contributing/skills/write-issue)
+        checklist in form fields. Two fields accept an explicit `not yet identified`
+        — use it honestly rather than guessing; a caveated report is welcome, a
+        fabricated root cause is not.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched open **and closed** issues and did not find a duplicate.
+          required: true
+        - label: I reproduced this on the mathcity commit my city actually has deployed, and confirmed the buggy code is still present on `origin/main`.
+          required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences. A maintainer should be able to tell from this alone whether to read further.
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Symptom
+      description: |
+        What you observe — the literal error string, log line, or command output.
+        Paste it, don't paraphrase it. Save your interpretation for "Root cause"
+        below; the two are separated on purpose, because a wrong diagnosis attached
+        to a correct symptom is harder to unpick than no diagnosis at all.
+      placeholder: |
+        ```console
+        $ gc dolt health >/dev/null 2>&1; echo $?
+        2
+        ```
+
+        The skill then reports:
+
+        ```
+        Dolt is unreachable (bd cannot resolve beads).
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: mre
+    attributes:
+      label: Minimal reproducible example (MRE)
+      description: |
+        The most important field on this form. Give all three parts:
+
+        **1. Exact commands** — copy-pasteable, in order. Name the skill, formula,
+        or order by repo path (`skills/work/SKILL.md`), not by prose.
+
+        **2. Required city/rig state** — what must already be true before step 1:
+        rig exists, supervisor running, N sessions active, a bead in status X, a
+        quarantine marker present, Dolt reachable. A repro that only fires against
+        your machine's ambient state is not reproducible until that state is
+        written down.
+
+        **3. Expected vs actual** — literally `expected: … → got: …`. If it is
+        timing-sensitive, name the race window.
+
+        **Magma / compute bugs:** don't paste the computation here. Write it as a
+        `.mag` MRE, run [`check-mre`](https://github.com/tdupu/mathcity/blob/main/subdomains/computing/skills/check-mre/SKILL.md)
+        against it, and give the file path plus the APPROVED verdict. `check-mre`
+        is the standard for those — this field defers to it rather than restating it.
+
+        If you truly cannot reduce it, say so here. An un-reduced report is still
+        worth filing; expect P3 and slower triage.
+      placeholder: |
+        Required state: rig `hecke` exists; supervisor running; a quarantine
+        marker present at `.gc/runtime/packs/dolt/compact-quarantine/<db>`.
+
+        1. `gc dolt status`   # confirm the server is up and answering
+        2. Run any skill with a Dolt preflight, e.g. `skills/work/SKILL.md`
+
+        expected: `Dolt reachable; WARNING: compaction quarantined on <db>`
+        →    got: `Dolt is unreachable (bd cannot resolve beads)` + exit 1
+    validations:
+      required: true
+
+  - type: textarea
+    id: root_cause
+    attributes:
+      label: Root cause
+      description: |
+        Tie the symptom to specific code with `path/to/file:LINE` references into
+        this repo. Name the invariant that is violated and where.
+
+        If you have not identified it, write exactly `not yet identified` — that is
+        an accepted answer, and better than a guess.
+      placeholder: |
+        `skills/check-molecules/SKILL.md:42` treats any non-zero exit from
+        `gc dolt health` as unreachable. Upstream defines exit 2 as a distinct
+        signal (quarantine), so the two states are conflated at that line.
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix_candidates
+    attributes:
+      label: Fix candidates
+      description: |
+        **At least two.** A single candidate forecloses the discussion; two expose
+        the trade-off. Each gets a one-line description, a rough scope (files
+        touched), and what it makes better or worse. Mark which you'd recommend —
+        the decision stays with the maintainer.
+
+        If you cannot name two, write `not yet identified`. Expect the issue to be
+        triaged at P3 and to need an investigation pass before anyone can act.
+      placeholder: |
+        **A. Point-fix the exit-code check** — branch on exit 2 at each call site.
+        - Scope: ~12 skills
+        - Trade-off: minimal blast radius; the next new call site repeats the bug.
+
+        **B. Centralize the preflight** — one shared fragment every skill includes.
+        - Scope: 1 new fragment + 12 call sites
+        - Trade-off: fixes the class, not the instance; larger diff.
+
+        **Recommendation:** B. Maintainer's call.
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `gc version` and `bd version`, plus the mathcity commit your city has deployed (not necessarily `origin/main`).
+      placeholder: "gc 0.13.0, bd 0.42.1, mathcity 2600053"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, shell, worker provider, and which rig this happened on.
+      placeholder: "macOS 15.5, zsh, claude provider, rig hecke"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested priority
+      description: |
+        Priority is reach and recoverability — how many users hit it and how hard it
+        is to undo — not how loud it was for you. Most ergonomics issues are P3.
+        "Unsure" is a perfectly good answer.
+      options:
+        - "P1 — breaks many users, data loss, or unrecoverable"
+        - "P2 — significant friction, workaround exists"
+        - "P3 — polish, ergonomics, nice-to-have"
+        - "Unsure — please triage"
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Adjacent / out of scope
+      description: |
+        What you noticed nearby that should **not** be part of this fix. Naming it
+        up front is what stops it from becoming scope creep later. "Nothing" is a
+        valid answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Related issues, PRs, bead IDs, or upstream links.

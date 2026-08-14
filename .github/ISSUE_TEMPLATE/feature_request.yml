@@ -1,0 +1,122 @@
+name: Feature request
+description: Propose a new capability, skill, formula, or policy for the mathcity pack.
+title: "feat: "
+labels: ["kind/feature", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For scoped proposals against **this pack**. A new capability in `gc` or `bd`
+        itself belongs on [gastownhall/gascity](https://github.com/gastownhall/gascity/issues)
+        (`subdomains/dev/POLICY.md`, P3.2).
+
+        **Title:** `feat: <surface>: <capability>` — e.g.
+        `feat: formula-work: full formula lifecycle`.
+
+        The wheel-check below is the field that most often kills a proposal, and it
+        is meant to — most "we should build X" turns out to be "we should use the
+        X we already have". Do it before you write the design, not after.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched open **and closed** issues and did not find a duplicate.
+          required: true
+        - label: I can state the user or maintainer problem this solves, not just the implementation I prefer.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: |
+        The pain, concretely. What breaks, what gets repeated by hand, what an agent
+        gets wrong today. Write this without naming your solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: wheel_check
+    attributes:
+      label: Wheel check — why doesn't something existing already cover this?
+      description: |
+        Run [`check-wheel`](https://github.com/tdupu/mathcity/blob/main/subdomains/dev/skills/check-wheel/SKILL.md)
+        (or [`check-zero`](https://github.com/tdupu/mathcity/blob/main/subdomains/dev/skills/check-zero/SKILL.md)
+        for the survey alone) and report what it found. `subdomains/dev/POLICY.md`
+        P1.20 requires this before any design or skill dispatch.
+
+        Name each existing thing that *nearly* does this — a mathcity skill,
+        formula, order, or gate; an upstream `gc` subcommand; a superpowers skill; a
+        Magma intrinsic; an LMFDB table — and say specifically why it falls short.
+
+        "Nothing exists" is an acceptable answer **only** if you say where you
+        looked. This field distinguishes reuse from novelty; the next field is about
+        design alternatives, which is a different question.
+      placeholder: |
+        - `formula-work` (mathcity): dispatches formula creation but stops at the
+          brief; no lifecycle after adjudication.
+        - `gc formula run`: executes an existing formula; doesn't author one.
+        - superpowers `writing-plans`: plans code, not formula TOMLs.
+
+        Gap: nothing carries a formula from draft through adjudication to install.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed design
+      description: |
+        The behavior, interface, or workflow you want. For a skill or formula, say
+        where it would live in the pack layout and what it composes with. Concrete
+        enough that someone could disagree with a specific part of it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        At least one other way to build it, and why you rejected it. Distinct from
+        the wheel check above: that one asks whether to build at all, this one asks
+        which shape to build. Current workarounds count as an alternative.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blast_radius
+    attributes:
+      label: Blast radius
+      description: |
+        Which pack surfaces this touches — skills, formulas, orders, gates, agent
+        configs, policy documents, README indexes — and what else has to move with
+        it (a `README-*.md` index, a policy rule ID, a gates.toml entry, a symlink
+        exposure).
+
+        **Does any part of this require a change OUTSIDE the owned pack set** —
+        `gc`/`bd` core, another pack, a `vendor/**` tree? If yes, say which part:
+        that half is PR-only and routes through P3.1/P3.2 rather than landing here.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested priority
+      description: Reach and recoverability, not enthusiasm. "Unsure" is a fine answer.
+      options:
+        - "P1 — blocks other work or closes a correctness gap"
+        - "P2 — significant leverage, workaround exists"
+        - "P3 — polish, ergonomics, nice-to-have"
+        - "Unsure — please triage"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Related issues, bead IDs, prior discussion, upstream links.

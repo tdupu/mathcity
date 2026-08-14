@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Gas City core bugs and features (gc / bd)
+    url: https://github.com/gastownhall/gascity/issues
+    about: Bugs in the gc or bd binaries are filed upstream, not here (subdomains/dev/POLICY.md, P3.2). File here only for the mathcity-owned half, and cross-link.
+  - name: Install and setup
+    url: https://github.com/tdupu/mathcity/blob/main/SETUP.md
+    about: Installing the pack, importing it into a city, and materializing skills.
+  - name: Onboarding
+    url: https://github.com/tdupu/mathcity/blob/main/ONBOARDING.md
+    about: Start here if you are new to the pack — vocabulary, layout, and what lives where.
+  - name: Pack policy — what mathcity owns and how changes route
+    url: https://github.com/tdupu/mathcity/blob/main/subdomains/dev/POLICY.md
+    about: Read before proposing a change that touches anything outside the owned pack set.
