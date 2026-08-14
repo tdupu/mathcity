@@ -44,7 +44,9 @@ Before evaluating logic or content, list every skill name, tool name, script pat
 
 **Future failure modes**: Where will this break in 6 months when someone changes something adjacent? What assumptions are baked in that will become false?
 
-**Internal consistency**: Does the artifact contradict itself? Are there parts that conflict with other parts?
+**Internal consistency**: Does the artifact contradict itself? Are there parts that conflict with other parts? Pay particular attention to artifacts that were revised section-wise — two individually-defensible sections prescribing incompatible sequences is the classic shape, and it is invisible unless you have read the whole document.
+
+**Claim provenance**: "Missing evidence" is the easy case. The harder one is evidence of the *wrong kind* — a claim that is cited, confidently stated, and produced by an instrument that measures something merely adjacent to it: a count taken at one directory level standing in for a recursive total, a function name standing in for its behaviour, commit subjects standing in for file contents, a prior session's handoff note standing in for the live CLI surface. For each claim the artifact's recommendation actually *rests on* — negate it; if the recommendation survives, skip it — ask what instrument produced it and whether that instrument's raw output entails the claim. An unnameable instrument ("stated confidently, source unclear") is a BLOCKING issue when the claim guards an irreversible action. Run [[check-claims]] to do this systematically; the Step 0 existence check below is the same discipline narrowed to `SKILL.md` references.
 
 **Scope creep / bloat**: Is there dead weight that adds complexity without value? Does the artifact say the same thing twice? Is any section longer than it needs to be to convey its meaning?
 
