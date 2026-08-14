@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-133 skills across the parent pack and 7 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+134 skills across the parent pack and 7 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -13,7 +13,7 @@ Parent: [README.md](./README.md)
 
 _Regenerate/verify with `/update-README`._
 
-### Parent pack — `mathcity/skills/`  (55)
+### Parent pack — `mathcity/skills/`  (56)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -22,6 +22,7 @@ _Regenerate/verify with `/update-README`._
 | `bead-check` | `mathcity.bead-check` | Use when the disposition of a specific bead is in question — stale, possibly superseded, mis-filed, orphaned, or in the wrong rig — and a recommendation is needed before anyone acts on it |
 | `brief-prep` | `mathcity.brief-prep` | Specialized worker that owns the brief-prep pipeline end-to-end |
 | `check-briefs` | `mathcity.check-briefs` | Report the current brief stack — compact table (Rig, Artifact, unlock_count, Age, Epic/linked) sorted by unlock_count descending |
+| `check-claims` | `mathcity.check-claims` | Provenance triage on an artifact about to be acted on — finds the claims that are BOTH load-bearing (negating them changes a recommended action) AND unsourced or proxy-sourced (the instrument that produced them does not entail them), names the independent instrument that would re-derive each, and runs a whole-artifact coherence pass that re-derivation structurally cannot do |
 | `check-mayor-mail` | `mathcity.check-mayor-mail` | Mayor-facing mail triage routine — scan the gc mail inbox, surface [ESCALATE CRITICAL/HIGH] first, and catch escalations the fleet raised into a void |
 | `check-molecules` | `mathcity.check-molecules` | Complete molecule accounting across all rigs, by status and in order — BEING WORKED ON (live worker), STRANDED (in_progress, no worker — reclaim backlog), READY (dispatchable, priority-ranked); writes the full accounting to the configured city-side molecules directory and prints a capped per-status summary |
 | `check-on-agent` | `mathcity.check-on-agent` | Check in on ONE running gc-managed worker session to answer what it is doing, whether its artifact landed, or whether it is stalled; observe first and only message after activity genuinely stops |
