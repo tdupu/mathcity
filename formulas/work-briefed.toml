@@ -88,7 +88,19 @@ default = "mathcity.work"
 [[steps]]
 id = "route"
 title = "Route {{source_bead}} through mathcity.work"
-metadata = { "gc.run_target" = "mathcity.brief-operator" }
+# Rig-scoped, deliberately. `mathcity.brief-operator` is scope="city" with
+# work_dir="{{.AgentBase}}", which resolves to <city-root>/mathcity.brief-operator-N —
+# directories with no .beads and no git repo, so bd walks up and binds the HQ store.
+# A route step pinned there cannot address rig beads at all: `bd show mc-hs3` returned
+# "no issue found" while 18 mc-* beads sat unclaimed. Bare `gc.run-operator` is
+# scope="rig" with no work_dir override, inherits executionRigContext from the parent
+# mathcity.work run, and therefore follows the SOURCE BEAD's store (rig for mc-*, HQ
+# for gt-*). Matches sibling planning-briefed.formula.toml, which already uses bare
+# gc.run-operator for its entry step (:70) and reserves mathcity.brief-operator for the
+# city-scoped brief-FILING step (:198). Do NOT "fix" this by changing the agent's scope
+# — city scope is load-bearing for the rigless HQ brief-shuffle-pile override
+# (city.toml:96-105). See decisions-track #149, tdupu/mathcity#23.
+metadata = { "gc.run_target" = "gc.run-operator" }
 description = """
 You are the routing gate for `mathcity.work`. Read the source bead, enumerate
 live formulas, and either continue a clear work graph or commission a dispatch
