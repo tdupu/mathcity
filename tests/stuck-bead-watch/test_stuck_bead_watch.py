@@ -356,7 +356,7 @@ def test_watchdog_output_passes_the_real_lost_bead_filter_validator():
 # --- longer than its priority grace window must escalate on the FIRST     ---
 # --- detection pass -- not first-detection + a fresh grace window.        ---
 
-def _run_main_with_beads(tmp_path, beads, sessions=None):
+def _run_main_with_beads(tmp_path, beads, sessions=None, extra_args=None):
     """Drive main() end-to-end with the network/subprocess boundary stubbed
     out, returning the list of bead ids that got escalated this run."""
     import tempfile
@@ -367,17 +367,22 @@ def _run_main_with_beads(tmp_path, beads, sessions=None):
     import unittest.mock as _mock
     patches = [
         _mock.patch.object(sbw, "_preflight", lambda: None),
-        _mock.patch.object(sbw, "_gc_bd_list_routed", lambda: beads),
+        # main() now passes scan-budget / per-call-timeout kwargs into the
+        # widened _gc_bd_list_routed, so the stub must accept *a/**k.
+        _mock.patch.object(sbw, "_gc_bd_list_routed", lambda *a, **k: beads),
         _mock.patch.object(sbw, "_gc_session_list_active", lambda: (sessions or [])),
         _mock.patch.object(
             sbw, "classify_and_escalate",
             lambda bead, cd, cr, observed_at, **kw: (escalated_ids.append(bead["id"]) or f"evt-{bead['id']}"),
         ),
     ]
+    argv = ["--cache-dir", str(cache_dir), "--classification-root", str(classification_root)]
+    if extra_args:
+        argv += extra_args
     for p in patches:
         p.start()
     try:
-        sbw.main(["--cache-dir", str(cache_dir), "--classification-root", str(classification_root)])
+        sbw.main(argv)
     finally:
         for p in patches:
             p.stop()
@@ -515,3 +520,349 @@ def test_order_toml_exec_command_passes_matching_classification_root():
         line for line in order_path.read_text().splitlines() if line.strip().startswith("exec")
     ][0]
     assert f"--classification-root {_DEFAULT_CLASSIFICATION_ROOT}" in exec_line
+
+
+# === decisions-track brief #99: fleet-wide detection (THE BUG) ================
+# `gc bd list` with no --rig only ever resolves the HQ store, so every non-HQ
+# rig store was invisible to this detector. The fix loops HQ + each rig store
+# from `gc rig list --json`, under a scan budget + per-tick escalation cap.
+
+import subprocess as _subprocess  # noqa: E402
+
+
+def _completed(cmd, stdout="[]", returncode=0, stderr=""):
+    return _subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr=stderr)
+
+
+def test_gc_rig_list_names_parses_non_hq_rigs(monkeypatch):
+    # `gc rig list --json` emits one JSON object; the HQ store is the entry
+    # with "hq": true and must be EXCLUDED (it's the default no-rig store).
+    payload = json.dumps({
+        "schema_version": "1",
+        "rigs": [
+            {"name": "mathcity", "hq": True},
+            {"name": "gamma0", "hq": False},
+            {"name": "sl2", "hq": False},
+        ],
+    })
+    monkeypatch.setattr(sbw, "_run", lambda cmd, **kw: _completed(cmd, stdout=payload))
+    assert sbw._gc_rig_list_names() == ["gamma0", "sl2"]
+
+
+def test_gc_rig_list_names_fails_loud_on_error(monkeypatch):
+    monkeypatch.setattr(
+        sbw, "_run",
+        lambda cmd, **kw: _completed(cmd, stdout="", returncode=1, stderr="no city"),
+    )
+    try:
+        sbw._gc_rig_list_names()
+        assert False, "expected SystemExit"
+    except SystemExit as exc:
+        assert exc.code == 1
+
+
+def _capturing_bd_list(recorded, by_store):
+    """Return a fake _run that records each `gc bd list` command and answers
+    with the beads registered for that store (None => HQ)."""
+    def fake_run(cmd, **kw):
+        recorded.append(list(cmd))
+        # locate the store: the token after --rig, or None for HQ.
+        rig = None
+        if "--rig" in cmd:
+            rig = cmd[cmd.index("--rig") + 1]
+        beads = by_store.get(rig, [])
+        return _completed(cmd, stdout=json.dumps(beads))
+    return fake_run
+
+
+def test_gc_bd_list_routed_loops_every_store_with_correct_rig_flags(monkeypatch):
+    recorded = []
+    by_store = {None: [_bead("gt-hq")], "gamma0": [_bead("gamma0-1")], "sl2": [_bead("sl2-1")]}
+    monkeypatch.setattr(sbw, "_run", _capturing_bd_list(recorded, by_store))
+
+    out = sbw._gc_bd_list_routed(rig_names_fn=lambda: ["gamma0", "sl2"])
+
+    # 3 stores (HQ + 2 rigs) x 3 routed keys = 9 calls.
+    assert len(recorded) == 9
+    # HQ calls carry NO --rig flag.
+    hq_calls = [c for c in recorded if "--rig" not in c]
+    assert len(hq_calls) == 3
+    # each rig store is pinned by --rig <name>, 3 keys apiece.
+    gamma_calls = [c for c in recorded if "--rig" in c and c[c.index("--rig") + 1] == "gamma0"]
+    sl2_calls = [c for c in recorded if "--rig" in c and c[c.index("--rig") + 1] == "sl2"]
+    assert len(gamma_calls) == 3 and len(sl2_calls) == 3
+    # every call still filters server-side on one of the 3 CT1.8 routed keys.
+    seen_keys = {c[c.index("--has-metadata-key") + 1] for c in recorded}
+    assert seen_keys == set(sbw.ROUTED_METADATA_KEYS)
+    # every routed bead across every store is returned.
+    assert {b["id"] for b in out} == {"gt-hq", "gamma0-1", "sl2-1"}
+
+
+def test_gc_bd_list_routed_merges_and_dedupes_across_stores(monkeypatch):
+    # The SAME bead id can surface from more than one store (or more than one
+    # routed key); it must be deduped by id, not double-counted.
+    shared = _bead("dup-1")
+    by_store = {None: [shared], "gamma0": [shared, _bead("gamma0-only")]}
+    monkeypatch.setattr(sbw, "_run", _capturing_bd_list([], by_store))
+
+    out = sbw._gc_bd_list_routed(rig_names_fn=lambda: ["gamma0"])
+    ids = [b["id"] for b in out]
+    assert sorted(ids) == ["dup-1", "gamma0-only"]
+    assert ids.count("dup-1") == 1
+
+
+def test_gc_bd_list_routed_partial_scan_skips_remaining_when_budget_exhausted(monkeypatch, capsys):
+    recorded = []
+    by_store = {None: [_bead("gt-hq")], "gamma0": [_bead("g-1")], "sl2": [_bead("s-1")]}
+    monkeypatch.setattr(sbw, "_run", _capturing_bd_list(recorded, by_store))
+
+    # RESERVING-threshold semantics: budget=30, per-call timeout=8 => one
+    # store's worst case = 3*8 = 24s. After HQ the clock reads 10s elapsed.
+    # The OLD `>= budget` check would CONTINUE (10 < 30) and start gamma0,
+    # which could then run to 10+24 = 34s > 30 (and risk the 60s order hard
+    # kill before the cursor write). The RESERVING check must STOP here
+    # because 10 + 24 = 34 > 30 -- it never starts a store it can't finish
+    # inside the budget.
+    ticks = iter([0.0, 10.0, 10.0, 10.0])
+    out = sbw._gc_bd_list_routed(
+        scan_budget_seconds=30.0,
+        per_call_timeout=8.0,
+        rig_names_fn=lambda: ["gamma0", "sl2"],
+        clock=lambda: next(ticks),
+    )
+    # only HQ was scanned (3 keys, no --rig); gamma0/sl2 reserved-out.
+    assert len(recorded) == 3
+    assert all("--rig" not in c for c in recorded)
+    assert {b["id"] for b in out} == {"gt-hq"}
+    err = capsys.readouterr().err
+    assert "scan budget" in err and "skipped 2 store(s)" in err
+
+
+def _stepping_clock(step):
+    """Injected clock returning 0 at the sweep start and advancing by `step`
+    on each subsequent call -- models each store costing ~`step` wall-seconds
+    so the reserving budget check can be exercised deterministically."""
+    n = {"k": -1}
+
+    def _clock():
+        n["k"] += 1
+        return n["k"] * step
+    return _clock
+
+
+def test_gc_bd_list_routed_total_time_stays_within_budget(monkeypatch):
+    # With a per-store cost near the call timeout, the reserving check must
+    # keep TOTAL scan time <= scan_budget_seconds (never starting a store
+    # whose worst case would overrun), so the order's 60s hard timeout can
+    # never pre-empt the end-of-loop cursor write.
+    recorded = []
+    monkeypatch.setattr(sbw, "_run", _capturing_bd_list(recorded, {}))
+
+    step = 5.0            # each store advances the clock ~5s
+    call_timeout = 5.0    # => one store's worst case = 3*5 = 15s
+    budget = 45.0
+    max_store_cost = len(sbw.ROUTED_METADATA_KEYS) * call_timeout
+    sbw._gc_bd_list_routed(
+        scan_budget_seconds=budget,
+        per_call_timeout=call_timeout,
+        rig_names_fn=lambda: [f"rig{i}" for i in range(20)],  # 21 stores total
+        clock=_stepping_clock(step),
+    )
+    stores_scanned = len(recorded) // len(sbw.ROUTED_METADATA_KEYS)
+    # The last store STARTED at elapsed (stores_scanned-1)*step; finishing its
+    # worst case must not exceed the budget -- that is the invariant the
+    # reserving check enforces.
+    last_start = (stores_scanned - 1) * step
+    assert last_start + max_store_cost <= budget
+    # ...and it did stop early (budget-bound), not run all 21 stores.
+    assert stores_scanned < 21
+    # Starting one MORE store would have violated the budget (proving the
+    # loop stopped at the tightest safe point, not prematurely).
+    assert last_start + step + max_store_cost > budget
+
+
+def test_gc_bd_list_routed_skips_hung_store_without_failing(monkeypatch, capsys):
+    # GATE #1b: a single hung rig store is skipped (partial scan, WARN), NOT a
+    # fatal SystemExit -- HQ and the healthy rig still get scanned.
+    def fake_run(cmd, **kw):
+        rig = cmd[cmd.index("--rig") + 1] if "--rig" in cmd else None
+        if rig == "gamma0":
+            raise _subprocess.TimeoutExpired(cmd=cmd, timeout=kw.get("timeout"))
+        beads = {None: [_bead("gt-hq")], "sl2": [_bead("s-1")]}.get(rig, [])
+        return _completed(cmd, stdout=json.dumps(beads))
+
+    monkeypatch.setattr(sbw, "_run", fake_run)
+    out = sbw._gc_bd_list_routed(rig_names_fn=lambda: ["gamma0", "sl2"])
+    assert {b["id"] for b in out} == {"gt-hq", "s-1"}
+    err = capsys.readouterr().err
+    assert "gamma0 timed out" in err
+
+
+def test_max_classifications_per_tick_caps_escalations(capsys):
+    # Five old (200-day-idle) p0 strands would all escalate, but the cap of 2
+    # stops after 2 this tick; the rest drain on subsequent ticks.
+    now = datetime.now(timezone.utc)
+    old = _iso(now - timedelta(days=200))
+    beads = []
+    for i in range(5):
+        b = _bead(f"gt-flood-{i}", priority=0, assignee=None,
+                  routed_to="mathcity.brief-operator", created_at=old)
+        b["updated_at"] = old
+        beads.append(b)
+    with __import__("tempfile").TemporaryDirectory() as tmp:
+        escalated = _run_main_with_beads(
+            tmp, beads, extra_args=["--max-classifications-per-tick", "2"]
+        )
+    assert len(escalated) == 2, f"cap=2 must limit escalations; got {escalated}"
+    err = capsys.readouterr().err
+    assert "classification cap (2) reached" in err
+
+
+# --- GATE reviewer change 1: rotating cursor => bounded, complete coverage ---
+# A plain "stop + WARN" at a FIXED store order leaves the tail permanently
+# unscanned under a tight budget (bug #99, one layer up). The persisted cursor
+# must rotate so EVERY store is covered within a bounded number of ticks.
+
+def _budget_after_first():
+    """Injected clock: 0 on the first call (sweep start), large thereafter --
+    so exactly ONE store is scanned per tick (budget exhausted before store 2)."""
+    state = {"n": 0}
+
+    def _clock():
+        state["n"] += 1
+        return 0.0 if state["n"] == 1 else 100.0
+    return _clock
+
+
+def test_rotation_cursor_covers_every_store_within_bounded_ticks(monkeypatch):
+    monkeypatch.setattr(sbw, "_run", lambda cmd, **kw: _completed(cmd, stdout="[]"))
+    with tempfile.TemporaryDirectory() as tmp:
+        cache_dir = Path(tmp) / "cache"
+        classification_root = Path(tmp) / "class"
+        stores = ["HQ", "gamma0", "sl2"]  # 3 stores => full coverage within 3 ticks
+
+        def run_tick(ts):
+            sbw._gc_bd_list_routed(
+                scan_budget_seconds=10.0,
+                rig_names_fn=lambda: ["gamma0", "sl2"],
+                clock=_budget_after_first(),
+                cache_dir=cache_dir,
+                classification_root=classification_root,
+                observed_at=ts,
+            )
+
+        state_path = classification_root / "store-scan-state.json"
+
+        # Tick 1 scans only HQ (rotation, NOT a full scan).
+        run_tick("2026-08-14T00:00:00Z")
+        assert set(json.loads(state_path.read_text())) == {"HQ"}
+        # cursor advanced to the next store.
+        assert json.loads((cache_dir / ".store-scan-cursor.json").read_text())["next_store"] == "gamma0"
+
+        # Tick 2 resumes at gamma0; Tick 3 resumes at sl2.
+        run_tick("2026-08-14T00:01:30Z")
+        run_tick("2026-08-14T00:03:00Z")
+
+        # After 3 ticks (== number of stores) EVERY store has been scanned:
+        # bounded, complete coverage -- no permanent blind spot on the tail.
+        assert set(json.loads(state_path.read_text())) == set(stores)
+        # cursor wrapped back to the front.
+        assert json.loads((cache_dir / ".store-scan-cursor.json").read_text())["next_store"] == "HQ"
+
+
+def test_rotation_advances_past_a_hung_store(monkeypatch, capsys):
+    # A store that exceeds the per-call timeout must NOT block rotation: the
+    # cursor advances past it so the rest of the fleet still gets covered.
+    def fake_run(cmd, **kw):
+        rig = cmd[cmd.index("--rig") + 1] if "--rig" in cmd else None
+        if rig == "gamma0":
+            raise _subprocess.TimeoutExpired(cmd=cmd, timeout=kw.get("timeout"))
+        return _completed(cmd, stdout="[]")
+
+    monkeypatch.setattr(sbw, "_run", fake_run)
+    # budget=20, per-call timeout=2 => one store's worst case = 3*2 = 6s, so
+    # the reserving check leaves room for 2 stores (gamma0 hung + sl2) before
+    # stopping ahead of HQ. clock: start=0, 5s elapsed after gamma0 (5+6<=20,
+    # continue), 15s after sl2 (15+6>20, stop before HQ).
+    ticks = iter([0.0, 5.0, 15.0])
+    with tempfile.TemporaryDirectory() as tmp:
+        cache_dir = Path(tmp) / "cache"
+        classification_root = Path(tmp) / "class"
+        # Seed the cursor at the hung store so this tick STARTS there.
+        cache_dir.mkdir(parents=True)
+        (cache_dir / ".store-scan-cursor.json").write_text(json.dumps({"next_store": "gamma0"}))
+        sbw._gc_bd_list_routed(
+            scan_budget_seconds=20.0,
+            per_call_timeout=2.0,
+            rig_names_fn=lambda: ["gamma0", "sl2"],
+            clock=lambda: next(ticks),
+            cache_dir=cache_dir,
+            classification_root=classification_root,
+            observed_at="2026-08-14T00:00:00Z",
+        )
+        # Started at gamma0(idx1): gamma0 hung (skipped), sl2 scanned, then
+        # budget exhausted before HQ. The cursor moved FORWARD to HQ -- it is
+        # NOT stuck perpetually retrying the hung gamma0 as the sweep's start.
+        nxt = json.loads((cache_dir / ".store-scan-cursor.json").read_text())["next_store"]
+        assert nxt == "HQ"
+        # sl2 got covered despite gamma0 hanging; gamma0 is a visible gap.
+        state = json.loads((classification_root / "store-scan-state.json").read_text())
+        assert set(state) == {"sl2"}
+    assert "gamma0 timed out" in capsys.readouterr().err
+
+
+def test_store_scan_state_records_only_actually_scanned_stores(monkeypatch):
+    # The queryable state file is the source of truth for coverage: a hung
+    # store must NOT get a fresh timestamp (that would hide the gap).
+    def fake_run(cmd, **kw):
+        rig = cmd[cmd.index("--rig") + 1] if "--rig" in cmd else None
+        if rig == "sl2":
+            raise _subprocess.TimeoutExpired(cmd=cmd, timeout=kw.get("timeout"))
+        return _completed(cmd, stdout="[]")
+
+    monkeypatch.setattr(sbw, "_run", fake_run)
+    with tempfile.TemporaryDirectory() as tmp:
+        classification_root = Path(tmp) / "class"
+        sbw._gc_bd_list_routed(
+            rig_names_fn=lambda: ["gamma0", "sl2"],
+            cache_dir=Path(tmp) / "cache",
+            classification_root=classification_root,
+            observed_at="2026-08-14T00:00:00Z",
+        )
+        state = json.loads((classification_root / "store-scan-state.json").read_text())
+    assert state == {"HQ": "2026-08-14T00:00:00Z", "gamma0": "2026-08-14T00:00:00Z"}
+    assert "sl2" not in state  # hung store is a visible coverage gap, not stamped
+
+
+def test_per_store_scan_times_are_logged_once(monkeypatch, capsys):
+    monkeypatch.setattr(sbw, "_run", lambda cmd, **kw: _completed(cmd, stdout="[]"))
+    sbw._gc_bd_list_routed(rig_names_fn=lambda: ["gamma0"])
+    err = capsys.readouterr().err
+    assert "per-store scan times:" in err
+    assert err.count("per-store scan times:") == 1  # once per run, not per store
+
+
+def test_rotation_cursor_survives_main_cache_cleanup(monkeypatch):
+    # The cursor lives in --cache-dir alongside per-bead waiting-room entries;
+    # main()'s stale-entry sweep must not delete it (it isn't a bead id).
+    with tempfile.TemporaryDirectory() as tmp:
+        cache_dir = Path(tmp) / "cache"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / ".store-scan-cursor.json").write_text(json.dumps({"next_store": "gamma0"}))
+        # a stale per-bead entry that SHOULD be swept.
+        (cache_dir / "gt-stale.json").write_text(json.dumps({"first_seen_stuck": "x"}))
+        _run_main_with_beads(tmp, [])  # no candidates => gt-stale is stale
+        assert (cache_dir / ".store-scan-cursor.json").exists(), "cursor must survive cleanup"
+        assert not (cache_dir / "gt-stale.json").exists(), "stale bead entry must be swept"
+
+
+def test_order_toml_exposes_the_three_scan_cap_knobs():
+    # Reviewer refinement: the caps must be tunable from the ORDER exec line,
+    # not hardcoded -- confirm the order actually passes them.
+    order_path = Path(__file__).resolve().parents[2] / "orders" / "stuck-bead-watch.toml"
+    exec_line = [
+        line for line in order_path.read_text().splitlines() if line.strip().startswith("exec")
+    ][0]
+    for knob in ("--scan-budget-seconds", "--max-call-timeout-seconds",
+                 "--max-classifications-per-tick"):
+        assert knob in exec_line, f"order must pass {knob}"

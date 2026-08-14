@@ -10,6 +10,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +22,25 @@ DEFAULT_GRACE_WINDOWS = {
     4: 45 * 60,
 }
 DEFAULT_MIN_AGE_SECONDS = 3 * 60
+
+# GATE #1 (decisions-track brief #99): the detector now scans EVERY rig store,
+# not just HQ -- `gc bd list` with no --rig only ever resolves the HQ (gt-*)
+# store, so non-HQ rigs were invisible to detection. A wide scan is (HQ + N
+# rigs) x 3 routed keys of `gc bd list` calls (~54 for ~18 rigs), while the
+# order's own budget is only 60s. These caps keep a wide scan safely inside
+# that budget and prevent an escalation flood on the first successful wide
+# scan (cf. gsp-2bowrk, which stranded ~1000 beads):
+#   * scan-budget: wall-clock ceiling on the per-tick store sweep; once
+#     exhausted the remaining rig stores are skipped this tick (PARTIAL scan,
+#     WARN -- not a hard failure) and picked up on subsequent ticks.
+#   * max-call-timeout: a tighter per-`gc bd list` timeout than the blanket
+#     SUBPROCESS_TIMEOUT_SECONDS, so one hung rig can't consume the whole
+#     budget -- a timed-out store is skipped (WARN), not fatal.
+#   * max-classifications-per-tick: cap on NEW escalations emitted per run;
+#     the backlog drains over subsequent ticks instead of flooding in one.
+DEFAULT_SCAN_BUDGET_SECONDS = 45.0
+DEFAULT_MAX_CALL_TIMEOUT_SECONDS = 8.0
+DEFAULT_MAX_CLASSIFICATIONS_PER_TICK = 50
 
 # CT1.8 (mathcity/subdomains/dev/POLICY-city.md): routed work is anything
 # carrying ANY of these metadata keys, including formula/order-internal
@@ -62,14 +82,23 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def _run(cmd: list[str], **kwargs):
+def _run(cmd: list[str], timeout: float = SUBPROCESS_TIMEOUT_SECONDS,
+         fatal_timeout: bool = True, **kwargs):
     """subprocess.run wrapper that fails loud (P6.1) on a hang instead of
-    letting a TimeoutExpired propagate as an unhandled traceback."""
+    letting a TimeoutExpired propagate as an unhandled traceback.
+
+    `timeout` overrides the blanket SUBPROCESS_TIMEOUT_SECONDS for a single
+    call (the per-store rig sweep uses a tighter ceiling; GATE #1b). When
+    `fatal_timeout` is False the TimeoutExpired is re-raised instead of routed
+    through fail(), so the caller can treat a single hung store as a skippable
+    partial-scan event rather than a fatal one."""
     try:
-        return subprocess.run(cmd, timeout=SUBPROCESS_TIMEOUT_SECONDS, **kwargs)
+        return subprocess.run(cmd, timeout=timeout, **kwargs)
     except subprocess.TimeoutExpired:
+        if not fatal_timeout:
+            raise
         fail(
-            f"command timed out after {SUBPROCESS_TIMEOUT_SECONDS}s: {' '.join(cmd)}\n"
+            f"command timed out after {timeout}s: {' '.join(cmd)}\n"
             "Check `gc dolt health` -- a hung gc/bd call usually means Dolt is "
             "degraded or unreachable."
         )
@@ -299,24 +328,219 @@ routed_target = "{routed_target}"
     return event_id
 
 
-def _gc_bd_list_routed() -> list[dict]:
+def _gc_rig_list_names() -> list[str]:
+    """Enumerate the NON-HQ rig store names from `gc rig list --json`.
+
+    `gc rig list --json` emits a single JSON object whose `rigs` array lists
+    every store; the HQ/city store is the entry with `"hq": true`. HQ is
+    queried through the default (no --rig) store, so it is excluded here --
+    each remaining entry's `name` field is what pins that rig store via
+    `gc bd list --rig <name>`. Fails loud (constraint 5) if enumeration
+    fails, since a broken rig list means the scan can't know which stores
+    exist and would silently narrow back to HQ-only."""
+    result = _run(["gc", "rig", "list", "--json"], capture_output=True, text=True)
+    if result.returncode != 0:
+        fail(f"gc rig list failed: {result.stderr.strip()}")
+    data = json.loads(result.stdout)
+    rigs = data.get("rigs", []) if isinstance(data, dict) else []
+    return [r["name"] for r in rigs if not r.get("hq")]
+
+
+# The rotation cursor persists (across 90s ticks) the LABEL of the store to
+# start the next sweep from, and the per-store last-scan state persists a
+# queryable {store -> last-scan ISO} map so coverage is observable, not just a
+# stderr WARN nobody reads (cf. the Reaper failing silently for 24h).
+_CURSOR_FILENAME = ".store-scan-cursor.json"
+_STORE_SCAN_STATE_FILENAME = "store-scan-state.json"
+
+
+def _read_scan_cursor(cache_dir: Path | None) -> str | None:
+    """Return the label of the store to resume the sweep from, or None."""
+    if cache_dir is None:
+        return None
+    path = cache_dir / _CURSOR_FILENAME
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text()).get("next_store")
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _write_scan_cursor(cache_dir: Path | None, next_store: str) -> None:
+    if cache_dir is None:
+        return
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    (cache_dir / _CURSOR_FILENAME).write_text(json.dumps({"next_store": next_store}))
+
+
+def _update_store_scan_state(
+    classification_root: Path | None, scanned_labels: list[str], observed_at: str
+) -> None:
+    """Stamp each actually-scanned store's last-scan time into a queryable
+    JSON map under classification_root, so 'which stores are we covering?'
+    is answerable by reading a file (the source of truth), not by scraping
+    stderr WARNs. Stores never appearing (or with stale timestamps) are the
+    coverage gaps."""
+    if classification_root is None or not scanned_labels:
+        return
+    path = classification_root / _STORE_SCAN_STATE_FILENAME
+    state: dict[str, str] = {}
+    if path.exists():
+        try:
+            state = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            state = {}
+    for label in scanned_labels:
+        state[label] = observed_at
+    classification_root.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+
+def _gc_bd_list_routed(
+    scan_budget_seconds: float = DEFAULT_SCAN_BUDGET_SECONDS,
+    per_call_timeout: float = DEFAULT_MAX_CALL_TIMEOUT_SECONDS,
+    rig_names_fn=None,
+    clock=time.monotonic,
+    cache_dir: Path | None = None,
+    classification_root: Path | None = None,
+    observed_at: str | None = None,
+) -> list[dict]:
+    # THE FIX (decisions-track brief #99): `gc bd list` with no --rig only
+    # ever resolves the HQ (gt-*) store, so every non-HQ rig store was
+    # invisible to detection. A single city-scoped tick must scan ALL stores,
+    # and `gc bd list --rig <name>` pins ONE store at a time (there is no
+    # multi-rig single call), so loop store-by-store: HQ (default, no --rig)
+    # plus each rig name from `gc rig list --json`.
+    #
     # --has-metadata-key is a server-side filter AND the only way to get
     # assignee/metadata included in the response — the default `gc bd list
     # --json` (no metadata filter) omits both fields entirely (verified
-    # live 2026-07-28). Filtering server-side on each of the 3 CT1.8 routed
-    # keys also avoids pulling every open bead city-wide on every 90s tick.
-    # --has-metadata-key takes one key at a time, so query once per key and
-    # merge by id (a bead carrying more than one routed key is deduped).
+    # live 2026-07-28). It takes one key at a time, so query once per store
+    # per key and merge by id (a bead carrying more than one routed key, or
+    # surfaced by more than one store, is deduped).
+    #
+    # COVERAGE GUARANTEE (GATE, reviewer change 1): the sweep does NOT restart
+    # from a fixed store each tick -- that would leave the TAIL of the order
+    # permanently unscanned whenever the budget is tight (re-creating bug #99
+    # one layer up, precisely for the big/slow stores that sort last). Instead
+    # a ROTATION CURSOR persists in cache_dir: each tick resumes from the store
+    # after the last one attempted and wraps around. The first store of every
+    # tick is always attempted (even a store slower than the whole budget), so
+    # the cursor advances by >= 1 every tick and a hung store is attempted-then-
+    # skipped rather than blocking rotation. Therefore, with S stores, EVERY
+    # store is attempted at least once within at most S ticks, regardless of
+    # per-store cost -- bounded, provably-complete coverage instead of a
+    # permanent blind spot. Per-store last-scan timestamps are recorded to
+    # classification_root so that guarantee is queryable (reviewer change 2).
+    #
+    # The between-stores budget check RESERVES one store's worst-case cost
+    # (3 keys x call_timeout) so the loop never STARTS a store that could push
+    # total scan time past scan_budget_seconds. Without that reserve a store
+    # starting at ~44.9s could run ~24s more and blow the order's 60s HARD
+    # timeout -- which kills the process mid-store BEFORE the end-of-loop
+    # cursor write, so the cursor never advances and the tail is never reached
+    # (the exact blind spot this cursor prevents, re-opened via a hard kill).
+    # Reserving headroom guarantees a graceful partial-scan-with-cursor-advance
+    # ALWAYS happens before any order-timeout pre-emption.
+    if rig_names_fn is None:
+        rig_names_fn = _gc_rig_list_names
+    if observed_at is None:
+        observed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rig_names = rig_names_fn()
+
+    # (rig, label): rig=None is the HQ/default store (no --rig flag).
+    stores: list[tuple[str | None, str]] = [(None, "HQ")]
+    stores.extend((name, name) for name in rig_names)
+    n_stores = len(stores)
+
+    # Resume the rotation from the persisted cursor (by label, so the cursor is
+    # robust to rigs being added/removed between ticks); default to the front.
+    labels = [label for _, label in stores]
+    resume_label = _read_scan_cursor(cache_dir)
+    start_index = labels.index(resume_label) if resume_label in labels else 0
+
+    # GATE #1b: cap each per-store call tighter than the blanket 30s so one
+    # hung rig can't consume the whole scan budget.
+    call_timeout = min(per_call_timeout, SUBPROCESS_TIMEOUT_SECONDS)
+    # GATE #1a headroom: one store's worst case is all 3 keys hitting the
+    # per-call timeout. The budget check RESERVES this so we never START a
+    # store that could push total scan time past the budget (and thus past
+    # the order's hard 60s timeout, which would kill the process before the
+    # cursor write).
+    max_store_cost = len(ROUTED_METADATA_KEYS) * call_timeout
+
     merged: dict[str, dict] = {}
-    for key in ROUTED_METADATA_KEYS:
-        result = _run(
-            ["gc", "bd", "list", "--all", "--has-metadata-key", key, "--json", "--limit=0"],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            fail(f"gc bd list failed for --has-metadata-key {key}: {result.stderr.strip()}")
-        for bead in json.loads(result.stdout):
-            merged[bead["id"]] = bead
+    scanned_labels: list[str] = []
+    timings: list[str] = []
+    attempted = 0
+    start = clock()
+    for i in range(n_stores):
+        rig, label = stores[(start_index + i) % n_stores]
+        # GATE #1a: enforce the per-scan wall-clock budget BETWEEN stores. The
+        # first store of the tick (i == 0) always runs -- this is what makes
+        # the cursor advance every tick and gives the coverage guarantee above.
+        # For every later store, stop BEFORE starting it if finishing its
+        # worst case would exceed the budget, so total scan time stays <=
+        # scan_budget_seconds (safely under the 60s order timeout) and a
+        # graceful partial scan + cursor advance always beats the hard kill.
+        if i > 0 and (clock() - start) + max_store_cost > scan_budget_seconds:
+            skipped = n_stores - i
+            print(
+                f"stuck-bead-watch: WARNING scan budget ({scan_budget_seconds:.0f}s) "
+                f"exhausted after {i} of {n_stores} stores -- skipped "
+                f"{skipped} store(s) this tick (partial scan; the rotation "
+                "cursor resumes there next tick)",
+                file=sys.stderr,
+            )
+            break
+        attempted += 1
+        store_t0 = time.monotonic()
+        store_timed_out = False
+        for key in ROUTED_METADATA_KEYS:
+            cmd = ["gc", "bd", "list"]
+            if rig is not None:
+                cmd += ["--rig", rig]
+            cmd += ["--all", "--has-metadata-key", key, "--json", "--limit=0"]
+            try:
+                result = _run(
+                    cmd, timeout=call_timeout, fatal_timeout=False,
+                    capture_output=True, text=True,
+                )
+            except subprocess.TimeoutExpired:
+                # GATE #1b: a single hung store is skipped (partial scan, WARN),
+                # NOT fatal -- the tighter timeout bounds how much of the budget
+                # it can burn, and the rest of the fleet still gets scanned. The
+                # cursor still advances past it, so it can't block rotation.
+                print(
+                    f"stuck-bead-watch: WARNING store {label} timed out after "
+                    f"{call_timeout:.0f}s -- skipping this store this tick "
+                    "(partial scan; covered on a subsequent rotation)",
+                    file=sys.stderr,
+                )
+                store_timed_out = True
+                break
+            if result.returncode != 0:
+                fail(f"gc bd list failed for store {label} "
+                     f"--has-metadata-key {key}: {result.stderr.strip()}")
+            for bead in json.loads(result.stdout):
+                merged[bead["id"]] = bead
+        timings.append(f"{label}={time.monotonic() - store_t0:.2f}s")
+        if not store_timed_out:
+            scanned_labels.append(label)
+
+    # Advance and persist the cursor past every store attempted this tick, so
+    # the next tick resumes at the first store we did NOT reach.
+    if n_stores:
+        _write_scan_cursor(cache_dir, stores[(start_index + attempted) % n_stores][1])
+    _update_store_scan_state(classification_root, scanned_labels, observed_at)
+
+    # Cheap instrumentation (reviewer refinement): per-store call time is
+    # non-uniform (big stores cost far more), so log it once per run to make
+    # the next budget tuning data-driven rather than guesswork.
+    if timings:
+        print("stuck-bead-watch: per-store scan times: " + " ".join(timings),
+              file=sys.stderr)
     return list(merged.values())
 
 
@@ -353,6 +577,16 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--grace-p2", type=int, default=DEFAULT_GRACE_WINDOWS[2])
     parser.add_argument("--grace-p3", type=int, default=DEFAULT_GRACE_WINDOWS[3])
     parser.add_argument("--grace-p4", type=int, default=DEFAULT_GRACE_WINDOWS[4])
+    # GATE #1 (decisions-track brief #99): bound the now-fleet-wide scan.
+    parser.add_argument("--scan-budget-seconds", type=float, default=DEFAULT_SCAN_BUDGET_SECONDS,
+                        help="wall-clock ceiling on the per-tick rig-store sweep; "
+                             "remaining stores are skipped (partial scan) once exceeded")
+    parser.add_argument("--max-call-timeout-seconds", type=float, default=DEFAULT_MAX_CALL_TIMEOUT_SECONDS,
+                        help="tighter per-`gc bd list` timeout for the store loop so one "
+                             "hung rig can't consume the whole scan budget")
+    parser.add_argument("--max-classifications-per-tick", type=int, default=DEFAULT_MAX_CLASSIFICATIONS_PER_TICK,
+                        help="cap on NEW escalations emitted per run; the backlog drains "
+                             "over subsequent ticks instead of flooding in one")
     args = parser.parse_args(argv)
 
     windows = {0: args.grace_p0, 1: args.grace_p1, 2: args.grace_p2, 3: args.grace_p3, 4: args.grace_p4}
@@ -361,7 +595,13 @@ def main(argv: list[str]) -> int:
     now = datetime.now(timezone.utc)
     observed_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    beads = _gc_bd_list_routed()
+    beads = _gc_bd_list_routed(
+        scan_budget_seconds=args.scan_budget_seconds,
+        per_call_timeout=args.max_call_timeout_seconds,
+        cache_dir=args.cache_dir,
+        classification_root=args.classification_root,
+        observed_at=observed_at,
+    )
     sessions = _gc_session_list_active()
     candidates = find_stuck_candidates(beads, sessions, now, args.min_age_seconds)
     candidate_ids = {c["id"] for c in candidates}
@@ -369,12 +609,21 @@ def main(argv: list[str]) -> int:
     escalated = []
     entered_waiting_room = []
 
+    cap = args.max_classifications_per_tick
+    cap_hit = False
     for bead in candidates:
         entry = read_cache_entry(args.cache_dir, bead["id"])
         # gsp-2bowrk: gate on REAL idle age (updated_at), so a bead already
         # idle longer than its priority grace window escalates on this FIRST
         # detection pass -- not first-detection + a fresh grace window.
         if should_escalate(bead, entry, now, windows):
+            # GATE #1c: cap escalations per tick so the first successful
+            # fleet-wide scan can't flood the pipeline with ~1000 events at
+            # once (cf. gsp-2bowrk). Remaining stuck beads stay candidates and
+            # drain over subsequent ticks.
+            if len(escalated) >= cap:
+                cap_hit = True
+                break
             event_id = classify_and_escalate(bead, args.cache_dir, args.classification_root, observed_at)
             escalated.append((bead["id"], event_id))
         elif entry is None:
@@ -383,8 +632,20 @@ def main(argv: list[str]) -> int:
             write_cache_entry(args.cache_dir, bead["id"], observed_at)
             entered_waiting_room.append(bead["id"])
 
+    if cap_hit:
+        print(
+            f"stuck-bead-watch: WARNING classification cap ({cap}) reached -- "
+            "stopped escalating this tick; remaining stuck beads drain over "
+            "subsequent ticks",
+            file=sys.stderr,
+        )
+
     if args.cache_dir.exists():
         for cache_file in args.cache_dir.glob("*.json"):
+            # The rotation cursor lives in cache_dir but is NOT a per-bead
+            # waiting-room entry -- it must survive the stale-entry sweep.
+            if cache_file.name == _CURSOR_FILENAME:
+                continue
             bead_id = cache_file.stem
             if bead_id not in candidate_ids:
                 clear_cache_entry(args.cache_dir, bead_id)

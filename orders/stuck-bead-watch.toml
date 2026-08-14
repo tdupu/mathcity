@@ -18,6 +18,6 @@ description = "Detect routed beads that never made progress; escalate past a pri
 scope = "city"
 trigger = "cooldown"
 interval = "90s"
-exec = "python3 $PACK_DIR/assets/scripts/stuck-bead-watch.py --cache-dir .beads/stuck-bead-watch --classification-root .beads/lost-bead-classifications --grace-p0 300 --grace-p1 600 --grace-p2 1200 --grace-p3 2700 --grace-p4 2700"
+exec = "python3 $PACK_DIR/assets/scripts/stuck-bead-watch.py --cache-dir .beads/stuck-bead-watch --classification-root .beads/lost-bead-classifications --grace-p0 300 --grace-p1 600 --grace-p2 1200 --grace-p3 2700 --grace-p4 2700 --scan-budget-seconds 45 --max-call-timeout-seconds 8 --max-classifications-per-tick 50"
 timeout = "60s"
 idempotent = false
