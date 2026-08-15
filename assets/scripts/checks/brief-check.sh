@@ -147,6 +147,16 @@ check_shuffle_result() {
     if find "$ROOT/.pile" -mindepth 1 -maxdepth 1 -type f -name '*.md' 2>/dev/null | grep -q .; then
       fail "no promoted or rejected brief found (pile still has pending briefs)"
     fi
+    # #20: "empty pile" means no top-level files at all. A pile holding
+    # non-.md files (*.md.bak residue, or a brief whose .md was removed while a
+    # .bak survived) is NOT empty — every selector here globs '*.md', so such a
+    # pile read as empty and passed vacuously, hiding two pending-review briefs
+    # for weeks. A residue-only pile is a distinct, alarmable state, never the
+    # same as a truly-empty one. Fail loud so orphans/residue are surfaced.
+    residue="$(find "$ROOT/.pile" -mindepth 1 -maxdepth 1 -type f ! -name '.*' 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${residue:-0}" -gt 0 ]; then
+      fail "pile holds ${residue} non-.md file(s) but no .md brief and nothing shuffled — possible orphaned briefs or unreaped .bak residue in $ROOT/.pile (a .bak-only pile is NOT an empty pile; see #20)"
+    fi
   fi
   check_jsonl "$ROOT/stack/.index.jsonl"
 }
