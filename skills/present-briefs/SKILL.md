@@ -73,6 +73,7 @@ Decision briefs live only as files in the decisions-track; nothing above finds t
 DECISIONS_DIR="${DECISIONS_TRACK_PATH:-$HOME/gt/.beads/decisions-track}"
 python3 - "$DECISIONS_DIR" <<'PY'
 import json, sys, glob, os
+from datetime import date
 ddir = sys.argv[1]
 for line in open(os.path.join(ddir, "manifest.jsonl")):
     line = line.strip()
@@ -80,6 +81,12 @@ for line in open(os.path.join(ddir, "manifest.jsonl")):
     try: d = json.loads(line)
     except: continue
     if d.get("status") != "ready": continue        # manifest is authoritative
+    du = d.get("defer_until")                       # a deferred brief keeps status=ready but must
+    if du:                                          # NOT resurface until its date has passed (#18)
+        try:
+            if date.fromisoformat(du) > date.today(): continue
+        except ValueError:
+            pass                                    # malformed date -> treat as not deferred
     n = d.get("n")
     cands = glob.glob(os.path.join(ddir, f"{n:02d}-*-brief.md")) \
           + glob.glob(os.path.join(ddir, f"{n}-*-brief.md"))

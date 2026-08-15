@@ -86,9 +86,10 @@ if [ -n "$BRIEF_FILE" ] && [ -f "$BRIEF_FILE" ]; then
   # (1) file frontmatter status: line (macOS BSD sed needs the '' arg)
   sed -i '' -E "s/^status:.*/status: $FS/" "$BRIEF_FILE"
   # (2) manifest entry: status (+ verdict/rationale/date when terminal), rewritten in place
-  python3 - "$DTRACK/manifest.jsonl" "$N" "$MS" "$VERDICT" "$RATIONALE" "$(date +%Y-%m-%d)" <<'PY'
+  python3 - "$DTRACK/manifest.jsonl" "$N" "$MS" "$VERDICT" "$RATIONALE" "$(date +%Y-%m-%d)" "${DEFER_UNTIL:-}" <<'PY'
 import json, sys
 path, n, ms, verdict, rat, today = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
+defer_until = sys.argv[7] if len(sys.argv) > 7 else ""
 out = []
 for line in open(path):
     s = line.strip()
@@ -98,6 +99,10 @@ for line in open(path):
         d["status"] = ms
         if ms != "ready":
             d["verdict"] = verdict; d["verdict_note"] = rat; d["adjudicated_at"] = today
+            d.pop("defer_until", None)      # terminal verdict: clear any prior defer window
+        elif defer_until:
+            d["defer_until"] = defer_until  # defer: record the un-defer date so present-briefs
+                                            # can skip this brief until then (#18); ISO YYYY-MM-DD
     out.append(json.dumps(d))
 open(path, "w").write("\n".join(out) + "\n")
 PY
