@@ -16,6 +16,10 @@ root = ".beads/briefs"
 pile = ".beads/briefs/.pile"
 no_brainer = ".beads/briefs/.pile/.no-brainer"
 rejected = ".beads/briefs/.pile/.rejected"
+# Destination for .bak snapshots retired after a successful revision. The
+# directory already existed on disk but was referenced by no code (#20), so
+# .bak snapshots accumulated as unreaped residue in the pile itself.
+bak_archive = ".beads/briefs/.pile/.bak-archive"
 stack = ".beads/briefs/stack"
 archive = ".beads/briefs/archive"
 presentations = ".beads/briefs/presentations"

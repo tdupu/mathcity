@@ -30,6 +30,7 @@ README.md
 │   └── README-dolt.md
 ├── System Model
 │   ├── GLOSSARY.md
+│   ├── LAYOUT.md
 │   ├── docs/TECHNICAL-SPEC.md
 │   ├── README-beads.md
 │   ├── README-mayor.md
@@ -62,6 +63,7 @@ README.md
 | [docs/INSTALL.md](./docs/INSTALL.md) | Command-level installation guide. |
 | [README-dolt.md](./README-dolt.md) | Private bead backup and Dolt remote setup. |
 | [GLOSSARY.md](./GLOSSARY.md) | Canonical vocabulary. |
+| [LAYOUT.md](./LAYOUT.md) | Repository folder structure and the subdomain pack model. |
 | [docs/TECHNICAL-SPEC.md](./docs/TECHNICAL-SPEC.md) | Precise system mechanics: formulas, gates, feedback loops, roles, and current/planned surfaces. |
 | [README-formulas.md](./README-formulas.md) | Canonical formula index. |
 | [README-skills.md](./README-skills.md) | Canonical skill index. |
