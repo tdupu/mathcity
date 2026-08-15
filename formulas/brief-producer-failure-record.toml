@@ -1,8 +1,8 @@
 description = """
-Record producer-failure signals for gate-rejected briefs.
+Record shared brief-quality-failure signals for gate-rejected briefs.
 
 This formula is idempotent: every run scans `.pile/.rejected` and records only
-rejected briefs that do not already have a producer-failure cache file.
+rejected briefs that do not already have a brief-quality-failure cache file.
 Canonical durable state is the linked event bead where available; cache files
 are regenerable inspection state.
 """
@@ -14,7 +14,7 @@ formula_compiler = ">=2.0.0"
 
 [catalog]
 name = "brief-producer-failure-record"
-description = "Record producer-failure signals from brief-shuffle gate rejects."
+description = "Record brief-quality-failure signals from brief-shuffle gate rejects."
 
 [vars]
 
@@ -28,24 +28,24 @@ default = "mathcity.brief-operator"
 
 [[steps]]
 id = "scan-rejected"
-title = "Find rejected briefs missing producer-failure records"
+title = "Find rejected briefs missing brief-quality-failure records"
 metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
 description = """
 Scan `{{artifact_root}}/.pile/.rejected/*/brief.md` and flat rejected markdown
 files if any legacy rejects exist. For each rejected brief, derive `slug` from
 the rejected path and skip it when
-`{{artifact_root}}/.producer-failure-pile/<slug>.toml` already exists.
+`{{artifact_root}}/.brief-quality-failure-pile/<slug>.toml` already exists.
 
 Write the list of unrecorded slugs to
-`$GC_WORK_DIR/unrecorded-producer-failures.txt`.
+`$GC_WORK_DIR/unrecorded-brief-quality-failures.txt`.
 
-If there are no unrecorded rejects, record `no unrecorded producer failures`
+If there are no unrecorded rejects, record `no unrecorded brief quality failures`
 and complete successfully.
 """
 
 [[steps]]
 id = "record-signals"
-title = "Record producer-failure signals"
+title = "Record brief-quality-failure signals"
 needs = ["scan-rejected"]
 metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
 description = """
@@ -55,13 +55,13 @@ Before recording signals, verify runtime dependencies:
 for cmd in bd gc jq; do
   command -v "$cmd" >/dev/null 2>&1 || {
     echo "I'm sorry, I can't do that — required command '$cmd' is missing." >&2
-    echo "Install '$cmd' or run the appropriate setup/update skill before recording producer failures." >&2
+    echo "Install '$cmd' or run the appropriate setup/update skill before recording brief quality failures." >&2
     exit 1
   }
 done
 ```
 
-For each slug in `$GC_WORK_DIR/unrecorded-producer-failures.txt`, read the
+For each slug in `$GC_WORK_DIR/unrecorded-brief-quality-failures.txt`, read the
 rejected brief and rejection record. Extract:
 
 - `brief_id` from `brief_slug` or the slug path
@@ -75,57 +75,64 @@ rejected brief and rejection record. Extract:
 - `failed_gate_name`
 - `failure_summary`
 - `failure_fingerprint`
+- `brief_kind`
+- `gate_profile`
+- `source_surface`
 
 If `producer_contract: brief-producer-repair.v1` is present, skip the brief;
 repair briefs are self-excluded.
 
-Write `{{artifact_root}}/.producer-failure-pile/<slug>.toml` with schema
-`brief-producer-failure.v1` and these fields:
+Write `{{artifact_root}}/.brief-quality-failure-pile/<slug>.toml` with schema
+`brief_quality_failure.v1` and these fields:
 
 ```toml
-schema = "brief-producer-failure.v1"
+schema = "brief_quality_failure.v1"
 brief_id = "<slug>"
-brief_path = "{{artifact_root}}/.pile/.rejected/<slug>/brief.md"
+brief_kind = "<brief kind>"
+gate_profile = "<gate profile>"
 source_bead = "<source bead id or unknown>"
-source_formula = "<producer formula or unknown>"
-source_step = "<terminal step or unknown>"
-routing_path = ["<route entries>"]
+source_surface = "<source surface>"
 failed_gate = "<gate id>"
-failed_gate_name = "<gate name>"
 failure_summary = "<one sentence>"
 failure_fingerprint = "<lowercase-dash-fingerprint>"
-observed_at = "<RFC3339 UTC>"
 status = "untriaged"
-dedupe_key = "<source_formula>:<failed_gate>:<failure_fingerprint>:<source_bead>"
 ```
+
+When the rejected brief has `producer_contract: brief-producer.v1` or
+explicit producer-origin metadata, also write the legacy
+`{{artifact_root}}/.producer-failure-pile/<slug>.toml` cache with schema
+`brief-producer-failure.v1` and its existing payload shape for compatibility.
 
 Create a linked event bead with the same payload:
 
 ```bash
 payload="$(jq -nc \
-  --arg schema "brief-producer-failure.v1" \
+  --arg schema "brief_quality_failure.v1" \
   --arg brief_id "$slug" \
   --arg brief_path "$brief_path" \
   --arg source_bead "$source_bead" \
   --arg source_formula "$source_formula" \
   --arg source_step "$source_step" \
   --arg routing_path "$routing_path_json" \
+  --arg brief_kind "$brief_kind" \
+  --arg gate_profile "$gate_profile" \
+  --arg source_surface "$source_surface" \
   --arg failed_gate "$failed_gate" \
   --arg failed_gate_name "$failed_gate_name" \
   --arg failure_summary "$failure_summary" \
   --arg failure_fingerprint "$failure_fingerprint" \
   --arg dedupe_key "$dedupe_key" \
-  '{schema:$schema,brief_id:$brief_id,brief_path:$brief_path,source_bead:$source_bead,source_formula:$source_formula,source_step:$source_step,routing_path:$routing_path,failed_gate:$failed_gate,failed_gate_name:$failed_gate_name,failure_summary:$failure_summary,failure_fingerprint:$failure_fingerprint,dedupe_key:$dedupe_key}')"
-event_bead="$(bd create "producer failure: $slug" \
+  '{schema:$schema,brief_id:$brief_id,brief_path:$brief_path,brief_kind:$brief_kind,gate_profile:$gate_profile,source_surface:$source_surface,source_bead:$source_bead,source_formula:$source_formula,source_step:$source_step,routing_path:$routing_path,failed_gate:$failed_gate,failed_gate_name:$failed_gate_name,failure_summary:$failure_summary,failure_fingerprint:$failure_fingerprint,dedupe_key:$dedupe_key}')"
+event_bead="$(bd create "brief quality failure: $slug" \
   --type=event \
-  --event-category brief.producer_failure \
+  --event-category brief.quality_failure \
   --event-target "$source_bead" \
   --event-payload "$payload" \
   --silent)"
 bd dep relate "$event_bead" "$source_bead" || true
-gc event emit brief.producer_failure_recorded --subject "$slug"
+gc event emit brief.quality_failure_recorded --subject "$slug"
 ```
 
 If cache write or event creation fails, emit
-`brief.producer_failure_record_failed` with the slug and exit nonzero.
+`brief.quality_failure_record_failed` with the slug and exit nonzero.
 """
