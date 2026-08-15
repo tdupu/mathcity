@@ -390,6 +390,25 @@ formula, through the front door.*
   an E2E claim is made from manual force-claims, missing provenance, or
   softer vocabulary such as "basically works" → **revise**.
 
+- **CT7.5 Hygienic issues for lifecycle blockers.** When a live workflow is
+  blocked by substrate, lifecycle, deployment, or policy/runtime mismatch
+  rather than by the artifact under review, the operator must file or link a
+  **hygienic issue** before treating the brief as resolved. A *hygienic issue*
+  is a GitHub issue on the **`tdupu/mathcity`** issue tracker that satisfies
+  the gascity-packs `contributing` issue-creation standard in full: it names
+  the failed command or lifecycle point, the affected rig or source path, and
+  the recovery owner; supplies a **minimal reproducible example**; records a
+  **duplicate/related-issue search on `tdupu/mathcity`** and a **related-issue
+  check upstream on `gastownhall/gascity` and `gastownhall/gascity-packs`**;
+  and states the necessity of the fix. File it through `mathcity.create-issue`
+  / the `create-issue-briefed` formula (which read
+  `template-fragments/issue-investigation-standard.md`), never a bare
+  `gh issue create`. Pass: every such blocker has a linked issue meeting this
+  standard before the operator closes or bypasses the affected workflow. Fail:
+  a blocker is treated as resolved only in chat, scratch notes, or an untracked
+  terminal transcript, or filed without the contributing-standard requirements
+  → **revise**.
+
 ## Pillar CT8 — Resource economy
 
 *Tokens are the city's fuel; spend them where judgment lives.*
@@ -692,6 +711,15 @@ test-outcome labels, not artifact or review verdicts.
   reliability-as-a-dial (already reflected in CT9.2)
 
 ## Change log
+
+### 2026-08-15 — CT7.5 added: hygienic issues for lifecycle blockers
+Added a durable-issue requirement for substrate, lifecycle, deployment, and
+policy/runtime mismatch blockers that affect live workflows. A "hygienic issue"
+is defined as a `tdupu/mathcity` GitHub issue satisfying the gascity-packs
+`contributing` issue-creation standard in full (minimal reproducible example,
+duplicate/related search on mathcity + upstream gascity/gascity-packs,
+necessity), filed via `mathcity.create-issue` / `create-issue-briefed`, never a
+bare `gh issue create`. Human adjudicator approved 2026-08-15.
 
 ### 2026-07-28 — CT1.8 and CT7.4 added: routed work conservation and E2E launch provenance
 Added a runtime conservation invariant for routed beads, including formula/order-internal steps, and required E2E tests to declare launch provenance, natural-claim bounds, and strict result labels before claims are made. Triggered by gt-608un/gt-v0nja direct formula E2E roots leaving gt-gon21/gt-q103k open and unclaimed without an automatic stuck/lost signal.
