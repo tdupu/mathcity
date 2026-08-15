@@ -149,3 +149,46 @@ if python3 "$SCRIPT" inventory --rig-root "$TMP" --output "$TMP/missing-parent/o
   echo "expected missing output parent to fail" >&2
   exit 1
 fi
+
+STACK="$TMP/.beads/briefs/stack"
+MARKER="$TMP/.beads/briefs/migrations/2026-08-15-decisions-track-inventory.jsonl"
+cat >"$STACK/08-briefed-free-text-brief.md" <<'MD'
+# Existing Stack Copy
+MD
+cat >"$STACK/.index.jsonl" <<JSONL
+{"slug":"briefed-free-text","path":"$STACK/08-briefed-free-text-brief.md","unlock_count":4}
+JSONL
+dry_run="$(python3 "$SCRIPT" migrate --rig-root "$TMP" --marker "$MARKER")"
+grep -Fq '"apply": false' <<<"$dry_run"
+grep -Fq '"migratable_rows": 8' <<<"$dry_run"
+grep -Fq '"copy_rows": 7' <<<"$dry_run"
+grep -Fq '"annotate_existing_rows": 1' <<<"$dry_run"
+[ ! -e "$MARKER" ] || {
+  echo "dry-run created migration marker" >&2
+  exit 1
+}
+if grep -Fq '"legacy_source":"decisions-track/08-briefed-free-text-brief.md"' "$STACK/.index.jsonl"; then
+  echo "dry-run annotated existing stack index row" >&2
+  exit 1
+fi
+
+python3 "$SCRIPT" migrate --rig-root "$TMP" --marker "$MARKER" --apply >/tmp/decisions-track-migrate.out
+[ -s "$MARKER" ] || {
+  echo "migration did not create marker" >&2
+  exit 1
+}
+grep -Fq '"legacy_source":"decisions-track/01-ready-one-brief.md"' "$STACK/.index.jsonl"
+grep -Fq '"legacy_source":"decisions-track/05-ready-near-miss-brief.md"' "$STACK/.index.jsonl"
+grep -Fq '"legacy_source":"decisions-track/08-briefed-free-text-brief.md"' "$STACK/.index.jsonl"
+grep -Fq '"legacy_source":"decisions-track/10-approved-slung-brief.md"' "$STACK/.index.jsonl"
+if grep -Fq '"legacy_source":"decisions-track/11-terminal-free-text-brief.md"' "$STACK/.index.jsonl"; then
+  echo "migration copied terminal row into stack" >&2
+  exit 1
+fi
+grep -Fq '01-ready-one-brief.md' "$STACK/.index.jsonl"
+test -f "$STACK/01-ready-one-brief.md"
+test -f "$STACK/05-ready-near-miss-brief.md"
+if [ "$(grep -Fc 'decisions-track/08-briefed-free-text-brief.md' "$STACK/.index.jsonl")" -ne 1 ]; then
+  echo "migration duplicated existing stack row instead of annotating it once" >&2
+  exit 1
+fi

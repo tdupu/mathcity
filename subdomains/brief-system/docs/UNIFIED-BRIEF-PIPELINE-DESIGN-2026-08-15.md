@@ -478,6 +478,13 @@ After merge but before touching live data:
 
 Run after BART deploys the merged behavior, before bulk migration:
 
+0. Run `python3 assets/scripts/brief-stack-index.py reconcile-archive
+   --brief-root <city-root>/.beads/briefs` as a dry-run. Review the rows it
+   would remove, then run with `--apply` before any decisions-track migration.
+   The 2026-08-15 live canary `gt-o9yayi` found stack index drift: archived
+   briefs had been moved out of `stack/` while their rows remained in
+   `stack/.index.jsonl`. Proofs 1, 2, and 4 are OUTSTANDING until this
+   reconcile is applied and rerun; proof 5 alone is necessary, not sufficient.
 1. Create a synthetic decision-only brief in a test fixture or temporary rig
    area.
 2. Confirm it enters `.beads/briefs/.pile`.
@@ -496,6 +503,9 @@ After the migration:
 
 - rerun inventory and confirm every legacy item is either migrated,
   terminal-preserved, or explicitly malformed/preserved
+- confirm the migration marker was created by the same `migrate --apply`
+  command that copied decision briefs into the unified stack; do not create the
+  marker first
 - run `check-brief-policy`
 - run `check-city-policy`
 - run `present-briefs` queue discovery and confirm all ripe migrated briefs
