@@ -25,16 +25,35 @@ def slug_from_file(path: Path) -> tuple[int | None, str]:
         return None, stem
     return int(match.group(1)), match.group(2)
 
+# A status is confidently TERMINAL (nothing further owed to the human) only if it
+# begins with one of these prefixes. Prefix-matched so free-text variants like
+# "adjudicated:approve-b(...)" are correctly terminal. Everything else — including
+# unrecognised free-text and near-misses like "ready-for-adjudication" — is treated
+# as non-terminal and MIGRATED (visible), never preserved-invisible (#38, fix A).
+TERMINAL_PREFIXES = ("adjudicated", "rescinded", "auto-dispatched", "moot", "superseded")
+
+
+def is_terminal_status(status: str) -> bool:
+    s = status.strip().lower()
+    return any(s.startswith(prefix) for prefix in TERMINAL_PREFIXES)
+
+
 def action_for(status: str, defer_until: str | None, has_file: bool) -> str:
     if not has_file:
         return "preserve_missing_file"
-    if status == "ready" and defer_until:
-        return "copy_to_pile_deferred"
-    if status == "ready":
-        return "copy_to_pile"
-    if status in {"adjudicated", "rescinded", "auto-dispatched"}:
+    # Fail-closed (#38): preserve ONLY confidently-terminal statuses. Any status that
+    # is not confidently terminal migrates to the unified pile as visible legacy
+    # decision material (the row carries manifest_status for review) rather than being
+    # preserved where B2.10 makes it unreachable. A stray duplicate is visible and
+    # adjudicable; a stray disappearance is not detectable from the queue.
+    if is_terminal_status(status):
         return "preserve_terminal"
-    return "preserve_unknown_status"
+    if status.strip() == "ready" and defer_until:
+        return "copy_to_pile_deferred"
+    if status.strip() == "ready":
+        return "copy_to_pile"
+    # Non-terminal, non-`ready` (free-text, mid-decision) — migrate for review.
+    return "copy_to_pile_review"
 
 def malformed_manifest_row(line_no: int, reason: str) -> dict:
     return {
