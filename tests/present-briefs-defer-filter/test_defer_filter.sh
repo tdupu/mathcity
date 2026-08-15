@@ -19,9 +19,9 @@ PASS=0; FAIL=0
 ok()  { echo "PASS: $1"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
-# --- extract the Method 3 selector heredoc from present-briefs ---
+# --- extract the legacy fallback selector heredoc from present-briefs ---
 SEL="$(mktemp)"
-awk '/DECISIONS_DIR" <</{f=1;next} f&&/^PY$/{exit} f{print}' "$PB" > "$SEL"
+awk '/^### Method 2 — decisions-track legacy fallback/{section=1;next} section&&/python3 - "\$DECISIONS_DIR" <<'"'"'PY'"'"'/{f=1;next} f&&/^PY$/{exit} f{print}' "$PB" > "$SEL"
 [ -s "$SEL" ] || { echo "FAIL: could not extract selector heredoc"; exit 1; }
 
 # --- extract the manifest-writer heredoc from adjudicate-brief ---

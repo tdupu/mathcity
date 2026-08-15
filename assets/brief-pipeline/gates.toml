@@ -95,7 +95,7 @@ id = "G8"
 name = "brief-record-bookkeeping"
 kind = "mechanical"
 required = true
-rules = ["B1.7", "B2.9", "B3.3", "N7"]
+rules = ["B1.7", "B2.9", "B2.10", "B3.3", "N7"]
 evidence_key = "G8 Brief-record"
 description = "Bead records (brief bead type=decision), source links, pile membership, and recorded-verdict/archive records all consistent (one-bead model)."
 
@@ -104,8 +104,8 @@ id = "G9"
 name = "no-brainer-filter"
 kind = "review"
 required = true
-# rules per the POLICY.md gate-inventory table (G9 -> N1-N4, N6)
-rules = ["N1", "N2", "N3", "N4", "N6"]
+# rules per the POLICY.md gate-inventory table (G9 -> N1-N4, N6, N9)
+rules = ["N1", "N2", "N3", "N4", "N6", "N9"]
 evidence_key = "G9 No-brainer-filter"
 policy = "no-brainer-brief-filter.md"
 description = "No-brainer classifier evidence must record exactly one state: known_no_brainer, known_non_no_brainer, candidate, capability_blocker, or safety_blocked. Missing, malformed, or stale classification evidence blocks shortcut handling and stack promotion."
@@ -240,3 +240,12 @@ gates = [
   "G13",
   "G16",
 ]
+
+[profiles.decision]
+gates = ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"]
+
+[profiles.lost_bead_filter]
+gates = ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"]
+
+[profiles.producer_repair]
+gates = ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"]

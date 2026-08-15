@@ -26,6 +26,7 @@ Via args (space-separated or comma-separated):
 |-----|---------|---------|
 | `--artifacts a,b,c` | (ripe queue) | Explicit artifact list; bypasses queue discovery |
 | `--queue-path <dir>` | auto-discover | Override brief-stack directory |
+| `--include-legacy-decisions` | false | Include eligible decisions-track records during the migration safety window |
 
 Examples:
 - `/present-briefs` → present top brief from ripe queue, pre-load next
@@ -33,79 +34,121 @@ Examples:
 
 ## Queue Discovery
 
-When no explicit artifact list is given, discover the ripe queue. The queue is the **union of two brief sources**, both awaiting the human adjudicator's decision:
+When no explicit artifact list is given, the default ripe queue is the unified brief stack at `<rig-root>/.beads/briefs/stack`. The decisions-track scan is legacy fallback only: run it only when `--include-legacy-decisions` is passed or when no migration marker exists. If a decisions-track item appears in `stack/.index.jsonl` as `legacy_source`, suppress the legacy copy.
 
-1. **Artifact briefs** — approved briefs in the brief stack (`<city-root>/.beads/briefs/`), produced by `brief-prep`. Found via Method 1 (beads) or Method 2 (dir scan).
-2. **Decision briefs** — filed by `decisions-to-briefs` into the decisions-track (`<city-root>/.beads/decisions-track/`). These are **file-only** (they are NOT `brief_status=approved` beads), so Method 1 can never see them; Method 3 **always** scans them and merges them in. Decision-briefs are ripe at `status: ready-for-adjudication` (they carry no runnable artifact, so they never cross the artifact-brief approve gate — `test-evidence N/A by construction`).
+### Method 1 — stack index (default)
 
-Run Method 1 (or 2) **and** Method 3, concatenate, and sort the combined list by `unlock_count` descending.
-
-### Method 1 — beads query (preferred)
+The stack index is the authoritative presentation queue. It carries the promoted brief path and its priority, so do not fall back to scanning arbitrary markdown files. Select ready entries from `stack/.index.jsonl`; a future `defer_until` is skipped, while a malformed date deliberately fails open:
 
 ```bash
-bd list --status open --metadata-field brief_status=approved \
-  --limit 0 --json 2>/dev/null \
-  | jq 'sort_by(.metadata.unlock_count | -(.//0))
-        | .[] | {id: .id, artifact: (.metadata.artifact // .id),
-                 path: .metadata.brief_path, unlock: (.metadata.unlock_count//0)}'
-```
-
-### Method 2 — directory scan (fallback)
-
-```bash
-BRIEF_DIR="${BRIEF_QUEUE_PATH:-$HOME/gt/.beads/briefs}"
-find "$BRIEF_DIR" -maxdepth 1 -name "*.md" \
-  | xargs grep -l "^status: approved" 2>/dev/null \
-  | while read f; do
-      unlock=$(grep -m1 "^unlock_count:" "$f" | awk '{print $2}')
-      echo "${unlock:-0} $f"
-    done \
-  | sort -rn | awk '{print $2}'
-```
-
-### Method 3 — decisions-track scan (ALWAYS — do not skip)
-
-Decision briefs live only as files in the decisions-track; nothing above finds them. Always run this and merge its output into the queue.
-
-**The manifest is authoritative for lifecycle status — NOT the file frontmatter.** Adjudication updates `manifest.jsonl` (`status` → `adjudicated`/`rescinded`/`auto-dispatched`) but does NOT rewrite the brief file's `status:` line, so a file can read `ready-for-adjudication` long after it was decided. Filtering on file frontmatter re-presents resolved decisions (observed 2026-08-04: 17 of 66 file-ripe briefs were already adjudicated). Select ripe briefs by **manifest `status == "ready"`**:
-
-```bash
-DECISIONS_DIR="${DECISIONS_TRACK_PATH:-$HOME/gt/.beads/decisions-track}"
-python3 - "$DECISIONS_DIR" <<'PY'
-import json, sys, glob, os
+STACK_DIR="${BRIEF_QUEUE_PATH:-$HOME/gt/.beads/briefs/stack}"
+python3 - "$STACK_DIR" <<'PY'
+import json, os, sys
 from datetime import date
-ddir = sys.argv[1]
-for line in open(os.path.join(ddir, "manifest.jsonl")):
-    line = line.strip()
-    if not line: continue
-    try: d = json.loads(line)
-    except: continue
-    if d.get("status") != "ready": continue        # manifest is authoritative
-    du = d.get("defer_until")                       # a deferred brief keeps status=ready but must
-    if du:                                          # NOT resurface until its date has passed (#18)
+
+stack_dir = sys.argv[1]
+index = os.path.join(stack_dir, ".index.jsonl")
+try:
+    lines = open(index)
+except OSError:
+    sys.exit(0)
+with lines:
+    for line in lines:
         try:
-            if date.fromisoformat(du) > date.today(): continue
-        except ValueError:
-            pass                                    # malformed date -> treat as not deferred
-    n = d.get("n")
-    cands = glob.glob(os.path.join(ddir, f"{n:02d}-*-brief.md")) \
-          + glob.glob(os.path.join(ddir, f"{n}-*-brief.md"))
-    if not cands: continue
-    print(f'{d.get("unlock_count", 0)} {cands[0]}')
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        defer_until = entry.get("defer_until")
+        if defer_until:
+            try:
+                if date.fromisoformat(defer_until) > date.today():
+                    continue
+            except (TypeError, ValueError):
+                pass  # Malformed defer is fail-open.
+        path = entry.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        print(f'{entry.get("unlock_count", 0)} {path}')
 PY
 ```
 
-(Follow-up hygiene: `adjudicate-brief` should also rewrite the file's `status:` on verdict so file and manifest never diverge — tracked separately. Until then, manifest wins.)
+### Method 2 — decisions-track legacy fallback
 
-Then combine Method 1/2 output with Method 3 output and rank together:
+`<rig-root>/.beads/briefs/migrations/2026-08-15-decisions-track-inventory.jsonl` is the default migration marker; override it with `BRIEF_MIGRATION_MARKER` if the migration batch differs. `INCLUDE_LEGACY_DECISIONS=1` represents `--include-legacy-decisions`. The selector returns nothing while the marker exists unless that flag is set. The legacy manifest remains authoritative for lifecycle state, and future defers are skipped while malformed defers fail open.
 
 ```bash
-{ method_1_or_2_paths_with_unlock; method_3_output; } | sort -rn | awk '{print $2}' | awk '!seen[$0]++'
+DECISIONS_DIR="${DECISIONS_TRACK_PATH:-$HOME/gt/.beads/decisions-track}"
+STACK_INDEX="${BRIEF_STACK_INDEX:-${BRIEF_QUEUE_PATH:-$HOME/gt/.beads/briefs/stack}/.index.jsonl}"
+MIGRATION_MARKER="${BRIEF_MIGRATION_MARKER:-$HOME/gt/.beads/briefs/migrations/2026-08-15-decisions-track-inventory.jsonl}"
+INCLUDE_LEGACY_DECISIONS="${INCLUDE_LEGACY_DECISIONS:-0}"
+export STACK_INDEX MIGRATION_MARKER INCLUDE_LEGACY_DECISIONS
+python3 - "$DECISIONS_DIR" <<'PY'
+import glob, json, os, sys
+from datetime import date
+
+decisions_dir = sys.argv[1]
+stack_index = os.environ.get("STACK_INDEX", "")
+marker = os.environ.get("MIGRATION_MARKER", "")
+include_legacy = os.environ.get("INCLUDE_LEGACY_DECISIONS") == "1"
+if os.path.exists(marker) and not include_legacy:
+    sys.exit(0)
+
+legacy_sources = set()
+try:
+    with open(stack_index) as index:
+        for line in index:
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(entry, dict) and isinstance(entry.get("legacy_source"), str):
+                legacy_sources.add(entry["legacy_source"])
+except OSError:
+    pass
+
+try:
+    manifest = open(os.path.join(decisions_dir, "manifest.jsonl"))
+except OSError:
+    sys.exit(0)
+with manifest:
+    for line in manifest:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict) or entry.get("status") != "ready":
+            continue
+        defer_until = entry.get("defer_until")
+        if defer_until:
+            try:
+                if date.fromisoformat(defer_until) > date.today():
+                    continue
+            except (TypeError, ValueError):
+                pass  # Malformed defer is fail-open.
+        n = entry.get("n")
+        if not isinstance(n, int):
+            continue
+        candidates = (glob.glob(os.path.join(decisions_dir, f"{n:02d}-*-brief.md"))
+                      + glob.glob(os.path.join(decisions_dir, f"{n}-*-brief.md")))
+        if not candidates:
+            continue
+        path = candidates[0]
+        relative_path = f"decisions-track/{os.path.basename(path)}"
+        if relative_path in legacy_sources or path in legacy_sources:
+            continue
+        print(f'{entry.get("unlock_count", 0)} {path}')
+PY
 ```
 
-Sort order: **unlock_count descending** (highest unblocking value first). Decision-briefs with no `unlock_count` default to 0; if you need a load-bearing one (e.g. a `stays-out` git-gate decision that unblocks others) surfaced first, pass it explicitly via `--artifacts`.
+The presentation queue is Method 1, optionally followed by Method 2, sorted by `unlock_count` descending:
 
-If queue is empty: report "No ripe briefs in queue (brief stack + decisions-track both empty). Run /brief-prep on pending artifacts, or /decisions-to-briefs to file pending decisions." and exit.
+```bash
+{ stack_selector_output; legacy_selector_output_if_enabled; } | sort -rn | awk '{print $2}' | awk '!seen[$0]++'
+```
+
+If queue is empty: report "No ripe briefs in unified stack. Run /brief-prep, or /decisions-to-briefs to file a decision brief into the pile." and exit.
 
 ## Execution
 
@@ -175,7 +218,7 @@ On each decision: `hot` → present immediately; `queue.pop(0)` → fan out to r
 |-----------|--------|
 | Brief has fewer than 7 sections | Return to prep queue; skip to next |
 | Artifact brief `status` is not `approved` | Skip with note; continue to next |
-| Decision brief (from decisions-track) `status` is `ready-for-adjudication` or `approved` | **Present it** — this is its ripe state; do NOT skip |
+| Decision brief promoted into the stack | **Present it** — decision briefs use the decision-at-top + action-block shape; do NOT apply the artifact-only gate below |
 | Decision brief has fewer than 7 §-sections | Present anyway — decision-briefs follow the `decisions-to-briefs` shape (decision-at-top + action-block), not the artifact §1–§7 template; the 7-section gate binds artifact briefs only |
 | Brief source bead has `Status: HELD` | Skip with note; continue to next |
 | Queue empty at startup | "No ripe briefs. Run /brief-prep on pending artifacts first." |
@@ -194,8 +237,8 @@ On each decision: `hot` → present immediately; `queue.pop(0)` → fan out to r
 - **`/adjudicate-brief`** — records the human adjudicator's verdict and closes the brief bead
 - **`/mathcity.work`** — dispatches approved artifacts (clerk runs this after approve)
 - **`/brief-prep`** — upstream producer that populates the ripe queue with approved briefs
-- **`/decisions-to-briefs`** — files decision-briefs into the decisions-track (`<city-root>/.beads/decisions-track/`) that Method 3 now drains
-- **Brief-pipeline substrate** — the brief-stack (`<city-root>/.beads/briefs/`) + decisions-track (`<city-root>/.beads/decisions-track/`) this skill consumes
+- **`/decisions-to-briefs`** — files new decision briefs into the unified pile (`<city-root>/.beads/briefs/.pile/`), from which `brief-shuffle` promotes them to the stack
+- **Brief-pipeline substrate** — the unified `.beads/briefs/.pile -> stack` lifecycle this skill consumes; decisions-track is legacy fallback only during migration
 
 ## What this skill does NOT do
 

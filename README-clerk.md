@@ -16,12 +16,17 @@ present-briefs
   -> next brief
 ```
 
+`present-briefs` drains the unified `.beads/briefs/stack` queue. Legacy
+`.beads/decisions-track` files are migration fallback records, not a separate
+active lane; new decision-only briefs enter `.beads/briefs/.pile` and are
+promoted by `brief-shuffle` before presentation.
+
 ## Key Skills
 
 | Skill | Purpose |
 | --- | --- |
 | `prime-clerk` | Orient a fresh clerk session. |
-| `present-briefs` | Drain the stack and present briefs in priority/unlock order. |
+| `present-briefs` | Drain the unified stack and present briefs in priority/unlock order. |
 | `adjudicate-brief` | Record the human verdict on the brief bead. |
 | `work` | Dispatch approved follow-up work through the standard front door. |
 | `check-plan-hygiene` | Check any sling command copied from a brief before execution. |
