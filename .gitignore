@@ -10,3 +10,6 @@ __pycache__/
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Local machine-layout note (operator-specific; not shared)
+CONTEXT.md
