@@ -5,7 +5,7 @@ Parent: [README.md](./README.md)
 | Field | Value |
 | --- | --- |
 | Status | **Draft** — compiled 2026-07-23 from the human adjudicator's city-behavior directives; rules marked **PROPOSED** are Claude suggestions not yet adopted and require a grilling pass |
-| Date | 2026-08-15 |
+| Date | 2026-07-28 |
 | Decided | the pack owner (directives, 2026-07-23 session); PROPOSED rules pending |
 | Applies to | The running Gas City instance: dispatch, scheduling, molecules, formulas, and every rig the city manages |
 | Rule prefix | **CT** (City Operations) — reserved in [rule-prefix-registry.md](../../docs/rule-prefix-registry.md); distinct from the Computing domain's `C` prefix |
@@ -390,16 +390,6 @@ formula, through the front door.*
   an E2E claim is made from manual force-claims, missing provenance, or
   softer vocabulary such as "basically works" → **revise**.
 
-- **CT7.5 Hygienic issues for lifecycle blockers.** When a live workflow is
-  blocked by substrate, lifecycle, deployment, or policy/runtime mismatch
-  rather than by the artifact under review, the operator must file or link a
-  durable hygienic issue before treating the brief as resolved. The issue must
-  name the failed command or lifecycle point, the affected rig or source path,
-  and the recovery owner. Pass: every such blocker has a linked issue or bead
-  before the operator closes or bypasses the affected workflow. Fail: a
-  blocker is treated as resolved only in chat, scratch notes, or an untracked
-  terminal transcript → **revise**.
-
 ## Pillar CT8 — Resource economy
 
 *Tokens are the city's fuel; spend them where judgment lives.*
@@ -702,13 +692,6 @@ test-outcome labels, not artifact or review verdicts.
   reliability-as-a-dial (already reflected in CT9.2)
 
 ## Change log
-
-### 2026-08-15 — CT7.5 added: hygienic issues for lifecycle blockers
-Added a durable-issue requirement for substrate, lifecycle, deployment, and
-policy/runtime mismatch blockers that affect live workflows. Triggered by the
-unified brief pipeline design: blockers found while presenting, filtering, or
-migrating briefs must become trackable city hygiene work rather than silent
-operator memory.
 
 ### 2026-07-28 — CT1.8 and CT7.4 added: routed work conservation and E2E launch provenance
 Added a runtime conservation invariant for routed beads, including formula/order-internal steps, and required E2E tests to declare launch provenance, natural-claim bounds, and strict result labels before claims are made. Triggered by gt-608un/gt-v0nja direct formula E2E roots leaving gt-gon21/gt-q103k open and unclaimed without an automatic stuck/lost signal.

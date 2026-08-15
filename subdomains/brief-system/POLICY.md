@@ -101,8 +101,8 @@ audits the diff mechanically.
 | G5b | user-skill-touching-exclusion | stop | Changes to user skill directories never pass shortcut automation without explicit human authorization | N3, B1.3 |
 | G6 | latex-gate | manual | LaTeX-bearing work carries the LaTeX gate outcome, or an explicit no-LaTeX surface check | L1–L4 |
 | G7 | artifacts-staging | mechanical | Artifacts staged under the brief run directory and referenced from the brief | E6 |
-| G8 | brief-record-bookkeeping | mechanical | Bead records (brief bead `type=decision`), source links, pile membership, recorded-verdict/archive records all consistent | B1.7, B2.9, B2.10, B3.3, N7 |
-| G9 | no-brainer-filter | review | Classifier ran and recorded exactly one state: `known_no_brainer`, `known_non_no_brainer`, `candidate`, `capability_blocker`, or `safety_blocked`; missing, malformed, or stale classification evidence blocks shortcut handling | N1–N4, N6, N9 |
+| G8 | brief-record-bookkeeping | mechanical | Bead records (brief bead `type=decision`), source links, pile membership, recorded-verdict/archive records all consistent | B1.7, B2.9, B3.3, N7 |
+| G9 | no-brainer-filter | review | Classifier ran and recorded exactly one state: `known_no_brainer`, `known_non_no_brainer`, `candidate`, `capability_blocker`, or `safety_blocked`; missing, malformed, or stale classification evidence blocks shortcut handling | N1–N4, N6 |
 | G10 | improve-readme | mechanical | Qualifying changes show the README improvement or why no README surface exists | D1, B4.3 |
 | G11 | breadcrumb | mechanical | Experiment/deferred work leaves a durable breadcrumb: source, staged artifacts, next owner | D4, E6 |
 | G12 | auto-merge-kill-switch | stop | Automation checks the two-level kill-switch hierarchy before executing (semantics in N5) | N5 |
@@ -254,13 +254,6 @@ by what adjudication unlocks, not by arrival time.*
   including confidence and category per N7) and closes it, and the brief then
   falls under B2.3 no-resurface like any other adjudicated brief.
   Auto-execution with no verdict recorded on the brief bead → G8 FAIL.
-- **B2.10 Unified presentation pipeline.** Every adjudicable brief source must
-  enter the shared `.beads/briefs/.pile -> brief-shuffle -> stack ->
-  present-briefs` lifecycle before it reaches the human adjudicator.
-  Source-specific behavior is expressed by `brief_kind` and `gate_profile`;
-  it must not create an active side presentation lane. Legacy decisions-track
-  records may be read only as migration fallback and must be
-  duplicate-suppressed when a unified-pile mapping exists.
 
 ---
 
@@ -450,11 +443,6 @@ default; the kill switch is a brake, not a parking brake.*
   net-negative and the category threshold must be raised or the category
   removed. Calibration check: run whenever categories are modified or when
   N6 regressions accumulate.
-- **N9 Classifier evidence for every profile.** Every promoted brief,
-  including decision-only, lost-bead-filter, and producer-repair briefs, must
-  record exactly one no-brainer classifier state before stack promotion.
-  Human-identified obvious briefs that reached presentation must record a
-  durable `no_brainer_leak` linked to the classifier evidence.
 
 ---
 
@@ -765,4 +753,3 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | PP1.8 concision: rationale clauses moved out of rule bodies into this row — B2.5 "the constraint is the human adjudicator's decision budget, and everything subordinates to the constraint"; B4.2 "Leaving the old code behind for 'reference' creates drift — the production path and the legacy path coexist, and the next worker won't know which is current"; L4 "a one-character sign change is exactly the case the gate exists for"; N6 "not a scheduling slip" and "not in asking the human adjudicator to accept more noise" (N6's fix-location sentence kept — load-bearing remediation routing). Pass/fail outcomes unchanged | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
-| 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
