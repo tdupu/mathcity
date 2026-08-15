@@ -31,7 +31,8 @@ Input shapes accepted:
      live branch), or is a commit hash (40-char hex string, or short 7–12-char hex).
      Route to the branch pipeline ([[create-brief]] / [[brief-prep]]); skip steps 2–6.
    - **`policy-disposition`** — everything else (no git artifact). Continue with
-     steps 2–6.
+     steps 2–6. New policy-disposition briefs enter the unified pile; they do
+     not enter decisions-track as an active presentation lane.
    - Emit one `<item-id>  <class>  pending` line to `classification.log` per
      item immediately after classifying it (before any brief is produced). Write to
      `<CWD>/classification.log` unless an explicit path is provided by the caller.
@@ -49,10 +50,13 @@ Input shapes accepted:
    verdict with a one-line rationale.
 5. **ATTACH the ACTION-BLOCK** (schema below) as a fenced `yaml` block in
    the brief. Apply the safety invariant BEFORE writing any auto-action.
-6. **DEPOSIT on a pile via [[create-brief]] conventions** — one file per
-   decision, `NN-<slug>-brief.md`, plus one line in the pile's
-   `manifest.jsonl`. Never present in the Mayor's terminal; the clerk /
-   present-briefs channel drains the pile.
+6. **DEPOSIT on the unified pile via [[create-brief]] conventions** — for a
+   policy-disposition, write one file per decision to
+   `<city-root>/.beads/briefs/.pile/` as `NN-<slug>-brief.md`, plus one line
+   in that pile's `manifest.jsonl`. Never present in the Mayor's terminal;
+   `brief-shuffle` promotes gate-clean briefs to the stack and the clerk /
+   present-briefs channel drains the stack. Do not file new presentation
+   briefs in decisions-track.
 
 ## Branch-artifact pipeline
 
@@ -270,14 +274,28 @@ hygiene still apply in full.
 
 ## Pile + manifest conventions
 
-- Files: `NN-<slug>-brief.md`, zero-padded, one decision each.
-- Frontmatter (minimum): `artifact:` (bead id if the decision maps to one,
-  else `none`), `status: ready-for-adjudication`, `form: compact|full`,
-  `track: <track-name>`.
+- Policy-disposition files: `<city-root>/.beads/briefs/.pile/NN-<slug>-brief.md`,
+  zero-padded, one decision each. The unified pile is the only active intake
+  lane; `brief-shuffle` owns promotion to `stack/`.
+- Frontmatter (minimum):
+  ```yaml
+  artifact: <bead-id-or-none>
+  brief_kind: decision
+  gate_profile: decision
+  feedback_sink: brief_quality_failure
+  classifier_state: known_non_no_brainer
+  legacy_source: null
+  status: ready-for-adjudication
+  form: compact|full
+  track: policy-disposition
+  ```
 - `manifest.jsonl` beside the briefs, one line per brief:
   `{"n": 1, "slug": "...", "source_bead": "...", "form": "compact",
   "track": "...", "status": "ready"}` — so the presenter can count and
   order without opening files.
+- decisions-track records are legacy compatibility/migration mappings only:
+  write pointer records when migration compatibility requires them, never a
+  new ready-to-present policy-disposition brief.
 - Verify freshness before drafting: `bd show` every source bead — a closed
   or deferred source changes the decision (e.g. "approve the audit" becomes
   "approve the delivered plan"). Record any such reclassification in the
@@ -305,9 +323,9 @@ hygiene still apply in full.
 - Artifact type: `policy-disposition` → continues through steps 2–6
 - Shape: **named options** (yes / no / defer on the retention window)
 - Form: compact (reversible y/n scope)
-- Outcome: condensed brief produced via existing procedure; no [[create-brief]]
-  skill invocation; no brief-stack deposit — deposited to the decision pile per
-  §Pile conventions
+- Outcome: condensed brief produced via the existing procedure; no
+  [[create-brief]] skill invocation; deposited to the unified brief-stack
+  `.pile` per §Pile conventions
 
 ## Versioning
 

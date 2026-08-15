@@ -159,7 +159,11 @@ For `Disposition: reject` or `Disposition: blocked`:
    `{{artifact_root}}/.pile/.rejected/<slug>/brief.md` with a short
    rejection record, then remove the now-empty
    `{{artifact_root}}/.staging/<slug>/` directory.
-2. A rejection MUST NOT dead-end there — perform BOTH send-back actions
+2. Every rejected or blocked item MUST write enough rejection metadata for
+   the shared `brief_quality_failure.v1` record: `brief_kind`, `gate_profile`,
+   `source_bead`, `source_surface`, `failed_gate`, `failure_summary`, and
+   `failure_fingerprint`.
+3. A rejection MUST NOT dead-end there — perform BOTH send-back actions
    (unchanged from before):
    - File a remediation bead: `.gc/scripts/escalate.sh --title
      "[brief-shuffle] gate-rejected: <slug>" --body "<failed gates +

@@ -64,8 +64,12 @@ rules:
 Your brief-cycle runs through three skills. Do not improvise any other
 presentation, recording, or dispatch channel.
 
-- **PRESENT — `present-briefs`.** Drains the ripe/approved brief stack to
-  the human adjudicator. It wraps `present-it` (Decision-at-Top: the FIRST thing the human adjudicator
+- **PRESENT — `present-briefs`.** Drains the unified ripe/approved brief
+  stack to the human adjudicator. New artifact, decision-only, lost-bead-filter,
+  and producer-repair briefs all reach this queue through
+  `.beads/briefs/.pile -> brief-shuffle -> stack`; `.beads/decisions-track`
+  is a preserved legacy/migration fallback, not a normal active lane. It
+  wraps `present-it` (Decision-at-Top: the FIRST thing the human adjudicator
   hears is what is being decided) and walks the stack in `unlock_count`
   order. `present-briefs` internally calls `brief-record-decision` via
   `gc sling` when the human adjudicator gives a verdict — check its output to confirm the
@@ -143,13 +147,12 @@ deprecated. Always use the `build-basic-briefed` pattern above, or let
 
 ## The job, step by step
 
-1. Locate the live brief stack. For hecke work the stack lives at **both**
-   `<city-root>/.beads/briefs/` (HQ city stack) and
-   `<repos-root>/hecke/.beads/briefs/` (repo side, 11+ entries — more entries =
-   this is the operative stack for repo work per CLAUDE.md routing rules).
-   `stack/` is presentation-ready, ordered by `unlock_count` desc via
-   `stack/.index.jsonl`; `.pile/` (city side only) is awaiting
-   gate-keep promotion. Skip any brief whose bead has `Status: HELD`.
+1. Locate the live brief stack. `stack/` is presentation-ready, ordered by
+   `unlock_count` desc via `stack/.index.jsonl`; `.pile/` is awaiting
+   `brief-shuffle` promotion. During the decisions-track migration window,
+   treat `.beads/decisions-track` only as an explicit fallback/audit input
+   and suppress any legacy item whose `legacy_source` already appears in the
+   stack index. Skip any brief whose bead has `Status: HELD`.
 2. Present the top brief with `present-briefs` (which wraps `present-it`;
    no-brainers collapse to compact one-liners, full briefs go through
    grill-and-present). Decision-at-Top: the FIRST thing the human adjudicator hears is

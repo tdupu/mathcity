@@ -87,13 +87,56 @@ new artifact created
   → /testing-work dispatched
   → smoke-test-briefed runs
   → TESTING.md written
-  → brief filed with test evidence
+  → brief filed with test evidence in .beads/briefs/.pile
+  → brief-shuffle applies the brief's gate_profile
+  → stack
   -> adjudication
   → A verdict → commit + push
 ```
 
 The `formula-work` skill references `testing-work` explicitly; formula authors
 should dispatch both in parallel where possible.
+
+Every brief source uses the same promotion contract: the relevant typed
+profile, no-brainer classifier evidence, and a declared
+`brief_quality_failure.v1` feedback sink. Artifact briefs still carry the
+standard artifact evidence gates; decision-only, lost-bead-filter, and
+producer-repair briefs prove their own profile-specific evidence instead of
+inventing fake artifact-style test evidence.
+
+## Brief Pipeline Regression Tests
+
+The unified brief pipeline has focused smoke tests that can run before BART
+touches live city state:
+
+```bash
+bash tests/unified-brief-pipeline-e2e/smoke_test.sh
+bash tests/decisions-track-migration/smoke_test.sh
+bash tests/unified-brief-gate-profiles/smoke_test.sh
+bash tests/present-briefs-unified-source/smoke_test.sh
+bash tests/present-briefs-defer-filter/test_defer_filter.sh
+bash tests/brief-quality-failure/smoke_test.sh
+```
+
+Run the older filter/gate regressions with them when changing the brief
+pipeline:
+
+```bash
+bash tests/lost-bead-filter/smoke_test.sh
+bash skills/catch-no-brainer/fixtures/run.sh
+bash tests/brief-no-brainer-gate/test_brief_check_no_brainer.sh
+bash tests/lockless-brief-shuffle/smoke_test.sh
+bash tests/producer-failure-rollup-routing/smoke_test.sh
+python3 -m pytest tests/stuck-bead-watch tests/tail-end-detector
+```
+
+For BART deployment, rerun the same commands in the exact runtime path that
+`gc` resolves. Pull-only deployment is enough only if live-resolved
+`present-briefs`, `decisions-to-briefs`, `assets/brief-pipeline/gates.toml`,
+and `check-brief-policy` match `/Users/tdupuy/repos/mathcity` at the merged
+commit. If those files resolve from `/Users/tdupuy/gt`, `~/.gc/cache`, or
+another installed pack location, run the existing pack import/build/install
+step first, then rerun the tests there before live migration.
 
 ## Tests that grow over time
 

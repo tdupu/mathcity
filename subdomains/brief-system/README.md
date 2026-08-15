@@ -102,6 +102,13 @@ source bead → build-basic-briefed convoy → terminal slot: brief-prep SKILL
   → brief-decision-dispatch → gc.publisher → real publish
 ```
 
+Decision-only briefs use the same intake. `decisions-to-briefs` writes new
+decision briefs into `.beads/briefs/.pile` with `brief_kind=decision`,
+`gate_profile=decision`, no-brainer classifier evidence, and
+`feedback_sink=brief_quality_failure`. The old `.beads/decisions-track`
+directory is preserved as legacy/migration input and as an audit trail; it is
+not the normal presentation queue.
+
 ---
 
 ## Where it goes: pile → shuffle → stack
@@ -109,19 +116,28 @@ source bead → build-basic-briefed convoy → terminal slot: brief-prep SKILL
 - **The pile** (`.beads/briefs/.pile/`) is the single accumulation point for
   briefs that are written but not yet vetted. Canonically the pile is a bead
   query — "all open `decision` beads not under an active defer" — and the
-  directory is its cache.
+  directory is its cache. Artifact briefs, decision-only briefs,
+  lost-bead-filter briefs, and producer-repair briefs all enter here.
 - **The shuffle** is the gatekeeper. A background order
   (`brief-shuffle-pile`) notices a non-empty pile and runs the
   `brief-shuffle` formula: take one brief, check every required gate against
   the registry, and either **promote** it or **reject** it (rejects go to
   `.pile/.rejected/` with a reason; nothing is silently dropped). The shuffle
-  is the *single writer* to the stack — producers may never skip it.
+  is the *single writer* to the stack — producers may never skip it. Source
+  differences are expressed with `brief_kind` and `gate_profile`, not with
+  separate presentation lanes.
 - **The stack** (`.beads/briefs/stack/`) holds gate-clean briefs awaiting
   human adjudication, indexed in `stack/.index.jsonl`. Ordering is by **unlock count**:
   the number of downstream beads that adjudicating this brief would unblock,
   computed from the dependency graph — largest first. The idea: human
   attention is the scarce resource, so spend it where one verdict releases
   the most stalled work. Ties break by priority, then age.
+
+Every source uses the same source contract before promotion: a typed
+`gate_profile`, no-brainer classifier evidence, and a declared
+`feedback_sink`. Rejects from any source record `brief_quality_failure.v1`;
+producer-origin rejects also retain the legacy producer-failure cache for
+compatibility.
 
 Presentation then drains the stack (next section).
 
@@ -132,11 +148,14 @@ Presentation then drains the stack (next section).
 **Reading the stack.** Two routes:
 
 - The **present-briefs** skill, run by the outside clerk (or Mayor), drains
-  every pending stack brief in one session: trivial "no-brainer" items are
+  pending briefs from the unified stack: trivial "no-brainer" items are
   collapsed into one-line `DECISION / CONTEXT / RECOMMEND / CONFIRM: y/n`
   entries, and full briefs are presented one at a time in their seven-section
-  form. Presentation is human-facing and cannot be staffed by a gc order —
-  there is no `brief-present-next` order; the outside clerk runs the skill.
+  form. During the migration window, `present-briefs` may scan
+  `.beads/decisions-track` only as an explicit legacy fallback and suppresses
+  duplicates that already have a `legacy_source` mapping in the stack index.
+  Presentation is human-facing and cannot be staffed by a gc order — there is
+  no `brief-present-next` order; the outside clerk runs the skill.
 
 - The **present-it** skill, interactively: say "present he-x8dk-merge" in a
   session and get the same decision-first dump in conversation.
@@ -213,6 +232,23 @@ The brief system's orders:
 
 The design principle is "ring the bell": decisions emit events and consumers
 wake immediately; the timed sweeps are backstops for lost events.
+
+## Migration And Deployment Notes
+
+Legacy `.beads/decisions-track` material is migrated copy-first. The inventory
+tool records ready, deferred, terminal, malformed, missing-file, and
+file-without-manifest cases before any behavior changes. Live unadjudicated
+items get normalized printouts in `.beads/briefs/.pile`; terminal items remain
+preserved and do not re-enter pile or stack.
+
+BART deployment must verify the runtime source path before live migration. A
+plain `git pull --ff-only` in `/Users/tdupuy/repos/mathcity` is sufficient only
+when the live `gc` runtime resolves skills, formulas, assets, and tests
+directly from that checkout. If the runtime resolves an installed pack under
+`/Users/tdupuy/gt`, `~/.gc/cache`, or another materialized location, BART must
+run the existing pack import/build/install step and verify the live-resolved
+`present-briefs`, `decisions-to-briefs`, `gates.toml`, and policy-check files
+match the merged source revision before running migration.
 
 ---
 

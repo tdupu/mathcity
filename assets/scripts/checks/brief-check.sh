@@ -66,6 +66,151 @@ require_text() {
   grep -Eq "$pattern" "$path" || fail "$message in $path"
 }
 
+require_frontmatter_key_value() {
+  path="$1"
+  key="$2"
+  expected="$3"
+  awk -v key="$key" -v expected="$expected" '
+    BEGIN { in_frontmatter = 0; closed = 0; found = 0; invalid = 0 }
+    NR == 1 {
+      if ($0 != "---") { invalid = 1; exit }
+      in_frontmatter = 1
+      next
+    }
+    in_frontmatter && $0 == "---" {
+      closed = 1
+      exit
+    }
+    in_frontmatter {
+      line = $0
+      prefix = "^" key "[[:space:]]*:"
+      if (line ~ prefix) {
+        sub(prefix, "", line)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+        if (line ~ /^".*"$/ || line ~ /^'"'"'.*'"'"'$/) {
+          line = substr(line, 2, length(line) - 2)
+        }
+        if (line == expected) { found = 1 }
+      }
+    }
+    END { exit(!invalid && closed && found ? 0 : 1) }
+  ' "$path" || fail "frontmatter $key must equal $expected in $path"
+}
+
+require_frontmatter_key() {
+  path="$1"
+  key="$2"
+  frontmatter_has_key "$path" "$key" ||
+    fail "frontmatter $key must have a value in $path"
+}
+
+frontmatter_has_key() {
+  path="$1"
+  key="$2"
+  awk -v key="$key" '
+    BEGIN { in_frontmatter = 0; closed = 0; found = 0; invalid = 0 }
+    NR == 1 {
+      if ($0 != "---") { invalid = 1; exit }
+      in_frontmatter = 1
+      next
+    }
+    in_frontmatter && $0 == "---" {
+      closed = 1
+      exit
+    }
+    in_frontmatter {
+      line = $0
+      prefix = "^" key "[[:space:]]*:"
+      if (line ~ prefix) {
+        sub(prefix, "", line)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+        if (length(line) > 0) { found = 1 }
+      }
+    }
+    END { exit(!invalid && closed && found ? 0 : 1) }
+  ' "$path"
+}
+
+check_profile_common() {
+  path="$1"
+  profile="$2"
+  require_file "$path"
+  require_frontmatter_key_value "$path" "gate_profile" "$profile"
+  require_frontmatter_key_value "$path" "feedback_sink" "brief_quality_failure"
+  check_no_brainer_classification_evidence
+}
+
+check_action_block() {
+  path="$1"
+  require_text "$path" '^action_block:[[:space:]]*$' "missing action_block"
+  require_text "$path" '^  on_approve:' "action_block missing on_approve"
+  require_text "$path" '^  on_reject:' "action_block missing on_reject"
+  require_text "$path" '^  on_defer:' "action_block missing on_defer"
+}
+
+check_decision_profile() {
+  path="$(brief_path)"
+  check_profile_common "$path" "decision"
+  require_frontmatter_key_value "$path" "brief_kind" "decision"
+  if ! frontmatter_has_key "$path" "source_bead"; then
+    require_frontmatter_key "$path" "legacy_source"
+  fi
+  check_action_block "$path"
+}
+
+check_lost_bead_filter_profile() {
+  path="$(brief_path)"
+  check_profile_common "$path" "lost_bead_filter"
+  require_frontmatter_key_value "$path" "brief_kind" "lost_bead_filter"
+  for key in source_bead fingerprint threshold_count distinct_bead_count replay_command false_positive_risk; do
+    require_frontmatter_key "$path" "$key"
+  done
+}
+
+check_producer_repair_profile() {
+  path="$(brief_path)"
+  check_profile_common "$path" "producer_repair"
+  require_frontmatter_key_value "$path" "brief_kind" "producer_repair"
+  require_frontmatter_key_value "$path" "producer_contract" "brief-producer-repair.v1"
+  for key in repair_source_formula repair_failed_gate repair_failure_fingerprint replay_command; do
+    require_frontmatter_key "$path" "$key"
+  done
+}
+
+check_brief_quality_failure_record() {
+  path="$(brief_path)"
+  require_file "$path"
+  for key in schema brief_id brief_kind gate_profile source_bead source_surface failed_gate failure_summary failure_fingerprint status; do
+    awk -v key="$key" '
+      $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+        value = $0
+        sub("^[[:space:]]*" key "[[:space:]]*=[[:space:]]*", "", value)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        if (value != "" && value != "\"\"" && value != "''''") found = 1
+      }
+      END { exit(found ? 0 : 1) }
+    ' "$path" || fail "TOML field $key must have a value in $path"
+  done
+  require_toml_key_value "$path" "schema" "brief_quality_failure.v1"
+  require_toml_key_value "$path" "status" "untriaged"
+}
+
+require_toml_key_value() {
+  path="$1"
+  key="$2"
+  expected="$3"
+  awk -v key="$key" -v expected="$expected" '
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*=" {
+      value = $0
+      sub("^[[:space:]]*" key "[[:space:]]*=[[:space:]]*", "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      if (value ~ /^".*"$/) value = substr(value, 2, length(value) - 2)
+      if (value == expected) found = 1
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$path" || fail "TOML $key must equal $expected in $path"
+}
+
 require_gate() {
   path="$1"
   key="$2"
@@ -449,5 +594,9 @@ case "$COMMAND" in
   file-or-sendback-log) check_file_or_sendback_log ;;
   producer-contract) check_producer_contract ;;
   producer-repair-self-exclusion) check_producer_repair_self_exclusion ;;
+  decision-profile) check_decision_profile ;;
+  lost-bead-filter-profile) check_lost_bead_filter_profile ;;
+  producer-repair-profile) check_producer_repair_profile ;;
+  brief-quality-failure-record) check_brief_quality_failure_record ;;
   *) fail "unknown check: $COMMAND" ;;
 esac
