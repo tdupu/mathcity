@@ -11,6 +11,7 @@ import re
 import socket
 import sys
 import tomllib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,21 @@ from typing import Any
 
 OWNER = "brief-shuffle-fast-drain"
 STATUS_PATTERN = re.compile(r"^(.+?):\s*(PASS|N/A|FAIL|BLOCKED|PENDING)\b", re.MULTILINE)
+CLASSIFIER_STATES = {
+    "known_no_brainer",
+    "known_non_no_brainer",
+    "candidate",
+    "capability_blocker",
+    "safety_blocked",
+}
+CLASSIFIER_TIMESTAMP = re.compile(r"classified_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
+@dataclass(frozen=True)
+class Outcome:
+    action: str
+    slug: str
+    reason: str = ""
 
 
 def utc_now() -> str:
@@ -49,6 +65,45 @@ def gate_statuses(text: str) -> dict[str, list[str]]:
     return statuses
 
 
+def classifier_error(text: str) -> str | None:
+    lines = [line for line in text.splitlines() if "G9 No-brainer-filter:" in line]
+    if len(lines) != 1:
+        return "G9 evidence must contain exactly one G9 No-brainer-filter line"
+    line = lines[0]
+    if not re.search(r"G9 No-brainer-filter:\s*PASS\b", line):
+        return "G9 No-brainer-filter evidence must be PASS"
+    if not CLASSIFIER_TIMESTAMP.search(line):
+        return "G9 evidence must set classified_at=<ISO-8601-utc>"
+    states = re.findall(r"classifier_state=([^\s;]+)", line)
+    if len(states) != 1 or states[0] not in CLASSIFIER_STATES:
+        return "G9 evidence must contain exactly one valid classifier_state"
+    state = states[0]
+    if state == "known_no_brainer":
+        category = re.search(r"category=([A-Za-z0-9._-]+)", line)
+        if not category or category.group(1) == "none":
+            return "known_no_brainer G9 evidence must set a registry category"
+        categories_path = Path(__file__).resolve().parents[1] / "brief-pipeline/no-brainer-categories.toml"
+        with categories_path.open("rb") as handle:
+            registry = tomllib.load(handle)
+        categories = {item.get("id") for item in registry.get("category", [])}
+        if category.group(1) not in categories:
+            return f"known_no_brainer category is not in registry: {category.group(1)}"
+        if "stop_gates_clear=true" not in line:
+            return "known_no_brainer G9 evidence requires stop_gates_clear=true"
+        confidence = re.search(r"confidence=([0-9]+(?:\.[0-9]+)?)", line)
+        if not confidence or float(confidence.group(1)) < 0.85:
+            return "known_no_brainer confidence must be >= 0.85"
+    elif state == "known_non_no_brainer" and not re.search(r"reason=[^;]+", line):
+        return "known_non_no_brainer G9 evidence must set reason"
+    elif state == "candidate" and not re.search(r"proposed_registry_extension=[^;]+", line):
+        return "candidate G9 evidence must set proposed_registry_extension"
+    elif state == "capability_blocker" and not re.search(r"reason=[^;]+", line):
+        return "capability_blocker G9 evidence must set blocker reason"
+    elif state == "safety_blocked" and not re.search(r"stop_gate=(G5|G5b|L4)", line):
+        return "safety_blocked G9 evidence must name stop_gate=G5, G5b, or L4"
+    return None
+
+
 def profile_error(profile: str, metadata: dict[str, str], text: str) -> str | None:
     if profile == "standard":
         if not any(metadata.get(key) for key in ("source_bead", "artifact", "brief_bead")):
@@ -56,8 +111,8 @@ def profile_error(profile: str, metadata: dict[str, str], text: str) -> str | No
     elif profile == "decision":
         if metadata.get("brief_kind") != "decision":
             return "decision brief must set brief_kind: decision"
-        if not metadata.get("feedback_sink"):
-            return "decision brief missing feedback_sink metadata"
+        if metadata.get("feedback_sink") != "brief_quality_failure":
+            return "decision brief feedback_sink must equal brief_quality_failure"
         if not (metadata.get("source_bead") or metadata.get("legacy_source")):
             return "decision brief missing source_bead or legacy_source metadata"
         if not re.search(r"^action_block:\s*$", text, re.MULTILINE):
@@ -67,24 +122,24 @@ def profile_error(profile: str, metadata: dict[str, str], text: str) -> str | No
                 return f"decision brief action_block missing {action}"
     elif profile == "lost_bead_filter":
         required = ("source_bead", "fingerprint", "threshold_count", "distinct_bead_count", "replay_command", "false_positive_risk")
-        if metadata.get("brief_kind") != "lost_bead_filter" or not metadata.get("feedback_sink"):
-            return "lost_bead_filter brief missing required profile metadata"
+        if metadata.get("brief_kind") != "lost_bead_filter":
+            return "lost_bead_filter brief must set brief_kind: lost_bead_filter"
+        if metadata.get("feedback_sink") != "brief_quality_failure":
+            return "lost_bead_filter brief feedback_sink must equal brief_quality_failure"
         missing = next((key for key in required if not metadata.get(key)), None)
         if missing:
             return f"lost_bead_filter brief missing {missing} metadata"
     elif profile == "producer_repair":
         required = ("repair_source_formula", "repair_failed_gate", "repair_failure_fingerprint", "replay_command")
-        if (metadata.get("brief_kind") != "producer_repair"
-                or metadata.get("producer_contract") != "brief-producer-repair.v1"
-                or not metadata.get("feedback_sink")):
-            return "producer_repair brief missing required profile metadata"
+        if metadata.get("brief_kind") != "producer_repair":
+            return "producer_repair brief must set brief_kind: producer_repair"
+        if metadata.get("producer_contract") != "brief-producer-repair.v1":
+            return "producer_repair brief producer_contract must equal brief-producer-repair.v1"
+        if metadata.get("feedback_sink") != "brief_quality_failure":
+            return "producer_repair brief feedback_sink must equal brief_quality_failure"
         missing = next((key for key in required if not metadata.get(key)), None)
         if missing:
             return f"producer_repair brief missing {missing} metadata"
-    elif profile == "no_brainer":
-        g9 = [line for line in text.splitlines() if line.startswith("G9 No-brainer-filter:")]
-        if len(g9) != 1 or "classified_at=" not in g9[0] or "classifier_state=" not in g9[0]:
-            return "no_brainer brief missing classifier evidence"
     return None
 
 
@@ -100,6 +155,10 @@ def evaluate(path: Path, gate_config: dict[str, Any]) -> tuple[str, str, dict[st
     error = profile_error(profile, metadata, text)
     if error:
         return profile, error, metadata
+    if "G9" in profiles[profile].get("gates", []):
+        error = classifier_error(text)
+        if error:
+            return profile, error, metadata
     statuses = gate_statuses(text)
     gates_by_id = {gate["id"]: gate for gate in gate_config.get("gates", [])}
     for gate_id in profiles[profile].get("gates", []):
@@ -157,7 +216,11 @@ def claim(source: Path, brief_root: Path, slug: str) -> tuple[Path, Path]:
     staging_dir = brief_root / ".staging" / f"fast-drain-{os.getpid()}-{slug}"
     staging_dir.mkdir(parents=True, exist_ok=False)
     staged = staging_dir / "brief.md"
-    source.replace(staged)
+    try:
+        source.replace(staged)
+    except OSError:
+        staging_dir.rmdir()
+        raise
     marker = {
         "owner": OWNER,
         "host": socket.gethostname(),
@@ -182,39 +245,64 @@ def cleanup_own_staging(staging_dir: Path) -> None:
     staging_dir.rmdir()
 
 
-def process_item(source: Path, brief_root: Path, gate_config: dict[str, Any], apply: bool) -> tuple[str, str, str]:
-    slug = source.stem
-    profile, reason, metadata = evaluate(source, gate_config)
-    action = "promote" if not reason else "reject"
-    if not apply:
-        return action, slug, reason
-    staging_dir, staged = claim(source, brief_root, slug)
-    if action == "promote":
-        stack = brief_root / "stack"
-        stack.mkdir(parents=True, exist_ok=True)
-        staged.replace(stack / f"{slug}.md")
-        append_index(stack, {
-            "slug": slug,
-            "path": f"stack/{slug}.md",
-            "source": f".pile/{slug}.md",
-            "gate_profile": profile,
-            "unlock_count": 0,
-            "created_at": utc_now(),
-        })
-    else:
-        rejected_dir = brief_root / ".pile" / ".rejected" / slug
-        rejected_dir.mkdir(parents=True, exist_ok=False)
-        staged.replace(rejected_dir / "brief.md")
-        rejection = {
-            "slug": slug,
-            "gate_profile": profile,
-            "reason": reason,
-            "source_path": f".pile/{slug}.md",
-            "rejected_at": utc_now(),
-        }
-        (rejected_dir / "rejection.json").write_text(json.dumps(rejection, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, profile: str, reason: str) -> None:
+    rejected_dir = brief_root / ".pile" / ".rejected" / slug
+    rejected_dir.mkdir(parents=True, exist_ok=False)
+    staged.replace(rejected_dir / "brief.md")
+    rejection = {
+        "slug": slug,
+        "gate_profile": profile,
+        "reason": reason,
+        "source_path": f".pile/{slug}.md",
+        "rejected_at": utc_now(),
+    }
+    (rejected_dir / "rejection.json").write_text(json.dumps(rejection, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     cleanup_own_staging(staging_dir)
-    return action, slug, reason
+
+
+def process_item(source: Path, brief_root: Path, gate_config: dict[str, Any], apply: bool) -> Outcome:
+    slug = source.stem
+    profile, reason, _metadata = evaluate(source, gate_config)
+    action = "promote" if not reason else "reject"
+    if action == "promote" and (brief_root / "stack" / f"{slug}.md").exists():
+        action = "reject"
+        reason = "duplicate stack slug"
+    if not apply:
+        return Outcome(action, slug, reason)
+    try:
+        staging_dir, staged = claim(source, brief_root, slug)
+    except FileNotFoundError:
+        return Outcome("skipped", slug, "source disappeared before claim")
+    except OSError as error:
+        return Outcome("skipped", slug, f"unable to claim source: {error}")
+    try:
+        if action == "promote":
+            stack = brief_root / "stack"
+            destination = stack / f"{slug}.md"
+            if destination.exists():
+                action = "reject"
+                reason = "duplicate stack slug"
+            else:
+                stack.mkdir(parents=True, exist_ok=True)
+                staged.replace(destination)
+                try:
+                    append_index(stack, {
+                        "slug": slug,
+                        "path": f"stack/{slug}.md",
+                        "source": f".pile/{slug}.md",
+                        "gate_profile": profile,
+                        "unlock_count": 0,
+                        "created_at": utc_now(),
+                    })
+                except OSError:
+                    destination.replace(staged)
+                    raise
+                cleanup_own_staging(staging_dir)
+                return Outcome("promote", slug)
+        reject_staged(staging_dir, staged, brief_root, slug, profile, reason)
+        return Outcome("reject", slug, reason)
+    except OSError as error:
+        return Outcome("skipped", slug, f"disposition failed; staged for recovery: {error}")
 
 
 def main() -> int:
@@ -240,14 +328,16 @@ def main() -> int:
         "reasons": {},
     }
     for source in items:
-        action, slug, reason = process_item(source, brief_root, gate_config, args.apply)
-        key = {"promote": "promoted", "reject": "rejected"}[action]
-        if args.apply:
-            report[key].append(slug)
+        outcome = process_item(source, brief_root, gate_config, args.apply)
+        if outcome.action == "skipped":
+            report["skipped"].append(outcome.slug)
+        elif args.apply:
+            report[{"promote": "promoted", "reject": "rejected"}[outcome.action]].append(outcome.slug)
         else:
-            report[f"planned_{key}"].append(slug)
-        if reason:
-            report["reasons"][slug] = reason
+            key = {"promote": "promoted", "reject": "rejected"}[outcome.action]
+            report[f"planned_{key}"].append(outcome.slug)
+        if outcome.reason:
+            report["reasons"][outcome.slug] = outcome.reason
     report["remaining_pile"] = len(selected_pile_items(pile, sys.maxsize))
     if args.json:
         print(json.dumps(report, sort_keys=True))

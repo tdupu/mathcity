@@ -1,13 +1,24 @@
 import json
+import importlib.util
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "assets/scripts/brief-shuffle-fast-drain.py"
 GATES = REPO_ROOT / "assets/brief-pipeline/gates.toml"
+
+
+def load_drain_module():
+    spec = importlib.util.spec_from_file_location("brief_shuffle_fast_drain", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class BriefShuffleFastDrainTests(unittest.TestCase):
@@ -144,6 +155,96 @@ feedback_sink: brief_quality_failure
         self.json_output(self.run_drain("--apply"))
         self.assertTrue((foreign / "brief.md").exists())
         self.assertTrue((foreign / ".claimed_by").exists())
+
+    def test_profile_rejects_wrong_feedback_sink(self):
+        fixtures = {
+            "decision": "brief_kind: decision\nlegacy_source: decisions-track/decision.md\n",
+            "lost_bead_filter": "brief_kind: lost_bead_filter\nfingerprint: fixture\nthreshold_count: 1\ndistinct_bead_count: 1\nreplay_command: bd show source\nfalse_positive_risk: low\n",
+            "producer_repair": "brief_kind: producer_repair\nproducer_contract: brief-producer-repair.v1\nrepair_source_formula: fixture\nrepair_failed_gate: G9\nrepair_failure_fingerprint: fixture\nreplay_command: true\n",
+        }
+        for profile, metadata in fixtures.items():
+            brief = self.write_brief(f"wrong-sink-{profile}", profile=profile, extra_frontmatter=metadata)
+            if profile == "decision":
+                brief.write_text(brief.read_text().replace("\n# Fixture brief", "\naction_block:\n  on_approve: []\n  on_reject: []\n  on_defer: []\n\n# Fixture brief"))
+            brief.write_text(brief.read_text().replace("feedback_sink: brief_quality_failure", "feedback_sink: another_sink"))
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], sorted(f"wrong-sink-{profile}" for profile in fixtures))
+        for profile in fixtures:
+            reason = report["reasons"][f"wrong-sink-{profile}"]
+            self.assertIn("feedback_sink", reason)
+
+    def test_no_brainer_rejects_malformed_classifier_evidence(self):
+        self.write_brief(
+            "bad-classifier",
+            profile="no_brainer",
+            evidence=[
+                "G1 Test-evidence: PASS",
+                "G5 Server-touching: PASS",
+                "G5b User-skill-touching: PASS",
+                "G7 Artifacts-staging: PASS",
+                "G8 Brief-record: PASS",
+                "G9 No-brainer-filter: PASS classifier_state=candidate classified_at=2026-08-16T00:00:00Z",
+                "G12 Auto-merge-kill-switch: PASS",
+                "G13 Stale-claim: PASS",
+                "G14 Test-execution-silent: PASS",
+                "G16 Master-current: PASS",
+            ],
+        )
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["bad-classifier"])
+        self.assertIn("proposed_registry_extension", report["reasons"]["bad-classifier"])
+
+    def test_existing_stack_slug_is_rejected_without_overwrite(self):
+        self.write_brief("duplicate")
+        stack = self.brief_root / "stack"
+        stack.mkdir()
+        existing = stack / "duplicate.md"
+        existing.write_text("existing stack content\n")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["duplicate"])
+        self.assertEqual(existing.read_text(), "existing stack content\n")
+        self.assertTrue((self.brief_root / ".pile/.rejected/duplicate/brief.md").is_file())
+        self.assertIn("duplicate stack slug", report["reasons"]["duplicate"])
+
+    def test_rejection_collision_keeps_claimed_brief_and_reports_skip(self):
+        brief = self.write_brief("reject-collision")
+        brief.write_text(brief.read_text().replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL"))
+        (self.brief_root / ".pile/.rejected/reject-collision").mkdir(parents=True)
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["skipped"], ["reject-collision"])
+        staged = list((self.brief_root / ".staging").glob("fast-drain-*-reject-collision/brief.md"))
+        self.assertEqual(len(staged), 1)
+        self.assertFalse(brief.exists())
+
+    def test_source_disappearing_during_claim_is_skipped(self):
+        module = load_drain_module()
+        brief = self.write_brief("gone")
+        with mock.patch.object(module, "claim", side_effect=FileNotFoundError):
+            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+        self.assertEqual(outcome.action, "skipped")
+        self.assertIn("source disappeared", outcome.reason)
+
+    def test_contended_fast_drain_staging_directory_is_skipped(self):
+        module = load_drain_module()
+        brief = self.write_brief("contended")
+        with mock.patch.object(module.os, "getpid", return_value=4242):
+            foreign = self.brief_root / ".staging/fast-drain-4242-contended"
+            foreign.mkdir(parents=True)
+            (foreign / ".claimed_by").write_text('{"owner":"brief-shuffle-fast-drain"}\n')
+            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+        self.assertEqual(outcome.action, "skipped")
+        self.assertTrue(brief.exists())
+        self.assertTrue((foreign / ".claimed_by").exists())
+
+    def test_index_failure_rolls_back_to_staging_and_reports_skip(self):
+        module = load_drain_module()
+        brief = self.write_brief("index-failure")
+        with mock.patch.object(module, "append_index", side_effect=OSError("index unavailable")):
+            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+        self.assertEqual(outcome.action, "skipped")
+        self.assertFalse((self.brief_root / "stack/index-failure.md").exists())
+        staged = list((self.brief_root / ".staging").glob("fast-drain-*-index-failure/brief.md"))
+        self.assertEqual(len(staged), 1)
 
 
 if __name__ == "__main__":
