@@ -47,10 +47,16 @@ Input shapes accepted:
    §risks", not "long".
 4. **DRAFT the brief**: frontmatter, then §1 "What is being decided" as the
    FIRST body content (Decision-at-Top INVARIANT), then the recommended
-   verdict with a one-line rationale.
-5. **ATTACH the ACTION-BLOCK** (schema below) as a fenced `yaml` block in
+   verdict with a one-line rationale. Include the required `## Gate Evidence`
+   section for `gate_profile: decision`; do not rely on frontmatter alone.
+5. **FILE the brief bead before deposit.** Under the one-bead model, create
+   or identify the `type=decision` brief bead before the brief enters
+   `.pile/`. The `G8 Brief-record` line must cite that bead and say it was
+   filed BEFORE deposit; post-deposit brief-record bookkeeping is a known
+   rejection cause.
+6. **ATTACH the ACTION-BLOCK** (schema below) as a fenced `yaml` block in
    the brief. Apply the safety invariant BEFORE writing any auto-action.
-6. **DEPOSIT on the unified pile via [[create-brief]] conventions** — for a
+7. **DEPOSIT on the unified pile via [[create-brief]] conventions** — for a
    policy-disposition, write one file per decision to
    `<city-root>/.beads/briefs/.pile/` as `NN-<slug>-brief.md`, plus one line
    in that pile's `manifest.jsonl`. Never present in the Mayor's terminal;
@@ -272,6 +278,34 @@ test-evidence and good-test gates are **N/A by construction** — declare
 than silently skipping. The Decision-at-Top INVARIANT and critical-review
 hygiene still apply in full.
 
+## Required Gate Evidence for `gate_profile: decision`
+
+Every policy-disposition brief deposited by this skill MUST include a
+`## Gate Evidence` section. This is not optional bookkeeping: the unified
+pile shuffler fails closed when a brief claims a gate profile but omits the
+profile's evidence keys. Use the exact gate labels from the `decision`
+profile and mark each one with a literal `PASS` or `N/A` token in the same
+line. Do not write a placeholder that combines both choices, and do not write
+the past-tense pass word; the gate checker matches `PASS` or `N/A` exactly.
+
+```markdown
+## Gate Evidence
+
+G5 Server-touching: PASS — server_touching=false; no verdict path performs a server-live write, or the server-touching hazard is declared and routed only through external-reminder human authorization.
+G5b User-skill-touching: N/A — no verdict path modifies a user-scope skill such as ~/.claude/skills/*.
+G8 Brief-record: PASS — brief bead <bead-id> (type=decision) filed BEFORE deposit; pile membership recorded in .pile/manifest.jsonl.
+G9 No-brainer-filter: PASS classifier_state=known_non_no_brainer reason=<judgment-bearing|named-options|safety-blocked|other-specific-reason> classified_at=<YYYY-MM-DDTHH:MM:SSZ>
+G11 Breadcrumb: N/A — no experiment surface, or PASS — breadcrumb/provenance path <path-or-bead> recorded.
+G12 Auto-merge-kill-switch: PASS — checked city and rig N5 kill switches at deposit time; absent-or-true proceeds, and this brief carries no unauthorized auto-action.
+G13 Stale-claim: PASS — every source bead/path was re-read live before drafting at <YYYY-MM-DDTHH:MM:SSZ>.
+```
+
+If the decision is a true no-brainer, `G9` may use
+`classifier_state=known_no_brainer`, but then it must also include the
+registered `category=...`, `confidence=...`, and `stop_gates_clear=true`
+fields required by [[catch-no-brainer]]. Missing or free-form G9 prose is a
+gate failure.
+
 ## Pile + manifest conventions
 
 - Policy-disposition files: `<city-root>/.beads/briefs/.pile/NN-<slug>-brief.md`,
@@ -352,3 +386,6 @@ hygiene still apply in full.
   `brief-stack`, `no-brainer` → `auto-dispatched`) with REQ-005/AC-7; RF-3 add
   execution-order sentence to branch-artifact pipeline; RR-1 add `gsp-*` classification
   pattern; RR-2 document `classification.log` default path convention.
+- **v0.6 — decision gate evidence** (2026-08-15, gt-rcav8b): decision-profile
+  briefs must carry a `## Gate Evidence` section with G5/G5b/G8/G9/G11/G12/G13
+  evidence before entering the unified pile.

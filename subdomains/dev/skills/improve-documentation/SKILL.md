@@ -95,8 +95,7 @@ Run:
 Then run targeted cheap checks appropriate to the change, for example:
 
 ```bash
-python3 -m pytest tests/stuck-bead-watch/test_stuck_bead_watch.py tests/tail-end-detector/test_tail_end_detector.py
-for t in tests/*/smoke_test.sh; do bash "$t"; done
+bash scripts/run-local-tests.sh
 ```
 
 For documentation-only changes, do not spend model tokens or run integration

@@ -1,0 +1,17 @@
+[order]
+description = "Roll up producer-failure records when durable producer-failure cache files change."
+scope = "city"
+formula = "brief-producer-failure-rollup"
+trigger = "condition"
+check = '''
+root=".beads/briefs"
+records="$root/.producer-failure-pile"
+open="$root/.producer-failure-rollups/open.jsonl"
+[ -d "$records" ] || exit 1
+find "$records" -type f -name '*.toml' 2>/dev/null | grep -q . || exit 1
+[ -f "$open" ] || exit 0
+find "$records" -type f -name '*.toml' -newer "$open" 2>/dev/null | grep -q .
+'''
+pool = "mathcity.brief-operator"
+timeout = "180s"
+idempotent = true

@@ -206,6 +206,9 @@ mkdir -p "{{artifact_root}}/.pile"
 
 The brief MUST contain:
 - `status: approved` frontmatter
+- `brief_kind: decision`
+- `gate_profile: decision`
+- `feedback_sink: brief_quality_failure`
 - `brief_bead: {{source_bead}}`
 - `producer_contract: brief-producer.v1`
 - `source_formula: planning-briefed`
@@ -220,7 +223,7 @@ The brief MUST contain:
 - The full plan document (from $GC_WORK_DIR/{{source_bead}}-plan.md) as a fenced markdown block
 - Key risks and unknowns surfaced by review-plan
 - Recommended verdict (A = approve plan and proceed to implementation / C = revise plan)
-- A complete `## Gate Evidence` section for the active gate profile, including
+- A complete `## Gate Evidence` section for the `decision` gate profile, including
   this machine-readable G9 line:
   `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=the human adjudicator plan approval required; proposed_registry_extension=none`
 

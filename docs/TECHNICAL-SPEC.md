@@ -121,7 +121,7 @@ Existing cheap coverage:
 
 - `tests/stuck-bead-watch/test_stuck_bead_watch.py`
 - `tests/tail-end-detector/test_tail_end_detector.py`
-- `tests/*/smoke_test.sh`
+- `bash scripts/run-local-tests.sh`
 
 `smoke-test-briefed` is the current formula for creating and recording
 lightweight smoke-test evidence. `test-execution-request` is the gate for

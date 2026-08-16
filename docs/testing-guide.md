@@ -68,6 +68,16 @@ bash mathcity/tests/<slug>/smoke_test.sh
 
 Exit 0 = PASS, non-zero = FAIL. Output is human-readable.
 
+Run the whole local suite through the repo runner, not an ad hoc glob:
+
+```bash
+cd mathcity
+bash scripts/run-local-tests.sh
+```
+
+The runner discovers every shell test under `tests/` and every pytest file
+named `test_*.py` or `*_test.py`. It exits nonzero if any child test fails.
+
 ## How to reproduce a test run
 
 The `TESTING.md` in each test directory is the canonical reproducibility guide.

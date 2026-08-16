@@ -51,13 +51,7 @@ Original upstream repositories:
 Current cheap tests:
 
 ```sh
-python3 -m pytest \
-  tests/stuck-bead-watch/test_stuck_bead_watch.py \
-  tests/tail-end-detector/test_tail_end_detector.py
-
-for t in tests/*/smoke_test.sh; do
-  bash "$t"
-done
+bash scripts/run-local-tests.sh
 ```
 
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke

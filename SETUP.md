@@ -85,13 +85,7 @@ Once imported, Gas City agents can run mathcity formulas such as
 Cheap local verification:
 
 ```sh
-python3 -m pytest \
-  tests/stuck-bead-watch/test_stuck_bead_watch.py \
-  tests/tail-end-detector/test_tail_end_detector.py
-
-for t in tests/*/smoke_test.sh; do
-  bash "$t"
-done
+bash scripts/run-local-tests.sh
 ```
 
 Runtime verification requires a configured city:

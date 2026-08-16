@@ -126,6 +126,10 @@ The brief must include:
 Stamp this frontmatter:
 
 ```yaml
+status: approved
+brief_kind: producer_repair
+gate_profile: producer_repair
+feedback_sink: brief_quality_failure
 producer_contract: brief-producer-repair.v1
 source_formula: brief-producer-repair
 source_step: file-repair-brief
@@ -133,9 +137,14 @@ routing_path: brief-producer-repair
 repair_source_formula: "{{source_formula}}"
 repair_failed_gate: "{{failed_gate}}"
 repair_failure_fingerprint: "{{failure_fingerprint}}"
+review_gate: approved
 ```
 
 Because `producer_contract: brief-producer-repair.v1` is present, this repair
 brief is excluded from producer-failure rollups if it is later rejected by
 the gates.
+
+The brief must also include a complete `## Gate Evidence` section for the
+`producer_repair` gate profile, including a machine-readable G9 line with
+`classifier_state=known_non_no_brainer` and `classified_at=<ISO-8601-utc>`.
 """
