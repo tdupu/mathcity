@@ -1,0 +1,9 @@
+[order]
+description = "Mechanically drain up to three pending briefs without dispatching the legacy LLM shuffler"
+scope = "rig"
+formula = "brief-shuffle-fast-drain"
+trigger = "condition"
+check = "find .beads/briefs/.pile -maxdepth 1 -type f -name '*.md' ! -name '.*' 2>/dev/null | grep -q ."
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true

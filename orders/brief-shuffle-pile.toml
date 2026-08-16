@@ -12,10 +12,14 @@
 # route (gsp-3al3) guarantees a run that finds nothing exits cleanly and
 # releases the shuffler lock.
 [order]
-description = "Promote or reject one brief whenever the pile has pending markdown briefs"
+description = "Legacy slow brief shuffler retired for new dispatches; existing live roots are left alone"
 scope = "rig"
 formula = "brief-shuffle"
 trigger = "condition"
+# Issue #40: `brief-shuffle-fast-drain` is the deterministic replacement.
+# A permanently false condition prevents only future roots; it does not close,
+# delete, or rewrite any live `brief-shuffle-pile` roots.
+check = "false"
 # Pile items are FLAT .pile/<slug>.md files — that is what brief-prep's
 # submit-to-pile step actually deposits (formulas/brief-prep.toml:136 sets
 # gc.brief.path = "{{artifact_root}}/.pile/{{brief_slug}}.md") and what the
@@ -32,7 +36,6 @@ trigger = "condition"
 # change them together or not at all.
 # Depth-1 -type f never descends, so .rejected/ and .no-brainer/ subdirs are
 # excluded structurally; ! -name '.*' skips hidden/partial files.
-check = "find .beads/briefs/.pile -maxdepth 1 -type f -name '*.md' ! -name '.*' 2>/dev/null | grep -q ."
 pool = "mathcity.brief-operator"
 timeout = "60s"
 idempotent = true

@@ -1,0 +1,150 @@
+import json
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "assets/scripts/brief-shuffle-fast-drain.py"
+GATES = REPO_ROOT / "assets/brief-pipeline/gates.toml"
+
+
+class BriefShuffleFastDrainTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.brief_root = Path(self.temp_dir.name) / ".beads/briefs"
+        (self.brief_root / ".pile").mkdir(parents=True)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def run_drain(self, *args):
+        return subprocess.run(
+            [
+                "python3",
+                str(SCRIPT),
+                "--brief-root",
+                str(self.brief_root),
+                "--gate-config",
+                str(GATES),
+                "--json",
+                "--no-external",
+                *args,
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def write_brief(self, slug, profile="standard", extra_frontmatter="", evidence=None):
+        profile_gates = {
+            "standard": ["G1", "G2", "G3", "G4", "G5", "G5b", "G6", "G7", "G8", "G9", "G10", "G11", "G12", "G13", "G14", "G15", "G16"],
+            "decision": ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"],
+            "lost_bead_filter": ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"],
+            "producer_repair": ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"],
+            "no_brainer": ["G1", "G5", "G5b", "G7", "G8", "G9", "G12", "G13", "G14", "G16"],
+        }.get(profile, [])
+        gate_names = {
+            "G1": "Test-evidence", "G2": "Good-test", "G3": "Shell-scripts-testable",
+            "G4": "Critical-review", "G5": "Server-touching", "G5b": "User-skill-touching",
+            "G6": "LaTeX-gate", "G7": "Artifacts-staging", "G8": "Brief-record",
+            "G9": "No-brainer-filter", "G10": "Improve-README", "G11": "Breadcrumb",
+            "G12": "Auto-merge-kill-switch", "G13": "Stale-claim",
+            "G14": "Test-execution-silent", "G15": "Improve-README-silent", "G16": "Master-current",
+        }
+        lines = evidence if evidence is not None else [
+            f"{gate} {gate_names[gate]}: "
+            + ("PASS classifier_state=known_non_no_brainer reason=fixture classified_at=2026-08-16T00:00:00Z" if gate == "G9" else "PASS")
+            for gate in profile_gates
+        ]
+        frontmatter = f"""---
+brief_slug: {slug}
+gate_profile: {profile}
+source_bead: source-{slug}
+feedback_sink: brief_quality_failure
+{extra_frontmatter}---
+"""
+        path = self.brief_root / ".pile" / f"{slug}.md"
+        path.write_text(frontmatter + "\n# Fixture brief\n\n## Gate Evidence\n" + "\n".join(lines) + "\n")
+        return path
+
+    def json_output(self, result):
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_valid_standard_brief_promotes_to_stack(self):
+        self.write_brief("standard-ok")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["promoted"], ["standard-ok"])
+        self.assertTrue((self.brief_root / "stack/standard-ok.md").is_file())
+
+    def test_valid_decision_brief_promotes_to_stack(self):
+        self.write_brief(
+            "decision-ok",
+            profile="decision",
+            extra_frontmatter="brief_kind: decision\nlegacy_source: decisions-track/decision-ok.md\n",
+        )
+        decision = self.brief_root / ".pile/decision-ok.md"
+        decision.write_text(decision.read_text().replace("\n# Fixture brief", "\naction_block:\n  on_approve: []\n  on_reject: []\n  on_defer: []\n\n# Fixture brief"))
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["promoted"], ["decision-ok"])
+
+    def test_missing_g4_rejects(self):
+        brief = self.write_brief("missing-g4")
+        brief.write_text(brief.read_text().replace("G4 Critical-review: PASS\n", ""))
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["missing-g4"])
+        self.assertTrue((self.brief_root / ".pile/.rejected/missing-g4/brief.md").is_file())
+        rejection = json.loads((self.brief_root / ".pile/.rejected/missing-g4/rejection.json").read_text())
+        self.assertIn("missing required gate G4 Critical-review", rejection["reason"])
+
+    def test_failed_g4_rejects_and_records_failure(self):
+        brief = self.write_brief("failed-g4")
+        brief.write_text(brief.read_text().replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL - controlled fixture"))
+        self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/failed-g4/rejection.json").read_text())
+        self.assertIn("G4 Critical-review: FAIL", rejection["reason"])
+
+    def test_max_items_one_leaves_other_pile_items(self):
+        self.write_brief("one")
+        self.write_brief("two")
+        report = self.json_output(self.run_drain("--max-items", "1", "--apply"))
+        self.assertEqual(len(report["promoted"] + report["rejected"]), 1)
+        self.assertEqual(len(list((self.brief_root / ".pile").glob("*.md"))), 1)
+
+    def test_dry_run_does_not_change_files_and_reports_planned_action(self):
+        brief = self.write_brief("dry-run")
+        before = brief.read_text()
+        report = self.json_output(self.run_drain())
+        self.assertEqual(brief.read_text(), before)
+        self.assertFalse((self.brief_root / "stack").exists())
+        self.assertEqual(report["planned_promoted"], ["dry-run"])
+
+    def test_index_gets_one_row_per_promoted_slug_and_rerun_does_not_duplicate(self):
+        self.write_brief("indexed")
+        self.json_output(self.run_drain("--apply"))
+        self.json_output(self.run_drain("--apply"))
+        rows = [json.loads(line) for line in (self.brief_root / "stack/.index.jsonl").read_text().splitlines()]
+        self.assertEqual([row["slug"] for row in rows], ["indexed"])
+
+    def test_unknown_gate_profile_rejects(self):
+        self.write_brief("unknown", profile="unknown")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["unknown"])
+        rejection = json.loads((self.brief_root / ".pile/.rejected/unknown/rejection.json").read_text())
+        self.assertIn("unknown gate profile", rejection["reason"])
+
+    def test_unclaimed_staging_directory_is_not_removed(self):
+        self.write_brief("claimed")
+        foreign = self.brief_root / ".staging/other-worker"
+        foreign.mkdir(parents=True)
+        (foreign / "brief.md").write_text("foreign")
+        (foreign / ".claimed_by").write_text("other-worker\n")
+        self.json_output(self.run_drain("--apply"))
+        self.assertTrue((foreign / "brief.md").exists())
+        self.assertTrue((foreign / ".claimed_by").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
