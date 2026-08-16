@@ -1,5 +1,7 @@
 # MathCity mctl MCP Hardening Implementation Plan
 
+Parent: [Dev README](../../../README.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a shared MathCity command core, `mctl` CLI, typed MCP server, and later dashboard so brief and work operations stop depending on loose prompt-skill command chains.
@@ -8,15 +10,17 @@
 
 **Tech Stack:** Python 3.11+ standard library (`argparse`, `dataclasses`, `enum`, `json`, `subprocess`, `tomllib`, `uuid`, `pathlib`), `pytest`, shell smoke tests, existing Gas City commands (`gc`, `bd`), existing TOML/JSONL assets.
 
+Related plan: [Brief Shuffle Fast Drain](./BRIEF-SHUFFLE-FAST-DRAIN-PLAN-2026-08-16.md). That plan owns the immediate deterministic `.pile -> stack` cache-drain fix; this plan treats those cache artifacts as derived state to inspect, validate, and expose through CLI/MCP/dashboard surfaces.
+
 ## Global Constraints
 
-- The source repository is `/Users/tdupuy/repos/mathcity`; implementation work happens there, not in deprecated `gascity-packs/mathcity`.
-- `origin/main` was fetched on 2026-08-15; local `main` was ahead 2, behind 0 at planning time.
+- The source repository is `<repo-root>`; implementation work happens there, not in deprecated `gascity-packs/mathcity`.
+- Before implementation, fetch `origin` and confirm whether the branch is behind `origin/main`; this work depends on recently changing brief-system behavior.
 - The CLI name is `mctl`.
 - `mctl` is a MathCity domain tool, not a generic shell, `gc`, or `bd` wrapper.
 - Build a shared MathCity core first, CLI first, MCP second, dashboard later.
 - Runtime scope comes from a Gas City city/rig context, not from the pack source checkout.
-- Running ordinary brief or work commands from `/Users/tdupuy/repos/mathcity` must hard-error unless an explicit registered runtime rig context is supplied.
+- Running ordinary brief or work commands from `<repo-root>` must hard-error unless an explicit registered runtime rig context is supplied.
 - Plain commands operate on exactly one resolved rig.
 - Cross-rig reads require an explicit option such as `--all-rigs`.
 - Cross-rig mutations are forbidden until a command-specific batch mode is designed and reviewed.
@@ -295,27 +299,26 @@ From a terminal in a registered city, an operator can run:
 ```bash
 mctl context --json
 mctl context --rig mathcity --json
-mctl context --city /Users/tdupuy/gt --rig mathcity --json
+mctl context --city <city-root> --rig mathcity --json
 mctl context --explain
 ```
 
-The command prints the resolved city root, rig id, source checkout, bead database name, paths from `paths.toml`, applicable gates from `gates.toml`, and a trace id. From `/Users/tdupuy/repos/mathcity`, ordinary runtime commands fail with a precise error unless `--city` and `--rig` are supplied.
+The command prints the resolved city root, rig id, source checkout, bead database name, paths from `paths.toml`, applicable gates from `gates.toml`, and a trace id. From `<repo-root>`, ordinary runtime commands fail with a precise error unless `--city` and `--rig` are supplied.
 
 #### Files to create or edit
 
-- Create `subdomains/dev/tools/mctl/pyproject.toml` only if this repository keeps `mctl` as a local Python package instead of wiring it into an existing package entry point.
-- Create `subdomains/dev/tools/mctl/src/mctl/__init__.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/__main__.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/cli.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/context.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/diagnostics.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/trace.py`.
-- Create `subdomains/dev/tools/mctl/tests/test_context_cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/fixtures/city_root/city.toml`.
-- Create `subdomains/dev/tools/mctl/tests/fixtures/source_checkout/README.md` if a source-checkout fixture is needed to prove fail-closed behavior.
-- Edit `subdomains/dev/README-development.md` to document the local invocation used by tests.
+- Create `assets/scripts/mctl.py` as the thin local CLI entry point.
+- Create `assets/scripts/mctl_core/__init__.py`.
+- Create `assets/scripts/mctl_core/cli.py`.
+- Create `assets/scripts/mctl_core/context.py`.
+- Create `assets/scripts/mctl_core/diagnostics.py`.
+- Create `assets/scripts/mctl_core/trace.py`.
+- Create `tests/mctl/test_context_cli.py`.
+- Create `tests/mctl/fixtures/city_root/city.toml`.
+- Create `tests/mctl/fixtures/source_checkout/README.md` if a source-checkout fixture is needed to prove fail-closed behavior.
+- Edit `README-development.md` to document the local invocation used by tests.
 
-If a repository-standard location for Python tools already exists when this work begins, put the package there and keep these module names.
+This matches the current repository convention: executable Python lives under `assets/scripts/`, while behavior tests live under `tests/<behavior>/`. If a more formal package home is added later, update `LAYOUT.md` and this plan before moving these files.
 
 #### Core interfaces
 
@@ -360,7 +363,7 @@ def resolve_context(
 4. Resolve `paths.toml` and `gates.toml` from the selected rig's source checkout, using the already-read repository contracts:
    - `assets/brief-pipeline/paths.toml`
    - `assets/brief-pipeline/gates.toml`
-5. Detect source-checkout execution. If `cwd` is under `/Users/tdupuy/repos/mathcity` and `--city` is missing for a runtime command, return `FATAL MCTL_CONTEXT_SOURCE_CHECKOUT` with a hint to pass `--city /Users/tdupuy/gt --rig mathcity`.
+5. Detect source-checkout execution. If `cwd` is under `<repo-root>` and `--city` is missing for a runtime command, return `FATAL MCTL_CONTEXT_SOURCE_CHECKOUT` with a hint to pass `--city <city-root> --rig mathcity`.
 6. Implement `mctl context --json` and `mctl context --explain` only. No other command names should be accepted in this slice.
 7. Add deterministic JSON rendering with stable key order for tests.
 8. Add stderr diagnostic rendering for failures.
@@ -379,9 +382,9 @@ Write failing tests before implementation for:
 #### Verification commands
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests/test_context_cli.py
-git diff --check -- subdomains/dev/tools/mctl subdomains/dev/README-development.md
+cd <repo-root>
+python3 -m pytest tests/mctl/test_context_cli.py
+git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core tests/mctl README-development.md
 ```
 
 #### Commit boundary
@@ -408,15 +411,15 @@ The output identifies the canonical decision bead, related redundant artifacts, 
 
 #### Files to create or edit
 
-- Create `subdomains/dev/tools/mctl/src/mctl/beads.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/briefs.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/redundant_state.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/policy_refs.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/test_briefs_read_cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/fixtures/brief_state/beads.jsonl`.
-- Create `subdomains/dev/tools/mctl/tests/fixtures/brief_state/briefs/*.toml` as cache fixtures only, not as canonical fixtures.
-- Edit `subdomains/dev/README-development.md` with read-only brief inspection examples.
+- Create `assets/scripts/mctl_core/beads.py`.
+- Create `assets/scripts/mctl_core/briefs.py`.
+- Create `assets/scripts/mctl_core/redundant_state.py`.
+- Create `assets/scripts/mctl_core/policy_refs.py`.
+- Edit `assets/scripts/mctl_core/cli.py`.
+- Create `tests/mctl/test_briefs_read_cli.py`.
+- Create `tests/mctl/fixtures/brief_state/beads.jsonl`.
+- Create `tests/mctl/fixtures/brief_state/briefs/*.toml` as cache fixtures only, not as canonical fixtures.
+- Edit `README-development.md` with read-only brief inspection examples.
 
 #### Core interfaces
 
@@ -489,9 +492,9 @@ Write failing tests before implementation for:
 #### Verification commands
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests/test_context_cli.py subdomains/dev/tools/mctl/tests/test_briefs_read_cli.py
-git diff --check -- subdomains/dev/tools/mctl subdomains/dev/README-development.md
+cd <repo-root>
+python3 -m pytest tests/mctl/test_context_cli.py tests/mctl/test_briefs_read_cli.py
+git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core tests/mctl README-development.md
 ```
 
 #### Commit boundary
@@ -517,13 +520,13 @@ The dry run returns the exact bead update, redundant cache update, event log app
 
 #### Files to create or edit
 
-- Create `subdomains/dev/tools/mctl/src/mctl/effects.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/events.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/briefs.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/beads.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/test_briefs_mutation_cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/fixtures/mutation_state/`.
+- Create `assets/scripts/mctl_core/effects.py`.
+- Create `assets/scripts/mctl_core/events.py`.
+- Edit `assets/scripts/mctl_core/briefs.py`.
+- Edit `assets/scripts/mctl_core/beads.py`.
+- Edit `assets/scripts/mctl_core/cli.py`.
+- Create `tests/mctl/test_briefs_mutation_cli.py`.
+- Create `tests/mctl/fixtures/mutation_state/`.
 - Edit `formulas/brief-record-decision.toml` only if the existing formula needs a narrow compatibility hook for the new event fields.
 - Edit `subdomains/dev/docs/plans/mcp/MCTL-MCP-IMPLEMENTATION-PLAN.md` if implementation discovers a contract mismatch that changes this plan.
 
@@ -586,10 +589,10 @@ Write failing tests before implementation for:
 #### Verification commands
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests/test_context_cli.py subdomains/dev/tools/mctl/tests/test_briefs_read_cli.py subdomains/dev/tools/mctl/tests/test_briefs_mutation_cli.py
+cd <repo-root>
+python3 -m pytest tests/mctl/test_context_cli.py tests/mctl/test_briefs_read_cli.py tests/mctl/test_briefs_mutation_cli.py
 for t in tests/decisions-track-migration/smoke_test.sh tests/brief-decision-dispatch/smoke_test.sh; do bash "$t"; done
-git diff --check -- subdomains/dev/tools/mctl formulas/brief-record-decision.toml subdomains/dev/docs/plans/mcp/MCTL-MCP-IMPLEMENTATION-PLAN.md
+git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core tests/mctl formulas/brief-record-decision.toml subdomains/dev/docs/plans/mcp/MCTL-MCP-IMPLEMENTATION-PLAN.md
 ```
 
 #### Commit boundary
@@ -616,17 +619,17 @@ The command surface exposes ready work, current dispatch status, dispatch proven
 
 #### Files to create or edit
 
-- Create `subdomains/dev/tools/mctl/src/mctl/work.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/provenance.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/effects.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/test_work_cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/fixtures/work_state/`.
+- Create `assets/scripts/mctl_core/work.py`.
+- Create `assets/scripts/mctl_core/provenance.py`.
+- Edit `assets/scripts/mctl_core/effects.py`.
+- Edit `assets/scripts/mctl_core/cli.py`.
+- Create `tests/mctl/test_work_cli.py`.
+- Create `tests/mctl/fixtures/work_state/`.
 - Edit `formulas/work-briefed.toml` if the formula needs a narrow compatibility hook.
 - Edit `formulas/commission-work-briefed.toml` if dispatch handoff output needs a narrow compatibility hook.
 - Edit `orders/brief-decision-dispatch.toml` if the order contract must expose a stable `mctl` provenance field.
 - Edit `assets/bead-filter/dispatch-provenance-schema.toml` only for additive schema fields required by `mctl work provenance`.
-- Edit `subdomains/dev/README-development.md` with work command examples.
+- Edit `README-development.md` with work command examples.
 
 #### Core interfaces
 
@@ -684,10 +687,10 @@ Write failing tests before implementation for:
 #### Verification commands
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests/test_context_cli.py subdomains/dev/tools/mctl/tests/test_briefs_read_cli.py subdomains/dev/tools/mctl/tests/test_briefs_mutation_cli.py subdomains/dev/tools/mctl/tests/test_work_cli.py
+cd <repo-root>
+python3 -m pytest tests/mctl/test_context_cli.py tests/mctl/test_briefs_read_cli.py tests/mctl/test_briefs_mutation_cli.py tests/mctl/test_work_cli.py
 for t in tests/decisions-track-migration/smoke_test.sh tests/brief-decision-dispatch/smoke_test.sh; do bash "$t"; done
-git diff --check -- subdomains/dev/tools/mctl formulas/work-briefed.toml formulas/commission-work-briefed.toml orders/brief-decision-dispatch.toml assets/bead-filter/dispatch-provenance-schema.toml subdomains/dev/README-development.md
+git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core tests/mctl formulas/work-briefed.toml formulas/commission-work-briefed.toml orders/brief-decision-dispatch.toml assets/bead-filter/dispatch-provenance-schema.toml README-development.md
 ```
 
 #### Commit boundary
@@ -713,11 +716,11 @@ Creation writes the decision bead first, then redundant artifacts. Validation pr
 
 #### Files to create or edit
 
-- Edit `subdomains/dev/tools/mctl/src/mctl/briefs.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/effects.py`.
-- Edit `subdomains/dev/tools/mctl/src/mctl/cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/test_briefs_create_validate_cli.py`.
-- Create `subdomains/dev/tools/mctl/tests/fixtures/create_validate_state/`.
+- Edit `assets/scripts/mctl_core/briefs.py`.
+- Edit `assets/scripts/mctl_core/effects.py`.
+- Edit `assets/scripts/mctl_core/cli.py`.
+- Create `tests/mctl/test_briefs_create_validate_cli.py`.
+- Create `tests/mctl/fixtures/create_validate_state/`.
 - Edit `formulas/brief-prep.toml` if a compatibility hook is needed for CLI-created briefs.
 - Edit `formulas/math-brief-prep.toml` if the math variant needs the same hook.
 - Edit `subdomains/brief-system/POLICY.md` only if implementation reveals an ambiguity in canonical creation policy; otherwise do not change policy.
@@ -766,10 +769,10 @@ Write failing tests before implementation for:
 #### Verification commands
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests/test_context_cli.py subdomains/dev/tools/mctl/tests/test_briefs_read_cli.py subdomains/dev/tools/mctl/tests/test_briefs_mutation_cli.py subdomains/dev/tools/mctl/tests/test_work_cli.py subdomains/dev/tools/mctl/tests/test_briefs_create_validate_cli.py
+cd <repo-root>
+python3 -m pytest tests/mctl/test_context_cli.py tests/mctl/test_briefs_read_cli.py tests/mctl/test_briefs_mutation_cli.py tests/mctl/test_work_cli.py tests/mctl/test_briefs_create_validate_cli.py
 for t in tests/decisions-track-migration/smoke_test.sh tests/brief-decision-dispatch/smoke_test.sh; do bash "$t"; done
-git diff --check -- subdomains/dev/tools/mctl formulas/brief-prep.toml formulas/math-brief-prep.toml subdomains/brief-system/POLICY.md subdomains/brief-system/README.md
+git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core tests/mctl formulas/brief-prep.toml formulas/math-brief-prep.toml subdomains/brief-system/POLICY.md subdomains/brief-system/README.md
 ```
 
 #### Commit boundary
@@ -804,12 +807,12 @@ The server exposes typed task tools, not a generic shell, `gc`, `bd`, or `mctl` 
 
 #### Files to create or edit
 
-- Create `subdomains/dev/tools/mctl/src/mctl/mcp_server.py`.
-- Create `subdomains/dev/tools/mctl/src/mctl/schemas.py`.
-- Create `subdomains/dev/tools/mctl/tests/test_mcp_server.py`.
-- Create `subdomains/dev/tools/mctl/tests/test_mcp_schema_snapshots.py`.
-- Edit `subdomains/dev/tools/mctl/pyproject.toml` or the repository-standard package metadata to expose the MCP server entry point.
-- Edit `subdomains/dev/README-development.md` with local MCP startup and smoke-test commands.
+- Create `assets/scripts/mctl_core/mcp_server.py`.
+- Create `assets/scripts/mctl_core/schemas.py`.
+- Create `tests/mctl/test_mcp_server.py`.
+- Create `tests/mctl/test_mcp_schema_snapshots.py`.
+- Edit `assets/scripts/mctl.py` or future repository-standard package metadata to expose the MCP server entry point.
+- Edit `README-development.md` with local MCP startup and smoke-test commands.
 
 #### Core interfaces
 
@@ -841,9 +844,9 @@ Write failing tests before implementation for:
 #### Verification commands
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests
-git diff --check -- subdomains/dev/tools/mctl subdomains/dev/README-development.md
+cd <repo-root>
+python3 -m pytest tests/mctl
+git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core tests/mctl README-development.md
 ```
 
 #### Commit boundary
@@ -863,7 +866,7 @@ The relevant skills stop hand-rolling brief/work state transitions and either ca
 - Edit each skill listed in `SKILL-IMPACT-REGISTER.md` whose disposition becomes `wrap-with-mctl` or `replace-with-mctl`.
 - Create or edit skill tests under the repository's existing skill test location if present; otherwise add focused smoke tests beside the changed skill wrappers.
 - Edit `SKILL-IMPACT-REGISTER.md` with final dispositions and migration notes.
-- Edit `subdomains/dev/README-development.md` with the skill audit command sequence.
+- Edit `README-development.md` with the skill audit command sequence.
 
 #### Skill disposition targets
 
@@ -900,13 +903,13 @@ Write failing tests or smoke cases before each skill wrapper change for:
 #### Verification commands
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests
-for t in tests/*/smoke_test.sh; do bash "$t"; done
-git diff --check -- SKILL-IMPACT-REGISTER.md subdomains/dev/README-development.md skills subdomains
+cd <repo-root>
+python3 -m pytest tests/mctl
+bash scripts/run-local-tests.sh
+git diff --check -- SKILL-IMPACT-REGISTER.md README-development.md skills subdomains
 ```
 
-Narrow the `tests/*/smoke_test.sh` loop if it proves too broad for local runtime, but record the exact skipped tests and why in the commit message body.
+Narrow `scripts/run-local-tests.sh` only if it proves too broad for local runtime, but record the exact skipped tests and why in the commit message body.
 
 #### Commit boundary
 
@@ -931,7 +934,7 @@ The dashboard provides operator controls for the same completed workflows:
 
 - Create dashboard files in the repository-standard dashboard location once identified in this slice.
 - Create dashboard tests in the matching test location.
-- Edit `subdomains/dev/README-development.md` with dashboard startup and smoke-test instructions.
+- Edit `README-development.md` with dashboard startup and smoke-test instructions.
 - Edit this plan if dashboard discovery finds an existing application boundary that changes file paths materially.
 
 #### Implementation steps
@@ -962,9 +965,9 @@ Write failing tests before implementation for:
 Use the dashboard framework's local test command after the framework is identified. At minimum run:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
-python3 -m pytest subdomains/dev/tools/mctl/tests
-git diff --check -- subdomains/dev/README-development.md
+cd <repo-root>
+python3 -m pytest tests/mctl
+git diff --check -- README-development.md
 ```
 
 If the dashboard is web-based, also run Playwright or the repository-standard browser smoke test and capture the local URL in the handoff.
@@ -1007,9 +1010,9 @@ Add or update a table in `SKILL-IMPACT-REGISTER.md` with these fields:
 Run this audit check after Slice 7:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repo-root>
 rg -n "brief|adjudicate|defer|decision|dispatch|work ready|work status" skills subdomains -g 'SKILL.md'
-python3 -m pytest subdomains/dev/tools/mctl/tests
+python3 -m pytest tests/mctl
 ```
 
 For every remaining direct state manipulation hit, either migrate it to `mctl` or record a no-change/blocking reason in the impact register.
@@ -1022,12 +1025,12 @@ Testing is layered by slice. Every slice starts with failing tests for its user-
 
 | Slice | Required test gate |
 | --- | --- |
-| Slice 1 | `python3 -m pytest subdomains/dev/tools/mctl/tests/test_context_cli.py` |
+| Slice 1 | `python3 -m pytest tests/mctl/test_context_cli.py` |
 | Slice 2 | Slice 1 tests plus `test_briefs_read_cli.py` |
 | Slice 3 | Slices 1-2 tests plus `test_briefs_mutation_cli.py` and decisions-track/dispatch smoke tests |
 | Slice 4 | Slices 1-3 tests plus `test_work_cli.py` and provenance schema checks |
 | Slice 5 | Slices 1-4 tests plus `test_briefs_create_validate_cli.py` |
-| Slice 6 | all `subdomains/dev/tools/mctl/tests`, including MCP schema snapshots |
+| Slice 6 | all `tests/mctl`, including MCP schema snapshots |
 | Slice 7 | all `mctl` tests plus relevant skill smoke tests and impact-register grep audit |
 | Slice 8 | all `mctl` tests plus dashboard framework tests and browser smoke tests if web-based |
 
@@ -1036,19 +1039,19 @@ Testing is layered by slice. Every slice starts with failing tests for its user-
 Keep these existing gates green when touched files overlap their behavior:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repo-root>
 python3 -m pytest tests/stuck-bead-watch/test_stuck_bead_watch.py tests/tail-end-detector/test_tail_end_detector.py
-for t in tests/*/smoke_test.sh; do bash "$t"; done
+bash scripts/run-local-tests.sh
 ```
 
-If the full smoke loop is too broad for a local change, run the affected smoke tests explicitly and document why the rest were not run.
+If the full local runner is too broad for a local change, run the affected smoke tests explicitly and document why the rest were not run.
 
 ### Decisions-Track Migration Gate
 
 Any command that imports, lists, reasons about, or mutates state derived from legacy decisions-track data must be blocked until #38 migration proof is present. Required checks:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repo-root>
 bash tests/decisions-track-migration/smoke_test.sh
 ```
 
