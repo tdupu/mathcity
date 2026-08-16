@@ -246,6 +246,41 @@ feedback_sink: brief_quality_failure
         staged = list((self.brief_root / ".staging").glob("fast-drain-*-index-failure/brief.md"))
         self.assertEqual(len(staged), 1)
 
+    def test_claim_marker_failure_rolls_back_to_pile(self):
+        module = load_drain_module()
+        brief = self.write_brief("marker-failure")
+        original_write_text = Path.write_text
+
+        def fail_marker(path, *args, **kwargs):
+            if path.name == ".claimed_by":
+                raise OSError("marker unavailable")
+            return original_write_text(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "write_text", new=fail_marker):
+            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+        self.assertEqual(outcome.action, "skipped")
+        self.assertTrue(brief.exists())
+        self.assertEqual(list((self.brief_root / ".staging").iterdir()), [])
+
+    def test_rejection_sidecar_failure_rolls_back_to_owned_staging(self):
+        module = load_drain_module()
+        brief = self.write_brief("sidecar-failure")
+        brief.write_text(brief.read_text().replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL"))
+        original_write_text = Path.write_text
+
+        def fail_sidecar(path, *args, **kwargs):
+            if path.name == "rejection.json":
+                raise OSError("sidecar unavailable")
+            return original_write_text(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "write_text", new=fail_sidecar):
+            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+        self.assertEqual(outcome.action, "skipped")
+        staged = list((self.brief_root / ".staging").glob("fast-drain-*-sidecar-failure/brief.md"))
+        self.assertEqual(len(staged), 1)
+        self.assertTrue(staged[0].with_name(".claimed_by").exists())
+        self.assertFalse((self.brief_root / ".pile/.rejected/sidecar-failure/brief.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

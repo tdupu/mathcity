@@ -216,11 +216,6 @@ def claim(source: Path, brief_root: Path, slug: str) -> tuple[Path, Path]:
     staging_dir = brief_root / ".staging" / f"fast-drain-{os.getpid()}-{slug}"
     staging_dir.mkdir(parents=True, exist_ok=False)
     staged = staging_dir / "brief.md"
-    try:
-        source.replace(staged)
-    except OSError:
-        staging_dir.rmdir()
-        raise
     marker = {
         "owner": OWNER,
         "host": socket.gethostname(),
@@ -228,7 +223,14 @@ def claim(source: Path, brief_root: Path, slug: str) -> tuple[Path, Path]:
         "claimed_at": utc_now(),
         "source_path": f".pile/{source.name}",
     }
-    (staging_dir / ".claimed_by").write_text(json.dumps(marker, sort_keys=True) + "\n", encoding="utf-8")
+    marker_path = staging_dir / ".claimed_by"
+    try:
+        marker_path.write_text(json.dumps(marker, sort_keys=True) + "\n", encoding="utf-8")
+        source.replace(staged)
+    except OSError:
+        marker_path.unlink(missing_ok=True)
+        staging_dir.rmdir()
+        raise
     return staging_dir, staged
 
 
@@ -248,7 +250,8 @@ def cleanup_own_staging(staging_dir: Path) -> None:
 def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, profile: str, reason: str) -> None:
     rejected_dir = brief_root / ".pile" / ".rejected" / slug
     rejected_dir.mkdir(parents=True, exist_ok=False)
-    staged.replace(rejected_dir / "brief.md")
+    rejected_brief = rejected_dir / "brief.md"
+    rejection_path = rejected_dir / "rejection.json"
     rejection = {
         "slug": slug,
         "gate_profile": profile,
@@ -256,7 +259,15 @@ def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, 
         "source_path": f".pile/{slug}.md",
         "rejected_at": utc_now(),
     }
-    (rejected_dir / "rejection.json").write_text(json.dumps(rejection, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    try:
+        rejection_path.write_text(json.dumps(rejection, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        staged.replace(rejected_brief)
+    except OSError:
+        if rejected_brief.exists():
+            rejected_brief.replace(staged)
+        rejection_path.unlink(missing_ok=True)
+        rejected_dir.rmdir()
+        raise
     cleanup_own_staging(staging_dir)
 
 
