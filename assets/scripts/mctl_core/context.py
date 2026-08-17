@@ -19,6 +19,7 @@ class MctlContext:
     city_root: Path
     rig_id: str
     rig_root: Path
+    beads_fixture: Path | None
     rig_db: str
     source_checkout: Path
     paths_toml: Path
@@ -61,7 +62,6 @@ def resolve_context(
     env: Mapping[str, str],
 ) -> MctlContext:
     """Resolve one MathCity rig without invoking or mutating city services."""
-    del env  # No established environment convention is currently supported.
     trace_id = new_trace_id()
     invocation_cwd = cwd.expanduser().resolve()
     if (
@@ -102,6 +102,7 @@ def resolve_context(
     selected_rig, warnings = _select_rig(rig_entries, rig, trace_id, city_root)
     rig_id = selected_rig["name"]
     rig_root = _resolve_rig_root(selected_rig, city_root)
+    beads_fixture = _resolve_beads_fixture(env, trace_id, city_root, rig_id)
     rig_db = selected_rig.get("db", rig_id)
     if not isinstance(rig_db, str) or not rig_db:
         raise _error(
@@ -123,6 +124,7 @@ def resolve_context(
         city_root=city_root,
         rig_id=rig_id,
         rig_root=rig_root,
+        beads_fixture=beads_fixture,
         rig_db=rig_db,
         source_checkout=source_checkout,
         paths_toml=paths_toml,
@@ -258,6 +260,25 @@ def _resolve_rig_root(rig: dict[str, object], city_root: Path) -> Path:
         candidate = Path(configured).expanduser()
         return (candidate if candidate.is_absolute() else city_root / candidate).resolve()
     return (city_root / str(rig["name"])).resolve()
+
+
+def _resolve_beads_fixture(
+    env: Mapping[str, str], trace_id: str, city_root: Path, rig_id: str
+) -> Path | None:
+    value = env.get("MCTL_BEADS_FIXTURE")
+    if not value:
+        return None
+    fixture = Path(value).expanduser().resolve()
+    if fixture.is_file():
+        return fixture
+    raise _error(
+        trace_id,
+        "MCTL_CONTEXT_BEADS_FIXTURE_MISSING",
+        "The explicit MCTL_BEADS_FIXTURE path is not a file.",
+        city_root=str(city_root),
+        rig_id=rig_id,
+        beads_fixture=str(fixture),
+    )
 
 
 def _require_file(path: Path, code: str, trace_id: str, rig_id: str) -> None:

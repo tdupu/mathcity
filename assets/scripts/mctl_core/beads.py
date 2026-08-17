@@ -34,11 +34,15 @@ class BeadReadError(RuntimeError):
     """The canonical bead source could not be read."""
 
 
-def read_beads(rig_root: Path, *, timeout: int = BD_TIMEOUT_SECONDS) -> tuple[Bead, ...]:
-    """Read a fixture/export JSONL file, falling back to the read-only bd query."""
-    export = rig_root / ".beads" / "issues.jsonl"
-    if export.is_file():
-        return tuple(_bead_from_mapping(row) for row in _read_jsonl(export))
+def read_beads(
+    rig_root: Path,
+    *,
+    fixture_path: Path | None = None,
+    timeout: int = BD_TIMEOUT_SECONDS,
+) -> tuple[Bead, ...]:
+    """Query the canonical bead store, or read an explicitly injected fixture."""
+    if fixture_path is not None:
+        return tuple(_bead_from_mapping(row) for row in _read_jsonl(fixture_path))
     return tuple(_bead_from_mapping(row) for row in _read_bd(rig_root, timeout))
 
 

@@ -33,7 +33,6 @@ class ArtifactLayout:
     stack_index: Path
     decisions: Path
     legacy_manifest: Path
-    migration_marker: Path
 
 
 def artifact_layout(ctx: MctlContext) -> ArtifactLayout:
@@ -55,13 +54,6 @@ def artifact_layout(ctx: MctlContext) -> ArtifactLayout:
         stack_index=manifest,
         decisions=decisions,
         legacy_manifest=ctx.rig_root / ".beads" / "decisions-track" / "manifest.jsonl",
-        migration_marker=(
-            ctx.rig_root
-            / ".beads"
-            / "briefs"
-            / "migrations"
-            / "2026-08-15-decisions-track-inventory.jsonl"
-        ),
     )
 
 

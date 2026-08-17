@@ -153,6 +153,8 @@ def brief_options(ctx: MctlContext, brief_id: str) -> tuple[BriefOption, ...]:
             "MBRF011",
             f"Brief {brief_id!r} is not pending adjudication.",
             brief_id=brief_id,
+            data_location=_canonical_bead_location(ctx),
+            policy_ref="B2.2",
         )
     return (
         BriefOption("validate", "Validate", "Inspect canonical state and cache drift.", True, None),
@@ -163,23 +165,23 @@ def brief_options(ctx: MctlContext, brief_id: str) -> tuple[BriefOption, ...]:
 
 
 def doctor_briefs(ctx: MctlContext, brief_id: str | None) -> DoctorReport:
-    records = _records(ctx)
+    beads = _beads(ctx)
+    records = _records(ctx, beads)
     if brief_id is not None:
         records = tuple(record for record in records if record.brief_id == brief_id)
         if not records:
             raise BriefError(
                 _diagnostic(ctx, Severity.FATAL, "MBRF010", f"No canonical brief bead named {brief_id!r} was found.", brief_id=brief_id)
             )
-    beads = _beads(ctx)
     bead_by_id = {bead.id: bead for bead in beads}
     layout = artifact_layout(ctx)
     diagnostics: list[Diagnostic] = []
     for record in records:
         bead = bead_by_id[record.bead_id]
         if not bead.source_dependencies:
-            diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF004", "Brief bead has no source dependency.", brief_id=record.brief_id, data_location=str(ctx.rig_root / ".beads/issues.jsonl"), policy_ref="B2.1"))
+            diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF004", "Brief bead has no source dependency.", brief_id=record.brief_id, data_location=_canonical_bead_location(ctx), policy_ref="B2.1"))
         if bead.status.lower() in {"closed", "done"} and not _has_verdict(bead):
-            diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF005", "Closed brief bead has no recorded verdict.", brief_id=record.brief_id, policy_ref="B2.2"))
+            diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF005", "Closed brief bead has no recorded verdict.", brief_id=record.brief_id, data_location=_canonical_bead_location(ctx), policy_ref="B2.2"))
         for artifact in record.redundant_artifacts:
             if artifact.kind == "stack_index" and artifact.state == "stale":
                 diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF001", "Stack index row points at a missing file.", brief_id=record.brief_id, data_location=str(artifact.path), policy_ref="B2.8"))
@@ -188,18 +190,24 @@ def doctor_briefs(ctx: MctlContext, brief_id: str | None) -> DoctorReport:
                 message = "Closed/adjudicated brief appears in presentable stack." if code == "MBRF006" else "Deferred brief appears before defer expiry."
                 diagnostics.append(_diagnostic(ctx, Severity.ERROR, code, message, brief_id=record.brief_id, data_location=str(artifact.path), policy_ref="B2.3" if code == "MBRF006" else "B2.7"))
     for cached_id in orphan_decision_cache_ids(layout):
+        if brief_id is not None and cached_id != brief_id:
+            continue
         bead = bead_by_id.get(cached_id)
         if bead is None:
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF002", "Brief cache file exists with no matching decision bead.", brief_id=cached_id, data_location=str(layout.decisions / f"{cached_id}.toml"), policy_ref="B2.1"))
         elif bead.issue_type != "decision":
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF003", "Brief cache maps to a bead that is not type=decision.", brief_id=cached_id, data_location=str(layout.decisions / f"{cached_id}.toml"), policy_ref="B2.1"))
     for cached_id, path in orphan_markdown_cache_ids(layout):
+        if brief_id is not None and cached_id != brief_id:
+            continue
         if cached_id not in bead_by_id:
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF002", "Brief cache file exists with no matching decision bead.", brief_id=cached_id, data_location=str(path), policy_ref="B2.1"))
         elif bead_by_id[cached_id].issue_type != "decision":
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF003", "Brief cache maps to a bead that is not type=decision.", brief_id=cached_id, data_location=str(path), policy_ref="B2.1"))
     legacy_rows = legacy_nonterminal_rows(layout)
-    if legacy_rows and not layout.migration_marker.is_file():
+    if brief_id is not None:
+        legacy_rows = tuple(row for row in legacy_rows if _row_slug(row) == brief_id)
+    if legacy_rows:
         for row in legacy_rows:
             slug = _row_slug(row)
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF008", "Legacy decisions-track row is non-terminal and not migration-visible.", brief_id=slug, data_location=str(layout.legacy_manifest), policy_ref="B2.10"))
@@ -207,8 +215,9 @@ def doctor_briefs(ctx: MctlContext, brief_id: str | None) -> DoctorReport:
     return DoctorReport(records, tuple(diagnostics))
 
 
-def _records(ctx: MctlContext) -> tuple[BriefRecord, ...]:
+def _records(ctx: MctlContext, beads: tuple[Bead, ...] | None = None) -> tuple[BriefRecord, ...]:
     layout = artifact_layout(ctx)
+    beads = _beads(ctx) if beads is None else beads
     return tuple(
         BriefRecord(
             brief_id=bead.id,
@@ -222,16 +231,20 @@ def _records(ctx: MctlContext) -> tuple[BriefRecord, ...]:
             redundant_artifacts=scan_artifacts(layout, bead.id, _decision_state(bead)),
             policy_references=BRIEF_POLICY_REFERENCES,
         )
-        for bead in _beads(ctx)
+        for bead in beads
         if bead.is_brief
     )
 
 
 def _beads(ctx: MctlContext) -> tuple[Bead, ...]:
     try:
-        return read_beads(ctx.rig_root)
+        return read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture)
     except BeadReadError as error:
         raise BriefError(_diagnostic(ctx, Severity.FATAL, "MBRF012", str(error))) from error
+
+
+def _canonical_bead_location(ctx: MctlContext) -> str:
+    return f"bd list --json (rig database {ctx.rig_db})"
 
 
 def _matches(record: BriefRecord, filters: BriefFilters) -> bool:
