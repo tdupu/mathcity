@@ -25,6 +25,15 @@ from .effects import (
     plan_adjudication,
     plan_deferral,
 )
+from .work import (
+    WorkError,
+    apply_dispatch_plan,
+    dispatch_dry_run_payload,
+    plan_dispatch,
+    ready_work,
+    work_provenance,
+    work_status,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -36,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             city=Path(args.city) if args.city else None,
             rig=args.rig,
             require_runtime_city=True,
-            require_explicit_runtime=args.command == "briefs",
+            require_explicit_runtime=args.command in {"briefs", "work"},
             env=os.environ,
         )
     except ContextError as error:
@@ -49,7 +58,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(_render_explain(context))
         return 0
-    return _briefs_command(args, context)
+    if args.command == "briefs":
+        return _briefs_command(args, context)
+    return _work_command(args, context)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -69,6 +80,12 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_brief_doctor_parser(brief_commands)
     _add_brief_adjudicate_parser(brief_commands)
     _add_brief_defer_parser(brief_commands)
+    work = commands.add_parser("work", help="inspect and dispatch brief-backed work")
+    work_commands = work.add_subparsers(dest="work_command", required=True)
+    _add_work_ready_parser(work_commands)
+    _add_work_status_parser(work_commands)
+    _add_work_provenance_parser(work_commands)
+    _add_work_dispatch_parser(work_commands)
     return parser
 
 
@@ -123,6 +140,30 @@ def _add_brief_defer_parser(commands: argparse._SubParsersAction[argparse.Argume
     _add_runtime_arguments(parser)
 
 
+def _add_work_ready_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("ready", help="list ready brief-backed work")
+    _add_runtime_arguments(parser)
+
+
+def _add_work_status_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("status", help="show work readiness and blockers")
+    parser.add_argument("brief_id")
+    _add_runtime_arguments(parser)
+
+
+def _add_work_provenance_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("provenance", help="show validated dispatch provenance")
+    parser.add_argument("brief_id")
+    _add_runtime_arguments(parser)
+
+
+def _add_work_dispatch_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("dispatch", help="dispatch brief-backed work through an effect plan")
+    parser.add_argument("brief_id")
+    parser.add_argument("--dry-run", action="store_true")
+    _add_runtime_arguments(parser)
+
+
 def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     try:
         if args.brief_command == "list":
@@ -172,6 +213,43 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                 )
                 payload = dry_run_payload(plan) if args.dry_run else apply_effect_plan(context, plan).to_dict()
     except (BriefError, MutationError) as error:
+        print(render_diagnostic(error.diagnostic), file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(_render_brief_payload(payload))
+    return 0
+
+
+def _work_command(args: argparse.Namespace, context: MctlContext) -> int:
+    try:
+        if args.work_command == "ready":
+            payload = {
+                "diagnostics": _diagnostics_payload(context, ()),
+                "trace_id": context.trace_id,
+                "work": [item.to_dict() for item in ready_work(context)],
+            }
+        elif args.work_command == "status":
+            payload = {
+                "diagnostics": _diagnostics_payload(context, ()),
+                "trace_id": context.trace_id,
+                "work": work_status(context, args.brief_id).to_dict(),
+            }
+        elif args.work_command == "provenance":
+            payload = {
+                "diagnostics": _diagnostics_payload(context, ()),
+                "provenance": work_provenance(context, args.brief_id).to_dict(),
+                "trace_id": context.trace_id,
+            }
+        else:
+            plan = plan_dispatch(context, args.brief_id)
+            payload = (
+                dispatch_dry_run_payload(plan)
+                if args.dry_run
+                else apply_dispatch_plan(context, plan)
+            )
+    except WorkError as error:
         print(render_diagnostic(error.diagnostic), file=sys.stderr)
         return 1
     if args.json:

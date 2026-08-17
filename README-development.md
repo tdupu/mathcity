@@ -106,6 +106,25 @@ Mutation commands refuse to run without a reason, refuse to run when `briefs
 doctor` reports `ERROR` or `FATAL`, and preserve the legacy
 `MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED` guard from read-only inspection.
 
+### Mctl Work Controls
+
+Inspect brief-backed work and dispatch provenance from the same explicit city
+context:
+
+```sh
+python3 assets/scripts/mctl.py work ready --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py work status mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py work provenance mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py work dispatch mc-abc --dry-run --city <city-root> --rig mathcity --json
+```
+
+`work ready` is derived from canonical decision beads and excludes blocked,
+non-approving, already-dispatched, or invalid-provenance items. Dispatch uses
+the same effect-plan model as brief mutation commands. Fixture-backed dispatch
+writes dispatch provenance plus MCTL event/trace rows; live dispatch remains
+fail-closed until a dedicated runtime canary enables the actual `gc sling`
+handoff.
+
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke
 tests. Use `test-execution-request` before risky, slow, or costly test
 execution.
