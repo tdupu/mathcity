@@ -66,6 +66,24 @@ python3 assets/scripts/mctl.py context --city tests/mctl/fixtures/city_root --ri
 from `city.toml`. It uses an explicit rig `db` value when present; otherwise,
 the resolved rig ID is the database name.
 
+### Mctl Brief Inspection
+
+Read canonical brief beads and their redundant filesystem cache without
+repairing any drift:
+
+```sh
+python3 assets/scripts/mctl.py briefs list --status open --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs show mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs options mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs doctor --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs doctor --brief mc-abc --city <city-root> --rig mathcity --json
+```
+
+From the MathCity source checkout, brief commands require both `--city` and
+`--rig`. The bead store is canonical; pile, stack, decision TOML, and legacy
+decisions-track files are reported as redundant artifacts and are never
+rewritten by these read-only commands.
+
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke
 tests. Use `test-execution-request` before risky, slow, or costly test
 execution.

@@ -18,6 +18,7 @@ CITY_FILE_NAME = "city.toml"
 class MctlContext:
     city_root: Path
     rig_id: str
+    rig_root: Path
     rig_db: str
     source_checkout: Path
     paths_toml: Path
@@ -36,6 +37,7 @@ class MctlContext:
             "paths_toml": str(self.paths_toml),
             "rig_db": self.rig_db,
             "rig_id": self.rig_id,
+            "rig_root": str(self.rig_root),
             "source_checkout": str(self.source_checkout),
             "trace_id": self.trace_id,
             "warnings": [warning.to_dict() for warning in self.warnings],
@@ -55,14 +57,17 @@ def resolve_context(
     city: Path | None,
     rig: str | None,
     require_runtime_city: bool,
+    require_explicit_runtime: bool = False,
     env: Mapping[str, str],
 ) -> MctlContext:
     """Resolve one MathCity rig without invoking or mutating city services."""
     del env  # No established environment convention is currently supported.
     trace_id = new_trace_id()
     invocation_cwd = cwd.expanduser().resolve()
-    if city is None and require_runtime_city and _is_within(
-        invocation_cwd, SOURCE_REPOSITORY_ROOT
+    if (
+        require_runtime_city
+        and _is_within(invocation_cwd, SOURCE_REPOSITORY_ROOT)
+        and (city is None or (require_explicit_runtime and rig is None))
     ):
         raise _error(
             trace_id,
@@ -96,6 +101,7 @@ def resolve_context(
 
     selected_rig, warnings = _select_rig(rig_entries, rig, trace_id, city_root)
     rig_id = selected_rig["name"]
+    rig_root = _resolve_rig_root(selected_rig, city_root)
     rig_db = selected_rig.get("db", rig_id)
     if not isinstance(rig_db, str) or not rig_db:
         raise _error(
@@ -116,6 +122,7 @@ def resolve_context(
     return MctlContext(
         city_root=city_root,
         rig_id=rig_id,
+        rig_root=rig_root,
         rig_db=rig_db,
         source_checkout=source_checkout,
         paths_toml=paths_toml,
@@ -243,6 +250,14 @@ def _import_source(imports: object) -> str | None:
         if isinstance(source, str):
             return source
     return None
+
+
+def _resolve_rig_root(rig: dict[str, object], city_root: Path) -> Path:
+    configured = rig.get("path")
+    if isinstance(configured, str) and configured:
+        candidate = Path(configured).expanduser()
+        return (candidate if candidate.is_absolute() else city_root / candidate).resolve()
+    return (city_root / str(rig["name"])).resolve()
 
 
 def _require_file(path: Path, code: str, trace_id: str, rig_id: str) -> None:
