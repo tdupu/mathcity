@@ -18,6 +18,13 @@ from .briefs import (
 )
 from .context import ContextError, MctlContext, resolve_context
 from .diagnostics import Diagnostic, render_diagnostic
+from .effects import (
+    MutationError,
+    apply_effect_plan,
+    dry_run_payload,
+    plan_adjudication,
+    plan_deferral,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -60,6 +67,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_brief_show_parser(brief_commands)
     _add_brief_options_parser(brief_commands)
     _add_brief_doctor_parser(brief_commands)
+    _add_brief_adjudicate_parser(brief_commands)
+    _add_brief_defer_parser(brief_commands)
     return parser
 
 
@@ -94,6 +103,26 @@ def _add_brief_doctor_parser(commands: argparse._SubParsersAction[argparse.Argum
     _add_runtime_arguments(parser)
 
 
+def _add_brief_adjudicate_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("adjudicate", help="record a brief verdict through an effect plan")
+    parser.add_argument("brief_id")
+    parser.add_argument("--verdict", "--decision", dest="verdict")
+    parser.add_argument("--reason")
+    parser.add_argument("--option")
+    parser.add_argument("--dry-run", action="store_true")
+    _add_runtime_arguments(parser)
+
+
+def _add_brief_defer_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("defer", help="defer a brief through an effect plan")
+    parser.add_argument("brief_id")
+    parser.add_argument("--reason")
+    parser.add_argument("--until")
+    parser.add_argument("--days", type=int)
+    parser.add_argument("--dry-run", action="store_true")
+    _add_runtime_arguments(parser)
+
+
 def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     try:
         if args.brief_command == "list":
@@ -119,11 +148,30 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                 "trace_id": context.trace_id,
             }
         else:
-            report = doctor_briefs(context, args.brief_id)
-            payload = report.to_dict()
-            payload["trace_id"] = context.trace_id
-            payload["diagnostics"] = _diagnostics_payload(context, report.diagnostics)
-    except BriefError as error:
+            if args.brief_command == "doctor":
+                report = doctor_briefs(context, args.brief_id)
+                payload = report.to_dict()
+                payload["trace_id"] = context.trace_id
+                payload["diagnostics"] = _diagnostics_payload(context, report.diagnostics)
+            elif args.brief_command == "adjudicate":
+                plan = plan_adjudication(
+                    context,
+                    args.brief_id,
+                    verdict=args.verdict,
+                    reason=args.reason,
+                    option=args.option,
+                )
+                payload = dry_run_payload(plan) if args.dry_run else apply_effect_plan(context, plan).to_dict()
+            else:
+                plan = plan_deferral(
+                    context,
+                    args.brief_id,
+                    reason=args.reason,
+                    until=args.until,
+                    days=args.days,
+                )
+                payload = dry_run_payload(plan) if args.dry_run else apply_effect_plan(context, plan).to_dict()
+    except (BriefError, MutationError) as error:
         print(render_diagnostic(error.diagnostic), file=sys.stderr)
         return 1
     if args.json:
