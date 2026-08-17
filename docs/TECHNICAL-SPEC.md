@@ -55,7 +55,7 @@ source work
   -> brief producer
   -> pile
   -> brief-gate-keep
-  -> brief-shuffle
+  -> brief-shuffle-fast-drain
   -> stack
   -> present-briefs
   -> adjudicate-brief

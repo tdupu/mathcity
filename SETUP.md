@@ -74,7 +74,7 @@ the relevant skills are:
 ### Gas City Runtime
 
 Once imported, Gas City agents can run mathcity formulas such as
-`work-briefed`, `build-basic-briefed`, `brief-shuffle`, and
+`work-briefed`, `build-basic-briefed`, `brief-shuffle-fast-drain`, and
 `smoke-test-briefed`. Mayor and clerk operation are separate:
 
 - [README-mayor.md](./README-mayor.md)

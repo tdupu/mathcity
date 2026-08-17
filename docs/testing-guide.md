@@ -98,7 +98,7 @@ new artifact created
   → smoke-test-briefed runs
   → TESTING.md written
   → brief filed with test evidence in .beads/briefs/.pile
-  → brief-shuffle applies the brief's gate_profile
+  → brief-shuffle-fast-drain applies the brief's gate_profile
   → stack
   -> adjudication
   → A verdict → commit + push
@@ -121,6 +121,8 @@ touches live city state:
 
 ```bash
 bash tests/unified-brief-pipeline-e2e/smoke_test.sh
+bash tests/brief-shuffle-fast-drain/smoke_test.sh
+bash tests/brief-shuffle-fast-drain-three-track-e2e/smoke_test.sh
 bash tests/brief-stack-index-reconcile/smoke_test.sh
 bash tests/decisions-track-migration/smoke_test.sh
 bash tests/unified-brief-gate-profiles/smoke_test.sh

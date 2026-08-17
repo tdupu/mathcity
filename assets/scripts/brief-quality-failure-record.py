@@ -82,17 +82,41 @@ def split_routing_path(value: str) -> list[str]:
 
 
 def rejection_file(rejected_dir: Path) -> Path | None:
-    for name in ("rejection.md", "rejection-record.md"):
+    for name in ("rejection.md", "rejection-record.md", "rejection.json"):
         candidate = rejected_dir / name
         if candidate.exists():
             return candidate
     return None
 
 
+def rejection_metadata(path: Path) -> dict[str, str]:
+    if path.suffix != ".json":
+        return parse_frontmatter(path)
+    try:
+        data = json.loads(path.read_text(errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): str(value) for key, value in data.items() if isinstance(value, (str, int, float, bool))}
+
+
 def extract_failed_gate(rejection_text: str, rejection_meta: dict[str, str]) -> tuple[str, str, str]:
     if rejection_meta.get("failed_gate"):
         gate = normalize_gate_id(rejection_meta["failed_gate"])
         return gate, rejection_meta.get("failed_gate_name", gate), rejection_meta.get("failure_summary", "")
+
+    reason = rejection_meta.get("reason", "")
+    reason_match = re.search(
+        r"\b(G\d+[A-Za-z]?)\s+(.+?):\s*(FAIL|BLOCKED)\b(?:\s*[-:]\s*(.*))?",
+        reason,
+        re.IGNORECASE,
+    )
+    if reason_match:
+        gate = normalize_gate_id(reason_match.group(1))
+        name = clean_label(reason_match.group(2)) or gate
+        summary = clean_label(reason_match.group(4) or reason)
+        return gate, name, summary
 
     lines = rejection_text.splitlines()
     for index, line in enumerate(lines):
@@ -133,6 +157,10 @@ def is_producer_origin(brief_meta: dict[str, str]) -> bool:
     return not is_repair_brief(brief_meta)
 
 
+def rejection_requires_feedback(rejection_meta: dict[str, str]) -> bool:
+    return rejection_meta.get("feedback_required", "true").lower() not in {"false", "0", "no"}
+
+
 def build_record(slug: str, rejected_dir: Path) -> dict[str, Any] | None:
     brief_path = rejected_dir / "brief.md"
     reject_path = rejection_file(rejected_dir)
@@ -140,10 +168,12 @@ def build_record(slug: str, rejected_dir: Path) -> dict[str, Any] | None:
         return None
 
     brief_meta = parse_frontmatter(brief_path)
+    rejection_meta = rejection_metadata(reject_path)
+    if not rejection_requires_feedback(rejection_meta):
+        return None
     if is_repair_brief(brief_meta):
         return None
 
-    rejection_meta = parse_frontmatter(reject_path)
     rejection_text = read_text(reject_path)
     failed_gate, failed_gate_name, failure_summary = extract_failed_gate(rejection_text, rejection_meta)
     if not failure_summary:

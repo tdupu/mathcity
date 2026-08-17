@@ -109,7 +109,7 @@ gc session list
 ```
 
 Expected mathcity surfaces include `brief-prep`, `math-brief-prep`,
-`build-basic-briefed`, `brief-shuffle-pile`, `brief-review-patrol`, and the
+`build-basic-briefed`, `brief-shuffle-fast-drain`, `brief-review-patrol`, and the
 `mathcity.brief-operator` pool.
 
 ## Development Checkout
@@ -188,7 +188,7 @@ rig-scope Gas City roles import is present in `city.toml` and run
 If brief files remain in `.beads/briefs/.pile/`, inspect:
 
 ```sh
-gc order show brief-shuffle-pile
+gc order show brief-shuffle-fast-drain
 gc session list --template mathcity.brief-operator
 gc order history | grep brief
 ```
