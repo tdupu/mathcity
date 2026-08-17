@@ -69,6 +69,20 @@ replay_command: true
 ## Gate Evidence
 {evidence("producer_repair", "G5")}
 """, encoding="utf-8")
+
+collision = pile / "recovery-collision.md"
+collision_text = (pile / "producer-origin.md").read_text()
+collision_text = collision_text.replace("producer-origin", "recovery-collision")
+collision_text = collision_text.replace("source-producer-origin", "source-recovery-collision")
+collision_text = collision_text.replace("G4 Critical-review: FAIL - controlled backfill fixture", "G4 Critical-review: PASS")
+collision.write_text(collision_text, encoding="utf-8")
+staging = pile.parent / ".staging/fast-drain-recovery-collision"
+staging.mkdir(parents=True)
+(staging / "brief.md").write_text(collision_text, encoding="utf-8")
+(staging / ".claimed_by").write_text(
+    '{"owner":"brief-shuffle-fast-drain","source_path":".pile/recovery-collision.md"}\n',
+    encoding="utf-8",
+)
 PY
 
 report="$(python3 "$DRAIN" --brief-root "$BRIEFS" --gate-config "$GATES" --apply --json --no-external)"
@@ -78,7 +92,8 @@ import sys
 
 report = json.loads(sys.argv[1])
 assert report["rejected"] == ["producer-origin", "repair-origin"], report
-assert report["promoted"] == [], report
+assert report["promoted"] == ["recovery-collision"], report
+assert report["recovered"] == ["recovery-collision"], report
 PY
 
 test -f "$BRIEFS/.pile/.rejected/producer-origin/rejection.json"
@@ -96,5 +111,7 @@ grep -Fq 'schema = "brief-producer-failure.v1"' "$PRODUCER"
 grep -Fq 'source_bead = "source-producer-origin"' "$PRODUCER"
 test ! -e "$BRIEFS/.brief-quality-failure-pile/repair-origin.toml"
 test ! -e "$BRIEFS/.producer-failure-pile/repair-origin.toml"
+test ! -e "$BRIEFS/.brief-quality-failure-pile/recovery-collision-recovery.toml"
+test ! -e "$BRIEFS/.producer-failure-pile/recovery-collision-recovery.toml"
 
 printf 'brief-shuffle-fast-drain failure backfill E2E: ok\n'

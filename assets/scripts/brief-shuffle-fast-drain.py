@@ -311,6 +311,8 @@ def recover_owned_staging(brief_root: Path) -> list[str]:
                     "slug": source.stem,
                     "gate_profile": parse_frontmatter(staged).get("gate_profile", "standard"),
                     "reason": "owned staging recovery found an existing pile entry",
+                    "rejection_kind": "operational_recovery_collision",
+                    "feedback_required": False,
                     "source_path": f".pile/{source.name}",
                     "rejected_at": utc_now(),
                 }

@@ -313,6 +313,11 @@ feedback_sink: brief_quality_failure
         report = self.json_output(self.run_drain("--apply"))
         self.assertEqual(report["recovered"], ["recovery-collision"])
         self.assertTrue((self.brief_root / ".pile/.rejected/recovery-collision-recovery/brief.md").is_file())
+        rejection = json.loads(
+            (self.brief_root / ".pile/.rejected/recovery-collision-recovery/rejection.json").read_text()
+        )
+        self.assertEqual(rejection["rejection_kind"], "operational_recovery_collision")
+        self.assertFalse(rejection["feedback_required"])
         self.assertFalse((staging_dir / "brief.md").exists())
         self.assertEqual(list((self.brief_root / ".staging").iterdir()), [])
 

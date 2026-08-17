@@ -157,6 +157,10 @@ def is_producer_origin(brief_meta: dict[str, str]) -> bool:
     return not is_repair_brief(brief_meta)
 
 
+def rejection_requires_feedback(rejection_meta: dict[str, str]) -> bool:
+    return rejection_meta.get("feedback_required", "true").lower() not in {"false", "0", "no"}
+
+
 def build_record(slug: str, rejected_dir: Path) -> dict[str, Any] | None:
     brief_path = rejected_dir / "brief.md"
     reject_path = rejection_file(rejected_dir)
@@ -164,10 +168,12 @@ def build_record(slug: str, rejected_dir: Path) -> dict[str, Any] | None:
         return None
 
     brief_meta = parse_frontmatter(brief_path)
+    rejection_meta = rejection_metadata(reject_path)
+    if not rejection_requires_feedback(rejection_meta):
+        return None
     if is_repair_brief(brief_meta):
         return None
 
-    rejection_meta = rejection_metadata(reject_path)
     rejection_text = read_text(reject_path)
     failed_gate, failed_gate_name, failure_summary = extract_failed_gate(rejection_text, rejection_meta)
     if not failure_summary:
