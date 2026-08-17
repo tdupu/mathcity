@@ -1,0 +1,8 @@
+"""Trace identifiers for mctl invocations."""
+from __future__ import annotations
+
+from uuid import uuid4
+
+
+def new_trace_id() -> str:
+    return str(uuid4())
