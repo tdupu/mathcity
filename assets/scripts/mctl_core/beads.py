@@ -33,6 +33,29 @@ class BeadReadError(RuntimeError):
     """The canonical bead source could not be read."""
 
 
+class BeadWriteError(RuntimeError):
+    """The canonical bead source could not be updated."""
+
+
+@dataclass(frozen=True)
+class BeadUpdate:
+    id: str
+    status: str | None = None
+    metadata: Mapping[str, str] | None = None
+    defer_until: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "id": self.id,
+            "metadata": dict(sorted((self.metadata or {}).items())),
+        }
+        if self.status is not None:
+            payload["status"] = self.status
+        if self.defer_until is not None:
+            payload["defer_until"] = self.defer_until
+        return payload
+
+
 def read_beads(
     rig_root: Path,
     *,
@@ -43,6 +66,20 @@ def read_beads(
     if fixture_path is not None:
         return tuple(_bead_from_mapping(row) for row in _read_jsonl(fixture_path))
     return tuple(_bead_from_mapping(row) for row in _read_bd(rig_root, timeout))
+
+
+def apply_bead_update(
+    rig_root: Path,
+    update: BeadUpdate,
+    *,
+    fixture_path: Path | None = None,
+    timeout: int = BD_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    """Apply one canonical bead update through the fixture seam or bd."""
+    if fixture_path is not None:
+        _apply_fixture_update(fixture_path, update)
+        return {"id": update.id, "mode": "fixture"}
+    return _apply_bd_update(rig_root, update, timeout)
 
 
 def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
@@ -81,6 +118,66 @@ def _read_bd(rig_root: Path, timeout: int) -> Iterable[Mapping[str, object]]:
     if not isinstance(parsed, list) or not all(isinstance(row, dict) for row in parsed):
         raise BeadReadError(f"{' '.join(BD_LIST_ARGS)} did not return a JSON list of objects")
     return parsed
+
+
+def _apply_bd_update(rig_root: Path, update: BeadUpdate, timeout: int) -> dict[str, object]:
+    args = ["bd", "update", update.id]
+    if update.status is not None:
+        args.extend(("--status", update.status))
+    if update.defer_until is not None:
+        args.extend(("--defer", update.defer_until))
+    for key, value in sorted((update.metadata or {}).items()):
+        args.extend(("--set-metadata", f"{key}={value}"))
+    args.append("--json")
+    try:
+        result = subprocess.run(
+            args,
+            cwd=rig_root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise BeadWriteError(f"Could not update bead {update.id}: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise BeadWriteError(detail or f"{' '.join(args)} failed")
+    if not result.stdout.strip():
+        return {"id": update.id, "mode": "bd", "stdout": ""}
+    try:
+        parsed: Any = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return {"id": update.id, "mode": "bd", "stdout": result.stdout.strip()}
+    return {"id": update.id, "mode": "bd", "result": parsed}
+
+
+def _apply_fixture_update(path: Path, update: BeadUpdate) -> None:
+    rows = list(_read_jsonl(path))
+    changed = False
+    rewritten: list[dict[str, object]] = []
+    for row in rows:
+        mutable = dict(row)
+        if mutable.get("id") == update.id:
+            if update.status is not None:
+                mutable["status"] = update.status
+            if update.defer_until is not None:
+                mutable["defer_until"] = update.defer_until
+            metadata = mutable.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+            metadata = dict(metadata)
+            metadata.update(update.metadata or {})
+            if metadata:
+                mutable["metadata"] = metadata
+            changed = True
+        rewritten.append(mutable)
+    if not changed:
+        raise BeadWriteError(f"No bead named {update.id!r} exists in {path}")
+    path.write_text(
+        "".join(f"{json.dumps(row, sort_keys=True)}\n" for row in rewritten),
+        encoding="utf-8",
+    )
 
 
 def _bead_from_mapping(raw: Mapping[str, object]) -> Bead:

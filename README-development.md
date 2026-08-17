@@ -90,6 +90,22 @@ manifest cannot be parsed, the JSON `diagnostics` envelope includes
 decisions-track migration proof/canary has passed and the result is explicitly
 authorized; historical migration marker files alone are not trusted proof.
 
+### Mctl Brief Mutations
+
+Decision mutations are dry-run first and bead-first. The canonical bead update
+is applied before redundant decision TOML, stack index, event, or trace writes:
+
+```sh
+python3 assets/scripts/mctl.py briefs adjudicate mc-abc --verdict approve --reason "ready" --dry-run --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs adjudicate mc-abc --verdict approve --reason "ready" --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --dry-run --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --city <city-root> --rig mathcity --json
+```
+
+Mutation commands refuse to run without a reason, refuse to run when `briefs
+doctor` reports `ERROR` or `FATAL`, and preserve the legacy
+`MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED` guard from read-only inspection.
+
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke
 tests. Use `test-execution-request` before risky, slow, or costly test
 execution.
