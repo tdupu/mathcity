@@ -6,14 +6,16 @@ from datetime import date
 from pathlib import Path
 from typing import Iterable
 
-from .beads import Bead, BeadReadError, read_beads
+from .beads import BD_LIST_ARGS, Bead, BeadReadError, read_beads
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .policy_refs import BRIEF_POLICY_REFERENCES, PolicyReference
 from .redundant_state import (
+    ArtifactLayout,
+    LegacyManifestState,
     RedundantArtifact,
     artifact_layout,
-    legacy_nonterminal_rows,
+    legacy_manifest_state,
     orphan_decision_cache_ids,
     orphan_markdown_cache_ids,
     scan_artifacts,
@@ -123,31 +125,32 @@ def list_briefs(ctx: MctlContext, filters: BriefFilters) -> tuple[BriefRecord, .
 
 
 def show_brief(ctx: MctlContext, brief_id: str) -> BriefRecord:
-    for record in _records(ctx):
-        if record.brief_id == brief_id:
-            return record
-    raise BriefError(
-        _diagnostic(
-            ctx,
-            Severity.FATAL,
-            "MBRF010",
-            f"No canonical brief bead named {brief_id!r} was found.",
-            brief_id=brief_id,
-            suggested_next_command="mctl briefs list --json",
-        )
-    )
+    return _find_record(ctx, _records(ctx), brief_id)
+
+
+def brief_command_diagnostics(ctx: MctlContext, records: Iterable[BriefRecord]) -> tuple[Diagnostic, ...]:
+    layout = artifact_layout(ctx)
+    legacy_state = legacy_manifest_state(layout)
+    brief_ids = {record.brief_id for record in records}
+    return _legacy_gate_diagnostics(ctx, layout, legacy_state, brief_ids)
 
 
 def brief_options(ctx: MctlContext, brief_id: str) -> tuple[BriefOption, ...]:
-    record = show_brief(ctx, brief_id)
-    doctor = doctor_briefs(ctx, brief_id)
-    blocker = next(
-        (diagnostic for diagnostic in doctor.diagnostics if diagnostic.severity in {Severity.ERROR, Severity.FATAL}),
-        None,
-    )
-    mutation_enabled = blocker is None and record.decision_state == "pending"
-    if blocker is None and record.decision_state != "pending":
-        blocker = _diagnostic(
+    options, _ = brief_options_report(ctx, brief_id)
+    return options
+
+
+def brief_options_report(ctx: MctlContext, brief_id: str) -> tuple[tuple[BriefOption, ...], tuple[Diagnostic, ...]]:
+    beads = _beads(ctx)
+    records = _records(ctx, beads)
+    record = _find_record(ctx, records, brief_id)
+    bead_by_id = {bead.id: bead for bead in beads}
+    bead = bead_by_id[record.bead_id]
+    doctor = _doctor_briefs(ctx, brief_id, beads)
+    blocker = _blocking_diagnostic(doctor.diagnostics)
+    pending_blocker = blocker
+    if pending_blocker is None and record.decision_state != "pending":
+        pending_blocker = _diagnostic(
             ctx,
             Severity.ERROR,
             "MBRF011",
@@ -156,17 +159,55 @@ def brief_options(ctx: MctlContext, brief_id: str) -> tuple[BriefOption, ...]:
             data_location=_canonical_bead_location(ctx),
             policy_ref="B2.2",
         )
+    dispatch_blocker = blocker
+    if dispatch_blocker is None and not _approved_for_dispatch(bead):
+        dispatch_blocker = _diagnostic(
+            ctx,
+            Severity.ERROR,
+            "MBRF011",
+            f"Brief {brief_id!r} has no approving verdict for dispatch.",
+            brief_id=brief_id,
+            data_location=_canonical_bead_location(ctx),
+            policy_ref="B2.2",
+        )
     return (
-        BriefOption("validate", "Validate", "Inspect canonical state and cache drift.", True, None),
-        BriefOption("adjudicate", "Adjudicate", "Record a human verdict on the canonical brief bead.", mutation_enabled, blocker),
-        BriefOption("defer", "Defer", "Set a timed defer window on the canonical brief bead.", mutation_enabled, blocker),
-        BriefOption("dispatch-work", "Dispatch work", "Dispatch work unlocked by the canonical brief bead.", mutation_enabled, blocker),
+        (
+            BriefOption("validate", "Validate", "Inspect canonical state and cache drift.", True, None),
+            BriefOption(
+                "adjudicate",
+                "Adjudicate",
+                "Record a human verdict on the canonical brief bead.",
+                pending_blocker is None,
+                pending_blocker,
+            ),
+            BriefOption(
+                "defer",
+                "Defer",
+                "Set a timed defer window on the canonical brief bead.",
+                pending_blocker is None,
+                pending_blocker,
+            ),
+            BriefOption(
+                "dispatch-work",
+                "Dispatch work",
+                "Dispatch work unlocked by the canonical brief bead.",
+                dispatch_blocker is None,
+                dispatch_blocker,
+            ),
+        ),
+        doctor.diagnostics,
     )
 
 
 def doctor_briefs(ctx: MctlContext, brief_id: str | None) -> DoctorReport:
-    beads = _beads(ctx)
-    records = _records(ctx, beads)
+    return _doctor_briefs(ctx, brief_id)
+
+
+def _doctor_briefs(ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ...] | None = None) -> DoctorReport:
+    beads = _beads(ctx) if beads is None else beads
+    layout = artifact_layout(ctx)
+    legacy_state = legacy_manifest_state(layout)
+    records = _records(ctx, beads, layout, legacy_state)
     if brief_id is not None:
         records = tuple(record for record in records if record.brief_id == brief_id)
         if not records:
@@ -174,7 +215,6 @@ def doctor_briefs(ctx: MctlContext, brief_id: str | None) -> DoctorReport:
                 _diagnostic(ctx, Severity.FATAL, "MBRF010", f"No canonical brief bead named {brief_id!r} was found.", brief_id=brief_id)
             )
     bead_by_id = {bead.id: bead for bead in beads}
-    layout = artifact_layout(ctx)
     diagnostics: list[Diagnostic] = []
     for record in records:
         bead = bead_by_id[record.bead_id]
@@ -204,19 +244,25 @@ def doctor_briefs(ctx: MctlContext, brief_id: str | None) -> DoctorReport:
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF002", "Brief cache file exists with no matching decision bead.", brief_id=cached_id, data_location=str(path), policy_ref="B2.1"))
         elif bead_by_id[cached_id].issue_type != "decision":
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF003", "Brief cache maps to a bead that is not type=decision.", brief_id=cached_id, data_location=str(path), policy_ref="B2.1"))
-    legacy_rows = legacy_nonterminal_rows(layout)
-    if brief_id is not None:
-        legacy_rows = tuple(row for row in legacy_rows if _row_slug(row) == brief_id)
-    if legacy_rows:
-        for row in legacy_rows:
-            slug = _row_slug(row)
-            diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF008", "Legacy decisions-track row is non-terminal and not migration-visible.", brief_id=slug, data_location=str(layout.legacy_manifest), policy_ref="B2.10"))
-        diagnostics.append(_diagnostic(ctx, Severity.FATAL, "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED", "Legacy decisions-track state requires the authorized #38 migration proof/canary.", data_location=str(layout.legacy_manifest), policy_ref="B2.10", suggested_next_command="bash tests/decisions-track-migration/smoke_test.sh"))
+    diagnostics.extend(
+        _legacy_gate_diagnostics(
+            ctx,
+            layout,
+            legacy_state,
+            {brief_id} if brief_id is not None else None,
+        )
+    )
     return DoctorReport(records, tuple(diagnostics))
 
 
-def _records(ctx: MctlContext, beads: tuple[Bead, ...] | None = None) -> tuple[BriefRecord, ...]:
-    layout = artifact_layout(ctx)
+def _records(
+    ctx: MctlContext,
+    beads: tuple[Bead, ...] | None = None,
+    layout: ArtifactLayout | None = None,
+    legacy_state: LegacyManifestState | None = None,
+) -> tuple[BriefRecord, ...]:
+    layout = artifact_layout(ctx) if layout is None else layout
+    legacy_state = legacy_manifest_state(layout) if legacy_state is None else legacy_state
     beads = _beads(ctx) if beads is None else beads
     return tuple(
         BriefRecord(
@@ -228,7 +274,7 @@ def _records(ctx: MctlContext, beads: tuple[Bead, ...] | None = None) -> tuple[B
             labels=bead.labels,
             created_at=bead.created_at,
             updated_at=bead.updated_at,
-            redundant_artifacts=scan_artifacts(layout, bead.id, _decision_state(bead)),
+            redundant_artifacts=scan_artifacts(layout, bead.id, _decision_state(bead), legacy_state),
             policy_references=BRIEF_POLICY_REFERENCES,
         )
         for bead in beads
@@ -244,7 +290,7 @@ def _beads(ctx: MctlContext) -> tuple[Bead, ...]:
 
 
 def _canonical_bead_location(ctx: MctlContext) -> str:
-    return f"bd list --json (rig database {ctx.rig_db})"
+    return f"{' '.join(BD_LIST_ARGS)} (rig database {ctx.rig_db})"
 
 
 def _matches(record: BriefRecord, filters: BriefFilters) -> bool:
@@ -263,14 +309,33 @@ def _decision_state(bead: Bead) -> str:
 
 
 def _has_verdict(bead: Bead) -> bool:
+    return _verdict(bead) is not None
+
+
+def _verdict(bead: Bead) -> str | None:
     for key in ("verdict", "decision", "recorded_verdict"):
         value = bead.raw.get(key)
         if isinstance(value, str) and value:
-            return True
+            return value
     metadata = bead.raw.get("metadata")
-    return isinstance(metadata, dict) and any(
-        isinstance(metadata.get(key), str) and metadata[key] for key in ("verdict", "decision", "recorded_verdict")
-    )
+    if isinstance(metadata, dict):
+        for key in ("verdict", "decision", "recorded_verdict"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def _approved_for_dispatch(bead: Bead) -> bool:
+    verdict = _verdict(bead)
+    if verdict is None:
+        return False
+    return bead.status.lower() in {"closed", "done"} and verdict.strip().lower() in {
+        "accept",
+        "accepted",
+        "approve",
+        "approved",
+    }
 
 
 def _defer_until(bead: Bead) -> bool:
@@ -287,6 +352,82 @@ def _row_slug(row: dict[str, object]) -> str | None:
         if isinstance(value, str) and value:
             return value
     return None
+
+
+def _find_record(ctx: MctlContext, records: Iterable[BriefRecord], brief_id: str) -> BriefRecord:
+    for record in records:
+        if record.brief_id == brief_id:
+            return record
+    raise BriefError(
+        _diagnostic(
+            ctx,
+            Severity.FATAL,
+            "MBRF010",
+            f"No canonical brief bead named {brief_id!r} was found.",
+            brief_id=brief_id,
+            suggested_next_command="mctl briefs list --json",
+        )
+    )
+
+
+def _blocking_diagnostic(diagnostics: Iterable[Diagnostic]) -> Diagnostic | None:
+    return next(
+        (diagnostic for diagnostic in diagnostics if diagnostic.severity in {Severity.ERROR, Severity.FATAL}),
+        None,
+    )
+
+
+def _legacy_gate_diagnostics(
+    ctx: MctlContext,
+    layout: ArtifactLayout,
+    legacy_state: LegacyManifestState,
+    brief_ids: set[str] | None,
+) -> tuple[Diagnostic, ...]:
+    if legacy_state.parse_error is not None:
+        return (
+            _diagnostic(
+                ctx,
+                Severity.ERROR,
+                "MBRF013",
+                "Legacy decisions-track manifest could not be parsed.",
+                data_location=str(layout.legacy_manifest),
+                policy_ref="B2.10",
+            ),
+            _legacy_migration_blocker(ctx, layout),
+        )
+    legacy_rows = legacy_state.nonterminal_rows
+    if brief_ids is not None:
+        legacy_rows = tuple(row for row in legacy_rows if _row_slug(row) in brief_ids)
+    if not legacy_rows:
+        return ()
+    diagnostics: list[Diagnostic] = []
+    for row in legacy_rows:
+        slug = _row_slug(row)
+        diagnostics.append(
+            _diagnostic(
+                ctx,
+                Severity.ERROR,
+                "MBRF008",
+                "Legacy decisions-track row is non-terminal and not migration-visible.",
+                brief_id=slug,
+                data_location=str(layout.legacy_manifest),
+                policy_ref="B2.10",
+            )
+        )
+    diagnostics.append(_legacy_migration_blocker(ctx, layout))
+    return tuple(diagnostics)
+
+
+def _legacy_migration_blocker(ctx: MctlContext, layout: ArtifactLayout) -> Diagnostic:
+    return _diagnostic(
+        ctx,
+        Severity.FATAL,
+        "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED",
+        "Legacy decisions-track state requires the authorized #38 migration proof/canary.",
+        data_location=str(layout.legacy_manifest),
+        policy_ref="B2.10",
+        suggested_next_command="bash tests/decisions-track-migration/smoke_test.sh",
+    )
 
 
 def _diagnostic(

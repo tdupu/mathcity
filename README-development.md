@@ -84,6 +84,12 @@ From the MathCity source checkout, brief commands require both `--city` and
 decisions-track files are reported as redundant artifacts and are never
 rewritten by these read-only commands.
 
+If a command inspects a matching legacy decisions-track row, or if that legacy
+manifest cannot be parsed, the JSON `diagnostics` envelope includes
+`MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED`. That blocker remains until the #38
+decisions-track migration proof/canary has passed and the result is explicitly
+authorized; historical migration marker files alone are not trusted proof.
+
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke
 tests. Use `test-execution-request` before risky, slow, or costly test
 execution.

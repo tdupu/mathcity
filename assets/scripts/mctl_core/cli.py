@@ -7,9 +7,17 @@ import os
 from pathlib import Path
 import sys
 
-from .briefs import BriefError, BriefFilters, brief_options, doctor_briefs, list_briefs, show_brief
+from .briefs import (
+    BriefError,
+    BriefFilters,
+    brief_command_diagnostics,
+    brief_options_report,
+    doctor_briefs,
+    list_briefs,
+    show_brief,
+)
 from .context import ContextError, MctlContext, resolve_context
-from .diagnostics import render_diagnostic
+from .diagnostics import Diagnostic, render_diagnostic
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,21 +97,32 @@ def _add_brief_doctor_parser(commands: argparse._SubParsersAction[argparse.Argum
 def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     try:
         if args.brief_command == "list":
-            payload = {
-                "briefs": [brief.to_dict() for brief in list_briefs(context, BriefFilters(args.status, args.label))],
-                "trace_id": context.trace_id,
-            }
+            records = list_briefs(context, BriefFilters(args.status, args.label))
+            payload = _brief_payload(
+                context,
+                briefs=[brief.to_dict() for brief in records],
+                diagnostics=brief_command_diagnostics(context, records),
+            )
         elif args.brief_command == "show":
-            payload = {"brief": show_brief(context, args.brief_id).to_dict(), "trace_id": context.trace_id}
+            record = show_brief(context, args.brief_id)
+            payload = _brief_payload(
+                context,
+                brief=record.to_dict(),
+                diagnostics=brief_command_diagnostics(context, (record,)),
+            )
         elif args.brief_command == "options":
+            options, diagnostics = brief_options_report(context, args.brief_id)
             payload = {
                 "brief_id": args.brief_id,
-                "options": [option.to_dict() for option in brief_options(context, args.brief_id)],
+                "diagnostics": _diagnostics_payload(context, diagnostics),
+                "options": [option.to_dict() for option in options],
                 "trace_id": context.trace_id,
             }
         else:
-            payload = doctor_briefs(context, args.brief_id).to_dict()
+            report = doctor_briefs(context, args.brief_id)
+            payload = report.to_dict()
             payload["trace_id"] = context.trace_id
+            payload["diagnostics"] = _diagnostics_payload(context, report.diagnostics)
     except BriefError as error:
         print(render_diagnostic(error.diagnostic), file=sys.stderr)
         return 1
@@ -112,6 +131,22 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     else:
         print(_render_brief_payload(payload))
     return 0
+
+
+def _brief_payload(
+    context: MctlContext, *, diagnostics: tuple[Diagnostic, ...], **payload: object
+) -> dict[str, object]:
+    payload["diagnostics"] = _diagnostics_payload(context, diagnostics)
+    payload["trace_id"] = context.trace_id
+    return payload
+
+
+def _diagnostics_payload(
+    context: MctlContext, diagnostics: tuple[Diagnostic, ...]
+) -> list[dict[str, object]]:
+    return [warning.to_dict() for warning in context.warnings] + [
+        diagnostic.to_dict() for diagnostic in diagnostics
+    ]
 
 
 def _render_brief_payload(payload: dict[str, object]) -> str:

@@ -35,6 +35,28 @@ class ArtifactLayout:
     legacy_manifest: Path
 
 
+@dataclass(frozen=True)
+class JsonlReadResult:
+    rows: tuple[dict[str, object], ...]
+    parse_error: str | None = None
+
+
+@dataclass(frozen=True)
+class LegacyManifestState:
+    path: Path
+    rows: tuple[dict[str, object], ...]
+    parse_error: str | None = None
+
+    @property
+    def nonterminal_rows(self) -> tuple[dict[str, object], ...]:
+        terminal = {"closed", "done", "terminal", "adjudicated", "rejected", "moot"}
+        return tuple(
+            row
+            for row in self.rows
+            if str(row.get("status", "")).lower() not in terminal
+        )
+
+
 def artifact_layout(ctx: MctlContext) -> ArtifactLayout:
     paths = _read_paths(ctx.paths_toml)
     root_value = paths.get("brief_root") or paths.get("root") or ".beads/briefs"
@@ -57,18 +79,23 @@ def artifact_layout(ctx: MctlContext) -> ArtifactLayout:
     )
 
 
-def scan_artifacts(layout: ArtifactLayout, brief_id: str, decision_state: str) -> tuple[RedundantArtifact, ...]:
+def scan_artifacts(
+    layout: ArtifactLayout,
+    brief_id: str,
+    decision_state: str,
+    legacy_state: LegacyManifestState | None = None,
+) -> tuple[RedundantArtifact, ...]:
     stack_rows = tuple(_read_jsonl(layout.stack_index))
     stack_row = next((row for row in stack_rows if _row_id(row) == brief_id), None)
     pile_path = layout.pile / f"{brief_id}.md"
     cache_path = layout.decisions / f"{brief_id}.toml"
-    legacy_rows = tuple(_read_jsonl(layout.legacy_manifest))
-    legacy_row = next((row for row in legacy_rows if _row_id(row) == brief_id), None)
+    legacy = legacy_manifest_state(layout) if legacy_state is None else legacy_state
+    legacy_row = next((row for row in legacy.rows if _row_id(row) == brief_id), None)
     return (
         _file_artifact("pile", pile_path),
         _stack_artifact(layout, stack_row, decision_state),
         _toml_artifact(cache_path, brief_id),
-        _legacy_artifact(layout.legacy_manifest, legacy_row),
+        _legacy_artifact(layout.legacy_manifest, legacy_row, legacy.parse_error),
     )
 
 
@@ -95,12 +122,12 @@ def orphan_markdown_cache_ids(layout: ArtifactLayout) -> tuple[tuple[str, Path],
 
 
 def legacy_nonterminal_rows(layout: ArtifactLayout) -> tuple[dict[str, object], ...]:
-    terminal = {"closed", "done", "terminal", "adjudicated", "rejected", "moot"}
-    return tuple(
-        row
-        for row in _read_jsonl(layout.legacy_manifest)
-        if str(row.get("status", "")).lower() not in terminal
-    )
+    return legacy_manifest_state(layout).nonterminal_rows
+
+
+def legacy_manifest_state(layout: ArtifactLayout) -> LegacyManifestState:
+    result = _read_jsonl_strict(layout.legacy_manifest)
+    return LegacyManifestState(layout.legacy_manifest, result.rows, result.parse_error)
 
 
 def _read_paths(path: Path) -> dict[str, str]:
@@ -158,7 +185,13 @@ def _toml_artifact(path: Path, brief_id: str) -> RedundantArtifact:
     return RedundantArtifact("decision_toml", path, "present", "redundant decision cache")
 
 
-def _legacy_artifact(path: Path, row: dict[str, object] | None) -> RedundantArtifact:
+def _legacy_artifact(
+    path: Path, row: dict[str, object] | None, parse_error: str | None
+) -> RedundantArtifact:
+    if parse_error is not None:
+        return RedundantArtifact(
+            "legacy_decisions_track", path, "inconsistent", "legacy migration manifest could not be parsed"
+        )
     if row is None:
         return RedundantArtifact("legacy_decisions_track", path, "missing", "no legacy migration row")
     return RedundantArtifact(
@@ -182,6 +215,28 @@ def _read_jsonl(path: Path) -> Iterable[dict[str, object]]:
     except (OSError, json.JSONDecodeError):
         return ()
     return rows
+
+
+def _read_jsonl_strict(path: Path) -> JsonlReadResult:
+    if not path.is_file():
+        return JsonlReadResult(())
+    rows: list[dict[str, object]] = []
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    parsed = json.loads(stripped)
+                except json.JSONDecodeError as error:
+                    return JsonlReadResult((), f"{path}:{line_number}: {error.msg}")
+                if not isinstance(parsed, dict):
+                    return JsonlReadResult((), f"{path}:{line_number}: row is not a JSON object")
+                rows.append(parsed)
+    except OSError as error:
+        return JsonlReadResult((), f"{path}: {error}")
+    return JsonlReadResult(tuple(rows))
 
 
 def _row_id(row: dict[str, object]) -> str | None:

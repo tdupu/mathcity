@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping
 
 
 BD_TIMEOUT_SECONDS = 5
+BD_LIST_ARGS = ("bd", "list", "--all", "--limit", "0", "--json", "--readonly")
 
 
 @dataclass(frozen=True)
@@ -25,9 +26,7 @@ class Bead:
 
     @property
     def is_brief(self) -> bool:
-        return self.issue_type == "decision" and bool(
-            {"brief-open", "brief-closed"}.intersection(self.labels)
-        )
+        return self.issue_type == "decision"
 
 
 class BeadReadError(RuntimeError):
@@ -64,7 +63,7 @@ def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
 def _read_bd(rig_root: Path, timeout: int) -> Iterable[Mapping[str, object]]:
     try:
         result = subprocess.run(
-            ["bd", "list", "--json"],
+            list(BD_LIST_ARGS),
             cwd=rig_root,
             text=True,
             capture_output=True,
@@ -74,13 +73,13 @@ def _read_bd(rig_root: Path, timeout: int) -> Iterable[Mapping[str, object]]:
     except (OSError, subprocess.TimeoutExpired) as error:
         raise BeadReadError(f"Could not query beads through bd: {error}") from error
     if result.returncode != 0:
-        raise BeadReadError(result.stderr.strip() or "bd list --json failed")
+        raise BeadReadError(result.stderr.strip() or f"{' '.join(BD_LIST_ARGS)} failed")
     try:
         parsed: Any = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise BeadReadError(f"bd list --json returned invalid JSON: {error}") from error
+        raise BeadReadError(f"{' '.join(BD_LIST_ARGS)} returned invalid JSON: {error}") from error
     if not isinstance(parsed, list) or not all(isinstance(row, dict) for row in parsed):
-        raise BeadReadError("bd list --json did not return a JSON list of objects")
+        raise BeadReadError(f"{' '.join(BD_LIST_ARGS)} did not return a JSON list of objects")
     return parsed
 
 
@@ -89,7 +88,7 @@ def _bead_from_mapping(raw: Mapping[str, object]) -> Bead:
     if not bead_id:
         raise BeadReadError("A bead has no string id")
     dependencies = raw.get("dependencies", ())
-    source_dependencies = tuple(sorted(_dependency_ids(dependencies)))
+    source_dependencies = tuple(sorted(_dependency_ids(bead_id, dependencies)))
     return Bead(
         id=bead_id,
         title=_string(raw, "title") or bead_id,
@@ -103,7 +102,7 @@ def _bead_from_mapping(raw: Mapping[str, object]) -> Bead:
     )
 
 
-def _dependency_ids(value: object) -> Iterable[str]:
+def _dependency_ids(bead_id: str, value: object) -> Iterable[str]:
     if not isinstance(value, list):
         return ()
     ids: list[str] = []
@@ -111,12 +110,32 @@ def _dependency_ids(value: object) -> Iterable[str]:
         if isinstance(dependency, str):
             ids.append(dependency)
         elif isinstance(dependency, dict):
-            for key in ("issue_id", "depends_on_id", "id", "source_id"):
-                candidate = dependency.get(key)
-                if isinstance(candidate, str) and candidate:
-                    ids.append(candidate)
-                    break
+            issue_id = dependency.get("issue_id")
+            depends_on = _first_string(
+                dependency,
+                ("depends_on_id", "depends_on_issue_id", "depends_on", "source_id"),
+            )
+            if issue_id == bead_id and depends_on:
+                ids.append(depends_on)
+                continue
+            if issue_id is None and depends_on:
+                ids.append(depends_on)
+                continue
+            if issue_id != bead_id and isinstance(issue_id, str) and issue_id and depends_on is None:
+                ids.append(issue_id)
+                continue
+            fallback = _first_string(dependency, ("id",))
+            if fallback:
+                ids.append(fallback)
     return ids
+
+
+def _first_string(value: Mapping[str, object], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return None
 
 
 def _string(value: Mapping[str, object], key: str) -> str | None:
