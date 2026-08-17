@@ -19,6 +19,8 @@ from typing import Any
 
 OWNER = "brief-shuffle-fast-drain"
 STATUS_PATTERN = re.compile(r"^(.+?):\s*(PASS|N/A|FAIL|BLOCKED|PENDING)\b", re.MULTILINE)
+GATE_EVIDENCE_HEADING = re.compile(r"^(?:#{1,6}\s+)?Gate Evidence\s*$", re.MULTILINE)
+MARKDOWN_HEADING = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 CLASSIFIER_STATES = {
     "known_no_brainer",
     "known_non_no_brainer",
@@ -56,6 +58,16 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
         if key and value:
             metadata[key] = value
     return {}
+
+
+def gate_evidence_section(text: str) -> str | None:
+    """Return only the canonical Gate Evidence section, or None if absent."""
+    match = GATE_EVIDENCE_HEADING.search(text)
+    if match is None:
+        return None
+    section = text[match.end():]
+    next_heading = MARKDOWN_HEADING.search(section)
+    return section if next_heading is None else section[:next_heading.start()]
 
 
 def gate_statuses(text: str) -> dict[str, list[str]]:
@@ -155,11 +167,14 @@ def evaluate(path: Path, gate_config: dict[str, Any]) -> tuple[str, str, dict[st
     error = profile_error(profile, metadata, text)
     if error:
         return profile, error, metadata
+    evidence = gate_evidence_section(text)
+    if evidence is None:
+        return profile, "missing Gate Evidence section", metadata
     if "G9" in profiles[profile].get("gates", []):
-        error = classifier_error(text)
+        error = classifier_error(evidence)
         if error:
             return profile, error, metadata
-    statuses = gate_statuses(text)
+    statuses = gate_statuses(evidence)
     gates_by_id = {gate["id"]: gate for gate in gate_config.get("gates", [])}
     for gate_id in profiles[profile].get("gates", []):
         gate = gates_by_id.get(gate_id)
@@ -247,6 +262,73 @@ def cleanup_own_staging(staging_dir: Path) -> None:
     staging_dir.rmdir()
 
 
+def owned_staging_source(staging_dir: Path, brief_root: Path) -> Path | None:
+    """Return a validated original pile path for a fast-drain staging claim."""
+    if not staging_dir.name.startswith("fast-drain-"):
+        return None
+    marker = staging_dir / ".claimed_by"
+    try:
+        claim_data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if claim_data.get("owner") != OWNER:
+        return None
+    source_path = claim_data.get("source_path")
+    if not isinstance(source_path, str):
+        return None
+    relative = Path(source_path)
+    if relative.parts[:1] != (".pile",) or len(relative.parts) != 2 or relative.suffix != ".md":
+        return None
+    return brief_root / relative
+
+
+def recovery_rejection_dir(brief_root: Path, slug: str) -> Path:
+    rejected_root = brief_root / ".pile" / ".rejected"
+    candidate = rejected_root / f"{slug}-recovery"
+    suffix = 2
+    while candidate.exists():
+        candidate = rejected_root / f"{slug}-recovery-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def recover_owned_staging(brief_root: Path) -> list[str]:
+    """Requeue interrupted fast-drain claims without disturbing foreign staging."""
+    staging_root = brief_root / ".staging"
+    if not staging_root.exists():
+        return []
+    recovered: list[str] = []
+    for staging_dir in sorted(path for path in staging_root.iterdir() if path.is_dir()):
+        source = owned_staging_source(staging_dir, brief_root)
+        staged = staging_dir / "brief.md"
+        if source is None or not staged.is_file():
+            continue
+        try:
+            if source.exists():
+                rejected_dir = recovery_rejection_dir(brief_root, source.stem)
+                rejected_dir.mkdir(parents=True)
+                rejection = {
+                    "slug": source.stem,
+                    "gate_profile": parse_frontmatter(staged).get("gate_profile", "standard"),
+                    "reason": "owned staging recovery found an existing pile entry",
+                    "source_path": f".pile/{source.name}",
+                    "rejected_at": utc_now(),
+                }
+                (rejected_dir / "rejection.json").write_text(
+                    json.dumps(rejection, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                staged.replace(rejected_dir / "brief.md")
+            else:
+                source.parent.mkdir(parents=True, exist_ok=True)
+                staged.replace(source)
+            cleanup_own_staging(staging_dir)
+        except OSError:
+            continue
+        recovered.append(source.stem)
+    return recovered
+
+
 def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, profile: str, reason: str) -> None:
     rejected_dir = brief_root / ".pile" / ".rejected" / slug
     rejected_dir.mkdir(parents=True, exist_ok=False)
@@ -331,13 +413,15 @@ def main() -> int:
         gate_config = tomllib.load(handle)
     brief_root = args.brief_root.expanduser()
     pile = brief_root / ".pile"
-    items = selected_pile_items(pile, args.max_items)
     report: dict[str, Any] = {
         "apply": args.apply,
-        "promoted": [], "rejected": [], "skipped": [],
+        "promoted": [], "rejected": [], "skipped": [], "recovered": [],
         "planned_promoted": [], "planned_rejected": [],
         "reasons": {},
     }
+    if args.apply:
+        report["recovered"] = recover_owned_staging(brief_root)
+    items = selected_pile_items(pile, args.max_items)
     for source in items:
         outcome = process_item(source, brief_root, gate_config, args.apply)
         if outcome.action == "skipped":

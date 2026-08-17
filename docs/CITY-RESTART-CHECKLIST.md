@@ -130,7 +130,7 @@ Parent: [../README-mayor.md](../README-mayor.md)
   ```bash
   gc order list | grep brief
   ```
-  Expected: `brief-shuffle-pile`, `brief-review-patrol`, `brief-watchdog-refill`, `brief-watchdog-refill-on-stack-low`, `brief-archive-sweep`, `brief-decision-dispatch`, `no-brainer-process`, `on-merge-brief-record`, `post-decision-file-or-sendback` all present.
+  Expected: `brief-shuffle-fast-drain`, `brief-review-patrol`, `brief-watchdog-refill`, `brief-watchdog-refill-on-stack-low`, `brief-archive-sweep`, `brief-decision-dispatch`, `no-brainer-process`, `on-merge-brief-record`, `post-decision-file-or-sendback` all present.
 
 - [ ] **Confirm formulas are visible**
   ```bash
@@ -152,18 +152,18 @@ Use these commands to diagnose order health at any point:
 gc order list
 
 # Inspect one order's trigger condition and schedule
-gc order show brief-shuffle-pile
+gc order show brief-shuffle-fast-drain
 
 # See which orders are currently due to fire (based on cooldown/schedule)
 gc order check
 
 # See when an order last ran — BEST debugging tool
-gc order history brief-shuffle-pile
-gc order history brief-shuffle-pile --rig hecke
+gc order history brief-shuffle-fast-drain
+gc order history brief-shuffle-fast-drain --rig hecke
 gc order history on-merge-brief-record
 
 # Manually fire an order (useful for smoke tests — bypasses cooldown)
-gc order run brief-shuffle-pile --rig hecke
+gc order run brief-shuffle-fast-drain --rig hecke
 
 # Watch orders firing in real-time (all events)
 gc events --type order.fired --since 30m
@@ -232,7 +232,7 @@ gc events --watch --type brief.decided
 gc events --follow
 
 # Correlate events to order runs
-gc order history brief-shuffle-pile
+gc order history brief-shuffle-fast-drain
 ```
 
 **Key event types in the brief pipeline:**
@@ -275,7 +275,7 @@ gc order history brief-shuffle-pile
 
 - [ ] **Trigger the shuffle** (promotes from pile to stack)
   ```bash
-  gc order run brief-shuffle-pile --rig hecke
+  gc order run brief-shuffle-fast-drain --rig hecke
   ls <repos-root>/hecke/.beads/briefs/stack/
   ```
   Expected: a brief entry appears in the stack directory.
@@ -303,7 +303,7 @@ gc order history brief-shuffle-pile
 
 - [ ] **Trigger the shuffle** (promotes from pile to stack)
   ```bash
-  gc order run brief-shuffle-pile --rig homog
+  gc order run brief-shuffle-fast-drain --rig homog
   ls <repos-root>/homog/.beads/briefs/stack/
   ```
   Expected: a brief entry appears in the stack directory.
@@ -342,7 +342,7 @@ gc order history brief-shuffle-pile
   cd <repos-root>/hecke
   bd create "Fix typo in README.md — no-brainer smoke test" --type task --label needs-decision
   bd close he-yyyy --reason "typo fixed"
-  gc order run brief-shuffle-pile --rig hecke
+  gc order run brief-shuffle-fast-drain --rig hecke
   ```
 
 - [ ] **In `/present-briefs`, confirm collapsed display**

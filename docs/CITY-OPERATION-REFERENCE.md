@@ -16,7 +16,7 @@ Parent: [../README-mayor.md](../README-mayor.md)
 |-----|------|--------|
 | `no-brainer-process.toml`: added `[vars] mode = "guarded-execute"` | gt-d3h6e | ✓ DONE |
 | `orders/on-merge-brief-record.toml`: `pool` → `mathcity.brief-operator` | gt-oiigr | ✓ DONE |
-| `orders/brief-shuffle-pile.toml`: `pool` → `mathcity.brief-operator` | gt-wz0xj | ✓ DONE |
+| Historical: `orders/brief-shuffle-pile.toml`: `pool` → `mathcity.brief-operator`; superseded by `brief-shuffle-fast-drain` | gt-wz0xj | ✓ DONE |
 | `orders/brief-review-patrol.toml`: `pool` → `mathcity.brief-operator` | gt-rix5m | ✓ DONE |
 | Formula defaults sweep: 13 occurrences across 12 formula files | (gt-oiigr context) | ✓ DONE |
 | Gate file `operator_target` defaults (4 files) | gt-y4nhw | DEFERRED P3 — gates still function via order overrides |
@@ -140,7 +140,7 @@ Active rigs: `agent_skills`, `differential_valuations`, `hecke`, `homog`, `jacob
 
 `gc.run-operator` sessions are spun up per-rig on demand when work is slung to a rig and
 torn down after draining. As of 2026-07-14, all brief-pipeline rig-scoped orders
-(`on-merge-brief-record`, `brief-shuffle-pile`, `brief-review-patrol`) have been retargeted
+(`on-merge-brief-record`, historical `brief-shuffle-pile`, `brief-review-patrol`) have been retargeted
 to `mathcity.brief-operator` (pool sweep gt-oiigr / gt-wz0xj / gt-rix5m).
 
 ### Codex Worker
@@ -167,9 +167,8 @@ source bead closes (needs-decision label)
         │  → gates checked (brief-gate-keep), review evidence gathered
         │  → brief.md deposited in .beads/briefs/.pile/<slug>/brief.md
         │
-        ▼  brief-shuffle-pile order (condition-trigger, rig-scoped)
-        │  check: find .beads/briefs/.pile -mindepth 2 -maxdepth 2 -type f -name 'brief.md'
-        │  → brief-shuffle formula: single-writer, promotes .pile → .beads/briefs/stack/
+        ▼  brief-shuffle-fast-drain order (condition-trigger, rig-scoped)
+        │  → brief-shuffle-fast-drain formula: bounded deterministic .pile → .beads/briefs/stack/
         │
         ▼  /present-briefs skill (CLERK-DRIVEN, not an order)
         │  → brief-present-next formula: drains all stack briefs
@@ -323,7 +322,7 @@ The `mathcity` pack is organized into subdomains under `<mathcity-pack-root>/sub
 | Order name | Source file | Trigger | Scope | Pool | What it does |
 |------------|-------------|---------|-------|------|-------------|
 | `on-merge-brief-record` | `on-merge-brief-record.toml` | event: `bead.closed` | rig | `mathcity.brief-operator` | Creates brief-record bead for closed `needs-decision` beads |
-| `brief-shuffle-pile` | `brief-shuffle-pile.toml` | condition (pile has brief.md) | rig | `mathcity.brief-operator` | Promotes .pile briefs → .stack (single-writer) |
+| `brief-shuffle-fast-drain` | `brief-shuffle-fast-drain.toml` | condition (pile has Markdown entries) | rig | `mathcity.brief-operator` | Bounded deterministic .pile → .stack promotion with rejection recovery |
 | `brief-decision-dispatch` | `brief-decision-dispatch.toml` | event: `brief.decided` | city | `mathcity.brief-operator` | Acts on verdict: on approve reassigns source bead to `<rig>/gc.publisher` (publish step: push/PR, no-op default, NOT a merge-to-main; dead-ends on no-`branch` beads — see gt-yv8p2); on reject/revise creates follow-up bead; on defer no-ops |
 | `post-decision-file-or-sendback` | `post-decision-file-or-sendback.toml` | event: `brief.decided` | city | `mathcity.brief-operator` | Routes FILE or SEND-BACK for decided brief |
 | `brief-archive-on-request` | `brief-archive-on-request.toml` | event: `brief.archive_requested` | city | `mathcity.brief-operator` | Archives sent-back brief immediately |
@@ -340,7 +339,7 @@ The `mathcity` pack is organized into subdomains under `<mathcity-pack-root>/sub
 | `brief-prep` | `brief-prep.toml` | Produces one policy-gated brief from a source bead |
 | `math-brief-prep` | `math-brief-prep.toml` | Fan-out brief-prep: one instance per pending source bead, then shuffle |
 | `on-merge-brief-record` | `on-merge-brief-record.toml` | Fired by `on-merge-brief-record` order; creates brief-record bead |
-| `brief-shuffle` | `brief-shuffle.toml` | Single-writer pile→stack promotion; fired by `brief-shuffle-pile` order |
+| `brief-shuffle-fast-drain` | `brief-shuffle-fast-drain.toml` | Bounded deterministic pile→stack promotion; fired by `brief-shuffle-fast-drain` order |
 | `brief-present-next` | `brief-present-next.toml` | Drain all stack briefs (no-brainers collapsed); used by `/present-briefs` |
 | `brief-record-decision` | `brief-record-decision.toml` | Write canonical decision record; emits `brief.decided` |
 | `brief-decision-dispatch` | `brief-decision-dispatch.toml` | Acts on verdict after `brief.decided` |
@@ -420,9 +419,9 @@ gc order list --rig hecke        # rig-scoped orders for hecke
 gc order show <name>             # show order config (trigger, formula, pool, interval)
 gc order check [name]            # check which orders are due to run
 gc order history [name]          # show past execution history; best for "did this order run?"
-gc order history brief-shuffle-pile --rig hecke  # history for one order in one rig
+gc order history brief-shuffle-fast-drain --rig hecke  # history for one order in one rig
 gc order run <name>              # execute an order manually (NOT "gc order fire")
-gc order run brief-shuffle-pile --rig hecke      # manual trigger for rig-scoped order
+gc order run brief-shuffle-fast-drain --rig hecke      # manual trigger for rig-scoped order
 ```
 
 ### Formulas
@@ -671,7 +670,7 @@ For high-throughput scenarios (many concurrent brief-preps), `math-brief-prep` f
 as many `gc.run-operator` sessions as there are pending briefs — the controller manages
 the queue. The `mathcity.brief-operator` pool at max=3 is an intentional temporary
 bottleneck while city startup/order-history latency is under investigation; `brief-review-patrol`
-and `brief-shuffle-pile` rig-scope steps use `gc.run-operator` (on-demand, unbounded effectively).
+and `brief-shuffle-fast-drain` rig-scope steps use `mathcity.brief-operator`.
 
 Pools (min/max_active_sessions in agent.toml) **are still a first-class concept** in gascity.
 The `fallback=true` flag in `agent.toml` (as seen in codex-worker) is distinct — it means

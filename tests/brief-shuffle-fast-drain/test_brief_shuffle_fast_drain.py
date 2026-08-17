@@ -3,6 +3,7 @@ import importlib.util
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -84,6 +85,10 @@ feedback_sink: brief_quality_failure
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
+    def gate_config(self):
+        with GATES.open("rb") as handle:
+            return tomllib.load(handle)
+
     def test_valid_standard_brief_promotes_to_stack(self):
         self.write_brief("standard-ok")
         report = self.json_output(self.run_drain("--apply"))
@@ -116,6 +121,20 @@ feedback_sink: brief_quality_failure
         self.json_output(self.run_drain("--apply"))
         rejection = json.loads((self.brief_root / ".pile/.rejected/failed-g4/rejection.json").read_text())
         self.assertIn("G4 Critical-review: FAIL", rejection["reason"])
+
+    def test_headingless_pass_evidence_rejects(self):
+        brief = self.write_brief("headingless-pass")
+        brief.write_text(brief.read_text().replace("## Gate Evidence\n", ""))
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["headingless-pass"])
+        self.assertEqual(report["reasons"]["headingless-pass"], "missing Gate Evidence section")
+
+    def test_pass_evidence_outside_gate_evidence_section_rejects(self):
+        brief = self.write_brief("sectionless-pass")
+        brief.write_text(brief.read_text().replace("## Gate Evidence", "## Other Evidence"))
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["sectionless-pass"])
+        self.assertEqual(report["reasons"]["sectionless-pass"], "missing Gate Evidence section")
 
     def test_max_items_one_leaves_other_pile_items(self):
         self.write_brief("one")
@@ -153,6 +172,17 @@ feedback_sink: brief_quality_failure
         (foreign / "brief.md").write_text("foreign")
         (foreign / ".claimed_by").write_text("other-worker\n")
         self.json_output(self.run_drain("--apply"))
+        self.assertTrue((foreign / "brief.md").exists())
+        self.assertTrue((foreign / ".claimed_by").exists())
+
+    def test_foreign_fast_drain_staging_is_ignored(self):
+        self.write_brief("claimed")
+        foreign = self.brief_root / ".staging/fast-drain-foreign"
+        foreign.mkdir(parents=True)
+        (foreign / "brief.md").write_text("foreign")
+        (foreign / ".claimed_by").write_text('{"owner":"another-worker","source_path":".pile/foreign.md"}\n')
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["recovered"], [])
         self.assertTrue((foreign / "brief.md").exists())
         self.assertTrue((foreign / ".claimed_by").exists())
 
@@ -220,7 +250,7 @@ feedback_sink: brief_quality_failure
         module = load_drain_module()
         brief = self.write_brief("gone")
         with mock.patch.object(module, "claim", side_effect=FileNotFoundError):
-            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
         self.assertEqual(outcome.action, "skipped")
         self.assertIn("source disappeared", outcome.reason)
 
@@ -231,7 +261,7 @@ feedback_sink: brief_quality_failure
             foreign = self.brief_root / ".staging/fast-drain-4242-contended"
             foreign.mkdir(parents=True)
             (foreign / ".claimed_by").write_text('{"owner":"brief-shuffle-fast-drain"}\n')
-            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
         self.assertEqual(outcome.action, "skipped")
         self.assertTrue(brief.exists())
         self.assertTrue((foreign / ".claimed_by").exists())
@@ -240,7 +270,7 @@ feedback_sink: brief_quality_failure
         module = load_drain_module()
         brief = self.write_brief("index-failure")
         with mock.patch.object(module, "append_index", side_effect=OSError("index unavailable")):
-            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
         self.assertEqual(outcome.action, "skipped")
         self.assertFalse((self.brief_root / "stack/index-failure.md").exists())
         staged = list((self.brief_root / ".staging").glob("fast-drain-*-index-failure/brief.md"))
@@ -257,9 +287,33 @@ feedback_sink: brief_quality_failure
             return original_write_text(path, *args, **kwargs)
 
         with mock.patch.object(Path, "write_text", new=fail_marker):
-            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
         self.assertEqual(outcome.action, "skipped")
         self.assertTrue(brief.exists())
+        self.assertEqual(list((self.brief_root / ".staging").iterdir()), [])
+
+    def test_post_claim_staging_recovers_and_promotes(self):
+        module = load_drain_module()
+        brief = self.write_brief("post-claim")
+        module.claim(brief, self.brief_root, "post-claim")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["recovered"], ["post-claim"])
+        self.assertEqual(report["promoted"], ["post-claim"])
+        self.assertEqual(list((self.brief_root / ".staging").iterdir()), [])
+
+    def test_recovery_collision_uses_durable_rejected_disposition(self):
+        source = self.write_brief("recovery-collision")
+        staging_dir = self.brief_root / ".staging/fast-drain-recovery-collision"
+        staging_dir.mkdir(parents=True)
+        staged = staging_dir / "brief.md"
+        staged.write_text(source.read_text().replace("source-recovery-collision", "staged-recovery-collision"))
+        (staging_dir / ".claimed_by").write_text(
+            '{"owner":"brief-shuffle-fast-drain","source_path":".pile/recovery-collision.md"}\n'
+        )
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["recovered"], ["recovery-collision"])
+        self.assertTrue((self.brief_root / ".pile/.rejected/recovery-collision-recovery/brief.md").is_file())
+        self.assertFalse((staging_dir / "brief.md").exists())
         self.assertEqual(list((self.brief_root / ".staging").iterdir()), [])
 
     def test_rejection_sidecar_failure_rolls_back_to_owned_staging(self):
@@ -274,12 +328,41 @@ feedback_sink: brief_quality_failure
             return original_write_text(path, *args, **kwargs)
 
         with mock.patch.object(Path, "write_text", new=fail_sidecar):
-            outcome = module.process_item(brief, self.brief_root, module.tomllib.load(GATES.open("rb")), True)
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
         self.assertEqual(outcome.action, "skipped")
         staged = list((self.brief_root / ".staging").glob("fast-drain-*-sidecar-failure/brief.md"))
         self.assertEqual(len(staged), 1)
         self.assertTrue(staged[0].with_name(".claimed_by").exists())
         self.assertFalse((self.brief_root / ".pile/.rejected/sidecar-failure/brief.md").exists())
+
+    def test_index_failure_staging_recovers_and_promotes(self):
+        module = load_drain_module()
+        brief = self.write_brief("index-recovery")
+        with mock.patch.object(module, "append_index", side_effect=OSError("index unavailable")):
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
+        self.assertEqual(outcome.action, "skipped")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["recovered"], ["index-recovery"])
+        self.assertEqual(report["promoted"], ["index-recovery"])
+
+    def test_rejection_sidecar_failure_staging_recovers_and_rejects(self):
+        module = load_drain_module()
+        brief = self.write_brief("sidecar-recovery")
+        brief.write_text(brief.read_text().replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL"))
+        original_write_text = Path.write_text
+
+        def fail_sidecar(path, *args, **kwargs):
+            if path.name == "rejection.json":
+                raise OSError("sidecar unavailable")
+            return original_write_text(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "write_text", new=fail_sidecar):
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
+        self.assertEqual(outcome.action, "skipped")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["recovered"], ["sidecar-recovery"])
+        self.assertEqual(report["rejected"], ["sidecar-recovery"])
+        self.assertTrue((self.brief_root / ".pile/.rejected/sidecar-recovery/rejection.json").is_file())
 
 
 if __name__ == "__main__":
