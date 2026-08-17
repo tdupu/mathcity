@@ -17,9 +17,11 @@ CITY_ROOT = FIXTURES / "city_root"
 SOURCE_CHECKOUT = FIXTURES / "source_checkout"
 
 
-def run_mctl(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+def run_mctl(
+    *args: str, cwd: Path, mctl: Path = MCTL
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(MCTL), "context", *args],
+        [sys.executable, str(mctl), "context", *args],
         cwd=cwd,
         text=True,
         capture_output=True,
@@ -47,8 +49,13 @@ def test_context_json_resolves_registered_city_fixture():
     assert payload["trace_id"]
 
 
-def test_context_explain_reports_cwd_discovery_and_implicit_rig_warning():
-    result = run_mctl("--explain", cwd=CITY_ROOT)
+def test_context_explain_reports_cwd_discovery_and_implicit_rig_warning(tmp_path: Path):
+    city_root = tmp_path / "city_root"
+    source_checkout = tmp_path / "source_checkout"
+    shutil.copytree(CITY_ROOT, city_root)
+    shutil.copytree(SOURCE_CHECKOUT, source_checkout)
+
+    result = run_mctl("--explain", cwd=city_root)
 
     assert result.returncode == 0, result.stderr
     assert "City discovery: cwd ancestry" in result.stdout
@@ -61,6 +68,30 @@ def test_context_from_source_checkout_without_city_fails_closed():
     assert result.returncode != 0
     assert "MCTL_CONTEXT_SOURCE_CHECKOUT" in result.stderr
     assert "--city <city-root> --rig mathcity" in result.stderr
+
+
+def test_context_from_nested_source_checkout_does_not_resolve_parent_city(tmp_path: Path):
+    city_root = tmp_path / "city_root"
+    source_checkout = city_root / "source_checkout"
+    shutil.copytree(CITY_ROOT, city_root)
+    shutil.copytree(SOURCE_CHECKOUT, source_checkout)
+    (city_root / "city.toml").write_text(
+        "[[rigs]]\n"
+        'name = "mathcity"\n\n'
+        "[rigs.imports.mathcity]\n"
+        'source = "source_checkout"\n'
+    )
+    nested_scripts = source_checkout / "assets" / "scripts"
+    nested_scripts.mkdir()
+    shutil.copy2(MCTL, nested_scripts / "mctl.py")
+    shutil.copytree(MCTL.parent / "mctl_core", nested_scripts / "mctl_core")
+
+    result = run_mctl(
+        "--json", cwd=source_checkout, mctl=nested_scripts / "mctl.py"
+    )
+
+    assert result.returncode != 0
+    assert "MCTL_CONTEXT_SOURCE_CHECKOUT" in result.stderr
 
 
 def test_context_rejects_unknown_rig():

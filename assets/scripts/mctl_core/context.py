@@ -61,17 +61,19 @@ def resolve_context(
     del env  # No established environment convention is currently supported.
     trace_id = new_trace_id()
     invocation_cwd = cwd.expanduser().resolve()
+    if city is None and require_runtime_city and _is_within(
+        invocation_cwd, SOURCE_REPOSITORY_ROOT
+    ):
+        raise _error(
+            trace_id,
+            "MCTL_CONTEXT_SOURCE_CHECKOUT",
+            "Runtime context cannot be inferred from the MathCity source checkout.",
+            "Pass --city <city-root> --rig mathcity to select a registered runtime rig.",
+            cwd=str(invocation_cwd),
+        )
     city_root, discovery_path = _discover_city(invocation_cwd, city, trace_id)
 
     if city_root is None:
-        if require_runtime_city and _is_within(invocation_cwd, SOURCE_REPOSITORY_ROOT):
-            raise _error(
-                trace_id,
-                "MCTL_CONTEXT_SOURCE_CHECKOUT",
-                "Runtime context cannot be inferred from the MathCity source checkout.",
-                "Pass --city <city-root> --rig mathcity to select a registered runtime rig.",
-                cwd=str(invocation_cwd),
-            )
         raise _error(
             trace_id,
             "MCTL_CONTEXT_CITY_NOT_FOUND",
