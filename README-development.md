@@ -54,6 +54,18 @@ Current cheap tests:
 bash scripts/run-local-tests.sh
 ```
 
+### Mctl Context
+
+Resolve an explicit local fixture context with:
+
+```sh
+python3 assets/scripts/mctl.py context --city tests/mctl/fixtures/city_root --rig mathcity --json
+```
+
+`mctl` reads `rigs.imports.mathcity.source` (or the matching default import)
+from `city.toml`. It uses an explicit rig `db` value when present; otherwise,
+the resolved rig ID is the database name.
+
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke
 tests. Use `test-execution-request` before risky, slow, or costly test
 execution.
