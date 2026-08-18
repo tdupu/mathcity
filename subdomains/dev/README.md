@@ -21,6 +21,46 @@ Contents:
   policy: source-aligned docs, examples, tests, setup, parent links, and the
   `improve-documentation` workflow.
 
+## Filing an issue
+
+One entry point: the **`create-issue`** skill (mathcity pack root). There is exactly
+one real copy; the user-level skill directory, the city sink, and `agent-skills` are
+**symlinks** to it. A second real `create-issue/SKILL.md` anywhere is drift — delete
+it and symlink.
+
+**Target any repository.** `owner/name` is a free parameter; `tdupu/mathcity` is the
+default, not a boundary. Name a different repo in the invocation and the skill reads
+that target's live templates, labels, and conventions.
+
+**Three kinds, three paths.** Stages 0–4 (resolve target, duplicate search, verify on
+current main, design/policy alignment) and the approval gate are universal. After
+that the paths diverge:
+
+| Kind | Path |
+| --- | --- |
+| `bug` | reduce to an MRE if you can · root cause with `file:line` · **≥2 fix candidates** · out of scope |
+| `feat` | **wheel check** (why doesn't something existing cover this?) · proposal · alternatives · blast radius |
+| `docs` | correction · where · **example usage** (required) · why the current text misleads |
+
+**An MRE is not a filing gate.** A bug may be filed without a reproduction, provided
+the gap is explicit — the reproduction field reads `not yet reduced — reduction is
+step 1`. Reducing it becomes the first work step, not a precondition for recording
+the defect.
+
+**Templates.** The target's live `.github/ISSUE_TEMPLATE/` is authoritative whenever
+it exists — it is the enforcement point and it changes without telling you. Targets
+with no forms (the common case once targeting is arbitrary) get the canonical shapes
+carried inline in the skill, derived from this repo's own richer field set.
+
+**Nothing files before a human approves the exact body** (P3.2). After filing, the
+skill offers to work the issue; on yes it routes through a bead into
+[`mathcity.work`](../../skills/work/SKILL.md), which takes beads rather than issue
+numbers.
+
+**Changing the investigation** means editing
+[`template-fragments/issue-investigation-standard.md`](../../template-fragments/issue-investigation-standard.md)
+— one copy, read by every surface — not the skill.
+
 ## Skills
 
 | Skill | Purpose |

@@ -1,6 +1,6 @@
 ---
 name: create-issue
-description: File a high-quality GitHub issue against the canonical mathcity repo `tdupu/mathcity` (the default), with `tdupu/gascity-packs` and `gastownhall/gascity` as declared alternatives. Runs the full investigation a maintainer would otherwise redo (duplicate search, verify-the-problem-exists-on-current-main, design/policy alignment, blast radius, file:line root-cause refs, >=2 fix candidates, required MRE for bugs), fills the target repo's LIVE `.github/ISSUE_TEMPLATE/` form, and stops at a human approval gate before anything is filed. Trigger phrases "create an issue", "file an issue", "write an issue for X", "open an issue about X", "report this bug", "file this against mathcity", "file this against gascity". Use this whenever the target is a tdupu-owned repo or whenever the target is passed explicitly; the upstream `contributing.write-issue` skill covers external-contributor filing to `gastownhall/gascity` with no targeting parameter. For the dispatchable, brief-pipeline version of the same standard, sling the `mathcity-issue-briefed` formula instead.
+description: File a high-quality GitHub issue against ANY GitHub repository, given as `owner/name`; `tdupu/mathcity` is the default target, not a boundary. Runs the full investigation a maintainer would otherwise redo (duplicate search, verify-the-problem-exists-on-current-main, design/policy alignment, blast radius, file:line root-cause refs, >=2 fix candidates, required MRE for bugs), fills the target repo's LIVE `.github/ISSUE_TEMPLATE/` form, and stops at a human approval gate before anything is filed. Trigger phrases "create an issue", "file an issue", "write an issue for X", "open an issue about X", "report this bug", "file this against mathcity", "file this against gascity". Use this whenever the target is a tdupu-owned repo or whenever the target is passed explicitly; the upstream `contributing.write-issue` skill covers external-contributor filing to `gastownhall/gascity` with no targeting parameter. For the dispatchable, brief-pipeline version of the same standard, sling the `mathcity-issue-briefed` formula instead.
 ---
 
 # create-issue
@@ -70,9 +70,10 @@ repo. Follow the fragment's stage 0 table and then state the resolution back:
 
 Resolution order:
 
-1. **The human named a repo** → use it. Validate it is one of the three recognized
-   targets; an unrecognized target is allowed but must be confirmed explicitly
-   ("You asked for `owner/name`, which isn't a recognized target — confirm?").
+1. **The human named a repo** → use it. **Any `owner/name` is a valid target; there
+   is no closed list.** `tdupu/mathcity` is the default, not a boundary. State the
+   resolution back and continue. For a target you have not filed against before, say
+   so once — its templates, labels, and conventions are all unknown until read.
 2. **The human named a surface, not a repo** → map it with the stage 0 table. A `gc`
    or `bd` binary behavior maps to `gastownhall/gascity`; anything in this pack maps
    to `tdupu/mathcity`.
@@ -95,6 +96,23 @@ Checkpoint with the human at three places rather than running to the end:
 | Stage 2 (duplicates) | the matches you found and your read of them | a match usually ends the task — comment instead of filing |
 | Stage 3 (verify on main) | which finding-table row you landed on | "already fixed on main" ends the task too |
 | Stage 7 (fix candidates) | the ≥2 candidates and your recommendation | this is the part a maintainer will actually argue with |
+
+### The stages branch by kind
+
+Stages 0–4 and the approval gate are **universal** — every kind resolves a target,
+searches duplicates, verifies against current main, and checks design/policy
+alignment. Stages 5–7 are **bug-shaped** and do not transfer:
+
+| Stage | `bug` | `feat` | `docs` |
+| --- | --- | --- | --- |
+| 5 — reduce to MRE | attempt it; **not** a filing gate (see below) | skip — no defect to reduce | skip |
+| 6 — blast radius | for non-trivial defects | **required** — a feature's cost is its reach | skip unless the doc is load-bearing |
+| 7 — fix candidates ≥2 | required | replaced by **proposal + alternatives** | replaced by **the corrected text** |
+| extra | — | **wheel check**: why doesn't something existing cover this? | **example usage**: show the correct invocation, do not just say the current one is wrong |
+
+A `docs` issue that asserts "this is wrong" without showing correct usage makes the
+maintainer invent the example. A `feat` issue without a wheel check gets closed as a
+duplicate of something that already exists.
 
 **Do not fabricate to fill a stage.** If stage 3 could not run because you have no
 checkout, say "stage 3 not run — no checkout" rather than asserting the code is on
@@ -127,12 +145,56 @@ adopted forms, or an unpushed branch. Do not stall, and do not invent a template
 | --- | --- |
 | The kind's template is present | Fill every field marked `validations: required: true`, in the template's order. Tick a required checkbox only if the assertion is **true** — on `tdupu/mathcity` those checkboxes assert that the stage 2 duplicate search and the stage 3 verify-on-main actually happened |
 | `.github/ISSUE_TEMPLATE/` exists but has no template for this kind | Use the nearest sibling template (`bug_report.yml` is the most demanding) and say in the body which template you filled and why |
-| `.github/ISSUE_TEMPLATE/` is absent entirely, or `gh api` 404s | Fall back to a plain body: `## Summary` / `## Symptom` / `## Reproduction` / `## Root cause` / `## Fix candidates` / `## Adjacent — out of scope`. Tell the human, in the approval gate, that you used the fallback and that the repo has no forms |
+| `.github/ISSUE_TEMPLATE/` is absent entirely, or `gh api` 404s | Use the canonical shape for the kind, below. Tell the human, in the approval gate, that you used the fallback and that the repo has no forms |
 | `gh api` fails for a reason other than 404 (auth, rate limit, network) | Stop. An empty listing caused by a failed call reads exactly like "no templates" and would silently downgrade the filing. Report the error instead |
 
 A `404` on `.github/ISSUE_TEMPLATE` means the templates are not on the target's
 **default branch** yet. If you know they exist on an unmerged branch, say so — the
 correct action is to land them, not to file against a template GitHub cannot see.
+
+### The canonical shapes (no-template fallback)
+
+Once the target can be any repository, **most targets will have no forms** — this is
+the common path, not the edge case. These shapes are derived from `tdupu/mathcity`'s
+own form fields, which are richer than the generic bug report: they force the
+investigation rather than merely collecting a symptom.
+
+**`bug`**
+
+```markdown
+## Summary            <!-- one sentence: what breaks -->
+## Symptom            <!-- observed behaviour, verbatim output where possible -->
+## Reproduction       <!-- steps, or: "not yet reduced — reduction is step 1" -->
+## Root cause         <!-- file:line refs; "unknown" is allowed, invention is not -->
+## Fix candidates     <!-- >=2, each with its trade-off -->
+## Adjacent — out of scope
+## Additional context
+```
+
+**`feat`**
+
+```markdown
+## Problem to solve
+## Wheel check        <!-- why doesn't something existing already cover this? -->
+## Proposed design
+## Alternatives considered
+## Blast radius
+## Suggested priority
+## Additional context
+```
+
+**`docs`**
+
+```markdown
+## Correction         <!-- what the text should say -->
+## Where              <!-- file / section / URL -->
+## Example usage      <!-- REQUIRED: show the correct invocation -->
+## Why the current text misleads
+## Additional context
+```
+
+Anything that does not fit a named section goes in **Additional context** — do not
+invent new sections, and do not widen the shape.
 
 ### Draft to a file
 
@@ -173,6 +235,17 @@ gh issue create --repo "$TARGET_REPO" \
   --label "kind/<bug|feature|docs>,priority/p<1|2|3>,status/needs-triage"
 ```
 
+**Label composition is one construction, driven by the kind branch:**
+
+| Kind chosen in step 2 | `kind/` term | Title prefix |
+| --- | --- | --- |
+| bug | `kind/bug` | `bug: <surface>: <symptom>` |
+| feat | `kind/feature` | `feat: <surface>: <capability>` |
+| docs | `kind/docs` | `docs: <area>: <correction>` |
+
+`priority/p<N>` is reach and recoverability, never how loud it was. Add
+`status/needs-triage` unless an owner has already agreed to take it.
+
 **Labels: check before you pass them.** GitHub **silently drops** label names the
 repo does not have — the issue files successfully and arrives unlabeled, so a
 triage state you think you set may not be set. Check first and only pass what exists:
@@ -205,12 +278,39 @@ Report the issue URL back.
 Both MathCity surfaces read the same fragment, so the investigation is identical;
 they differ only in who drives and where the approval gate is presented.
 
-## After filing
+## After filing — offer to work it
+
+Filing is not the end of the trail. Report the URL, then **ask**:
+
+> The issue is filed: `<url>`. Would you like me to work on it?
+
+On **no**, stop there — the issue exists and is triageable, which was the job.
+
+On **yes**, hand it to the fleet. `mathcity.work` routes **beads**, not issue
+numbers — an issue URL only rides along as `--var context=` — so the handoff is:
+
+1. Create a bead carrying the issue URL and the investigation you already did (do not
+   make the fleet redo stages 1–7).
+2. Feed that bead to `mathcity.work`.
+
+Also:
 
 - Record the issue number on the originating bead (append a linked bead per P1.19 —
   do not rewrite the original's content).
-- To pick the issue up yourself, upstream
-  [`plan-implementation`](https://github.com/gastownhall/gascity-packs/tree/main/contributing/skills/plan-implementation)
-  re-runs the competing-PR and architectural-refactor gates at code-time.
 - For the PR that closes it, `pr-pipeline-briefed` is the required path (P3.2) — an
   upstream PR without a corresponding completed issue is a policy failure.
+
+## Configuring this skill
+
+| You want | Do this |
+| --- | --- |
+| A different default target | Name the repo in the invocation (`file an issue against owner/name`). The `tdupu/mathcity` default applies only when no target is named or derivable. |
+| To file against a repo with no issue forms | Nothing — the canonical shapes above are used automatically, and the approval gate tells you the fallback fired. |
+| To know which labels will land | The skill lists the target's labels before filing and reports which were dropped. GitHub silently discards unknown label names. |
+| To change the investigation itself | Edit [`template-fragments/issue-investigation-standard.md`](../../template-fragments/issue-investigation-standard.md) — one copy, read by every surface. Not this file. |
+
+**This skill has one real copy**, in the mathcity pack. Every other location — the
+user-level skill directory, the city sink, `agent-skills` — is a **symlink** to it
+(P1.8 exposure, P1.9 one-real-copy). If you find a second `create-issue/SKILL.md`
+that is a real file, that is the drift this layout exists to prevent: delete it and
+symlink instead.

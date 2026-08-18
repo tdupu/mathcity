@@ -171,17 +171,23 @@ Distill the observation to the smallest reproduction someone else can run:
 - Expected vs. actual behavior
 - If timing-sensitive: the race window
 
-**An MRE is REQUIRED for `kind/bug`.** This is stricter than upstream `write-issue`,
-which allows a caveated best-effort repro. `bug_report.yml` on `tdupu/mathcity` asks
-for reproduction steps as a required field, and an unreproducible bug report costs
-the maintainer the whole investigation. If you genuinely cannot reduce it:
+**An MRE is NOT a filing gate.** Reduction is often the hardest part of the work,
+and some real defects resist it for a long time — blocking the filing on a clean
+repro loses the report and the investigation that went with it. A bug may be filed
+without one.
 
-- Do not file it as `kind/bug`. File it as `kind/docs` or `kind/feature` if it
-  reduces to a clarity or capability gap, **or**
-- File it as `kind/bug` at **P3** with the repro field explicitly marked
-  best-effort and the reason it resists reduction, **or**
-- Investigate further until it reduces. Inability to write a clean repro is a signal
-  you do not yet understand the bug.
+What is required instead is that the gap be **visible rather than silent**. When you
+cannot reduce it, write the reproduction field as exactly:
+
+> `not yet reduced — reduction is step 1`
+
+plus what you did try and why it resisted. Reducing it then becomes the **first work
+step** when the issue is picked up, not a precondition for recording it.
+
+Still prefer reduction when it is achievable: an MRE is the single most useful thing
+in a bug report, and inability to write one usually means the defect is not yet
+understood. The change here is that "not yet understood" is a thing to record, not a
+reason to stay silent.
 
 For Magma-language MREs specifically, the MRE file itself is validated separately by
 [`check-mre`](../subdomains/computing/skills/check-mre/SKILL.md) against the
@@ -295,8 +301,9 @@ the issue still files, just unlabeled.
 - ❌ **Symptoms-only body, no root-cause `file:line` refs.** The maintainer has to
   redo your investigation. P3 at minimum, or write the refs.
 - ❌ **Single fix candidate.** Forecloses the design space.
-- ❌ **`kind/bug` with no MRE.** Stage 5. Re-file it under a kind that fits, or reduce
-  it.
+- ❌ **A missing MRE left implicit.** Stage 5. Filing a bug without a reproduction is
+  allowed; leaving the reader to *discover* that it has none is not. Write
+  `not yet reduced — reduction is step 1` in the reproduction field.
 - ❌ **Restating the issue template inside the issue body.** The template in the repo
   is the enforcement point; a hand-copied version drifts silently.
 - ❌ **Skipping "out of scope" / "adjacent".** Adjacent-looking issues that are not
