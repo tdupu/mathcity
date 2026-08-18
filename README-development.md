@@ -178,6 +178,23 @@ workflow (`gc.root_bead_id`) already exists for the same source, and
 every retry. Readiness checks were moved to `MWRK010`+ so they stop squatting
 on the reserved safety range.
 
+Briefs can offer decision options, enumerated in the markdown cache as list
+items under an Options section:
+
+```markdown
+## §4 — Options
+
+- **(A) Do it now.** *(recommended)* Cheapest path.
+- **(B) Defer it.** Costs a cycle.
+```
+
+Adjudicating a brief that offers more than one requires `--option`, or it
+fails closed with `MOPT001`; an option the brief does not offer fails with
+`MOPT002`. Briefs with no Options section, one option, or no markdown cache
+at all are unaffected — the bead is canonical, so a missing cache never
+blocks a verdict. Note the plan names both this and the enabled-action list
+`BriefOption`; in code they are `BriefDecisionOption` and `BriefOption`.
+
 ### Mctl Traces
 
 Every mutation writes two append-only rows keyed by one `trace_id`:

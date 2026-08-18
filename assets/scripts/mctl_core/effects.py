@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .beads import BeadRaceLostError, BeadUpdate, BeadWriteError, apply_bead_update
-from .briefs import doctor_briefs, show_brief
+from .briefs import decision_options, doctor_briefs, show_brief
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
@@ -116,7 +116,35 @@ def plan_adjudication(
     normalized = _normalize_verdict(ctx, verdict, brief_id)
     reason = _require_reason(ctx, reason, brief_id)
     observed = show_brief(ctx, brief_id)
-    diagnostics = _blocking_preconditions(doctor_briefs(ctx, brief_id).diagnostics)
+    diagnostics = list(_blocking_preconditions(doctor_briefs(ctx, brief_id).diagnostics))
+    # Plan §4 MOPT001/MOPT002: a verdict on a multi-option brief has to say
+    # which option it is approving, or it records a decision against nothing.
+    offered = decision_options(ctx, brief_id)
+    if offered:
+        labels = {item.label.upper() for item in offered}
+        if option is None and len(offered) > 1:
+            diagnostics.append(
+                _diagnostic(
+                    ctx,
+                    Severity.ERROR,
+                    "MOPT001",
+                    "This brief offers multiple options; adjudication must name one.",
+                    brief_id=brief_id,
+                    detail="options=" + ", ".join(sorted(labels)),
+                )
+            )
+        elif option is not None and option.upper() not in labels:
+            diagnostics.append(
+                _diagnostic(
+                    ctx,
+                    Severity.ERROR,
+                    "MOPT002",
+                    f"Option {option!r} is not offered by this brief.",
+                    brief_id=brief_id,
+                    detail="options=" + ", ".join(sorted(labels)),
+                )
+            )
+    diagnostics = tuple(diagnostics)
     now = _now()
     metadata = {
         "adjudicated_at": now,

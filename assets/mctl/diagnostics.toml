@@ -193,6 +193,16 @@ severity = "ERROR"
 meaning = "Redundant brief cache update failed after canonical bead update."
 module = "effects.py"
 
+[MOPT001]
+severity = "ERROR"
+meaning = "Brief offers multiple decision options and adjudication omitted --option."
+module = "effects.py"
+
+[MOPT002]
+severity = "ERROR"
+meaning = "The named option is not one this brief offers."
+module = "effects.py"
+
 [MWRK001]
 severity = "ERROR"
 meaning = "The source bead already has an active assignee."

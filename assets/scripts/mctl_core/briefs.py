@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from datetime import date
 from pathlib import Path
 from typing import Iterable
@@ -198,6 +199,85 @@ def brief_options_report(ctx: MctlContext, brief_id: str) -> tuple[tuple[BriefOp
         doctor.diagnostics,
     )
 
+
+
+@dataclass(frozen=True)
+class BriefDecisionOption:
+    """One decision option offered by a brief, per plan §2.
+
+    Distinct from the action options `brief_options` returns (adjudicate /
+    defer / validate). The plan gives both types the name BriefOption; this is
+    the §2 one, parsed out of the brief markdown.
+    """
+
+    label: str
+    heading: str
+    start_line: int
+    end_line: int
+    raw_text: str
+    confidence: str
+
+
+# Real briefs enumerate options as list items under an Options section:
+#     ## §4 — Options
+#     - **(A) Do it now.** *(recommended)* ...
+# Confirmed on 4 of 5 briefs on the live pile. Scoping to the section keeps
+# ordinary bolded prose elsewhere from fabricating options.
+_OPTIONS_SECTION = re.compile(
+    r"^##\s+(?:§\d+\s*[—-]\s*)?Options\s*$(?P<body>.*?)(?=^##\s|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_OPTION_ITEM = re.compile(
+    r"^\s*[-*]\s+\*\*\((?P<label>[A-Za-z0-9]+)\)\s*(?P<heading>[^*]+?)\*\*",
+    re.MULTILINE,
+)
+
+
+def parse_decision_options(markdown: str) -> tuple[BriefDecisionOption, ...]:
+    """Extract the decision options a brief offers, if any."""
+    section = _OPTIONS_SECTION.search(markdown)
+    if section is None:
+        return ()
+    body = section.group("body")
+    body_offset = section.start("body")
+    line_of = lambda index: markdown.count("\n", 0, index) + 1
+
+    matches = list(_OPTION_ITEM.finditer(body))
+    options: list[BriefDecisionOption] = []
+    for position, match in enumerate(matches):
+        start = body_offset + match.start()
+        end_in_body = (
+            matches[position + 1].start() if position + 1 < len(matches) else len(body)
+        )
+        raw = body[match.start():end_in_body].strip()
+        options.append(
+            BriefDecisionOption(
+                label=match.group("label"),
+                heading=match.group("heading").strip(),
+                start_line=line_of(start),
+                end_line=line_of(body_offset + end_in_body),
+                raw_text=raw,
+                confidence="explicit",
+            )
+        )
+    return tuple(options)
+
+
+def decision_options(ctx: MctlContext, brief_id: str) -> tuple[BriefDecisionOption, ...]:
+    """Decision options for a brief, read from its markdown cache.
+
+    The bead is canonical, so a missing or unreadable cache yields no options
+    rather than blocking a verdict.
+    """
+    layout = artifact_layout(ctx)
+    for directory in (layout.pile, layout.stack):
+        path = directory / f"{brief_id}.md"
+        if path.is_file():
+            try:
+                return parse_decision_options(path.read_text(encoding="utf-8"))
+            except OSError:
+                return ()
+    return ()
 
 def doctor_briefs(
     ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ...] | None = None
