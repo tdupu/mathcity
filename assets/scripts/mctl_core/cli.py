@@ -17,7 +17,7 @@ from .briefs import (
     show_brief,
 )
 from .context import ContextError, MctlContext, resolve_context
-from .diagnostics import Diagnostic, render_diagnostic
+from .diagnostics import Diagnostic, Severity, render_diagnostic
 from .effects import (
     MutationError,
     apply_effect_plan,
@@ -58,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(_render_explain(context))
         return 0
+    if context.city_active is False:
+        print(render_diagnostic(_city_not_active_diagnostic(context)), file=sys.stderr)
+        return 1
     if args.command == "briefs":
         return _briefs_command(args, context)
     return _work_command(args, context)
@@ -277,6 +280,28 @@ def _diagnostics_payload(
 
 def _render_brief_payload(payload: dict[str, object]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def _city_not_active_diagnostic(context: MctlContext) -> Diagnostic:
+    facts = {
+        "city_path": str(context.city_root),
+        "implementation_provenance": "mctl city liveness gate",
+        "rig_name": context.rig_id,
+        "rig_path": str(context.rig_root),
+    }
+    if context.city_endpoint is not None:
+        facts["data_location"] = context.city_endpoint
+    return Diagnostic(
+        severity=Severity.FATAL,
+        code="MCTL_CITY_NOT_ACTIVE",
+        message=(
+            "The Gas City data plane for this rig is not reachable, so canonical "
+            "bead state cannot be read."
+        ),
+        hint="Start the city with `gc supervisor run`, then re-run this command.",
+        facts=facts,
+        trace_id=context.trace_id,
+    )
 
 
 def _render_explain(context: MctlContext) -> str:

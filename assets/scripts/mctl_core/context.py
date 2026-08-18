@@ -6,6 +6,7 @@ from pathlib import Path
 import tomllib
 from typing import Mapping
 
+from .liveness import probe_city
 from .diagnostics import Diagnostic, Severity
 from .trace import new_trace_id
 
@@ -28,9 +29,13 @@ class MctlContext:
     trace_id: str
     warnings: tuple[Diagnostic, ...]
     discovery_path: str
+    city_active: bool | None
+    city_endpoint: str | None
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "city_active": self.city_active,
+            "city_endpoint": self.city_endpoint,
             "city_root": str(self.city_root),
             "discovery_path": self.discovery_path,
             "gates_toml": str(self.gates_toml),
@@ -114,6 +119,8 @@ def resolve_context(
             rig_id=rig_id,
         )
 
+    liveness = probe_city(rig_root, city_root)
+
     source_checkout = _resolve_source_checkout(selected_rig, config, city_root, trace_id)
     paths_toml = source_checkout / "assets" / "brief-pipeline" / "paths.toml"
     gates_toml = source_checkout / "assets" / "brief-pipeline" / "gates.toml"
@@ -133,6 +140,8 @@ def resolve_context(
         trace_id=trace_id,
         warnings=tuple(warnings),
         discovery_path=discovery_path,
+        city_active=liveness.active,
+        city_endpoint=liveness.endpoint,
     )
 
 
