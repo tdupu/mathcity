@@ -84,7 +84,25 @@ If the observation spans both a binary and a pack surface, the fragment's stage 
 routing rules require **two cross-linked filings**. Say so before starting; it
 changes the shape of the work.
 
-## Step 2 — Walk stages 1–7 of the standard
+## Step 2 — Fork an agent to walk stages 1–7
+
+Issue creation is **fork-an-agent work**: few steps, and the triggering material is
+already in context when the need surfaces. Dispatch one subagent via the **Agent
+tool** to run the fragment's stages against the resolved target, and have it return
+the filled draft plus its stage-by-stage findings. You keep the target resolution
+(step 1), the checkpoints below, and the approval gate (step 4) — those are yours,
+not the subagent's.
+
+Give the fork, explicitly: the target `owner/name`, the kind, the observation
+verbatim, and the instruction to read
+[`issue-investigation-standard.md`](../../template-fragments/issue-investigation-standard.md)
+in full before starting. Do **not** paraphrase the standard into the prompt — a
+paraphrased standard is a standard that drifts.
+
+**Invokability fallback**: if your session cannot invoke the Agent tool (polecat and
+overnight-supervisor sessions have Agent/Task dispatch stripped; the Skill tool
+remains), walk the stages inline instead. The stages and the gate are identical
+either way — forking buys parallelism and a clean context, not a different standard.
 
 Work through the fragment's stages in order, with the human. Do not skip ahead; the
 ordering is the point (a duplicate found at stage 2 saves the whole investigation).
@@ -267,16 +285,21 @@ defaults. So:
 
 Report the issue URL back.
 
-## When to use the formula instead
+## Which surface
 
 | You want | Use |
 | --- | --- |
-| To investigate interactively, with checkpoints | **this skill** |
-| To dispatch issue-drafting to the fleet and get a decision brief back | `mathcity-issue-briefed` (`gc sling <rig>/<agent> mathcity-issue-briefed --formula --var source_bead=<id> --var brief_slug=<id>-issue`) |
+| To file an issue against any repo, interactively | **this skill** — it forks the investigation itself (step 2) |
+| Issue-drafting dispatched through the brief pipeline, returning a decision brief | `mathcity-issue-briefed` (`gc sling <rig>/<agent> mathcity-issue-briefed --formula --var source_bead=<id> --var brief_slug=<id>-issue`) |
 | To file against `gastownhall/gascity` as an external contributor, with no MathCity context | upstream `contributing.write-issue` |
 
-Both MathCity surfaces read the same fragment, so the investigation is identical;
-they differ only in who drives and where the approval gate is presented.
+Every surface reads the same fragment, so the investigation is identical; they differ
+only in who drives and where the approval gate is presented.
+
+> **Direction of travel** (tdupu/mathcity#50): issue creation is fork-an-agent work,
+> so this skill is the primary surface and the formula pair exists for brief-pipeline
+> dispatch, not as the general mechanism. Whether the pair survives at all is open on
+> that issue — do not build new callers against it in the meantime.
 
 ## After filing — offer to work it
 
