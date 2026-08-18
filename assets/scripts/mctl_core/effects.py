@@ -17,6 +17,7 @@ from .briefs import doctor_briefs, show_brief
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
+from .trace import append_aborted, append_applied, append_planned, trace_path
 
 
 VALID_VERDICTS = {
@@ -198,6 +199,22 @@ def apply_effect_plan(ctx: MctlContext, plan: EffectPlan) -> ApplyResult:
     _raise_if_blocked(plan)
     actual: list[Mapping[str, object]] = []
     diagnostics: list[Diagnostic] = []
+    # Plan §4: the trace records the intent before anything is mutated, then
+    # exactly one outcome row -- so a crash mid-mutation still leaves evidence.
+    trace_file = trace_path(ctx.rig_root)
+    for write in plan.trace_writes:
+        append_planned(write.path, write.row)
+        trace_file = write.path
+    return _apply_effects(ctx, plan, actual, diagnostics, trace_file)
+
+
+def _apply_effects(
+    ctx: MctlContext,
+    plan: EffectPlan,
+    actual: list[Mapping[str, object]],
+    diagnostics: list[Diagnostic],
+    trace_file: Path,
+) -> ApplyResult:
     for update in plan.bead_updates:
         try:
             result = apply_bead_update(
@@ -206,6 +223,7 @@ def apply_effect_plan(ctx: MctlContext, plan: EffectPlan) -> ApplyResult:
                 fixture_path=ctx.beads_fixture,
             )
         except BeadRaceLostError as error:
+            append_aborted(trace_file, plan.trace_id, [{"code": "MCTL_BEAD_UPDATE_RACE_LOST", "detail": str(error)}])
             raise MutationError(
                 _diagnostic(
                     ctx,
@@ -217,6 +235,7 @@ def apply_effect_plan(ctx: MctlContext, plan: EffectPlan) -> ApplyResult:
                 )
             ) from error
         except BeadWriteError as error:
+            append_aborted(trace_file, plan.trace_id, [{"code": "MCTL_CANONICAL_BEAD_UPDATE_FAILED", "detail": str(error)}])
             raise MutationError(
                 _diagnostic(
                     ctx,
@@ -244,9 +263,11 @@ def apply_effect_plan(ctx: MctlContext, plan: EffectPlan) -> ApplyResult:
             diagnostics.append(diagnostic)
             continue
         actual.append({"kind": "cache_update", "path": str(update.path)})
-    for write in (*plan.event_writes, *plan.trace_writes):
+    for write in plan.event_writes:
         append_jsonl(write.path, write.row)
         actual.append({"kind": write.kind, "path": str(write.path)})
+    append_applied(trace_file, plan.trace_id, actual)
+    actual.append({"kind": "trace_write", "path": str(trace_file)})
     return ApplyResult(plan.trace_id, plan, tuple(actual), tuple(diagnostics))
 
 
@@ -267,7 +288,6 @@ def _plan(
         "trace_id": ctx.trace_id,
     }
     trace_row = {
-        "actual_effects": [],
         "brief_id": brief_id,
         "city_path": str(ctx.city_root),
         "operation": operation,

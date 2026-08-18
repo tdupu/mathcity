@@ -158,6 +158,11 @@ meaning = "Legacy decisions-track state requires the authorized #38 migration pr
 policy_ref = "B2.10"
 module = "briefs.py"
 
+[MCTL_TRACE_NOT_FOUND]
+severity = "FATAL"
+meaning = "No trace rows were recorded for the requested trace id."
+module = "cli.py"
+
 [MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS]
 severity = "FATAL"
 meaning = "Mutation blocked because brief doctor reported ERROR or FATAL diagnostics."

@@ -18,6 +18,7 @@ from .briefs import (
 )
 from .context import ContextError, MctlContext, resolve_context
 from .diagnostics import Diagnostic, Severity, render_diagnostic
+from .trace import fold, read_rows
 from .effects import (
     MutationError,
     apply_effect_plan,
@@ -58,12 +59,40 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(_render_explain(context))
         return 0
-    if context.city_active is False:
+    if context.city_active is False and args.command != "trace":
         print(render_diagnostic(_city_not_active_diagnostic(context)), file=sys.stderr)
         return 1
     if args.command == "briefs":
         return _briefs_command(args, context)
+    if args.command == "trace":
+        return _trace_command(args, context)
     return _work_command(args, context)
+
+
+def _trace_command(args: argparse.Namespace, context: MctlContext) -> int:
+    record = fold(read_rows(context.rig_root), args.trace_id)
+    if record is None:
+        print(
+            render_diagnostic(
+                Diagnostic(
+                    severity=Severity.FATAL,
+                    code="MCTL_TRACE_NOT_FOUND",
+                    message=f"No trace rows recorded for {args.trace_id!r}.",
+                    hint="List recent traces under .beads/mctl/traces/.",
+                    facts={
+                        "city_path": str(context.city_root),
+                        "rig_name": context.rig_id,
+                        "rig_path": str(context.rig_root),
+                        "implementation_provenance": "mctl trace show",
+                    },
+                    trace_id=context.trace_id,
+                )
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    print(json.dumps({"trace": record, "trace_id": context.trace_id}, indent=2, sort_keys=True))
+    return 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -83,6 +112,11 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_brief_doctor_parser(brief_commands)
     _add_brief_adjudicate_parser(brief_commands)
     _add_brief_defer_parser(brief_commands)
+    trace = commands.add_parser("trace", help="inspect mctl operation traces")
+    trace_commands = trace.add_subparsers(dest="trace_command", required=True)
+    trace_show = trace_commands.add_parser("show", help="fold every phase row for one trace id")
+    trace_show.add_argument("trace_id")
+    _add_runtime_arguments(trace_show)
     work = commands.add_parser("work", help="inspect and dispatch brief-backed work")
     work_commands = work.add_subparsers(dest="work_command", required=True)
     _add_work_ready_parser(work_commands)

@@ -162,6 +162,21 @@ makes the current two-writer reality safe, but the boundary in those two
 documents still needs to be either amended deliberately or replaced by
 routing mctl's updates through the shuffler.
 
+### Mctl Traces
+
+Every mutation writes two append-only rows keyed by one `trace_id`:
+`planned` before anything is mutated, then exactly one of `applied` (with
+the real `actual_effects`) or `aborted` (with the blocking diagnostics). A
+failed or crashed mutation therefore still leaves evidence. Fold them with:
+
+```sh
+python3 assets/scripts/mctl.py trace show <trace-id> --city <city-root> --rig mathcity --json
+```
+
+`trace show` reads local JSONL only, so it stays available when the city is
+down. Both mutation paths write through `mctl_core/trace.py` so they cannot
+drift apart again.
+
 ### Mctl Diagnostic Codes
 
 `assets/mctl/diagnostics.toml` is the single source of truth for stable
