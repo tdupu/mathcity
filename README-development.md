@@ -66,6 +66,15 @@ python3 assets/scripts/mctl.py context --city tests/mctl/fixtures/city_root --ri
 from `city.toml`. It uses an explicit rig `db` value when present; otherwise,
 the resolved rig ID is the database name.
 
+Context resolution also probes the rig's Gas City data plane and reports
+`city_active` / `city_endpoint`. A rig configured for Dolt server mode
+(`.beads/dolt-server.port`) whose endpoint refuses a connection is reported as
+`city_active: false`, and every `briefs`/`work` command then fails immediately
+with `MCTL_CITY_NOT_ACTIVE` instead of blocking on a `bd` timeout. A rig with
+no server port uses embedded Dolt; it reports `city_active: null` and is never
+gated. `mctl context` always answers, so it stays usable for diagnosing a
+down city.
+
 ### Mctl Brief Inspection
 
 Read canonical brief beads and their redundant filesystem cache without
@@ -124,6 +133,28 @@ the same effect-plan model as brief mutation commands. Fixture-backed dispatch
 writes dispatch provenance plus MCTL event/trace rows; live dispatch remains
 fail-closed until a dedicated runtime canary enables the actual `gc sling`
 handoff.
+
+Every bead read is a full `bd list` subprocess, so core functions that already
+hold a bead snapshot pass it down (`doctor_briefs(ctx, brief_id, beads)`)
+rather than re-reading per brief. `work ready` reads beads once for the whole
+rig; re-introducing a per-brief read makes the command scale with rig size and
+is caught by `tests/mctl/test_bd_invocation_count.py`.
+
+### Mctl Bead-Backed Tests
+
+Most `tests/mctl` files inject `MCTL_BEADS_FIXTURE`, which bypasses the `bd`
+adapter and reads static JSONL. Two suites deliberately do not:
+
+- `tests/mctl/test_real_bead_store.py` builds an isolated embedded-Dolt store
+  with `bd init` and drives mctl against real beads, including the canonical
+  `bd update` write path. It never touches a production rig, and skips when
+  `bd` is not installed.
+- `tests/mctl/test_bd_invocation_count.py` puts a counting `bd` shim on `PATH`
+  to bound how many times a command shells out.
+
+When adding bead fixtures, prefer `related` dependencies between a brief and
+its source bead — that is what live rigs use, and real `bd` refuses to close a
+brief that a `blocks` dependency still blocks.
 
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke
 tests. Use `test-execution-request` before risky, slow, or costly test
