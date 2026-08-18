@@ -8,7 +8,7 @@ Prepared from: Abouzaid, *How do AI systems prove math theorems?* (First Proof /
 Stanford, ICARM 2026, `~/Downloads/icarm-ai.pdf`, 50 slides); the `1stproof`
 GitHub org; `CBirkbeck/mathlib-quality` command frontmatter; `CBirkbeck/TauCeti`
 `formalization.yaml` v0.2; `math-solve` `dag-schema.json` v5; and this pack's
-existing [proof-assist README](../README.md).
+existing [proof-assist README](../../proof-assist/README.md).
 
 ## Executive summary
 
@@ -63,6 +63,17 @@ https://github.com/1stproof/batch-2
 
 Licensed **CC-BY-SA-4.0** per the repo's `DATA-LICENSE.md`. Confirmed present
 2026-08-18.
+
+## Naming: `firstproof`, not `1stproof`
+
+The mathcity folder and every identifier derived from it use **`firstproof`**. The
+upstream project styles itself **First Proof** and its GitHub org is **`1stproof`**;
+our spelling is deliberately not an exact match. A leading digit is awkward in pack
+identifiers and skill aliases (`mathcity-1stproof.math-solve`), and renaming after
+scaffolding would mean redoing P1.8 exposure for every skill.
+
+Upstream URLs, org references, and repo names keep their real spelling — only *our*
+directory and identifiers are normalized.
 
 ## Repositories
 
@@ -128,7 +139,7 @@ node at `p_argument_gap = 0.80` and one at `0.02` enter `/develop` identically.
 ### Already in this pack (reuse, don't rebuild)
 
 `search-mathlib` (Loogle), `search-arxiv`, `search-stacks`, `search-scholar` —
-see [../README.md](../README.md). `/develop`'s Mathlib-search phase and
+see [proof-assist README](../../proof-assist/README.md). `/develop`'s Mathlib-search phase and
 `/mathlibable`'s literature sweep should route through these.
 
 ## Run procedure
@@ -190,7 +201,7 @@ than copying — which also satisfies **P1.9** (one real copy anywhere).
 - **README (running, written during the spike):** `FORMALIZATION-TOOLCHAIN.md`,
   scratchpad first, then this `docs/` directory. Records what happened, not what
   was planned.
-- **Subdomain README:** [../README.md](../README.md) currently advertises
+- **Subdomain README:** [proof-assist README](../../proof-assist/README.md) currently advertises
   `formalize-claim` and `proof-check` formulas that do not exist. Fix in the same
   change as any adoption; run the `update-README` skill (P1.8).
 - **Tests:** `tests/<name>/red_test.sh` is the house shape. A DAG→Verso
