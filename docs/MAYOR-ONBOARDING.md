@@ -72,9 +72,18 @@ These are the things a fresh Mayor session must know to operate the city well.
 - Finalize `control_quarantine` on a missing `.gc/scripts` path recurs every build — cosmetic.
 
 **The <city-root> ↔ <repos-root> duality**
-- The running city loads pack content from `<repos-root>/gascity-packs` (local-path import).
-  Pack-FILE edits under `<city-root>/gascity-packs` are STAGED-not-live; durable pack/skill/binary
-  changes go through repo-side landing agent (<repos-root>) + a rebuild/reload. Beads sync via the Dolt remotes.
+- **mathcity content is CANONICAL in `tdupu/mathcity` — `gascity-packs/mathcity` is DEPRECATED**
+  (the human adjudicator, 2026-08-15). Verified at source: `city.toml` imports
+  `<repos-root>/mathcity`, plus `<repos-root>/gascity-packs/{gascity,gascity/roles,contributing}`.
+  `<repos-root>/gascity-packs/mathcity` is imported NOWHERE. Formula provenance agrees — a live
+  molecule's `gc.formula_source` reads `<repos-root>/mathcity/formulas/work-briefed.toml`.
+  Do NOT edit, mirror, or "sync" the `gascity-packs/mathcity` copies; a fix landed only there is
+  a fix that never runs. (Concrete instance: the #149 store-scope fix is absent from both
+  `gascity-packs/mathcity` copies of `work-briefed.toml` and this is CORRECT, not drift.)
+- The running city loads non-mathcity pack content from `<repos-root>/gascity-packs`
+  (local-path import). Pack-FILE edits under `<city-root>/gascity-packs` are STAGED-not-live;
+  durable pack/skill/binary changes go through repo-side landing agent (<repos-root>) + a
+  rebuild/reload. Beads sync via the Dolt remotes.
 - The repo-side landing agent does git landings (push/merge/branch-delete), each behind a fresh
   the human adjudicator `authorize-git-operation`. Consensus with the repo-side landing agent before major work. Contact via
   `communicate-with-other-agent` (shared inbox `<city-root>/.claude/.agent-inbox.md`).

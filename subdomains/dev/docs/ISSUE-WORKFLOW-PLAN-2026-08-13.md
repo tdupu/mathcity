@@ -3,6 +3,21 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development`
 > or `superpowers:executing-plans` to implement this plan task-by-task.
 
+> **HISTORICAL RECORD — superseded in two places (2026-08-14).** This plan is kept
+> as-written because it records what was built on 2026-08-13; do not read it as the
+> current state of the pack.
+>
+> 1. The interactive skill named `write-issue-targeted` throughout this document was
+>    **renamed to `create-issue`** (`skills/create-issue/SKILL.md`,
+>    alias `mathcity.create-issue`) for verb-consistency with `create-issue-briefed`.
+>    One skill, renamed — not a second surface.
+> 2. The Global Constraint *"Do not author `.github/ISSUE_TEMPLATE/*.yml` — this
+>    workflow consumes them"* was scoped to this plan, and has since been discharged:
+>    `tdupu/mathcity` had **no** `.github/` at all, so every "reads the target's live
+>    template" claim in this workflow pointed at nothing. The templates
+>    (`bug_report.yml`, `feature_request.yml`, `docs_report.yml`, `config.yml`) plus
+>    `.github/LABELS.md` now exist in the repo and make those claims true.
+
 **Goal:** Give MathCity its own issue-filing workflow that carries `write-issue`'s
 investigation rigor, takes the target repo as a declared parameter defaulting to
 `tdupu/mathcity`, consumes the target repo's live issue templates, and never files

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke test for the MathCity issue workflow (issue #12): the
-# mathcity-issue-briefed adapter formula, the write-issue-targeted skill, and the
+# mathcity-issue-briefed adapter formula, the create-issue skill, and the
 # shared investigation standard they both read. F6.1 gate.
 # Run from rig root: bash mathcity/tests/mathcity-issue-briefed/smoke_test.sh
 set -euo pipefail
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACK_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FORMULA_PATH="$PACK_ROOT/formulas/mathcity-issue-briefed.formula.toml"
 BASE_PATH="$PACK_ROOT/formulas/create-issue-briefed.formula.toml"
-SKILL_PATH="$PACK_ROOT/skills/write-issue-targeted/SKILL.md"
+SKILL_PATH="$PACK_ROOT/skills/create-issue/SKILL.md"
 STANDARD_PATH="$PACK_ROOT/template-fragments/issue-investigation-standard.md"
 DEFAULT_TARGET="tdupu/mathcity"
 PASS=0
@@ -245,10 +245,10 @@ else
 fi
 
 # Check 15: skill frontmatter declares the expected name
-if [ -f "$SKILL_PATH" ] && head -5 "$SKILL_PATH" | grep -q '^name: write-issue-targeted$'; then
-  check "skill frontmatter declares name: write-issue-targeted" "ok"
+if [ -f "$SKILL_PATH" ] && head -5 "$SKILL_PATH" | grep -q '^name: create-issue$'; then
+  check "skill frontmatter declares name: create-issue" "ok"
 else
-  check "skill frontmatter" "name: write-issue-targeted missing from frontmatter"
+  check "skill frontmatter" "name: create-issue missing from frontmatter"
 fi
 
 # Check 16: gc formula show (soft — requires the pack installed to the live city)
