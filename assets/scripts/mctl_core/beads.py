@@ -3,13 +3,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import subprocess
 from typing import Any, Iterable, Mapping
 
 
-BD_TIMEOUT_SECONDS = 5
+DEFAULT_BD_TIMEOUT_SECONDS = 30
+BD_TIMEOUT_ENV = "MCTL_BD_TIMEOUT_SECONDS"
 BD_LIST_ARGS = ("bd", "list", "--all", "--limit", "0", "--json", "--readonly")
+
+
+def bd_timeout_seconds() -> int:
+    """Seconds to allow a bd subprocess.
+
+    A full read of the largest live rig already costs seconds, and a read
+    is slowest exactly when the data plane is degraded -- the moment these
+    commands are most useful. Keep the ceiling well clear of that, and let
+    an operator raise it further per invocation.
+    """
+    raw = os.environ.get(BD_TIMEOUT_ENV)
+    if raw is None:
+        return DEFAULT_BD_TIMEOUT_SECONDS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_BD_TIMEOUT_SECONDS
+    return value if value > 0 else DEFAULT_BD_TIMEOUT_SECONDS
 
 
 @dataclass(frozen=True)
@@ -60,12 +80,12 @@ def read_beads(
     rig_root: Path,
     *,
     fixture_path: Path | None = None,
-    timeout: int = BD_TIMEOUT_SECONDS,
+    timeout: int | None = None,
 ) -> tuple[Bead, ...]:
     """Query the canonical bead store, or read an explicitly injected fixture."""
     if fixture_path is not None:
         return tuple(_bead_from_mapping(row) for row in _read_jsonl(fixture_path))
-    return tuple(_bead_from_mapping(row) for row in _read_bd(rig_root, timeout))
+    return tuple(_bead_from_mapping(row) for row in _read_bd(rig_root, timeout or bd_timeout_seconds()))
 
 
 def apply_bead_update(
@@ -73,13 +93,13 @@ def apply_bead_update(
     update: BeadUpdate,
     *,
     fixture_path: Path | None = None,
-    timeout: int = BD_TIMEOUT_SECONDS,
+    timeout: int | None = None,
 ) -> dict[str, object]:
     """Apply one canonical bead update through the fixture seam or bd."""
     if fixture_path is not None:
         _apply_fixture_update(fixture_path, update)
         return {"id": update.id, "mode": "fixture"}
-    return _apply_bd_update(rig_root, update, timeout)
+    return _apply_bd_update(rig_root, update, timeout or bd_timeout_seconds())
 
 
 def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:

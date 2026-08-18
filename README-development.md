@@ -152,6 +152,17 @@ adapter and reads static JSONL. Two suites deliberately do not:
 - `tests/mctl/test_bd_invocation_count.py` puts a counting `bd` shim on `PATH`
   to bound how many times a command shells out.
 
+`bd` and `gc` are external contracts mctl does not own.
+`tests/mctl/test_external_command_contracts.py` pins the argv mctl builds
+and checks every long flag in it against the flags the installed `bd` and
+`gc` actually advertise, so a rename upstream fails the suite instead of
+silently producing a broken command.
+
+`bd` subprocess timeout defaults to 30s and is overridable with
+`MCTL_BD_TIMEOUT_SECONDS`. It must stay clear of the ~1-5s a full read of a
+large rig costs, since reads are slowest exactly when the data plane is
+degraded and these commands are most needed.
+
 When adding bead fixtures, prefer `related` dependencies between a brief and
 its source bead — that is what live rigs use, and real `bd` refuses to close a
 brief that a `blocks` dependency still blocks.
