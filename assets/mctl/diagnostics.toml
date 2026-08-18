@@ -1,0 +1,238 @@
+# mctl diagnostic code registry.
+#
+# Single source of truth for stable diagnostic codes. Plan §4's invariant
+# table is generated from this file, and tests/mctl/test_diagnostics_registry.py
+# asserts that every code mctl_core emits is registered here and every
+# registered code is still reachable in the source. Without that pairing the
+# plan and the code drift apart silently, which is how MBRF010-MBRF013 came to
+# exist in code but nowhere in the plan.
+
+[MBRF001]
+severity = "ERROR"
+meaning = "Stack index row points at a missing file."
+policy_ref = "B2.8"
+module = "briefs.py"
+
+[MBRF002]
+severity = "ERROR"
+meaning = "Brief cache file exists with no matching decision bead."
+policy_ref = "B2.1"
+module = "briefs.py"
+
+[MBRF003]
+severity = "ERROR"
+meaning = "Brief cache maps to a bead that is not type=decision."
+policy_ref = "B2.1"
+module = "briefs.py"
+
+[MBRF004]
+severity = "ERROR"
+meaning = "Brief bead has no source dependency."
+policy_ref = "B2.1"
+module = "briefs.py"
+
+[MBRF005]
+severity = "ERROR"
+meaning = "Closed brief bead has no recorded verdict."
+policy_ref = "B2.2"
+module = "briefs.py"
+
+[MBRF006]
+severity = "ERROR"
+meaning = "Closed or adjudicated brief still appears in the presentable stack."
+policy_ref = "B2.3"
+
+[MBRF007]
+severity = "ERROR"
+meaning = "Deferred brief appears in the stack before its defer window expires."
+policy_ref = "B2.7"
+
+[MBRF008]
+severity = "ERROR"
+meaning = "Legacy decisions-track row is non-terminal and not migration-visible."
+policy_ref = "B2.10"
+module = "briefs.py"
+
+[MBRF010]
+severity = "FATAL"
+meaning = "No canonical brief bead matches the requested brief id."
+module = "briefs.py"
+
+[MBRF011]
+severity = "ERROR"
+meaning = "Brief markdown cache exists with no matching decision bead."
+policy_ref = "B2.8"
+module = "briefs.py"
+
+[MBRF012]
+severity = "FATAL"
+meaning = "The canonical bead store could not be read."
+module = "briefs.py"
+
+[MBRF013]
+severity = "ERROR"
+meaning = "Legacy decisions-track manifest could not be parsed."
+policy_ref = "B2.10"
+module = "briefs.py"
+
+[MCTL_CANONICAL_BEAD_UPDATE_FAILED]
+severity = "FATAL"
+meaning = "The canonical bead update failed, so no redundant cache was written."
+policy_ref = "B2.8"
+module = "effects.py"
+
+[MCTL_CITY_NOT_ACTIVE]
+severity = "FATAL"
+meaning = "The Gas City data plane for this rig is not reachable, so canonical bead state cannot be read."
+module = "cli.py"
+
+[MCTL_CONTEXT_BEADS_FIXTURE_MISSING]
+severity = "FATAL"
+meaning = "The explicit MCTL_BEADS_FIXTURE path is not a file."
+module = "context.py"
+
+[MCTL_CONTEXT_CITY_NOT_FOUND]
+severity = "FATAL"
+meaning = "The requested city root does not contain city.toml."
+module = "context.py"
+
+[MCTL_CONTEXT_IMPLICIT_RIG]
+severity = "WARN"
+meaning = "A rig was inferred rather than named explicitly."
+module = "context.py"
+
+[MCTL_CONTEXT_INVALID_CITY_TOML]
+severity = "FATAL"
+meaning = "Could not parse city.toml."
+module = "context.py"
+
+[MCTL_CONTEXT_INVALID_RIG_DB]
+severity = "FATAL"
+meaning = "The selected rig has an invalid database name."
+module = "context.py"
+
+[MCTL_CONTEXT_MISSING_GATES_TOML]
+severity = "FATAL"
+meaning = "The resolved source checkout has no brief-pipeline gates.toml."
+module = "context.py"
+
+[MCTL_CONTEXT_MISSING_PATHS_TOML]
+severity = "FATAL"
+meaning = "The resolved source checkout has no brief-pipeline paths.toml."
+module = "context.py"
+
+[MCTL_CONTEXT_RIGS_MISSING]
+severity = "FATAL"
+meaning = "city.toml does not contain a registered rig list."
+module = "context.py"
+
+[MCTL_CONTEXT_RIG_REQUIRED]
+severity = "FATAL"
+meaning = "The city has multiple registered rigs and none was selected."
+module = "context.py"
+
+[MCTL_CONTEXT_SOURCE_CHECKOUT]
+severity = "FATAL"
+meaning = "Runtime context cannot be inferred from the MathCity source checkout."
+module = "context.py"
+
+[MCTL_CONTEXT_SOURCE_CHECKOUT_MISSING]
+severity = "FATAL"
+meaning = "The selected rig has no MathCity source checkout configured."
+module = "context.py"
+
+[MCTL_CONTEXT_UNKNOWN_RIG]
+severity = "FATAL"
+meaning = "Pass a rig shown in the city configuration."
+module = "context.py"
+
+[MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED]
+severity = "FATAL"
+meaning = "Legacy decisions-track state requires the authorized #38 migration proof/canary."
+policy_ref = "B2.10"
+module = "briefs.py"
+
+[MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS]
+severity = "FATAL"
+meaning = "Mutation blocked because brief doctor reported ERROR or FATAL diagnostics."
+module = "effects.py"
+
+[MCTL_MUTATION_DEFER_UNTIL_REQUIRED]
+severity = "FATAL"
+meaning = "Deferral requires --until YYYY-MM-DD or --days N."
+module = "effects.py"
+
+[MCTL_MUTATION_INVALID_VERDICT]
+severity = "FATAL"
+meaning = "Adjudication verdict must be approve, revise, or reject."
+module = "effects.py"
+
+[MCTL_MUTATION_REASON_REQUIRED]
+severity = "FATAL"
+meaning = "Brief mutations require a non-empty --reason."
+module = "effects.py"
+
+[MCTL_MUTATION_VERDICT_REQUIRED]
+severity = "FATAL"
+meaning = "Adjudication requires --verdict."
+module = "effects.py"
+
+[MCTL_REDUNDANT_CACHE_UPDATE_FAILED]
+severity = "ERROR"
+meaning = "Redundant brief cache update failed after canonical bead update."
+module = "effects.py"
+
+[MWRK001]
+severity = "ERROR"
+meaning = "Brief has no approving verdict for work dispatch."
+module = "work.py"
+
+[MWRK002]
+severity = "ERROR"
+meaning = "Approved work dispatch requires a source bead dependency."
+module = "work.py"
+
+[MWRK003]
+severity = "ERROR"
+meaning = "The source bead named by the brief dependency was not found."
+module = "work.py"
+
+[MWRK_ALREADY_DISPATCHED]
+severity = "FATAL"
+meaning = "Work already has dispatch provenance."
+module = "work.py"
+
+[MWRK_BEAD_READ_FAILED]
+severity = "FATAL"
+meaning = "The canonical bead store could not be read for work controls."
+module = "work.py"
+
+[MWRK_BRIEF_NOT_FOUND]
+severity = "FATAL"
+meaning = "No canonical decision brief matches the requested id."
+module = "work.py"
+
+[MWRK_DISPATCH_BLOCKED]
+severity = "FATAL"
+meaning = "Work dispatch is blocked by readiness diagnostics."
+module = "work.py"
+
+[MWRK_LIVE_DISPATCH_NOT_ENABLED]
+severity = "FATAL"
+meaning = "Live mctl work dispatch requires a dedicated runtime canary before it is enabled."
+module = "work.py"
+
+[MWRK_PROVENANCE_INVALID]
+severity = "ERROR"
+meaning = "Dispatch provenance could not be parsed as TOML."
+module = "provenance.py"
+
+[MWRK_PROVENANCE_NOT_FOUND]
+severity = "FATAL"
+meaning = "No dispatch provenance record exists for the source bead."
+module = "provenance.py"
+
+[MWRK_PROVENANCE_SCHEMA_UNAVAILABLE]
+severity = "FATAL"
+meaning = "Dispatch provenance schema could not be loaded."
+module = "provenance.py"

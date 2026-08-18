@@ -140,6 +140,15 @@ rather than re-reading per brief. `work ready` reads beads once for the whole
 rig; re-introducing a per-brief read makes the command scale with rig size and
 is caught by `tests/mctl/test_bd_invocation_count.py`.
 
+### Mctl Diagnostic Codes
+
+`assets/mctl/diagnostics.toml` is the single source of truth for stable
+diagnostic codes (code, severity, meaning, policy ref, module).
+`tests/mctl/test_diagnostics_registry.py` asserts every code `mctl_core`
+emits is registered and every registered code is still reachable, so the
+plan and the code cannot drift apart silently the way `MBRF010`-`MBRF013`
+(code-only) and `MOPT001` (plan-only) did.
+
 ### Mctl Bead-Backed Tests
 
 Most `tests/mctl` files inject `MCTL_BEADS_FIXTURE`, which bypasses the `bd`
