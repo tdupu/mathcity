@@ -313,7 +313,91 @@ def _diagnostics_payload(
 
 
 def _render_brief_payload(payload: dict[str, object]) -> str:
-    return json.dumps(payload, indent=2, sort_keys=True)
+    """Render a payload for a human.
+
+    Plan §1 promises concise human output OR structured JSON; this is the
+    former. Every shape keeps its diagnostics and trace id, since those are
+    what an operator acts on.
+    """
+    lines: list[str] = []
+
+    briefs = payload.get("briefs")
+    if isinstance(briefs, list):
+        lines.append(f"briefs: {len(briefs)}")
+        for brief in briefs:
+            lines.append(f"  {_brief_line(brief)}")
+
+    brief = payload.get("brief")
+    if isinstance(brief, dict):
+        lines.append(_brief_line(brief))
+        for key in ("title", "created_at", "canonical_source"):
+            if brief.get(key):
+                lines.append(f"  {key}: {brief[key]}")
+
+    options = payload.get("options")
+    if isinstance(options, list):
+        lines.append(f"options for {payload.get('brief_id', '?')}:")
+        for option in options:
+            mark = "+" if option.get("enabled") else "-"
+            detail = "" if option.get("enabled") else f"  ({option.get('disabled_reason') or 'disabled'})"
+            lines.append(f"  {mark} {option.get('id')}: {option.get('description', '')}{detail}")
+
+    work = payload.get("work")
+    if isinstance(work, list):
+        lines.append(f"ready work: {len(work)}")
+        for item in work:
+            lines.append(f"  {_work_line(item)}")
+    elif isinstance(work, dict):
+        lines.append(_work_line(work))
+        for blocker in work.get("blockers", []):
+            lines.append(f"  {_diagnostic_line(blocker)}")
+
+    per_brief = payload.get("brief_diagnostics")
+    if isinstance(per_brief, list):
+        total = sum(len(entry.get("diagnostics", [])) for entry in per_brief)
+        lines.append(f"doctor: {len(per_brief)} brief(s), {total} diagnostic(s)")
+        for entry in per_brief:
+            for diagnostic in entry.get("diagnostics", []):
+                lines.append(f"  {entry.get('brief_id')}: {_diagnostic_line(diagnostic)}")
+        if total == 0:
+            lines.append("  no diagnostics")
+
+    if "applied" in payload:
+        lines.append(f"applied: {payload['applied']}")
+        plan = payload.get("effect_plan")
+        if isinstance(plan, dict):
+            lines.append(f"  operation: {plan.get('operation', '?')}")
+            for update in plan.get("bead_updates", []):
+                lines.append(f"  bead update: {update.get('id')} -> status={update.get('status')}")
+            for write in plan.get("cache_updates", []):
+                lines.append(f"  cache update: {write.get('path')}")
+
+    for diagnostic in payload.get("diagnostics", []) or []:
+        lines.append(_diagnostic_line(diagnostic))
+
+    if payload.get("trace_id"):
+        lines.append(f"trace_id: {payload['trace_id']}")
+
+    return "\n".join(lines) if lines else "(no output)"
+
+
+def _brief_line(brief: dict[str, object]) -> str:
+    state = brief.get("decision_state") or brief.get("status") or "?"
+    return f"{brief.get('brief_id', '?')}  [{state}]  {str(brief.get('title', ''))[:70]}"
+
+
+def _work_line(item: dict[str, object]) -> str:
+    return (
+        f"{item.get('brief_id', '?')} -> {item.get('bead_id', '?')}  "
+        f"[{item.get('readiness', '?')}]  {str(item.get('title', ''))[:60]}"
+    )
+
+
+def _diagnostic_line(diagnostic: dict[str, object]) -> str:
+    return (
+        f"[{diagnostic.get('severity', '?')}] {diagnostic.get('code', '?')}: "
+        f"{diagnostic.get('message', '')}"
+    )
 
 
 def _city_not_active_diagnostic(context: MctlContext) -> Diagnostic:

@@ -75,6 +75,10 @@ no server port uses embedded Dolt; it reports `city_active: null` and is never
 gated. `mctl context` always answers, so it stays usable for diagnosing a
 down city.
 
+All `briefs` and `work` commands render concise human output by default and
+deterministic JSON under `--json`. Human output always keeps the diagnostics
+and the trace id, since those are what an operator acts on.
+
 ### Mctl Brief Inspection
 
 Read canonical brief beads and their redundant filesystem cache without
