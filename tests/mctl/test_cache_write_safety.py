@@ -166,3 +166,25 @@ def test_concurrent_stack_index_writers_do_not_lose_updates(tmp_path: Path):
     }
     assert rows["a"]["status"] == "adjudicated"
     assert rows["b"]["status"] == "deferred", "a concurrent writer lost its update"
+
+
+def test_mctl_and_the_shuffler_take_the_same_lock_file(tmp_path: Path):
+    """flock only serializes writers holding the SAME lock path.
+
+    brief-shuffle-fast-drain.py::append_index locks `<stack>/.manifest.lock`.
+    A lock of mctl's own would serialize mctl against mctl and leave the
+    shuffler race wide open while appearing to be handled.
+    """
+    import re
+
+    from mctl_core.effects import _stack_index_lock_path
+
+    shuffler = (REPO_ROOT / "assets" / "scripts" / "brief-shuffle-fast-drain.py").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r'lock_path = stack / "([^"]+)"', shuffler)
+    assert match, "could not find the shuffler's lock path; did it move?"
+
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    assert _stack_index_lock_path(stack / ".index.jsonl") == stack / match.group(1)

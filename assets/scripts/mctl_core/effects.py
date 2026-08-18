@@ -471,8 +471,15 @@ def _atomic_write(path: Path, text: str) -> None:
         raise
 
 
+# brief-shuffle-fast-drain.py::append_index locks `<stack>/.manifest.lock`.
+# flock only serializes writers that take the SAME lock file, so mctl must use
+# that exact path -- a lock of our own would serialize mctl against mctl and
+# leave the shuffler race wide open while looking like it was handled.
+STACK_INDEX_LOCK_NAME = ".manifest.lock"
+
+
 def _stack_index_lock_path(path: Path) -> Path:
-    return path.with_name(f"{path.name}.lock")
+    return path.parent / STACK_INDEX_LOCK_NAME
 
 
 @contextmanager

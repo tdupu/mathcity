@@ -178,7 +178,11 @@ rewrite any line inside a multi-line string that looked like the key being
 updated, silently losing the verdict.
 
 `stack/.index.jsonl` has a second writer — the shuffler drains it — so mctl
-takes an `flock` on `<path>.lock` across the whole read-modify-write.
+takes an `flock` on `<stack>/.manifest.lock` — the SAME lock file
+`brief-shuffle-fast-drain.py::append_index` uses — across the whole
+read-modify-write. `flock` only serializes writers holding the same lock
+path, so a lock of mctl's own would have serialized mctl against mctl and
+left the shuffler race open while looking handled.
 **Open architecture question:** `formulas/brief-prep.toml` and the fast-drain
 plan both describe the shuffler as the *single* writer of that file. The lock
 makes the current two-writer reality safe, but the boundary in those two
