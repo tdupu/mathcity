@@ -199,8 +199,16 @@ def brief_options_report(ctx: MctlContext, brief_id: str) -> tuple[tuple[BriefOp
     )
 
 
-def doctor_briefs(ctx: MctlContext, brief_id: str | None) -> DoctorReport:
-    return _doctor_briefs(ctx, brief_id)
+def doctor_briefs(
+    ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ...] | None = None
+) -> DoctorReport:
+    """Report canonical/cache drift.
+
+    Callers that already hold a bead snapshot pass it in; each bead read is a
+    full `bd list` subprocess, so re-reading per brief makes callers that loop
+    over briefs scale with the size of the rig.
+    """
+    return _doctor_briefs(ctx, brief_id, beads)
 
 
 def _doctor_briefs(ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ...] | None = None) -> DoctorReport:

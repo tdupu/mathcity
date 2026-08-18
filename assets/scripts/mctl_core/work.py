@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .beads import BD_LIST_ARGS, Bead, BeadReadError, read_beads
-from .briefs import BriefError, doctor_briefs
+from .briefs import BriefError, DoctorReport, doctor_briefs
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
@@ -74,9 +74,15 @@ class WorkError(Exception):
 
 
 def ready_work(ctx: MctlContext) -> tuple[WorkItem, ...]:
+    beads = _beads(ctx)
+    doctor = _doctor_report(ctx, None, beads)
     return tuple(
         item
-        for item in (_work_item(ctx, bead.id) for bead in _decision_beads(ctx))
+        for item in (
+            _work_item(ctx, bead.id, beads=beads, doctor=doctor)
+            for bead in beads
+            if bead.is_brief
+        )
         if item.readiness == "ready"
     )
 
@@ -182,9 +188,14 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
 
 
 def _work_item(
-    ctx: MctlContext, brief_id: str, *, include_provenance_errors: bool = True
+    ctx: MctlContext,
+    brief_id: str,
+    *,
+    include_provenance_errors: bool = True,
+    beads: tuple[Bead, ...] | None = None,
+    doctor: DoctorReport | None = None,
 ) -> WorkItem:
-    beads = _beads(ctx)
+    beads = _beads(ctx) if beads is None else beads
     bead_by_id = {bead.id: bead for bead in beads}
     brief = bead_by_id.get(brief_id)
     if brief is None or not brief.is_brief:
@@ -199,10 +210,16 @@ def _work_item(
             )
         )
     blockers: list[Diagnostic] = []
-    try:
-        blockers.extend(_blocking_doctor_diagnostics(doctor_briefs(ctx, brief_id).diagnostics))
-    except BriefError as error:
-        raise WorkError(error.diagnostic) from error
+    if doctor is None:
+        doctor = _doctor_report(ctx, brief_id, beads)
+        brief_diagnostics = doctor.diagnostics
+    else:
+        brief_diagnostics = tuple(
+            diagnostic
+            for diagnostic in doctor.diagnostics
+            if diagnostic.facts.get("brief_id") == brief_id
+        )
+    blockers.extend(_blocking_doctor_diagnostics(brief_diagnostics))
     source_id = brief.source_dependencies[0] if brief.source_dependencies else ""
     if not source_id:
         blockers.append(
@@ -263,6 +280,15 @@ def _work_item(
         blockers=tuple(blockers),
         provenance=provenance,
     )
+
+
+def _doctor_report(
+    ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ...] | None
+) -> DoctorReport:
+    try:
+        return doctor_briefs(ctx, brief_id, beads)
+    except BriefError as error:
+        raise WorkError(error.diagnostic) from error
 
 
 def _decision_beads(ctx: MctlContext) -> tuple[Bead, ...]:
