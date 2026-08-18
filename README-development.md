@@ -147,6 +147,21 @@ rather than re-reading per brief. `work ready` reads beads once for the whole
 rig; re-introducing a per-brief read makes the command scale with rig size and
 is caught by `tests/mctl/test_bd_invocation_count.py`.
 
+Redundant cache writes go through `_atomic_write` (same-directory temp file
+plus `os.replace`), so an interrupted mutation leaves the previous file
+intact rather than a truncated one. Decision TOML is parsed with `tomllib`
+and re-emitted with typed values; the previous line-splitting writer would
+rewrite any line inside a multi-line string that looked like the key being
+updated, silently losing the verdict.
+
+`stack/.index.jsonl` has a second writer — the shuffler drains it — so mctl
+takes an `flock` on `<path>.lock` across the whole read-modify-write.
+**Open architecture question:** `formulas/brief-prep.toml` and the fast-drain
+plan both describe the shuffler as the *single* writer of that file. The lock
+makes the current two-writer reality safe, but the boundary in those two
+documents still needs to be either amended deliberately or replaced by
+routing mctl's updates through the shuffler.
+
 ### Mctl Diagnostic Codes
 
 `assets/mctl/diagnostics.toml` is the single source of truth for stable

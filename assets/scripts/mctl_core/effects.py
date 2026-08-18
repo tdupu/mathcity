@@ -1,9 +1,14 @@
 """Dry-run-first effect planning for mctl mutations."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+import fcntl
 import json
+import os
+import tempfile
+import tomllib
 from pathlib import Path
 from typing import Mapping
 
@@ -398,37 +403,92 @@ def _apply_cache_update(update: CacheUpdate) -> None:
     raise OSError(f"unknown cache update kind: {update.kind}")
 
 
-def _update_simple_toml(path: Path, fields: Mapping[str, str]) -> None:
-    existing = path.read_text(encoding="utf-8").splitlines()
-    remaining = dict(fields)
-    updated: list[str] = []
-    for line in existing:
-        key = line.split("=", 1)[0].strip()
-        if key in remaining:
-            updated.append(f'{key} = "{_toml_escape(remaining.pop(key))}"')
-        else:
-            updated.append(line)
-    for key, value in sorted(remaining.items()):
-        updated.append(f'{key} = "{_toml_escape(value)}"')
-    path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+def _atomic_write(path: Path, text: str) -> None:
+    """Write via a same-directory temp file and os.replace.
+
+    A whole-file rewrite that is interrupted between truncate and write
+    destroys the cache it was updating. os.replace is atomic within a
+    filesystem, so readers see either the old file or the new one.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _stack_index_lock_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.lock")
+
+
+@contextmanager
+def _stack_index_lock(path: Path):
+    """Serialize stack-index writers.
+
+    formulas/brief-prep.toml and the fast-drain plan both name the shuffler as
+    the single writer that promotes stack entries and appends .index.jsonl.
+    mctl now writes it too, so the boundary needs an explicit lock rather than
+    two documents that quietly contradict the code.
+    """
+    lock_path = _stack_index_lock_path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, "a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
+
+
+def _toml_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return f'"{_toml_escape(str(value))}"'
+
+
+def _update_simple_toml(path: Path, fields: Mapping[str, object]) -> None:
+    """Rewrite a decision TOML through a real parser.
+
+    The previous writer split each line on the first `=`, so any line inside a
+    multi-line string that looked like `key = ...` was rewritten instead of the
+    real key -- silently losing the verdict and mutating unrelated prose.
+    """
+    existing: dict[str, object] = {}
+    if path.exists():
+        existing = dict(tomllib.loads(path.read_text(encoding="utf-8")))
+    existing.update(fields)
+    lines = [f"{key} = {_toml_value(value)}" for key, value in existing.items()]
+    _atomic_write(path, "\n".join(lines) + "\n")
 
 
 def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, str]) -> None:
-    rows: list[str] = []
-    changed = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        row = json.loads(line)
-        if isinstance(row, dict):
-            if _row_targets_brief(row, target_brief_id):
-                row.update(fields)
-                changed = True
-            rows.append(json.dumps(row, sort_keys=True))
-        else:
-            rows.append(line)
-    if changed:
-        path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    # Read and write inside the lock: the shuffler drains this same file, so a
+    # read-modify-write outside the lock is a lost update either way.
+    with _stack_index_lock(path):
+        rows: list[str] = []
+        changed = False
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if isinstance(row, dict):
+                if _row_targets_brief(row, target_brief_id):
+                    row.update(fields)
+                    changed = True
+                rows.append(json.dumps(row, sort_keys=True))
+            else:
+                rows.append(line)
+        if changed:
+            _atomic_write(path, "\n".join(rows) + "\n")
 
 
 def _row_targets_brief(row: Mapping[str, object], target_brief_id: str) -> bool:
@@ -473,4 +533,12 @@ def _now() -> str:
 
 
 def _toml_escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    # Control characters are illegal raw inside a TOML basic string, so a
+    # reason carrying newlines must be escaped rather than emitted literally.
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
