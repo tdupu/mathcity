@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT="$ROOT/assets/scripts/brief-decisions-track-inventory.py"
+PROOF5="$ROOT/tests/decisions-track-migration/proof5_no_nonterminal_unmapped.py"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/decisions-track-migration.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/.beads/decisions-track" "$TMP/.beads/briefs/stack"
@@ -12,6 +13,14 @@ cat >"$TMP/.beads/decisions-track/manifest.jsonl" <<'JSONL'
 {"n":2,"slug":"deferred-one","status":"ready","defer_until":"2999-01-01","unlock_count":3}
 {"n":3,"slug":"done-one","status":"adjudicated","unlock_count":2}
 {"n":4,"slug":"missing-file","status":"ready","unlock_count":1}
+{"n":5,"slug":"ready-near-miss","status":"ready-for-adjudication","unlock_count":8}
+{"n":6,"slug":"needs-revision-free-text","status":"needs-revision(check-zero-ZFC-partial:V5-pipeline-membership-is-semantic;option-A=add-model-call-language)","unlock_count":4}
+{"n":7,"slug":"on-hold-needs-revision","status":"on-hold-needs-revision","unlock_count":8}
+{"n":8,"slug":"briefed-free-text","status":"briefed","unlock_count":4}
+{"n":9,"slug":"brief-prep-dispatched","status":"brief-prep-dispatched","unlock_count":3}
+{"n":10,"slug":"approved-slung","status":"approved-slung","unlock_count":3}
+{"n":11,"slug":"terminal-free-text","status":"adjudicated:approve-b(move-cliff-part2;rehome-filed)","unlock_count":9}
+{"n":12,"slug":"moot-terminal","status":"moot-stale","unlock_count":9}
 {bad json
 ["not", "an", "object"]
 {"slug":"missing-number","status":"ready"}
@@ -37,6 +46,54 @@ status: ready-for-adjudication
 ---
 # Done
 MD
+cat >"$TMP/.beads/decisions-track/05-ready-near-miss-brief.md" <<'MD'
+---
+status: ready-for-adjudication
+---
+# Ready Near Miss
+MD
+cat >"$TMP/.beads/decisions-track/06-needs-revision-free-text-brief.md" <<'MD'
+---
+status: needs-revision
+---
+# Needs Revision Free Text
+MD
+cat >"$TMP/.beads/decisions-track/07-on-hold-needs-revision-brief.md" <<'MD'
+---
+status: on-hold-needs-revision
+---
+# On Hold Needs Revision
+MD
+cat >"$TMP/.beads/decisions-track/08-briefed-free-text-brief.md" <<'MD'
+---
+status: briefed
+---
+# Briefed Free Text
+MD
+cat >"$TMP/.beads/decisions-track/09-brief-prep-dispatched-brief.md" <<'MD'
+---
+status: brief-prep-dispatched
+---
+# Brief Prep Dispatched
+MD
+cat >"$TMP/.beads/decisions-track/10-approved-slung-brief.md" <<'MD'
+---
+status: approved-slung
+---
+# Approved Slung
+MD
+cat >"$TMP/.beads/decisions-track/11-terminal-free-text-brief.md" <<'MD'
+---
+status: ready-for-adjudication
+---
+# Terminal Free Text
+MD
+cat >"$TMP/.beads/decisions-track/12-moot-terminal-brief.md" <<'MD'
+---
+status: ready-for-adjudication
+---
+# Moot Terminal
+MD
 cat >"$TMP/.beads/decisions-track/99-orphan-brief.md" <<'MD'
 ---
 status: ready-for-adjudication
@@ -61,13 +118,77 @@ assert actions[(1,"ready-one")] == "copy_to_pile"
 assert actions[(2,"deferred-one")] == "copy_to_pile_deferred"
 assert actions[(3,"done-one")] == "preserve_terminal"
 assert actions[(4,"missing-file")] == "preserve_missing_file"
+for key in [
+    (5,"ready-near-miss"),
+    (6,"needs-revision-free-text"),
+    (7,"on-hold-needs-revision"),
+    (8,"briefed-free-text"),
+    (9,"brief-prep-dispatched"),
+    (10,"approved-slung"),
+]:
+    assert actions[key] == "copy_to_pile_review", (key, actions[key])
+assert actions[(11,"terminal-free-text")] == "preserve_terminal"
+assert actions[(12,"moot-terminal")] == "preserve_terminal"
 assert actions[(99,"orphan")] == "preserve_file_without_manifest"
 assert actions[(1,"wrong-slug")] == "preserve_file_without_manifest"
 assert sum(r["kind"] == "malformed_manifest_row" for r in rows) == 4
 print("decisions-track migration inventory: ok")
 PY
 
+python3 "$PROOF5" "$TMP/out.jsonl"
+
+cat >"$TMP/bad-proof5.jsonl" <<'JSONL'
+{"kind":"manifest_row","legacy_n":70,"legacy_slug":"sandbox-remaining-reject-moot-batch","legacy_file":"/tmp/70-sandbox-remaining-reject-moot-batch-brief.md","manifest_status":"on-hold-needs-revision","file_status":"ready-for-adjudication","defer_until":null,"unlock_count":8,"mapped_unified_path":null,"migration_action":"preserve_unknown_status","reason":"red-first fixture"}
+JSONL
+if python3 "$PROOF5" "$TMP/bad-proof5.jsonl"; then
+  echo "expected proof 5 to fail on preserved non-terminal manifest row" >&2
+  exit 1
+fi
+
 if python3 "$SCRIPT" inventory --rig-root "$TMP" --output "$TMP/missing-parent/out.jsonl"; then
   echo "expected missing output parent to fail" >&2
+  exit 1
+fi
+
+STACK="$TMP/.beads/briefs/stack"
+MARKER="$TMP/.beads/briefs/migrations/2026-08-15-decisions-track-inventory.jsonl"
+cat >"$STACK/08-briefed-free-text-brief.md" <<'MD'
+# Existing Stack Copy
+MD
+cat >"$STACK/.index.jsonl" <<JSONL
+{"slug":"briefed-free-text","path":"$STACK/08-briefed-free-text-brief.md","unlock_count":4}
+JSONL
+dry_run="$(python3 "$SCRIPT" migrate --rig-root "$TMP" --marker "$MARKER")"
+grep -Fq '"apply": false' <<<"$dry_run"
+grep -Fq '"migratable_rows": 8' <<<"$dry_run"
+grep -Fq '"copy_rows": 7' <<<"$dry_run"
+grep -Fq '"annotate_existing_rows": 1' <<<"$dry_run"
+[ ! -e "$MARKER" ] || {
+  echo "dry-run created migration marker" >&2
+  exit 1
+}
+if grep -Fq '"legacy_source":"decisions-track/08-briefed-free-text-brief.md"' "$STACK/.index.jsonl"; then
+  echo "dry-run annotated existing stack index row" >&2
+  exit 1
+fi
+
+python3 "$SCRIPT" migrate --rig-root "$TMP" --marker "$MARKER" --apply >/tmp/decisions-track-migrate.out
+[ -s "$MARKER" ] || {
+  echo "migration did not create marker" >&2
+  exit 1
+}
+grep -Fq '"legacy_source":"decisions-track/01-ready-one-brief.md"' "$STACK/.index.jsonl"
+grep -Fq '"legacy_source":"decisions-track/05-ready-near-miss-brief.md"' "$STACK/.index.jsonl"
+grep -Fq '"legacy_source":"decisions-track/08-briefed-free-text-brief.md"' "$STACK/.index.jsonl"
+grep -Fq '"legacy_source":"decisions-track/10-approved-slung-brief.md"' "$STACK/.index.jsonl"
+if grep -Fq '"legacy_source":"decisions-track/11-terminal-free-text-brief.md"' "$STACK/.index.jsonl"; then
+  echo "migration copied terminal row into stack" >&2
+  exit 1
+fi
+grep -Fq '01-ready-one-brief.md' "$STACK/.index.jsonl"
+test -f "$STACK/01-ready-one-brief.md"
+test -f "$STACK/05-ready-near-miss-brief.md"
+if [ "$(grep -Fc 'decisions-track/08-briefed-free-text-brief.md' "$STACK/.index.jsonl")" -ne 1 ]; then
+  echo "migration duplicated existing stack row instead of annotating it once" >&2
   exit 1
 fi

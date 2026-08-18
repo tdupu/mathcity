@@ -42,11 +42,13 @@ For each group at threshold, file one decision brief into `{{artifact_root}}/.pi
 The brief asks the human adjudicator whether to promote, merge, reject, or hold the candidate category.
 It must include examples, counterexamples, stop gates, fixture updates, and the exact files to change after approval.
 It must use the normal brief artifact shape expected by `brief-shuffle`:
-frontmatter with `status: approved`, `brief_slug`, `brief_bead` or a source
-link when known, `unlock_count`, `priority`, and `review_gate: approved`; a
-Decision-at-Top body; and a complete `## Gate Evidence` section including a
-machine-readable G9 line with `classifier_state=candidate`,
-`classified_at=<ISO-8601-utc>`, `category=none`, `confidence=<float>`,
-`stop_gates_clear=false`, `reason=curation-required`, and
+frontmatter with `status: approved`, `brief_kind: decision`,
+`gate_profile: decision`, `feedback_sink: brief_quality_failure`, `brief_slug`,
+`brief_bead` or a source link when known, `unlock_count`, `priority`, and
+`review_gate: approved`; a Decision-at-Top body; and a complete `## Gate
+Evidence` section for the `decision` gate profile including a machine-readable
+G9 line with `classifier_state=candidate`, `classified_at=<ISO-8601-utc>`,
+`category=none`, `confidence=<float>`, `stop_gates_clear=false`,
+`reason=curation-required`, and
 `proposed_registry_extension=<candidate-summary>`.
 """

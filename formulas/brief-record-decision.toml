@@ -199,6 +199,21 @@ description = """
 Move the decided brief and its staging directory under
 `{{artifact_root}}/archive/{{brief_slug}}/`. Keep the decision record in
 `{{artifact_root}}/decisions/` as the indexable canonical record.
+
+In the same bookkeeping step, remove the decided brief from
+`{{artifact_root}}/stack/.index.jsonl`; an archived brief must not remain in
+the authoritative presentation queue. Run the stack-index helper in apply mode
+after the archive move succeeds:
+
+```bash
+python3 "$PACK_DIR/assets/scripts/brief-stack-index.py" remove-archived-row \
+  --brief-root "{{artifact_root}}" \
+  --slug "{{brief_slug}}" \
+  --apply
+```
+
+The helper is dry-run by default for operator use, but the formula path uses
+`--apply` because the archive move and index removal are one lifecycle action.
 """
 
 [[steps]]
@@ -207,10 +222,12 @@ title = "Update manifest decision state"
 needs = ["archive-brief"]
 metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.root" = "{{artifact_root}}" }
 description = """
-Mark the manifest entry for `{{brief_slug}}` by setting its `status` key
-(allowed values: `decided` or `archived`) without removing historical stack
-information. The drain reader (brief-drain-manifest.sh) filters out entries
-whose `status` is `decided` or `archived`. The manifest must remain valid JSONL.
+Confirm the manifest entry for `{{brief_slug}}` is absent from the active stack
+index after archival. Historical decision state lives in
+`{{artifact_root}}/decisions/` and `{{artifact_root}}/archive/{{brief_slug}}/`;
+`stack/.index.jsonl` is the active presentation queue and must not retain
+`decided`, `archived`, or otherwise adjudicated rows. The manifest must remain
+valid JSONL.
 """
 
 [steps.check]

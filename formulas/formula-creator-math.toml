@@ -297,6 +297,9 @@ mkdir -p "{{artifact_root}}/.pile"
 
 The brief MUST contain:
 - `status: approved` frontmatter
+- `brief_kind: decision`
+- `gate_profile: decision`
+- `feedback_sink: brief_quality_failure`
 - `brief_bead: {{source_bead}}`
 - `brief_slug: {{brief_slug}}`
 - `producer_contract: brief-producer.v1`
@@ -311,7 +314,7 @@ The brief MUST contain:
 - The full draft TOML (fenced as `toml`) for the human adjudicator to review inline
 - A recommended verdict (A=approve and commit / C=defer if more design needed)
 - The three validation check results (all-pass confirmation)
-- A complete `## Gate Evidence` section for the active gate profile, including
+- A complete `## Gate Evidence` section for the `decision` gate profile, including
   this machine-readable G9 line:
   `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=human formula approval required; proposed_registry_extension=none`
 
@@ -320,6 +323,9 @@ Template:
 ```markdown
 ---
 status: approved
+brief_kind: decision
+gate_profile: decision
+feedback_sink: brief_quality_failure
 brief_bead: {{source_bead}}
 brief_slug: {{brief_slug}}
 producer_contract: brief-producer.v1

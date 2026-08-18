@@ -17,16 +17,75 @@ STACK="$TMP/stack"
 DECISIONS="$TMP/decisions-track"
 MARKER="$TMP/migration-marker.jsonl"
 mkdir -p "$STACK" "$DECISIONS"
+cat >"$STACK/native-adjudicated.md" <<'EOF'
+---
+status: adjudicated
+---
+
+# already handled
+EOF
+cat >"$STACK/native-ready.md" <<'EOF'
+---
+status: ready
+---
+
+# still ready
+EOF
+cat >"$STACK/native-approved.md" <<'EOF'
+---
+status: approved
+---
+
+# approved by brief-prep and still presentable
+EOF
+cat >"$STACK/native-revise.md" <<'EOF'
+---
+status: revise
+---
+
+# already sent back
+EOF
 printf '%s\n' \
   "{\"slug\":\"future\",\"path\":\"$STACK/future.md\",\"unlock_count\":9,\"defer_until\":\"2999-01-01\"}" \
-  "{\"slug\":\"ready\",\"path\":\"$STACK/ready.md\",\"unlock_count\":4}" >"$STACK/.index.jsonl"
+  "{\"slug\":\"ready\",\"path\":\"$STACK/ready.md\",\"unlock_count\":4}" \
+  "{\"slug\":\"legacy-adjudicated\",\"path\":\"$STACK/legacy-adjudicated.md\",\"unlock_count\":8,\"manifest_status\":\"adjudicated\"}" \
+  "{\"slug\":\"legacy-approved\",\"path\":\"$STACK/legacy-approved.md\",\"unlock_count\":8,\"manifest_status\":\"approved\"}" \
+  "{\"slug\":\"brief-prep-dispatched\",\"path\":\"$STACK/brief-prep-dispatched.md\",\"unlock_count\":8,\"manifest_status\":\"brief-prep-dispatched\"}" \
+  "{\"slug\":\"native-adjudicated\",\"path\":\"$STACK/native-adjudicated.md\",\"unlock_count\":7}" \
+  "{\"slug\":\"native-ready\",\"path\":\"$STACK/native-ready.md\",\"unlock_count\":6}" \
+  "{\"slug\":\"native-approved\",\"path\":\"$STACK/native-approved.md\",\"unlock_count\":5}" \
+  "{\"slug\":\"native-revise\",\"path\":\"$STACK/native-revise.md\",\"unlock_count\":4}" >"$STACK/.index.jsonl"
 
 stack_out="$(python3 "$STACK_SELECTOR" "$STACK")"
 if grep -Fq "$STACK/future.md" <<<"$stack_out"; then
   echo "FAIL: future-deferred stack entry was printed" >&2
   exit 1
 fi
+if grep -Fq "$STACK/legacy-adjudicated.md" <<<"$stack_out"; then
+  echo "FAIL: adjudicated manifest_status stack entry was printed" >&2
+  exit 1
+fi
+if grep -Fq "$STACK/legacy-approved.md" <<<"$stack_out"; then
+  echo "FAIL: terminal legacy approved stack entry was printed" >&2
+  exit 1
+fi
+if grep -Fq "$STACK/brief-prep-dispatched.md" <<<"$stack_out"; then
+  echo "FAIL: brief-prep-dispatched stack entry was printed" >&2
+  exit 1
+fi
+grep -Fq 'must write `status: ready`' "$SKILL"
+grep -Fq 'not use `briefed` or `present-it-pending` to mean "ready for presentation"' "$SKILL"
+if grep -Fq "$STACK/native-adjudicated.md" <<<"$stack_out"; then
+  echo "FAIL: adjudicated native stack entry was printed" >&2
+  exit 1
+fi
+if grep -Fq "$STACK/native-revise.md" <<<"$stack_out"; then
+  echo "FAIL: revise native stack entry was printed" >&2
+  exit 1
+fi
 grep -Fq "$STACK/ready.md" <<<"$stack_out"
+grep -Fq "$STACK/native-ready.md" <<<"$stack_out"
+grep -Fq "$STACK/native-approved.md" <<<"$stack_out"
 
 printf '%s\n' '{"n":1,"slug":"legacy","status":"ready","unlock_count":3}' >"$DECISIONS/manifest.jsonl"
 printf '# legacy\n' >"$DECISIONS/01-legacy-brief.md"

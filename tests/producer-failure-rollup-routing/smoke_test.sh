@@ -14,6 +14,11 @@ require_text() {
 }
 
 require_text 'repair_rig_dir="\$\(gc rig list --json' 'repair bead must be created/found in the target rig store'
+require_text 'repair_title="\[brief-producer-repair\]' 'repair review bead must use a stable repair title'
+require_text 'repair_bead="\$\(bd -C "\$repair_rig_dir" search "\$failure_fingerprint"' 'repair bead must be searched in the target rig store before creation'
+require_text 'bd -C "\$repair_rig_dir" create "\$repair_title"' 'repair bead must be created in the target rig store when missing'
+require_text '--type=decision' 'repair bead must be a decision bead'
+require_text '--description "\$repair_description"' 'repair bead description must carry the failure batch context'
 require_text 'bd -C "\$repair_rig_dir" show "\$repair_bead"' 'assignee guard must inspect the target rig store'
 require_text '--var operator_target="gascity-packs/gc.run-operator"' 'repair workflow must keep child steps in the target rig store'
 require_text 'repair_workflow="\$\(printf' 'dispatch verification must check the returned workflow root'

@@ -44,10 +44,73 @@ The stack index is the authoritative presentation queue. It carries the promoted
 STACK_DIR="${BRIEF_QUEUE_PATH:-$HOME/gt/.beads/briefs/stack}"
 python3 - "$STACK_DIR" <<'PY'
 import json, os, sys
+from pathlib import Path
 from datetime import date
 
 stack_dir = sys.argv[1]
 index = os.path.join(stack_dir, ".index.jsonl")
+# These are terminal lifecycle states, not ready-state aliases. New deposit
+# paths for presentable briefs must write `status: ready` in index rows and must
+# not use `briefed` or `present-it-pending` to mean "ready for presentation".
+common_terminal_statuses = {
+    "adjudicated",
+    "archived",
+    "briefed",
+    "changes_required",
+    "closed",
+    "decided",
+    "deferred",
+    "draft",
+    "mixed-partial",
+    "moot",
+    "on-hold-needs-revision",
+    "present-it-pending",
+    "rejected",
+    "rescinded",
+    "revise",
+    "approved-slung",
+}
+terminal_index_statuses = common_terminal_statuses | {
+    "approved",
+    "brief-prep-dispatched",
+}
+terminal_frontmatter_statuses = common_terminal_statuses | {
+    "brief-prep-dispatched",
+}
+terminal_prefixes = ("adjudicated:", "adjudicated-", "needs-revision")
+
+def clean_status(value):
+    if not isinstance(value, str):
+        return ""
+    return value.strip().strip("\"'").lower()
+
+def is_terminal_status(value, terminal_statuses):
+    status = clean_status(value)
+    if not status:
+        return False
+    return status in terminal_statuses or any(status.startswith(prefix) for prefix in terminal_prefixes)
+
+def frontmatter_status(path):
+    if not isinstance(path, str) or not path:
+        return ""
+    brief_path = Path(path).expanduser()
+    if not brief_path.is_absolute():
+        brief_path = Path.cwd() / brief_path
+    try:
+        with brief_path.open(errors="replace") as brief:
+            first = brief.readline()
+            if first.strip() != "---":
+                return ""
+            for line in brief:
+                stripped = line.strip()
+                if stripped == "---":
+                    return ""
+                if stripped.startswith("status:"):
+                    return stripped.split(":", 1)[1].strip()
+    except OSError:
+        return ""  # Missing/unreadable brief is fail-open; do not hide unknown work.
+    return ""
+
 try:
     lines = open(index)
 except OSError:
@@ -69,6 +132,11 @@ with lines:
                 pass  # Malformed defer is fail-open.
         path = entry.get("path")
         if not isinstance(path, str) or not path:
+            continue
+        status = entry.get("manifest_status", entry.get("status", ""))
+        if is_terminal_status(status, terminal_index_statuses):
+            continue
+        if is_terminal_status(frontmatter_status(path), terminal_frontmatter_statuses):
             continue
         print(f'{entry.get("unlock_count", 0)} {path}')
 PY

@@ -34,7 +34,12 @@ description = """
 Scan `{{artifact_root}}/.pile/.rejected/*/brief.md` and flat rejected markdown
 files if any legacy rejects exist. For each rejected brief, derive `slug` from
 the rejected path and skip it when
-`{{artifact_root}}/.brief-quality-failure-pile/<slug>.toml` already exists.
+`{{artifact_root}}/.brief-quality-failure-pile/<slug>.toml` already exists
+and any required legacy producer record also exists at
+`{{artifact_root}}/.producer-failure-pile/<slug>.toml`.
+
+Repair briefs with `producer_contract: brief-producer-repair.v1` are
+self-excluded and must not produce recursive failure records.
 
 Write the list of unrecorded slugs to
 `$GC_WORK_DIR/unrecorded-brief-quality-failures.txt`.
@@ -98,10 +103,12 @@ failure_fingerprint = "<lowercase-dash-fingerprint>"
 status = "untriaged"
 ```
 
-When the rejected brief has `producer_contract: brief-producer.v1` or
-explicit producer-origin metadata, also write the legacy
+For every non-repair rejected brief, also write the legacy
 `{{artifact_root}}/.producer-failure-pile/<slug>.toml` cache with schema
-`brief-producer-failure.v1` and its existing payload shape for compatibility.
+`brief-producer-failure.v1` and its existing payload shape for compatibility
+with the producer-failure rollup. Use `source_formula` when present; otherwise
+fall back to the brief's `track`, `brief_kind`, or `brief-pile` so every lane
+has feedback instead of silently vanishing from the rollup.
 
 Create a linked event bead with the same payload:
 
@@ -135,4 +142,17 @@ gc event emit brief.quality_failure_recorded --subject "$slug"
 
 If cache write or event creation fails, emit
 `brief.quality_failure_record_failed` with the slug and exit nonzero.
+
+This step is backed by a deterministic checker. Even if the worker skips the
+manual extraction instructions above, the checker scans rejected directories and
+writes missing cache files from durable `.pile/.rejected/<slug>/` state without
+requiring a synthetic `gc event emit`.
 """
+
+[steps.check]
+max_attempts = 1
+
+[steps.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/brief-quality-failure-record-backfill.sh"
+timeout = "2m"

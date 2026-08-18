@@ -51,14 +51,79 @@ Original upstream repositories:
 Current cheap tests:
 
 ```sh
-python3 -m pytest \
-  tests/stuck-bead-watch/test_stuck_bead_watch.py \
-  tests/tail-end-detector/test_tail_end_detector.py
-
-for t in tests/*/smoke_test.sh; do
-  bash "$t"
-done
+bash scripts/run-local-tests.sh
 ```
+
+### Mctl Context
+
+Resolve an explicit local fixture context with:
+
+```sh
+python3 assets/scripts/mctl.py context --city tests/mctl/fixtures/city_root --rig mathcity --json
+```
+
+`mctl` reads `rigs.imports.mathcity.source` (or the matching default import)
+from `city.toml`. It uses an explicit rig `db` value when present; otherwise,
+the resolved rig ID is the database name.
+
+### Mctl Brief Inspection
+
+Read canonical brief beads and their redundant filesystem cache without
+repairing any drift:
+
+```sh
+python3 assets/scripts/mctl.py briefs list --status open --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs show mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs options mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs doctor --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs doctor --brief mc-abc --city <city-root> --rig mathcity --json
+```
+
+From the MathCity source checkout, brief commands require both `--city` and
+`--rig`. The bead store is canonical; pile, stack, decision TOML, and legacy
+decisions-track files are reported as redundant artifacts and are never
+rewritten by these read-only commands.
+
+If a command inspects a matching legacy decisions-track row, or if that legacy
+manifest cannot be parsed, the JSON `diagnostics` envelope includes
+`MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED`. That blocker remains until the #38
+decisions-track migration proof/canary has passed and the result is explicitly
+authorized; historical migration marker files alone are not trusted proof.
+
+### Mctl Brief Mutations
+
+Decision mutations are dry-run first and bead-first. The canonical bead update
+is applied before redundant decision TOML, stack index, event, or trace writes:
+
+```sh
+python3 assets/scripts/mctl.py briefs adjudicate mc-abc --verdict approve --reason "ready" --dry-run --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs adjudicate mc-abc --verdict approve --reason "ready" --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --dry-run --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --city <city-root> --rig mathcity --json
+```
+
+Mutation commands refuse to run without a reason, refuse to run when `briefs
+doctor` reports `ERROR` or `FATAL`, and preserve the legacy
+`MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED` guard from read-only inspection.
+
+### Mctl Work Controls
+
+Inspect brief-backed work and dispatch provenance from the same explicit city
+context:
+
+```sh
+python3 assets/scripts/mctl.py work ready --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py work status mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py work provenance mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py work dispatch mc-abc --dry-run --city <city-root> --rig mathcity --json
+```
+
+`work ready` is derived from canonical decision beads and excludes blocked,
+non-approving, already-dispatched, or invalid-provenance items. Dispatch uses
+the same effect-plan model as brief mutation commands. Fixture-backed dispatch
+writes dispatch provenance plus MCTL event/trace rows; live dispatch remains
+fail-closed until a dedicated runtime canary enables the actual `gc sling`
+handoff.
 
 Use `testing-work` and `smoke-test-briefed` for lightweight generated smoke
 tests. Use `test-execution-request` before risky, slow, or costly test

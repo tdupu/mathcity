@@ -20,6 +20,9 @@
 - Every promoted brief must carry `brief_kind`, `gate_profile`, no-brainer classifier evidence, and `feedback_sink`.
 - Shared rejection feedback schema is `brief_quality_failure.v1`; producer-origin rejects still populate the legacy `brief-producer-failure.v1` cache for compatibility.
 - Initial migration is copy-first and count-proving: old decisions-track files remain in place and terminal records do not re-enter pile or stack.
+- The 2026-08-15 #38 ruling is Option A: fail closed toward visibility. Only confidently terminal legacy statuses are preserved; any other decisions-track manifest row with an existing legacy file is migration-visible.
+- Bulk live `.beads` migration remains held until proof 5 reports zero non-terminal preserved rows on the live decisions-track inventory.
+- Rig-local `.beads/briefs` residue is a separate follow-up from #38. #38 handles decisions-track invisibility; rig-vs-city scope proof handles cross-rig queue invisibility.
 
 ---
 
@@ -27,6 +30,7 @@
 
 - Create `assets/scripts/brief-decisions-track-inventory.py`: read-only inventory and copy-first dry-run planner for legacy decisions-track rows/files.
 - Create `tests/decisions-track-migration/smoke_test.sh`: fixture coverage for ready, deferred, adjudicated, missing-file, malformed, and file-without-manifest cases.
+- Create `tests/decisions-track-migration/proof5_no_nonterminal_unmapped.py`: canary that fails if any non-terminal decisions-track manifest row with a presentable file is preserved instead of copied to the unified pile/review path.
 - Modify `assets/scripts/checks/brief-check.sh`: add profile-specific checks for `decision`, `lost_bead_filter`, `producer_repair`, and shared `brief_quality_failure` cache/event payload validation.
 - Modify `assets/brief-pipeline/gates.toml`: add `decision`, `lost_bead_filter`, and `producer_repair` profiles using the existing gate IDs that can apply without fake artifact evidence.
 - Create `tests/unified-brief-gate-profiles/smoke_test.sh`: fixture coverage for profile checks and metadata failures.
@@ -549,6 +553,8 @@ Run:
 
 ```bash
 bash tests/decisions-track-migration/smoke_test.sh
+python3 assets/scripts/brief-decisions-track-inventory.py inventory --rig-root /Users/tdupuy/gt --output /private/tmp/codex-proof5-live-inventory.jsonl
+python3 tests/decisions-track-migration/proof5_no_nonterminal_unmapped.py /private/tmp/codex-proof5-live-inventory.jsonl
 bash tests/unified-brief-gate-profiles/smoke_test.sh
 bash tests/present-briefs-unified-source/smoke_test.sh
 bash tests/present-briefs-defer-filter/test_defer_filter.sh
@@ -573,6 +579,8 @@ Report:
 branch: unified-brief-pipeline-gate-profiles
 source path: /Users/tdupuy/repos/mathcity
 do not run live migration until BART verifies live-resolved present-briefs, decisions-to-briefs, gates.toml, and check-brief-policy match this branch/merge commit
+do not run live migration unless proof 5 is green on the live decisions-track inventory
+track rig-local .beads/briefs residue separately; do not declare the pipeline fully unified across registered rigs until that follow-up has its own inventory/migration/proof
 pull-only is sufficient only if live gc resolves pack files directly from /Users/tdupuy/repos/mathcity; otherwise BART must run the existing pack import/build/install step
 ```
 
@@ -581,5 +589,6 @@ pull-only is sufficient only if live gc resolves pack files directly from /Users
 ## Self-Review Notes
 
 - Spec coverage: migration inventory, typed profiles, decision intake, stack-first presentation, feedback, docs, BART deployment, rollback-safe migration, and tests are represented.
+- Follow-up scope coverage: rig-local `.beads/briefs` residue is intentionally tracked outside #38 so the decisions-track classifier/proof patch stays narrow.
 - Placeholder scan target: no task uses deferred-work marker language.
 - Type consistency: `brief_kind`, `gate_profile`, `feedback_sink`, `legacy_source`, `defer_until`, `unlock_count`, and `brief_quality_failure.v1` match the design spec.

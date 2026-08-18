@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical index of every formula in the mathcity pack.**
 
-33 formulas in `mathcity/formulas/`. This file is the ONE complete list. When in doubt, **this file wins**.
+34 formulas in `mathcity/formulas/`. This file is the ONE complete list. When in doubt, **this file wins**.
 
 **Maintenance (single source of truth):**
 - `formula-creator-math` appends the new formula's row here as a required step before filing the brief.
@@ -15,7 +15,7 @@ _Regenerate/verify with `/update-README`._
 
 ---
 
-## Formulas — `mathcity/formulas/`  (33)
+## Formulas — `mathcity/formulas/`  (34)
 
 | Formula | Shape | What it does |
 |---|---|---|
@@ -30,6 +30,7 @@ _Regenerate/verify with `/update-README`._
 | `brief-record-decision` | do-work | Record the human decision for a presented brief and archive the run. |
 | `brief-review-patrol` | do-work | Patrol the brief stack for briefs stuck at the Phase 5 review gate. |
 | `brief-shuffle` | do-work | Single-writer shuffler for brief pile to stack promotion. |
+| `brief-shuffle-fast-drain` | do-work | Mechanically promote or reject a bounded batch of pile briefs using the existing gate profiles. |
 | `brief-watchdog-refill` | do-work | Watch the brief stack and request refill work when the stack is below target. |
 | `build-basic-briefed` | methodology | Full build lifecycle (requirements → plan → decompose → implement → review → finalize) with a decision-brief terminal slot instead of a direct merge. |
 | `codex-dispatch` | do-work | Dispatch a task to the codex-worker for cross-model critical review. |
@@ -65,7 +66,7 @@ source = "../gascity-packs/superpowers"
 ```
 
 Imported formulas are capabilities for MathCity dispatch planning, not
-MathCity-owned formulas, so they are not counted in the 32-row table above.
+MathCity-owned formulas, so they are not counted in the 34-row table above.
 Verify the import surface with
 `bash tests/superpowers-availability/smoke_test.sh`; when a live city catalog
 should be available, run `RUN_LIVE_GC=1 bash tests/superpowers-availability/smoke_test.sh`.

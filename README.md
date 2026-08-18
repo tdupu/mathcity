@@ -80,7 +80,7 @@ bead or artifact
   -> briefed formula
   -> brief in pile
   -> brief-gate-keep
-  -> brief-shuffle
+  -> brief-shuffle-fast-drain
   -> stack
   -> present-briefs
   -> adjudicate-brief
@@ -111,7 +111,8 @@ Planned surfaces are tracked in the issue tracker and summarized in
 | Example | Runner | Prerequisites | Command | Test path | Status | Issue |
 | --- | --- | --- | --- | --- | --- | --- |
 | Run cheap local tests | local shell | Python with `pytest`; shell | `python3 -m pytest tests/stuck-bead-watch/test_stuck_bead_watch.py tests/tail-end-detector/test_tail_end_detector.py` | `tests/stuck-bead-watch/test_stuck_bead_watch.py`; `tests/tail-end-detector/test_tail_end_detector.py` | current | none |
-| Run smoke scripts | local shell | shell plus optional tools used by individual smoke tests | `for t in tests/*/smoke_test.sh; do bash "$t"; done` | `tests/*/smoke_test.sh` | current | none |
+| Run local test suite | local shell | shell plus optional tools used by individual tests; Python with `pytest` | `bash scripts/run-local-tests.sh` | `tests/**/*.sh`; `tests/**/test_*.py`; `tests/**/*_test.py` | current | none |
+| Verify brief fast-drain E2E | local shell | shell, Python 3.11+ | `bash tests/brief-shuffle-fast-drain-three-track-e2e/smoke_test.sh` | `tests/brief-shuffle-fast-drain-three-track-e2e/smoke_test.sh` | current | `#42` |
 | Draft an issue body brief | Gas City formula | configured city, `gc`, `bd`, imported mathcity pack | `gc sling <rig>/gc.run-operator create-issue-briefed --formula --var source_bead=<bead> --var brief_slug=<slug>` | `tests/create-issue-briefed/smoke_test.sh` | current | none |
 | Draft a PR body brief | Gas City formula | configured city, source bead with branch/evidence context | `gc sling <rig>/gc.run-operator pr-pipeline-briefed --formula --var source_bead=<bead> --var brief_slug=<slug>` | `tests/pr-pipeline-briefed/smoke_test.sh` | current | none |
 | Verify work routing | local shell | shell | `bash tests/work-briefed-routing/smoke_test.sh` | `tests/work-briefed-routing/smoke_test.sh` | current | none |
@@ -125,13 +126,7 @@ Planned surfaces are tracked in the issue tracker and summarized in
 Run cheap local checks from the pack root:
 
 ```sh
-python3 -m pytest \
-  tests/stuck-bead-watch/test_stuck_bead_watch.py \
-  tests/tail-end-detector/test_tail_end_detector.py
-
-for t in tests/*/smoke_test.sh; do
-  bash "$t"
-done
+bash scripts/run-local-tests.sh
 ```
 
 Documentation must stay source-aligned. For feature, formula, skill, policy,

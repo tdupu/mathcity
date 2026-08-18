@@ -257,6 +257,8 @@ by what adjudication unlocks, not by arrival time.*
 - **B2.10 Unified presentation pipeline.** Every adjudicable brief source must
   enter the shared `.beads/briefs/.pile -> brief-shuffle -> stack ->
   present-briefs` lifecycle before it reaches the human adjudicator.
+  `brief-shuffle-fast-drain` is the mechanical `.pile -> stack` writer for
+  this lifecycle; producers still write only to `.pile`.
   Source-specific behavior is expressed by `brief_kind` and `gate_profile`;
   it must not create an active side presentation lane. Legacy decisions-track
   records may be read only as migration fallback and must be

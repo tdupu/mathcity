@@ -1,0 +1,6 @@
+[[rigs]]
+name = "mathcity"
+db = "fixture_mathcity"
+
+[rigs.imports.mathcity]
+source = "../source_checkout"

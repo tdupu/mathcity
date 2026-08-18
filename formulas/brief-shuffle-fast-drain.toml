@@ -1,0 +1,46 @@
+description = """
+Deterministically drain a bounded batch of valid briefs from .pile to stack.
+
+This vapor formula has one mechanical exec step. It is the B2.10 stack writer
+and does not ask an LLM to evaluate or rewrite briefs.
+"""
+formula = "brief-shuffle-fast-drain"
+phase = "vapor"
+version = 1
+
+[catalog]
+name = "brief-shuffle-fast-drain"
+description = "Mechanically promote or reject up to a bounded number of pile briefs."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root."
+default = ".beads/briefs"
+
+[vars.max_items]
+description = "Maximum pile entries to process in one deterministic run."
+default = "3"
+
+[vars.operator_target]
+description = "Run target for brief operator bookkeeping."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "drain-pile"
+title = "Deterministically drain eligible pile briefs"
+metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
+description = """
+Run this deterministic command exactly once:
+
+```bash
+python3 assets/scripts/brief-shuffle-fast-drain.py \
+  --brief-root {{artifact_root}} \
+  --gate-config assets/brief-pipeline/gates.toml \
+  --max-items {{max_items}} \
+  --apply --json --no-external
+```
+
+Record its JSON summary, including promoted, rejected, skipped, and remaining
+pile counts. The script owns only staging directories it creates and is the
+only writer in this formula to `stack/` and `stack/.index.jsonl`.
+"""

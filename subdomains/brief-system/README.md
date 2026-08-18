@@ -97,7 +97,7 @@ the architecture is settled:
 
 ```
 source bead → build-basic-briefed convoy → terminal slot: brief-prep SKILL
-  → catch-no-brainer → .pile → brief-shuffle promotes → stack
+  → catch-no-brainer → .pile → brief-shuffle-fast-drain promotes → stack
   → present-briefs + adjudicate-brief → APPROVE verdict
   → brief-decision-dispatch → gc.publisher → real publish
 ```
@@ -118,14 +118,16 @@ not the normal presentation queue.
   query — "all open `decision` beads not under an active defer" — and the
   directory is its cache. Artifact briefs, decision-only briefs,
   lost-bead-filter briefs, and producer-repair briefs all enter here.
-- **The shuffle** is the gatekeeper. A background order
-  (`brief-shuffle-pile`) notices a non-empty pile and runs the
-  `brief-shuffle` formula: take one brief, check every required gate against
-  the registry, and either **promote** it or **reject** it (rejects go to
-  `.pile/.rejected/` with a reason; nothing is silently dropped). The shuffle
-  is the *single writer* to the stack — producers may never skip it. Source
-  differences are expressed with `brief_kind` and `gate_profile`, not with
-  separate presentation lanes.
+- **The shuffle** is the gatekeeper. The current background order
+  (`brief-shuffle-fast-drain`) notices a non-empty pile and runs the
+  `brief-shuffle-fast-drain` formula: take a bounded batch, check every
+  required gate against the registry, and either **promote** each brief or
+  **reject** it (rejects go to `.pile/.rejected/` with a reason; nothing is
+  silently dropped). The shuffle is the *single writer* to the stack —
+  producers may never skip it. Source differences are expressed with
+  `brief_kind` and `gate_profile`, not with separate presentation lanes.
+  The legacy `brief-shuffle-pile` order is retired for new dispatches because
+  it handled one item per run and could be blocked behind old open roots.
 - **The stack** (`.beads/briefs/stack/`) holds gate-clean briefs awaiting
   human adjudication, indexed in `stack/.index.jsonl`. Ordering is by **unlock count**:
   the number of downstream beads that adjudicating this brief would unblock,
@@ -218,7 +220,8 @@ The brief system's orders:
 
 | Order | Trigger | What it does |
 |---|---|---|
-| `brief-shuffle-pile` | condition: pile non-empty | Vet and promote (or reject) one pile brief per run. |
+| `brief-shuffle-fast-drain` | condition: pile non-empty | Vet and promote (or reject) a bounded batch of pile briefs per run. |
+| `brief-shuffle-pile` | disabled | Legacy single-item shuffler; no new roots are dispatched. Existing live roots are left alone. |
 | `brief-review-patrol` | every 30 min, per rig | Rescue briefs stuck at a pending external review; run the missing review or escalate. |
 | `brief-watchdog-refill` | every 30 min | If the stack is below the low-water mark (2), commission up to 3 new brief-preps from ready source work; target depth 5. |
 | `brief-watchdog-refill-on-stack-low` | event: `brief.stack-low` | Same refill, fired instantly when a decision empties the stack. |
@@ -293,8 +296,8 @@ bd create --type=task --title "Merge feat/he-wzn: FD side-pairing fix"
 gc sling hecke/gc.run-operator brief-prep --formula \
   --var source=he-q7r2 --var brief_slug=he-q7r2-merge
 
-# 3. Shuffle: happens automatically (brief-shuffle-pile order fires on a
-#    non-empty pile). Check the outcome:
+# 3. Shuffle: happens automatically (brief-shuffle-fast-drain order fires on
+#    a non-empty pile). Check the outcome:
 ls <city-root>/.beads/briefs/stack/          # promoted
 ls <city-root>/.beads/briefs/.pile/.rejected # or rejected, with reasons
 

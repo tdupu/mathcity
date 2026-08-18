@@ -28,9 +28,13 @@ echo "=== A. static: no boolean or truncating probes ==="
 
 [ -f "$FRAGMENT" ] || fail "canonical fragment missing: template-fragments/dolt-preflight.md"
 
-# Search skills + subdomain skills only; docs and the fragment itself quote the
-# broken idiom on purpose, as the explanation of what not to do.
-SEARCH_DIRS="$PACK/skills $PACK/subdomains"
+# Search skills + subdomain skills only; docs and the fragment itself may quote
+# the probe as prose or audit vocabulary.
+SEARCH_DIRS="$PACK/skills"
+for d in "$PACK"/subdomains/*/skills; do
+  [ -d "$d" ] || continue
+  SEARCH_DIRS="$SEARCH_DIRS $d"
+done
 
 hits=$(grep -rn 'gc dolt health >/dev/null' $SEARCH_DIRS || true)
 [ -z "$hits" ] || fail "boolean Dolt probe reintroduced (exit 2 would abort):

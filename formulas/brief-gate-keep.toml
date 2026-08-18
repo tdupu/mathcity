@@ -23,7 +23,7 @@ required = true
 [vars.gate_profile]
 description = "Gate profile from assets/brief-pipeline/gates.toml."
 default = "standard"
-enum = ["standard", "no_brainer", "test_execution", "experiment"]
+enum = ["standard", "no_brainer", "test_execution", "experiment", "decision", "lost_bead_filter", "producer_repair"]
 
 [vars.operator_target]
 description = "Run target for deterministic gate checks and disposition."

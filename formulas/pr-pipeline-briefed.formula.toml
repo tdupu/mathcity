@@ -289,6 +289,9 @@ PR_BODY=$(cat "$GC_WORK_DIR/{{brief_slug}}-pr-body.md")
 
 The brief MUST contain:
 - `status: approved` frontmatter
+- `brief_kind: decision`
+- `gate_profile: decision`
+- `feedback_sink: brief_quality_failure`
 - `brief_bead: {{source_bead}}`
 - `brief_slug: {{brief_slug}}`
 - `producer_contract: brief-producer.v1`
@@ -307,7 +310,7 @@ The brief MUST contain:
 - The upstream target (base repo/branch) and the branch/commit range it describes
 - Any surfaced warnings (e.g. the P5.5 Co-Authored-By note)
 - Recommended verdict (A = approve; open the PR with this body — OR — C = revise the body)
-- A complete `## Gate Evidence` section for the active gate profile, including
+- A complete `## Gate Evidence` section for the `decision` gate profile, including
   this machine-readable G9 line:
   `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=the human adjudicator PR-body approval required before opening the PR; proposed_registry_extension=none`
 

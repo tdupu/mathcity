@@ -1,0 +1,29 @@
+[order]
+description = "Backfill brief-quality failure records from durable rejected brief directories."
+scope = "city"
+formula = "brief-producer-failure-record"
+trigger = "condition"
+check = '''
+root=".beads/briefs"
+rejected="$root/.pile/.rejected"
+[ -d "$rejected" ] || exit 1
+
+for dir in "$rejected"/*; do
+  [ -d "$dir" ] || continue
+  slug="${dir##*/}"
+  brief="$dir/brief.md"
+  [ -f "$brief" ] || continue
+
+  if grep -Eq '^producer_contract:[[:space:]]*brief-producer-repair\.v1\b' "$brief"; then
+    continue
+  fi
+
+  [ -f "$root/.brief-quality-failure-pile/$slug.toml" ] || exit 0
+  [ -f "$root/.producer-failure-pile/$slug.toml" ] || exit 0
+done
+
+exit 1
+'''
+pool = "mathcity.brief-operator"
+timeout = "120s"
+idempotent = true

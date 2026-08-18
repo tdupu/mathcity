@@ -105,6 +105,37 @@ for cmd in bd gc jq; do
   }
 done
 
+repair_title="[brief-producer-repair] ${source_formula} ${failed_gate} ${failure_fingerprint}"
+repair_bead="$(bd -C "$repair_rig_dir" search "$failure_fingerprint" --json --readonly 2>/dev/null | jq -r \
+  --arg title "$repair_title" \
+  --arg fingerprint "$failure_fingerprint" \
+  '[if type == "array" then .[] else . end
+    | select((.title // "") == $title
+             or (((.title // "") | contains("[brief-producer-repair]"))
+                 and (((.description // "") | contains($fingerprint))
+                      or ((.body // "") | contains($fingerprint)))))]
+   | .[0].id // empty')"
+if [ -z "$repair_bead" ]; then
+  repair_description="$(cat <<EOF
+Producer failure repair review.
+
+source_formula: $source_formula
+failed_gate: $failed_gate
+failure_fingerprint: $failure_fingerprint
+failure_batch: $batch_path
+
+Review the batch, repair the producer path, and file a producer-repair brief
+with producer_contract: brief-producer-repair.v1 so repair briefs are excluded
+from producer-failure feedback loops.
+EOF
+)"
+  repair_bead="$(bd -C "$repair_rig_dir" create "$repair_title" \
+    --type=decision \
+    --priority=2 \
+    --description "$repair_description" \
+    --silent)"
+fi
+
 assignee="$(bd -C "$repair_rig_dir" show "$repair_bead" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
 if [ -n "$assignee" ]; then
   echo "ALREADY DISPATCHED — bead $repair_bead has active assignee: $assignee; aborting producer repair sling" >&2

@@ -179,5 +179,6 @@ fi
 grep -Fq '[profiles.decision]' "$ROOT/assets/brief-pipeline/gates.toml"
 grep -Fq '[profiles.lost_bead_filter]' "$ROOT/assets/brief-pipeline/gates.toml"
 grep -Fq '[profiles.producer_repair]' "$ROOT/assets/brief-pipeline/gates.toml"
+grep -Fq 'enum = ["standard", "no_brainer", "test_execution", "experiment", "decision", "lost_bead_filter", "producer_repair"]' "$ROOT/formulas/brief-gate-keep.toml"
 
 echo "PASS - unified brief gate profile checks"

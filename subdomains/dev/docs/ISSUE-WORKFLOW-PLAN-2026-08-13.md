@@ -153,7 +153,8 @@ Markdown, bash smoke tests, `gh` CLI.
 - [ ] **Step 4:** Assert no line-start `gh issue create` in the formula, and that in
   the skill every `gh issue create` occurrence follows the approval-gate heading.
 - [ ] **Step 5:** Assert the F8.1 terminal step id, including through `extends`.
-- [ ] **Step 6:** Run it; run the whole `tests/*/smoke_test.sh` suite; run
+- [ ] **Step 6:** Run it; run the whole local suite with
+  `bash scripts/run-local-tests.sh`; run
   `gc lint . --json`. Record real output.
 - [ ] **Step 7:** Commit.
 
