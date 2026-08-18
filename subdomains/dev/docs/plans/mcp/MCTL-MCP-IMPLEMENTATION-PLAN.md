@@ -276,6 +276,14 @@ Core invariants:
 - `MWRK001`: bead already has an active assignee.
 - `MWRK002`: open child workflow already exists for the same source.
 - `MWRK003`: dispatch command returned success but assignee verification failed.
+- `MWRK010`: brief has no approving verdict for work dispatch.
+- `MWRK011`: approved work dispatch requires a source bead dependency.
+- `MWRK012`: the source bead named by the brief dependency was not found.
+
+`MWRK001`-`MWRK003` are dispatch-safety invariants and are reserved for that
+meaning. Readiness checks live at `MWRK010`+. The registry in
+`assets/mctl/diagnostics.toml` is the machine-checkable source of truth for
+this list; `tests/mctl/test_diagnostics_registry.py` keeps them in step.
 
 Trace storage:
 

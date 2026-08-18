@@ -55,6 +55,7 @@ def runtime(tmp_path: Path, gc_exit: int = 0) -> tuple[Path, Path, Path, Path]:
     gc_log = tmp_path / "gc-argv.jsonl"
     gc_log.write_text("", encoding="utf-8")
     shim = bin_dir / "gc"
+    fixture = rig_root / ".beads" / "issues.jsonl"
     shim.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
@@ -63,6 +64,13 @@ def runtime(tmp_path: Path, gc_exit: int = 0) -> tuple[Path, Path, Path, Path]:
         "if code:\n"
         "    sys.stderr.write('sling failed\\n')\n"
         "    sys.exit(code)\n"
+        # A real sling claims the bead; MWRK003 verifies that it did.
+        f"path = {str(fixture)!r}\n"
+        "rows = [json.loads(l) for l in open(path).read().splitlines() if l.strip()]\n"
+        "for row in rows:\n"
+        "    if row['id'] == 'source-ready':\n"
+        "        row['assignee'] = 'mathcity/gc.run-operator'\n"
+        "open(path, 'w').write(''.join(json.dumps(r, sort_keys=True) + '\\n' for r in rows))\n"
         "sys.stdout.write(json.dumps({'dispatched': True}))\n",
         encoding="utf-8",
     )

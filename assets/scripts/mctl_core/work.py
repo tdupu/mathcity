@@ -195,7 +195,28 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
             )
         )
 
-    # Only now, with a real handoff behind us, is provenance truthful.
+    # Plan §4 MWRK003: a sling can exit 0 without actually claiming the bead.
+    # Recording provenance then would assert a handoff that silently did not
+    # take, and would block every retry via MWRK_ALREADY_DISPATCHED.
+    try:
+        dispatched = {bead.id: bead for bead in _beads(ctx)}.get(plan.bead_id)
+    except WorkError:
+        dispatched = None
+    if dispatched is None or not dispatched.has_active_assignee:
+        raise WorkError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MWRK003",
+                "The dispatch command succeeded but the bead was never claimed.",
+                brief_id=plan.target_brief_id,
+                bead_id=plan.bead_id,
+                data_location=_canonical_bead_location(ctx),
+                detail="no active assignee after dispatch; nothing was recorded",
+            )
+        )
+
+    # Only now, with a verified handoff behind us, is provenance truthful.
     provenance = write_dispatch_provenance(
         ctx,
         bead_id=plan.bead_id,
@@ -268,7 +289,7 @@ def _work_item(
             _diagnostic(
                 ctx,
                 Severity.ERROR,
-                "MWRK002",
+                "MWRK011",
                 "Approved work dispatch requires a source bead dependency.",
                 brief_id=brief_id,
                 data_location=_canonical_bead_location(ctx),
@@ -281,7 +302,7 @@ def _work_item(
             _diagnostic(
                 ctx,
                 Severity.ERROR,
-                "MWRK003",
+                "MWRK012",
                 "The source bead named by the brief dependency was not found.",
                 brief_id=brief_id,
                 bead_id=source_id,
@@ -293,11 +314,40 @@ def _work_item(
             _diagnostic(
                 ctx,
                 Severity.ERROR,
-                "MWRK001",
+                "MWRK010",
                 "Brief has no approving verdict for work dispatch.",
                 brief_id=brief_id,
                 bead_id=source_id,
                 data_location=_canonical_bead_location(ctx),
+            )
+        )
+    # Plan §4 dispatch-safety invariants. These are the double-dispatch and
+    # lost-claim protections, distinct from the readiness checks above.
+    if source is not None and source.has_active_assignee:
+        blockers.append(
+            _diagnostic(
+                ctx,
+                Severity.ERROR,
+                "MWRK001",
+                "The source bead already has an active assignee.",
+                brief_id=brief_id,
+                bead_id=source_id,
+                data_location=_canonical_bead_location(ctx),
+                detail=f"assignee={source.assignee}",
+            )
+        )
+    existing_workflow = _open_child_workflow(beads, source_id)
+    if existing_workflow is not None:
+        blockers.append(
+            _diagnostic(
+                ctx,
+                Severity.ERROR,
+                "MWRK002",
+                "An open child workflow already exists for the same source bead.",
+                brief_id=brief_id,
+                bead_id=source_id,
+                data_location=_canonical_bead_location(ctx),
+                detail=f"workflow={existing_workflow.id} status={existing_workflow.status}",
             )
         )
     provenance: DispatchProvenance | None = None
@@ -322,6 +372,20 @@ def _work_item(
         blockers=tuple(blockers),
         provenance=provenance,
     )
+
+
+def _open_child_workflow(beads: tuple[Bead, ...], source_id: str) -> Bead | None:
+    """An open workflow bead already rooted at this source bead, if any.
+
+    Gas City workflow beads carry their root in metadata as gc.root_bead_id;
+    a live one means the source is already being worked.
+    """
+    for bead in beads:
+        if bead.id == source_id:
+            continue
+        if bead.workflow_root_id == source_id and bead.is_open:
+            return bead
+    return None
 
 
 def _doctor_report(

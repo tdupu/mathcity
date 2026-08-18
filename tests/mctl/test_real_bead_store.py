@@ -190,7 +190,7 @@ def test_work_status_blocks_real_brief_without_approving_verdict(tmp_path: Path,
     assert result.returncode == 0, result.stderr
     item = json.loads(result.stdout)["work"]
     assert item["readiness"] == "blocked"
-    assert "MWRK001" in {blocker["code"] for blocker in item["blockers"]}
+    assert "MWRK010" in {blocker["code"] for blocker in item["blockers"]}
 
 
 @requires_bd

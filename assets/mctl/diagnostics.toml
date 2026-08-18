@@ -195,15 +195,30 @@ module = "effects.py"
 
 [MWRK001]
 severity = "ERROR"
-meaning = "Brief has no approving verdict for work dispatch."
+meaning = "The source bead already has an active assignee."
 module = "work.py"
 
 [MWRK002]
 severity = "ERROR"
-meaning = "Approved work dispatch requires a source bead dependency."
+meaning = "An open child workflow already exists for the same source bead."
 module = "work.py"
 
 [MWRK003]
+severity = "FATAL"
+meaning = "The dispatch command succeeded but the bead was never claimed."
+module = "work.py"
+
+[MWRK010]
+severity = "ERROR"
+meaning = "Brief has no approving verdict for work dispatch."
+module = "work.py"
+
+[MWRK011]
+severity = "ERROR"
+meaning = "Approved work dispatch requires a source bead dependency."
+module = "work.py"
+
+[MWRK012]
 severity = "ERROR"
 meaning = "The source bead named by the brief dependency was not found."
 module = "work.py"

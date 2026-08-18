@@ -113,7 +113,7 @@ def test_work_status_reports_policy_and_readiness_blockers(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     item = json.loads(result.stdout)["work"]
     assert item["readiness"] == "blocked"
-    assert "MWRK001" in {diagnostic["code"] for diagnostic in item["blockers"]}
+    assert "MWRK010" in {diagnostic["code"] for diagnostic in item["blockers"]}
 
 
 def test_work_provenance_accepts_valid_schema_fixture(tmp_path: Path):
@@ -175,8 +175,16 @@ def test_armed_dispatch_writes_provenance_and_event_with_trace(tmp_path: Path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     shim = bin_dir / "gc"
+    fixture = beads_fixture(rig_root)
     shim.write_text(
         "#!/usr/bin/env python3\nimport json, sys\n"
+        # A real sling claims the bead; MWRK003 verifies the claim landed.
+        f"path = {str(fixture)!r}\n"
+        "rows = [json.loads(l) for l in open(path).read().splitlines() if l.strip()]\n"
+        "for row in rows:\n"
+        "    if row['id'] == 'source-ready':\n"
+        "        row['assignee'] = 'mathcity/gc.run-operator'\n"
+        "open(path, 'w').write(''.join(json.dumps(r, sort_keys=True) + '\\n' for r in rows))\n"
         "sys.stdout.write(json.dumps({'dispatched': True}))\n",
         encoding="utf-8",
     )

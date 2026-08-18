@@ -45,10 +45,33 @@ class Bead:
     created_at: str | None
     updated_at: str | None
     raw: Mapping[str, object]
+    assignee: str | None = None
 
     @property
     def is_brief(self) -> bool:
         return self.issue_type == "decision"
+
+    @property
+    def has_active_assignee(self) -> bool:
+        """Whether someone already holds this bead.
+
+        Dispatching over an active assignee is the lost-claim case plan §4
+        reserves MWRK001 for.
+        """
+        return bool(self.assignee and self.assignee.strip())
+
+    @property
+    def workflow_root_id(self) -> str | None:
+        """The source bead this workflow bead hangs off, if any."""
+        metadata = self.raw.get("metadata")
+        if not isinstance(metadata, Mapping):
+            return None
+        root = metadata.get("gc.root_bead_id")
+        return root if isinstance(root, str) and root else None
+
+    @property
+    def is_open(self) -> bool:
+        return self.status.lower() in {"open", "hooked", "in_progress", "blocked", "review", "testing"}
 
 
 class BeadReadError(RuntimeError):
@@ -238,6 +261,7 @@ def _bead_from_mapping(raw: Mapping[str, object]) -> Bead:
         created_at=_string(raw, "created_at"),
         updated_at=_string(raw, "updated_at"),
         raw=raw,
+        assignee=_string(raw, "assignee"),
     )
 
 

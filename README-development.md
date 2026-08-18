@@ -170,6 +170,14 @@ makes the current two-writer reality safe, but the boundary in those two
 documents still needs to be either amended deliberately or replaced by
 routing mctl's updates through the shuffler.
 
+Dispatch enforces plan §4's safety invariants: `MWRK001` blocks a source bead
+that already has an active assignee, `MWRK002` blocks when an open child
+workflow (`gc.root_bead_id`) already exists for the same source, and
+`MWRK003` fires when the sling exits zero without actually claiming the bead
+— in which case nothing is recorded, since phantom provenance would block
+every retry. Readiness checks were moved to `MWRK010`+ so they stop squatting
+on the reserved safety range.
+
 ### Mctl Traces
 
 Every mutation writes two append-only rows keyed by one `trace_id`:
