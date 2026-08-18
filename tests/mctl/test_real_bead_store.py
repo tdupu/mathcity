@@ -240,9 +240,9 @@ def test_adjudicate_writes_verdict_through_bd_to_the_real_bead(tmp_path: Path, s
 
 
 @requires_bd
-def test_live_dispatch_stays_fail_closed_against_a_real_store(tmp_path: Path, seeded_store):
-    """Dispatch must refuse to sling for real until a runtime canary exists."""
-    city_root, _rig_root = runtime_with_real_store(tmp_path, seeded_store)
+def test_unarmed_dispatch_is_inert_against_a_real_store(tmp_path: Path, seeded_store):
+    """Without MCTL_ENABLE_LIVE_DISPATCH, dispatch must not sling or record."""
+    city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
 
     result = run_mctl(
         "work", "dispatch", str(seeded_store["approved"]),
@@ -250,5 +250,6 @@ def test_live_dispatch_stays_fail_closed_against_a_real_store(tmp_path: Path, se
         cwd=REPO_ROOT,
     )
 
-    assert result.returncode != 0
-    assert "MWRK_LIVE_DISPATCH_NOT_ENABLED" in result.stderr, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["applied"] is False
+    assert not (rig_root / ".beads" / "mctl" / "provenance").exists()

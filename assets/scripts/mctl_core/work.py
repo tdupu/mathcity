@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
+import subprocess
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -12,6 +14,7 @@ from .briefs import BriefError, DoctorReport, doctor_briefs
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
+from .trace import append_applied, append_planned
 from .provenance import (
     DispatchProvenance,
     ProvenanceError,
@@ -135,21 +138,64 @@ def dispatch_dry_run_payload(plan: WorkDispatchPlan) -> dict[str, object]:
     }
 
 
+LIVE_DISPATCH_ENV = "MCTL_ENABLE_LIVE_DISPATCH"
+DISPATCH_TIMEOUT_SECONDS = 120
+
+
+def live_dispatch_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether the operator has explicitly armed live dispatch.
+
+    This is deliberately independent of MCTL_BEADS_FIXTURE. Gating a
+    production side effect on "are we in a test" meant the production branch
+    was unreachable and a fixture could arm dispatch by accident.
+    """
+    source = os.environ if env is None else env
+    return str(source.get(LIVE_DISPATCH_ENV, "")).strip() in {"1", "true", "yes"}
+
+
 def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, object]:
-    if ctx.beads_fixture is None:
+    if not live_dispatch_enabled():
+        # Not armed: behave exactly like a dry run. Writing provenance here
+        # would flip readiness to `dispatched` and block every future attempt,
+        # recording a handoff that never happened.
+        return dispatch_dry_run_payload(plan)
+
+    command = [str(part) for part in plan.formula_invocation["command"]]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=ctx.rig_root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=DISPATCH_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
         raise WorkError(
             _diagnostic(
                 ctx,
                 Severity.FATAL,
-                "MWRK_LIVE_DISPATCH_NOT_ENABLED",
-                "Live mctl work dispatch requires a dedicated runtime canary before it is enabled.",
+                "MWRK_DISPATCH_COMMAND_FAILED",
+                "The dispatch command could not be run, so no dispatch was recorded.",
                 brief_id=plan.target_brief_id,
                 bead_id=plan.bead_id,
-                suggested_next_command=(
-                    f"mctl work dispatch {plan.target_brief_id} --dry-run --json"
-                ),
+                detail=str(error),
+            )
+        ) from error
+    if result.returncode != 0:
+        raise WorkError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MWRK_DISPATCH_COMMAND_FAILED",
+                "The dispatch command failed, so no dispatch was recorded.",
+                brief_id=plan.target_brief_id,
+                bead_id=plan.bead_id,
+                detail=(result.stderr or result.stdout).strip(),
             )
         )
+
+    # Only now, with a real handoff behind us, is provenance truthful.
     provenance = write_dispatch_provenance(
         ctx,
         bead_id=plan.bead_id,
@@ -157,29 +203,25 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         observed_at=str(plan.provenance["created_at"]),
         formula_invocation=plan.formula_invocation,
     )
-    event_row = {
-        "bead_id": plan.bead_id,
-        "brief_id": plan.target_brief_id,
-        "formula_invocation": plan.formula_invocation,
-        "operation": plan.operation,
-        "provenance_path": str(provenance.path),
-        "trace_id": plan.trace_id,
-    }
-    trace_row = {
-        "actual_effects": [
-            {"kind": "provenance_write", "path": str(provenance.path)},
-            {"kind": "event_write", "path": str(plan.event_path)},
-        ],
-        "bead_id": plan.bead_id,
-        "brief_id": plan.target_brief_id,
-        "formula_invocation": plan.formula_invocation,
-        "operation": plan.operation,
-        "trace_id": plan.trace_id,
-    }
-    append_jsonl(plan.event_path, event_row)
-    append_jsonl(plan.trace_path, trace_row)
+    actual_effects = [
+        {"kind": "dispatch_command", "command": command, "exit_code": result.returncode},
+        {"kind": "provenance_write", "path": str(provenance.path)},
+        {"kind": "event_write", "path": str(plan.event_path)},
+    ]
+    append_jsonl(
+        plan.event_path,
+        {
+            "bead_id": plan.bead_id,
+            "brief_id": plan.target_brief_id,
+            "formula_invocation": plan.formula_invocation,
+            "operation": plan.operation,
+            "provenance_path": str(provenance.path),
+            "trace_id": plan.trace_id,
+        },
+    )
+    append_applied(plan.trace_path, plan.trace_id, actual_effects)
     return {
-        "actual_effects": trace_row["actual_effects"],
+        "actual_effects": actual_effects,
         "applied": True,
         "effect_plan": plan.to_dict(),
         "provenance": provenance.to_dict(),

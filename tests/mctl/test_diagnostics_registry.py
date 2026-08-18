@@ -23,7 +23,11 @@ CORE = REPO_ROOT / "assets" / "scripts" / "mctl_core"
 REGISTRY = REPO_ROOT / "assets" / "mctl" / "diagnostics.toml"
 
 # Names matching the code pattern that are environment variables, not codes.
-NOT_CODES = {"MCTL_BEADS_FIXTURE", "MCTL_BD_TIMEOUT_SECONDS"}
+NOT_CODES = {
+    "MCTL_BEADS_FIXTURE",
+    "MCTL_BD_TIMEOUT_SECONDS",
+    "MCTL_ENABLE_LIVE_DISPATCH",
+}
 
 CODE_PATTERN = re.compile(r'"(MBRF\d{3}|MWRK\d{3}|MOPT\d{3}|MCTL_[A-Z_]+|MWRK_[A-Z_]+|MBRF_[A-Z_]+)"')
 

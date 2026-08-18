@@ -223,14 +223,14 @@ severity = "FATAL"
 meaning = "No canonical decision brief matches the requested id."
 module = "work.py"
 
+[MWRK_DISPATCH_COMMAND_FAILED]
+severity = "FATAL"
+meaning = "The dispatch command could not be run or exited non-zero, so no dispatch was recorded."
+module = "work.py"
+
 [MWRK_DISPATCH_BLOCKED]
 severity = "FATAL"
 meaning = "Work dispatch is blocked by readiness diagnostics."
-module = "work.py"
-
-[MWRK_LIVE_DISPATCH_NOT_ENABLED]
-severity = "FATAL"
-meaning = "Live mctl work dispatch requires a dedicated runtime canary before it is enabled."
 module = "work.py"
 
 [MWRK_PROVENANCE_INVALID]

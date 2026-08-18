@@ -136,10 +136,18 @@ python3 assets/scripts/mctl.py work dispatch mc-abc --dry-run --city <city-root>
 
 `work ready` is derived from canonical decision beads and excludes blocked,
 non-approving, already-dispatched, or invalid-provenance items. Dispatch uses
-the same effect-plan model as brief mutation commands. Fixture-backed dispatch
-writes dispatch provenance plus MCTL event/trace rows; live dispatch remains
-fail-closed until a dedicated runtime canary enables the actual `gc sling`
-handoff.
+the same effect-plan model as brief mutation commands.
+
+Live dispatch is armed only by `MCTL_ENABLE_LIVE_DISPATCH=1`, which is
+deliberately independent of `MCTL_BEADS_FIXTURE`. Unarmed, `work dispatch`
+returns the dry-run payload and writes nothing — no provenance, no event or
+trace rows, no readiness change. Armed, it actually runs the `gc sling`
+command and records provenance only after a zero exit; a failed sling raises
+`MWRK_DISPATCH_COMMAND_FAILED` and records nothing.
+
+This matters because provenance is what flips readiness to `dispatched` and
+blocks every later attempt via `MWRK_ALREADY_DISPATCHED`. Writing it without
+slinging records a handoff that never happened.
 
 Every bead read is a full `bd list` subprocess, so core functions that already
 hold a bead snapshot pass it down (`doctor_briefs(ctx, brief_id, beads)`)

@@ -165,13 +165,31 @@ def test_work_dispatch_dry_run_returns_payload_without_mutating_fixture(tmp_path
     assert tree_digest(rig_root) == before
 
 
-def test_work_dispatch_fixture_writes_provenance_and_event_with_trace(tmp_path: Path):
-    city_root, rig_root = runtime_fixture(tmp_path)
+def test_armed_dispatch_writes_provenance_and_event_with_trace(tmp_path: Path):
+    """Provenance is written only when live dispatch is explicitly armed.
 
-    result = run_mctl(
-        *work_command(city_root, "dispatch", "mc-approved", "--json"),
-        cwd=REPO_ROOT,
-        beads_fixture=beads_fixture(rig_root),
+    The bead fixture used to double as the live-dispatch switch; it no longer
+    does, so this test arms MCTL_ENABLE_LIVE_DISPATCH and supplies a gc shim.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    shim = bin_dir / "gc"
+    shim.write_text(
+        "#!/usr/bin/env python3\nimport json, sys\n"
+        "sys.stdout.write(json.dumps({'dispatched': True}))\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["MCTL_BEADS_FIXTURE"] = str(beads_fixture(rig_root))
+    env["MCTL_ENABLE_LIVE_DISPATCH"] = "1"
+    result = subprocess.run(
+        [sys.executable, str(MCTL), *work_command(city_root, "dispatch", "mc-approved", "--json")],
+        cwd=REPO_ROOT, text=True, capture_output=True, check=False, env=env,
     )
 
     assert result.returncode == 0, result.stderr
