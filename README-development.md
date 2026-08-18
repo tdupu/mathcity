@@ -138,6 +138,17 @@ python3 assets/scripts/mctl.py work dispatch mc-abc --dry-run --city <city-root>
 non-approving, already-dispatched, or invalid-provenance items. Dispatch uses
 the same effect-plan model as brief mutation commands.
 
+mctl distinguishes two planes, because they fail independently. The **data
+plane** is the managed Dolt server (`.beads/dolt-server.port`); bead reads and
+writes need only that, and an unreachable endpoint gives `MCTL_CITY_NOT_ACTIVE`.
+The **control plane** is the Gas City supervisor; only dispatch needs it.
+`gc stop` brings down the supervisor but leaves Dolt running under its own
+watchdog (`gc __gc-managed-dolt-scope-watchdog`), so reads keep working while
+there is nothing to route a sling to — verified live, supervisor pid=0 with
+dolt still LISTENing on 58506. Armed dispatch therefore probes the supervisor
+too and refuses with `MCTL_CONTROL_PLANE_NOT_ACTIVE` rather than shelling out
+to a `gc sling` that has nowhere to go.
+
 Live dispatch is armed only by `MCTL_ENABLE_LIVE_DISPATCH=1`, which is
 deliberately independent of `MCTL_BEADS_FIXTURE`. Unarmed, `work dispatch`
 returns the dry-run payload and writes nothing — no provenance, no event or

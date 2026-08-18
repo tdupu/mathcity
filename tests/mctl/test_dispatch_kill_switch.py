@@ -30,7 +30,9 @@ WORK_STATE = FIXTURES / "work_state"
 APPROVED_BRIEF = "mc-approved"
 
 
-def runtime(tmp_path: Path, gc_exit: int = 0) -> tuple[Path, Path, Path, Path]:
+def runtime(
+    tmp_path: Path, gc_exit: int = 0, supervisor_up: bool = True
+) -> tuple[Path, Path, Path, Path]:
     city_root = tmp_path / "city_root"
     source_checkout = tmp_path / "source_checkout"
     rig_root = city_root / "mathcity"
@@ -59,7 +61,13 @@ def runtime(tmp_path: Path, gc_exit: int = 0) -> tuple[Path, Path, Path, Path]:
     shim.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
-        f"open({str(gc_log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+        "argv = sys.argv[1:]\n"
+        f"supervisor_up = {supervisor_up!r}\n"
+        "if argv[:2] == ['supervisor', 'status']:\n"
+        "    if supervisor_up:\n"
+        "        sys.stdout.write('Supervisor is running (PID 1)\\n'); sys.exit(0)\n"
+        "    sys.stdout.write('Supervisor is not running\\n'); sys.exit(1)\n"
+        f"open({str(gc_log)!r}, 'a').write(json.dumps(argv) + '\\n')\n"
         f"code = {gc_exit}\n"
         "if code:\n"
         "    sys.stderr.write('sling failed\\n')\n"
@@ -172,3 +180,39 @@ def test_failed_sling_is_not_recorded_as_a_dispatch(tmp_path: Path):
     assert "MWRK_DISPATCH_COMMAND_FAILED" in result.stderr, result.stderr
     assert gc_calls(gc_log), "gc was never called"
     assert not provenance_files(rig_root), "recorded provenance for a failed dispatch"
+
+
+def test_armed_dispatch_refuses_when_the_control_plane_is_down(tmp_path: Path):
+    """`gc stop` leaves Dolt up, so a data-plane probe alone cannot see this.
+
+    Verified live: supervisor pid=0 while dolt still LISTENs on 58506. Bead
+    reads keep working, but `gc sling` has nothing to route to, so an armed
+    dispatch must refuse by name rather than shelling out and failing opaquely.
+    """
+    city_root, rig_root, bin_dir, gc_log = runtime(tmp_path, supervisor_up=False)
+
+    result = run_dispatch(city_root, rig_root, bin_dir, enable=True)
+
+    assert result.returncode != 0
+    assert "MCTL_CONTROL_PLANE_NOT_ACTIVE" in result.stderr, result.stderr
+    assert not gc_calls(gc_log), "shelled out to gc sling with no supervisor running"
+    assert not provenance_files(rig_root), "recorded provenance with the control plane down"
+
+
+def test_reads_are_unaffected_by_a_down_control_plane(tmp_path: Path):
+    """Bead reads need Dolt, not the supervisor; they must not be gated."""
+    city_root, rig_root, bin_dir, _gc_log = runtime(tmp_path, supervisor_up=False)
+
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    env["MCTL_BEADS_FIXTURE"] = str(rig_root / ".beads" / "issues.jsonl")
+    result = subprocess.run(
+        [
+            sys.executable, str(MCTL), "briefs", "list",
+            "--city", str(city_root), "--rig", "mathcity", "--json",
+        ],
+        cwd=REPO_ROOT, text=True, capture_output=True, check=False, env=env,
+    )
+
+    assert result.returncode == 0, result.stderr

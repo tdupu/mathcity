@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import socket
+import subprocess
 
 
 PROBE_TIMEOUT_SECONDS = 0.5
@@ -95,3 +96,30 @@ def probe_city(
         return CityLiveness(
             active=False, endpoint=endpoint, detail=f"{endpoint} refused a connection: {error}"
         )
+
+
+CONTROL_PLANE_TIMEOUT_SECONDS = 10
+
+
+def probe_control_plane(timeout: float = CONTROL_PLANE_TIMEOUT_SECONDS) -> bool | None:
+    """Whether the Gas City supervisor is running.
+
+    This is a SEPARATE question from `probe_city`. `gc stop` brings down the
+    supervisor and city controller but leaves the managed Dolt server running
+    under its own watchdog, so the data plane keeps answering while nothing is
+    left to route work to. Bead reads only need Dolt; dispatch needs both.
+
+    Returns None when `gc` is unavailable, so callers can distinguish "no
+    supervisor" from "cannot tell".
+    """
+    try:
+        result = subprocess.run(
+            ["gc", "supervisor", "status"],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.returncode == 0

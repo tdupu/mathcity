@@ -152,6 +152,11 @@ severity = "FATAL"
 meaning = "Pass a rig shown in the city configuration."
 module = "context.py"
 
+[MCTL_CONTROL_PLANE_NOT_ACTIVE]
+severity = "FATAL"
+meaning = "The Gas City supervisor is not running, so dispatched work has nothing to route to."
+module = "work.py"
+
 [MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED]
 severity = "FATAL"
 meaning = "Legacy decisions-track state requires the authorized #38 migration proof/canary."

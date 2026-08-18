@@ -14,6 +14,7 @@ from .briefs import BriefError, DoctorReport, doctor_briefs
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
+from .liveness import probe_control_plane
 from .trace import append_applied, append_planned
 from .provenance import (
     DispatchProvenance,
@@ -159,6 +160,22 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         # would flip readiness to `dispatched` and block every future attempt,
         # recording a handoff that never happened.
         return dispatch_dry_run_payload(plan)
+
+    # The data-plane probe cannot see this: `gc stop` leaves Dolt listening, so
+    # reads keep working while there is no supervisor to route a sling to.
+    if probe_control_plane() is False:
+        raise WorkError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MCTL_CONTROL_PLANE_NOT_ACTIVE",
+                "The Gas City supervisor is not running, so dispatched work "
+                "would have nothing to route to.",
+                brief_id=plan.target_brief_id,
+                bead_id=plan.bead_id,
+                suggested_next_command="gc supervisor start",
+            )
+        )
 
     command = [str(part) for part in plan.formula_invocation["command"]]
     try:
