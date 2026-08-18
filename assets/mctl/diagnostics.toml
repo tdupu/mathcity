@@ -75,6 +75,12 @@ meaning = "Legacy decisions-track manifest could not be parsed."
 policy_ref = "B2.10"
 module = "briefs.py"
 
+[MCTL_BEAD_UPDATE_RACE_LOST]
+severity = "FATAL"
+meaning = "Another actor changed the bead between plan and apply; the guarded write was skipped."
+policy_ref = "B2.8"
+module = "effects.py"
+
 [MCTL_CANONICAL_BEAD_UPDATE_FAILED]
 severity = "FATAL"
 meaning = "The canonical bead update failed, so no redundant cache was written."

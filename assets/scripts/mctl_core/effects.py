@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-from .beads import BeadUpdate, BeadWriteError, apply_bead_update
+from .beads import BeadRaceLostError, BeadUpdate, BeadWriteError, apply_bead_update
 from .briefs import doctor_briefs, show_brief
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
@@ -109,7 +109,7 @@ def plan_adjudication(
 ) -> EffectPlan:
     normalized = _normalize_verdict(ctx, verdict, brief_id)
     reason = _require_reason(ctx, reason, brief_id)
-    show_brief(ctx, brief_id)
+    observed = show_brief(ctx, brief_id)
     diagnostics = _blocking_preconditions(doctor_briefs(ctx, brief_id).diagnostics)
     now = _now()
     metadata = {
@@ -131,7 +131,12 @@ def plan_adjudication(
         operation="briefs.adjudicate",
         brief_id=brief_id,
         preconditions=diagnostics,
-        bead_update=BeadUpdate(brief_id, status="closed", metadata=metadata),
+        bead_update=BeadUpdate(
+            brief_id,
+            status="closed",
+            metadata=metadata,
+            if_status=observed.status,
+        ),
         cache_fields=cache_fields,
     )
 
@@ -146,7 +151,7 @@ def plan_deferral(
 ) -> EffectPlan:
     reason = _require_reason(ctx, reason, brief_id)
     defer_until = _resolve_until(ctx, until, days, brief_id)
-    show_brief(ctx, brief_id)
+    observed = show_brief(ctx, brief_id)
     diagnostics = _blocking_preconditions(doctor_briefs(ctx, brief_id).diagnostics)
     metadata = {
         "defer_reason": reason,
@@ -168,6 +173,7 @@ def plan_deferral(
             status="deferred",
             metadata=metadata,
             defer_until=defer_until,
+            if_status=observed.status,
         ),
         cache_fields=cache_fields,
     )
@@ -194,6 +200,17 @@ def apply_effect_plan(ctx: MctlContext, plan: EffectPlan) -> ApplyResult:
                 update,
                 fixture_path=ctx.beads_fixture,
             )
+        except BeadRaceLostError as error:
+            raise MutationError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MCTL_BEAD_UPDATE_RACE_LOST",
+                    f"Another actor changed {update.id!r} before this mutation applied.",
+                    brief_id=update.id,
+                    detail=str(error),
+                )
+            ) from error
         except BeadWriteError as error:
             raise MutationError(
                 _diagnostic(

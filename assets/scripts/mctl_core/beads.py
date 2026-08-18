@@ -11,6 +11,8 @@ from typing import Any, Iterable, Mapping
 
 DEFAULT_BD_TIMEOUT_SECONDS = 30
 BD_TIMEOUT_ENV = "MCTL_BD_TIMEOUT_SECONDS"
+# bd reserves exit 13 for "an --if-status/--if-assignee guard no longer held".
+BD_GUARD_MISMATCH_EXIT = 13
 BD_LIST_ARGS = ("bd", "list", "--all", "--limit", "0", "--json", "--readonly")
 
 
@@ -57,12 +59,23 @@ class BeadWriteError(RuntimeError):
     """The canonical bead source could not be updated."""
 
 
+class BeadRaceLostError(BeadWriteError):
+    """Another actor changed the bead first, so the guarded write was skipped.
+
+    bd exits 13 when an --if-status/--if-assignee guard no longer holds. It
+    wrote nothing, and retrying the same guard cannot succeed.
+    """
+
+
 @dataclass(frozen=True)
 class BeadUpdate:
     id: str
     status: str | None = None
     metadata: Mapping[str, str] | None = None
     defer_until: str | None = None
+    # Optimistic-concurrency guard: the status observed when the plan was
+    # built. bd writes nothing and exits 13 if it no longer holds.
+    if_status: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -73,6 +86,7 @@ class BeadUpdate:
             payload["status"] = self.status
         if self.defer_until is not None:
             payload["defer_until"] = self.defer_until
+        payload["if_status"] = self.if_status
         return payload
 
 
@@ -148,6 +162,8 @@ def _apply_bd_update(rig_root: Path, update: BeadUpdate, timeout: int) -> dict[s
         args.extend(("--defer", update.defer_until))
     for key, value in sorted((update.metadata or {}).items()):
         args.extend(("--set-metadata", f"{key}={value}"))
+    if update.if_status is not None:
+        args.extend(("--if-status", update.if_status))
     args.append("--json")
     try:
         result = subprocess.run(
@@ -160,6 +176,12 @@ def _apply_bd_update(rig_root: Path, update: BeadUpdate, timeout: int) -> dict[s
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise BeadWriteError(f"Could not update bead {update.id}: {error}") from error
+    if result.returncode == BD_GUARD_MISMATCH_EXIT:
+        raise BeadRaceLostError(
+            f"another actor changed {update.id!r} before this write "
+            f"(bd exit {BD_GUARD_MISMATCH_EXIT}; expected status "
+            f"{update.if_status!r})"
+        )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise BeadWriteError(detail or f"{' '.join(args)} failed")

@@ -115,6 +115,13 @@ Mutation commands refuse to run without a reason, refuse to run when `briefs
 doctor` reports `ERROR` or `FATAL`, and preserve the legacy
 `MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED` guard from read-only inspection.
 
+Adjudicate and defer carry an optimistic-concurrency guard: the status
+observed at plan time is passed to `bd update --if-status`, so a brief that
+another actor adjudicated in the meantime is not overwritten. `bd` writes
+nothing and exits 13 in that case, which maps to `MCTL_BEAD_UPDATE_RACE_LOST`
+— distinct from `MCTL_CANONICAL_BEAD_UPDATE_FAILED` so a lost race is not
+mistaken for a crash, and so callers know retrying the same guard is futile.
+
 ### Mctl Work Controls
 
 Inspect brief-backed work and dispatch provenance from the same explicit city
