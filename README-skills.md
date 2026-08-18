@@ -35,6 +35,7 @@ _Regenerate/verify with `/update-README`._
 | `create-artifact` | `mathcity.create-artifact` | Dispatched by coordinate-review (payload contains a spec field and an optional artifact_type field, no action_items field) to produce a new artifact from a spec, or triggered directly by user phrases like "draft a skill for X", "draft a… |
 | `create-brief` | `mathcity.create-brief` | Produce the durable, gated `.md` brief artifact for the brief stack from a code artifact (branch, bead-id, PR, diff, GH-issue-N) |
 | `create-convoy` | `mathcity.create-convoy` | Create a properly configured OWNED convoy for an epic bead — the fan-out container for one WIP-dispatcher slot |
+| `create-issue` | `mathcity.create-issue` | File a high-quality GitHub issue against the canonical mathcity repo `tdupu/mathcity` (default; alternatives declared), running the shared investigation standard, filling the target's live `.github/ISSUE_TEMPLATE/` form, and stopping at a human approval gate before anything is filed |
 | `critical-review` | `mathcity.critical-review` | Act as a rigorous, adversarial reviewer of any artifact — SKILL.md files, plans, theorems, LaTeX, code, or any LLM-generated output |
 | `dolt-init` | `mathcity.dolt-init` | Initialize the bd (beads) Dolt database and set the dolt remote in both the city-side rig and repo-side working copy |
 | `dolt-pull` | `mathcity.dolt-pull` | Commit any pending beads changes locally, then pull from the Dolt remote |
@@ -70,7 +71,6 @@ _Regenerate/verify with `/update-README`._
 | `revise-artifact` | `mathcity.revise-artifact` | Apply a set of action items to an artifact (SKILL.md, plan, code, LaTeX, theorem, etc.) and produce a revised version |
 | `simple-work` | `mathcity.simple-work` | Dispatch a bounded, well-scoped task via simple-work-briefed (execute → file brief → finalize) when the work is a single operation (script run, repair, verification) and does not need the full build-basic-briefed lifecycle |
 | `wake-city` | `mathcity.wake-city` | Actually WAKE a stalled Gas City — diagnose WHY the fleet is dead (tmux down, Dolt down, suspended rig, dead dispatcher, session- vs weekly-limit zombies), apply the correct revival per cause, and VERIFY work resumes; unlike nudge-city, handles weekly-limit-dead zombies (close-to-free-slot) and fails loud on capacity blocks |
-| `write-issue-targeted` | `mathcity.write-issue-targeted` | File a high-quality GitHub issue against an explicitly targeted repo (default `tdupu/mathcity`), running the shared investigation standard and stopping at a human approval gate before anything is filed |
 | `work` | `mathcity.work` | Feed a bead into the math-city fleet through the work router: continue known work directly, or commission fresh/ambiguous work through an approval brief before dispatch |
 | `xkcd-927` | `mathcity.xkcd-927` | Reconcile or fix an issue that is spread across several beads / plans / PERTs / policy docs that duplicate, contradict, or prose-supersede each other — by CONSOLIDATING into the single existing source of truth, NEVER by writing a fresh a… |
 

@@ -36,7 +36,7 @@ enum). Do not copy this file.
 WHAT THIS FORMULA DOES NOT DO: it does not perform the investigation. Stages 1-7 of
 `template-fragments/issue-investigation-standard.md` require judgment and a repo
 checkout; this formula GATES on investigation evidence already recorded on the
-source bead (by a human, by the `write-issue-targeted` skill, or by a prior planning
+source bead (by a human, by the `create-issue` skill, or by a prior planning
 step) and fails closed when it is absent. Filing an issue whose investigation was
 invented by the drafting agent is the exact failure the standard exists to prevent.
 
@@ -174,7 +174,7 @@ the duplicate found.
 On any missing item:
 ```bash
 echo "[mathcity-issue-briefed] BLOCKED: investigation evidence missing: <list the stages>"
-bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: investigation evidence missing for stage(s) <list> per {{investigation_standard}}. Run the write-issue-targeted skill (or record the evidence on this bead) before re-dispatching."
+bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: investigation evidence missing for stage(s) <list> per {{investigation_standard}}. Run the create-issue skill (or record the evidence on this bead) before re-dispatching."
 gc runtime drain-ack; exit 0
 ```
 

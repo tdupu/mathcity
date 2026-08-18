@@ -1,9 +1,9 @@
 ---
-name: write-issue-targeted
-description: File a high-quality GitHub issue against an EXPLICITLY TARGETED repo — defaults to tdupu/mathcity, with tdupu/gascity-packs and gastownhall/gascity as declared alternatives. Runs the full investigation a maintainer would otherwise redo (duplicate search, verify-the-problem-exists-on-current-main, design/policy alignment, blast radius, file:line root-cause refs, >=2 fix candidates, required MRE for bugs), fills the target repo's LIVE .github/ISSUE_TEMPLATE form, and stops at a human approval gate before anything is filed. Trigger phrases "file an issue", "write an issue for X", "open an issue about X", "report this bug upstream", "file this against mathcity", "file this against gascity". Use this whenever the target is a tdupu-owned repo or whenever the target is passed explicitly; the upstream contributing.write-issue skill covers external-contributor filing to gastownhall/gascity with no targeting parameter. For the dispatchable, brief-pipeline version of the same standard, sling the mathcity-issue-briefed formula instead.
+name: create-issue
+description: File a high-quality GitHub issue against the canonical mathcity repo `tdupu/mathcity` (the default), with `tdupu/gascity-packs` and `gastownhall/gascity` as declared alternatives. Runs the full investigation a maintainer would otherwise redo (duplicate search, verify-the-problem-exists-on-current-main, design/policy alignment, blast radius, file:line root-cause refs, >=2 fix candidates, required MRE for bugs), fills the target repo's LIVE `.github/ISSUE_TEMPLATE/` form, and stops at a human approval gate before anything is filed. Trigger phrases "create an issue", "file an issue", "write an issue for X", "open an issue about X", "report this bug", "file this against mathcity", "file this against gascity". Use this whenever the target is a tdupu-owned repo or whenever the target is passed explicitly; the upstream `contributing.write-issue` skill covers external-contributor filing to `gastownhall/gascity` with no targeting parameter. For the dispatchable, brief-pipeline version of the same standard, sling the `mathcity-issue-briefed` formula instead.
 ---
 
-# write-issue-targeted
+# create-issue
 
 The interactive surface of the MathCity issue workflow. A human is in the loop; you
 investigate with them, draft against the target repo's live template, and stop for a
@@ -28,10 +28,18 @@ in its prompt to make that substitution — a load-bearing instruction that live
 prompt is one that eventually gets forgotten, and the failure is silent (the issue
 lands, on the wrong tracker).
 
-Here the target is a **declared parameter with a default**. Upstream's skill is not
-modified and not copied: it is `gascity-packs`-owned and read-only to us
-(`subdomains/dev/POLICY.md` P2.1); vendoring it would create a second real copy that
-P1.9 forbids and that P2.1 makes impossible to deduplicate.
+Here the target is a **declared parameter with a default**, and the default is the
+canonical `tdupu/mathcity`. Upstream's skill is not modified and not copied: it is
+`gascity-packs`-owned and read-only to us (`subdomains/dev/POLICY.md` P2.1);
+vendoring it would create a second real copy that P1.9 forbids and that P2.1 makes
+impossible to deduplicate.
+
+> **Naming.** This skill was `write-issue-targeted` through 2026-08-13. It was
+> renamed to `create-issue` to match the verb its own formula already uses
+> (`create-issue-briefed`) and the rest of the parent pack (`create-brief`,
+> `create-convoy`, `create-artifact`). Same skill, same standard, one copy — the old
+> name is gone, not deprecated-in-place, because two SKILL.md files competing for the
+> same trigger phrases is the failure `xkcd-927` describes.
 
 ## Pre-flight (P1.14)
 
@@ -94,10 +102,39 @@ main. If stage 5 will not reduce, take one of the fragment's three explicit exit
 
 ## Step 3 — Fill the live template (fragment stage 8)
 
-Read the template off `$TARGET_REPO` at draft time. Do not reproduce a template from
-memory or from this file — this skill deliberately contains no issue-body template,
-because the repo's `.github/ISSUE_TEMPLATE/*.yml` is the enforcement point and it
-changes without telling you.
+Read the template off `$TARGET_REPO` **at draft time**. Do not reproduce a template
+from memory or from this file — this skill deliberately contains no issue-body
+template, because the repo's `.github/ISSUE_TEMPLATE/*.yml` is the enforcement point
+and it changes without telling you.
+
+```bash
+# from a checkout of $TARGET_REPO
+ls .github/ISSUE_TEMPLATE/
+# or, without a checkout:
+gh api "repos/$TARGET_REPO/contents/.github/ISSUE_TEMPLATE" --jq '.[].name'
+```
+
+Pick by the stage 1 kind — `bug` → `bug_report.yml`, `feature` →
+`feature_request.yml`, `docs` → `docs_report.yml`. `config.yml` is the chooser
+config, not a submission template; never fill it.
+
+### Fallback when a template is absent
+
+The listing above can come back empty or 404 — a fresh repo, a target that never
+adopted forms, or an unpushed branch. Do not stall, and do not invent a template:
+
+| What you find | What to do |
+| --- | --- |
+| The kind's template is present | Fill every field marked `validations: required: true`, in the template's order. Tick a required checkbox only if the assertion is **true** — on `tdupu/mathcity` those checkboxes assert that the stage 2 duplicate search and the stage 3 verify-on-main actually happened |
+| `.github/ISSUE_TEMPLATE/` exists but has no template for this kind | Use the nearest sibling template (`bug_report.yml` is the most demanding) and say in the body which template you filled and why |
+| `.github/ISSUE_TEMPLATE/` is absent entirely, or `gh api` 404s | Fall back to a plain body: `## Summary` / `## Symptom` / `## Reproduction` / `## Root cause` / `## Fix candidates` / `## Adjacent — out of scope`. Tell the human, in the approval gate, that you used the fallback and that the repo has no forms |
+| `gh api` fails for a reason other than 404 (auth, rate limit, network) | Stop. An empty listing caused by a failed call reads exactly like "no templates" and would silently downgrade the filing. Report the error instead |
+
+A `404` on `.github/ISSUE_TEMPLATE` means the templates are not on the target's
+**default branch** yet. If you know they exist on an unmerged branch, say so — the
+correct action is to land them, not to file against a template GitHub cannot see.
+
+### Draft to a file
 
 Write the draft to a file so the human sees exactly what would be filed:
 
@@ -118,10 +155,10 @@ it survives into this skill unchanged.
 
 Present:
 
-- The target repo and the template being filled
+- The target repo and the template being filled — or the fallback you used
 - The **full** body, exactly as it would be filed
 - Every field you had to mark `<unknown — needs input>`
-- The label set
+- The label set, and which of those labels actually exist (see below)
 - Your recommendation: file / revise / drop
 
 Wait for APPROVE. On REVISE, return to step 3. On REJECT, stop — and say what you
@@ -136,9 +173,26 @@ gh issue create --repo "$TARGET_REPO" \
   --label "kind/<bug|feature|docs>,priority/p<1|2|3>,status/needs-triage"
 ```
 
-Report the issue URL back. If any label was silently dropped (`tdupu/mathcity`'s
-`priority/*` and `status/*` labels may not exist yet — see `.github/LABELS.md`), say
-so rather than letting the human assume the triage state is set.
+**Labels: check before you pass them.** GitHub **silently drops** label names the
+repo does not have — the issue files successfully and arrives unlabeled, so a
+triage state you think you set may not be set. Check first and only pass what exists:
+
+```bash
+gh label list --repo "$TARGET_REPO" --limit 100
+```
+
+On `tdupu/mathcity` the `kind/*`, `priority/*`, and `status/*` scheme is **proposed,
+not created**: [`.github/LABELS.md`](https://github.com/tdupu/mathcity/blob/main/.github/LABELS.md)
+records the scheme and the exact `gh label` commands, and states plainly that none of
+them have been run. Until an owner runs them the repo carries only GitHub's nine
+defaults. So:
+
+- If the `kind/*` labels do not exist, either drop `--label` entirely, or map to a
+  default that does exist (`bug`, `enhancement`, `documentation`).
+- Either way, **say which labels landed and which were dropped** rather than letting
+  the human assume the triage state is set.
+
+Report the issue URL back.
 
 ## When to use the formula instead
 

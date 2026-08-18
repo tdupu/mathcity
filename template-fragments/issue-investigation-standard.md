@@ -6,7 +6,7 @@ they do not restate it:
 
 | Surface | Kind | Reads this file |
 | --- | --- | --- |
-| `write-issue-targeted` | skill (interactive) | walks stages 1–9 with a human in the loop |
+| `create-issue` | skill (interactive) | walks stages 1–9 with a human in the loop |
 | `mathcity-issue-briefed` | formula (dispatchable) | gates `intake` on stages 1–7, then drafts and briefs |
 
 Ported from [`contributing/skills/write-issue`](https://github.com/gastownhall/gascity-packs/tree/main/contributing/skills/write-issue)
