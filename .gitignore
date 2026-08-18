@@ -13,3 +13,10 @@ __pycache__/
 
 # Local machine-layout note (operator-specific; not shared)
 CONTEXT.md
+
+# Generated skill/agent sinks and local build state (P1.3: never commit a
+# materialized sink -- .claude/skills/** are generated symlinks)
+.claude/
+.agents/
+.gc/
+.gc-builds/
