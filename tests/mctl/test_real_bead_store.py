@@ -253,3 +253,100 @@ def test_unarmed_dispatch_is_inert_against_a_real_store(tmp_path: Path, seeded_s
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["applied"] is False
     assert not (rig_root / ".beads" / "mctl" / "provenance").exists()
+
+
+def all_bead_rows(rig_root: Path) -> list[dict[str, object]]:
+    return json.loads(
+        run_bd("list", "--all", "--limit", "0", "--json", "--readonly", cwd=rig_root).stdout
+    )
+
+
+def brief_body(tmp_path: Path) -> Path:
+    path = tmp_path / "body.md"
+    path.write_text(
+        "## What is being decided\n\nShip the dispatch policy?\n", encoding="utf-8"
+    )
+    return path
+
+
+@requires_bd
+def test_create_dry_run_adds_no_bead_to_the_real_store(tmp_path: Path, seeded_store):
+    city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+    before = {row["id"] for row in all_bead_rows(rig_root)}
+
+    result = run_mctl(
+        "briefs", "create", "--title", "Decide dispatch policy",
+        "--body-file", str(brief_body(tmp_path)),
+        "--source", str(seeded_store["approved_source"]), "--dry-run",
+        "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["applied"] is False
+    assert {row["id"] for row in all_bead_rows(rig_root)} == before
+
+
+@requires_bd
+def test_create_writes_a_real_decision_bead_through_bd(tmp_path: Path, seeded_store):
+    """The canonical creation path: mctl -> bd create -> real bead store.
+
+    The MCTL_BEADS_FIXTURE seam cannot prove a write works; only bd can.
+    """
+    city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+    before = {row["id"] for row in all_bead_rows(rig_root)}
+
+    result = run_mctl(
+        "briefs", "create", "--title", "Decide dispatch policy",
+        "--body-file", str(brief_body(tmp_path)),
+        "--source", str(seeded_store["approved_source"]),
+        "--label", "brief-open", "--requested-by", "operator",
+        "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["applied"] is True
+    assert payload["actual_effects"][0]["kind"] == "bead_create"
+
+    new_id = str(payload["actual_effects"][0]["target"])
+    assert new_id not in before, "bd must have minted a fresh bead id"
+    row = bead_row(rig_root, new_id)
+    assert row["issue_type"] == "decision"
+    assert row["status"] == "open"
+    assert "brief-open" in (row.get("labels") or [])
+
+    # Redundant artifacts land only after bd accepted the canonical write.
+    assert (rig_root / ".beads" / "briefs" / ".pile" / f"{new_id}.md").is_file()
+    assert (rig_root / ".beads" / "briefs" / "decisions" / f"{new_id}.toml").is_file()
+
+
+@requires_bd
+def test_a_real_created_brief_passes_validation_and_doctor(tmp_path: Path, seeded_store):
+    """Creation must not manufacture a brief its own invariants reject."""
+    city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+
+    created = run_mctl(
+        "briefs", "create", "--title", "Decide dispatch policy",
+        "--body-file", str(brief_body(tmp_path)),
+        "--source", str(seeded_store["approved_source"]),
+        "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT,
+    )
+    assert created.returncode == 0, created.stderr
+    new_id = str(json.loads(created.stdout)["actual_effects"][0]["target"])
+
+    validated = run_mctl(
+        "briefs", "validate", new_id,
+        "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT,
+    )
+
+    assert validated.returncode == 0, validated.stderr
+    payload = json.loads(validated.stdout)
+    assert payload["valid"] is True, payload["diagnostics"]
+    # B2.1: bd recorded the source link, so the brief is not malformed.
+    assert "MBRF004" not in {
+        str(diagnostic["code"]) for diagnostic in payload["diagnostics"]
+    }

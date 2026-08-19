@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+import tomllib
 from datetime import date
 from pathlib import Path
 from typing import Iterable
@@ -114,6 +115,60 @@ class DoctorReport:
         }
 
 
+@dataclass(frozen=True)
+class ValidationReport:
+    """Proof that canonical and redundant brief state still agree.
+
+    `briefs doctor` reports drift across the whole rig; validate is the
+    stricter per-brief gate creation and mutation workflows lean on, so it
+    composes doctor and adds the invariants doctor deliberately leaves out.
+    Read-only: it never repairs what it reports.
+    """
+
+    scope: str
+    records: tuple[BriefRecord, ...]
+    diagnostics: tuple[Diagnostic, ...]
+
+    @property
+    def severity_counts(self) -> dict[str, int]:
+        return {
+            severity.value: sum(item.severity is severity for item in self.diagnostics)
+            for severity in Severity
+        }
+
+    @property
+    def valid(self) -> bool:
+        return not any(
+            diagnostic.severity in {Severity.ERROR, Severity.FATAL}
+            for diagnostic in self.diagnostics
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        brief_ids = [record.brief_id for record in self.records]
+        for diagnostic in self.diagnostics:
+            brief_id = diagnostic.facts.get("brief_id")
+            if brief_id and brief_id not in brief_ids:
+                brief_ids.append(brief_id)
+        return {
+            "briefs": [record.to_dict() for record in self.records],
+            "brief_diagnostics": [
+                {
+                    "brief_id": brief_id,
+                    "diagnostics": [
+                        diagnostic.to_dict()
+                        for diagnostic in self.diagnostics
+                        if diagnostic.facts.get("brief_id") == brief_id
+                    ],
+                }
+                for brief_id in brief_ids
+            ],
+            "diagnostics": [diagnostic.to_dict() for diagnostic in self.diagnostics],
+            "scope": self.scope,
+            "severity_counts": self.severity_counts,
+            "valid": self.valid,
+        }
+
+
 class BriefError(Exception):
     def __init__(self, diagnostic: Diagnostic):
         super().__init__(diagnostic.message)
@@ -134,6 +189,171 @@ def brief_command_diagnostics(ctx: MctlContext, records: Iterable[BriefRecord]) 
     legacy_state = legacy_manifest_state(layout)
     brief_ids = {record.brief_id for record in records}
     return _legacy_gate_diagnostics(ctx, layout, legacy_state, brief_ids)
+
+
+def legacy_gate_diagnostics(ctx: MctlContext) -> tuple[Diagnostic, ...]:
+    """The #38 legacy-migration gate, independent of any single brief.
+
+    Creation has no existing brief to scope the gate to, but it is still a
+    mutation and must fail closed on unmigrated decisions-track rows.
+    """
+    layout = artifact_layout(ctx)
+    return _legacy_gate_diagnostics(ctx, layout, legacy_manifest_state(layout), None)
+
+
+# A brief label is a bd label: one lowercase token, no spaces.
+_LABEL_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+
+# B2.4 keeps exactly one pile and expresses urgency through ordering, and
+# B2.10 forbids an active side presentation lane. A label that names its own
+# lane is a request for the thing both rules exclude.
+_BYPASS_LABEL_TOKENS = ("urgent", "bypass", "side-pile", "sidepile", "hotfix", "jump-queue")
+
+
+def validate_brief_input(
+    ctx: MctlContext, title: str | None, body: str | None, labels: Iterable[str]
+) -> tuple[str, str, tuple[str, ...]]:
+    """Check a proposed brief against brief-system policy before any write.
+
+    Each check maps to a policy section reference rather than restating the
+    prose; the reference is what the operator follows to see why.
+    """
+    clean_title = (title or "").strip()
+    if not clean_title:
+        raise BriefError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MBRF030",
+                "A brief needs a non-empty title stating what is being decided.",
+                policy_ref="B1.1",
+            )
+        )
+    clean_body = (body or "").strip()
+    if not clean_body:
+        raise BriefError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MBRF031",
+                "A brief needs a non-empty body carrying its decision evidence.",
+                policy_ref="B1.5",
+            )
+        )
+    clean_labels: list[str] = []
+    for label in labels:
+        candidate = label.strip()
+        if not _LABEL_PATTERN.match(candidate):
+            raise BriefError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MBRF033",
+                    f"Brief label {label!r} is not a usable bd label token.",
+                )
+            )
+        if any(token in candidate for token in _BYPASS_LABEL_TOKENS):
+            raise BriefError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MBRF032",
+                    f"Brief label {candidate!r} requests a side or bypass pile.",
+                    policy_ref="B2.4",
+                )
+            )
+        clean_labels.append(candidate)
+    return clean_title, clean_body, tuple(dict.fromkeys(clean_labels))
+
+
+def validate_brief(ctx: MctlContext, brief_id: str | None) -> ValidationReport:
+    """Validate one brief, or every brief when `brief_id` is None.
+
+    The bead store is read exactly once and the snapshot threaded through
+    every per-brief check, so `--all` costs the same number of bd calls as a
+    single brief.
+    """
+    beads = _beads(ctx)
+    layout = artifact_layout(ctx)
+    report = _doctor_briefs(ctx, brief_id, beads)
+    bead_by_id = {bead.id: bead for bead in beads}
+    diagnostics = list(report.diagnostics)
+    for record in report.records:
+        diagnostics.extend(
+            _strict_invariants(ctx, layout, record, bead_by_id[record.bead_id])
+        )
+    return ValidationReport(
+        scope=brief_id if brief_id is not None else "--all",
+        records=report.records,
+        diagnostics=tuple(diagnostics),
+    )
+
+
+def _strict_invariants(
+    ctx: MctlContext, layout: ArtifactLayout, record: BriefRecord, bead: Bead
+) -> tuple[Diagnostic, ...]:
+    diagnostics: list[Diagnostic] = []
+    cache_path = layout.decisions / f"{record.brief_id}.toml"
+    cached = _read_toml(cache_path)
+    cached_status = cached.get("status")
+    if isinstance(cached_status, str) and cached_status:
+        if cached_status not in {record.status, record.decision_state}:
+            diagnostics.append(
+                _diagnostic(
+                    ctx,
+                    Severity.ERROR,
+                    "MBRF020",
+                    "Redundant decision cache disagrees with the canonical bead.",
+                    brief_id=record.brief_id,
+                    data_location=str(cache_path),
+                    policy_ref="B2.8",
+                    detail=(
+                        f"cache status={cached_status!r}; canonical status="
+                        f"{record.status!r}, decision_state={record.decision_state!r}"
+                    ),
+                )
+            )
+    cached_verdict = cached.get("verdict")
+    if isinstance(cached_verdict, str) and cached_verdict:
+        canonical_verdict = _verdict(bead)
+        if (canonical_verdict or "").strip().lower() != cached_verdict.strip().lower():
+            diagnostics.append(
+                _diagnostic(
+                    ctx,
+                    Severity.ERROR,
+                    "MBRF020",
+                    "Redundant decision cache records a verdict the bead does not.",
+                    brief_id=record.brief_id,
+                    data_location=str(cache_path),
+                    policy_ref="B2.8",
+                    detail=(
+                        f"cache verdict={cached_verdict!r}; canonical verdict="
+                        f"{canonical_verdict!r}"
+                    ),
+                )
+            )
+    if not any(artifact.state == "present" for artifact in record.redundant_artifacts):
+        diagnostics.append(
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MBRF021",
+                "Canonical brief bead has no redundant cache artifact.",
+                brief_id=record.brief_id,
+                data_location=str(layout.pile / f"{record.brief_id}.md"),
+                policy_ref="B2.8",
+            )
+        )
+    return tuple(diagnostics)
+
+
+def _read_toml(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        return dict(tomllib.loads(path.read_text(encoding="utf-8")))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
 
 
 def brief_options(ctx: MctlContext, brief_id: str) -> tuple[BriefOption, ...]:
@@ -526,6 +746,7 @@ def _diagnostic(
     *,
     brief_id: str | None = None,
     data_location: str | None = None,
+    detail: str | None = None,
     policy_ref: str | None = None,
     suggested_next_command: str | None = None,
 ) -> Diagnostic:
@@ -540,6 +761,8 @@ def _diagnostic(
         facts["bead_id"] = brief_id
     if data_location:
         facts["data_location"] = data_location
+    if detail:
+        facts["detail"] = detail
     if policy_ref:
         facts["policy_reference"] = policy_ref
     if suggested_next_command:

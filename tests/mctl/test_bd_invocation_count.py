@@ -172,3 +172,47 @@ def test_briefs_list_reads_beads_once(tmp_path: Path):
 
     assert result.returncode == 0, result.stderr
     assert bd_call_count(call_log) == 1
+
+
+def test_briefs_validate_all_reads_beads_a_bounded_number_of_times(tmp_path: Path):
+    """`validate --all` walks every brief; it must still read the store once."""
+    city_root, _rig_root, bin_dir, call_log = counting_bd_runtime(tmp_path)
+
+    result = run_mctl(
+        "briefs", "validate", "--all", "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT, bin_dir=bin_dir,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert len(payload["brief_diagnostics"]) >= DECISION_BEAD_COUNT
+    calls = bd_call_count(call_log)
+    assert calls <= 2, (
+        f"mctl briefs validate --all shelled out to bd {calls} times for "
+        f"{DECISION_BEAD_COUNT} decision beads; the bead read must not scale "
+        "with the number of briefs"
+    )
+
+
+def test_briefs_validate_all_bd_calls_do_not_grow_with_brief_count(tmp_path: Path):
+    small_city, _r1, small_bin, small_log = counting_bd_runtime(tmp_path / "small", count=2)
+    small = run_mctl(
+        "briefs", "validate", "--all", "--city", str(small_city), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT, bin_dir=small_bin,
+    )
+    assert small.returncode == 0, small.stderr
+
+    large_city, _r2, large_bin, large_log = counting_bd_runtime(tmp_path / "large", count=10)
+    large = run_mctl(
+        "briefs", "validate", "--all", "--city", str(large_city), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT, bin_dir=large_bin,
+    )
+    assert large.returncode == 0, large.stderr
+
+    assert len(json.loads(large.stdout)["brief_diagnostics"]) == 5 * len(
+        json.loads(small.stdout)["brief_diagnostics"]
+    )
+    assert bd_call_count(small_log) == bd_call_count(large_log), (
+        f"bd calls grew from {bd_call_count(small_log)} to {bd_call_count(large_log)} "
+        "when the brief count grew 5x"
+    )

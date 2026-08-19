@@ -15,15 +15,18 @@ from .briefs import (
     doctor_briefs,
     list_briefs,
     show_brief,
+    validate_brief,
 )
 from .context import ContextError, MctlContext, resolve_context
 from .diagnostics import Diagnostic, Severity, render_diagnostic
 from .trace import fold, read_rows
 from .effects import (
+    BriefCreateInput,
     MutationError,
     apply_effect_plan,
     dry_run_payload,
     plan_adjudication,
+    plan_create_brief,
     plan_deferral,
 )
 from .work import (
@@ -112,6 +115,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_brief_doctor_parser(brief_commands)
     _add_brief_adjudicate_parser(brief_commands)
     _add_brief_defer_parser(brief_commands)
+    _add_brief_create_parser(brief_commands)
+    _add_brief_validate_parser(brief_commands)
     trace = commands.add_parser("trace", help="inspect mctl operation traces")
     trace_commands = trace.add_subparsers(dest="trace_command", required=True)
     trace_show = trace_commands.add_parser("show", help="fold every phase row for one trace id")
@@ -177,6 +182,28 @@ def _add_brief_defer_parser(commands: argparse._SubParsersAction[argparse.Argume
     _add_runtime_arguments(parser)
 
 
+def _add_brief_create_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("create", help="create a canonical decision brief bead")
+    parser.add_argument("--title", help="what is being decided")
+    body = parser.add_mutually_exclusive_group()
+    body.add_argument("--body-file", dest="body_file", help="read the brief body from a file")
+    body.add_argument("--body", help="brief body text")
+    parser.add_argument("--label", action="append", default=[], help="brief label (repeatable)")
+    parser.add_argument(
+        "--source", action="append", default=[], help="source bead id (repeatable)"
+    )
+    parser.add_argument("--requested-by", dest="requested_by")
+    parser.add_argument("--dry-run", action="store_true")
+    _add_runtime_arguments(parser)
+
+
+def _add_brief_validate_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("validate", help="prove canonical and redundant state agree")
+    parser.add_argument("brief_id", nargs="?")
+    parser.add_argument("--all", action="store_true", help="validate every canonical brief")
+    _add_runtime_arguments(parser)
+
+
 def _add_work_ready_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = commands.add_parser("ready", help="list ready brief-backed work")
     _add_runtime_arguments(parser)
@@ -225,12 +252,29 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                 "options": [option.to_dict() for option in options],
                 "trace_id": context.trace_id,
             }
+        elif args.brief_command == "validate":
+            report = validate_brief(context, _validation_scope(context, args))
+            payload = report.to_dict()
+            payload["trace_id"] = context.trace_id
+            payload["diagnostics"] = _diagnostics_payload(context, report.diagnostics)
         else:
             if args.brief_command == "doctor":
                 report = doctor_briefs(context, args.brief_id)
                 payload = report.to_dict()
                 payload["trace_id"] = context.trace_id
                 payload["diagnostics"] = _diagnostics_payload(context, report.diagnostics)
+            elif args.brief_command == "create":
+                plan = plan_create_brief(
+                    context,
+                    BriefCreateInput(
+                        title=args.title or "",
+                        body=_brief_body(context, args),
+                        labels=tuple(args.label),
+                        requested_by=args.requested_by,
+                        sources=tuple(args.source),
+                    ),
+                )
+                payload = dry_run_payload(plan) if args.dry_run else apply_effect_plan(context, plan).to_dict()
             elif args.brief_command == "adjudicate":
                 plan = plan_adjudication(
                     context,
@@ -256,7 +300,68 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(_render_brief_payload(payload))
+    # A mutation that reports ERROR or FATAL has not fully succeeded, even
+    # when the canonical write landed. Read commands still exit 0 with
+    # diagnostics -- reporting drift is what they are for.
+    if "applied" in payload and _has_blocking_diagnostic(payload):
+        return 1
     return 0
+
+
+def _has_blocking_diagnostic(payload: dict[str, object]) -> bool:
+    diagnostics = payload.get("diagnostics")
+    if not isinstance(diagnostics, list):
+        return False
+    return any(
+        isinstance(item, dict) and item.get("severity") in {"ERROR", "FATAL"}
+        for item in diagnostics
+    )
+
+
+def _validation_scope(context: MctlContext, args: argparse.Namespace) -> str | None:
+    if args.all and args.brief_id:
+        raise BriefError(_validation_scope_diagnostic(context, both=True))
+    if args.all:
+        return None
+    if args.brief_id:
+        return args.brief_id
+    raise BriefError(_validation_scope_diagnostic(context, both=False))
+
+
+def _validation_scope_diagnostic(context: MctlContext, *, both: bool) -> Diagnostic:
+    message = (
+        "briefs validate takes a brief id or --all, not both."
+        if both
+        else "briefs validate requires a brief id or --all."
+    )
+    return Diagnostic(
+        severity=Severity.FATAL,
+        code="MBRF014",
+        message=message,
+        hint="Run `mctl briefs validate <brief-id>` or `mctl briefs validate --all`.",
+        facts={
+            "city_path": str(context.city_root),
+            "implementation_provenance": "mctl Slice 5 brief validation",
+            "rig_name": context.rig_id,
+            "rig_path": str(context.rig_root),
+        },
+        trace_id=context.trace_id,
+    )
+
+
+def _brief_body(context: MctlContext, args: argparse.Namespace) -> str:
+    """Read the brief body from --body-file or --body.
+
+    An unreadable body file is an empty body as far as policy is concerned,
+    so it fails the same B1.5 check rather than crashing.
+    """
+    if args.body_file:
+        path = Path(args.body_file)
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+    return args.body or ""
 
 
 def _work_command(args: argparse.Namespace, context: MctlContext) -> int:
@@ -352,10 +457,18 @@ def _render_brief_payload(payload: dict[str, object]) -> str:
         for blocker in work.get("blockers", []):
             lines.append(f"  {_diagnostic_line(blocker)}")
 
+    if "valid" in payload:
+        counts = payload.get("severity_counts") or {}
+        verdict = "consistent" if payload.get("valid") else "DIVERGENT"
+        lines.append(f"validate {payload.get('scope', '?')}: {verdict}")
+        if isinstance(counts, dict):
+            lines.append("  " + "  ".join(f"{key}={value}" for key, value in sorted(counts.items())))
+
     per_brief = payload.get("brief_diagnostics")
     if isinstance(per_brief, list):
         total = sum(len(entry.get("diagnostics", [])) for entry in per_brief)
-        lines.append(f"doctor: {len(per_brief)} brief(s), {total} diagnostic(s)")
+        label = "validate" if "valid" in payload else "doctor"
+        lines.append(f"{label}: {len(per_brief)} brief(s), {total} diagnostic(s)")
         for entry in per_brief:
             for diagnostic in entry.get("diagnostics", []):
                 lines.append(f"  {entry.get('brief_id')}: {_diagnostic_line(diagnostic)}")
@@ -367,8 +480,15 @@ def _render_brief_payload(payload: dict[str, object]) -> str:
         plan = payload.get("effect_plan")
         if isinstance(plan, dict):
             lines.append(f"  operation: {plan.get('operation', '?')}")
+            for create in plan.get("bead_creates", []):
+                lines.append(
+                    f"  bead create: type={create.get('issue_type')} "
+                    f"title={str(create.get('title', ''))[:60]!r}"
+                )
             for update in plan.get("bead_updates", []):
                 lines.append(f"  bead update: {update.get('id')} -> status={update.get('status')}")
+            for create in plan.get("file_creates", []):
+                lines.append(f"  cache create: {create.get('path')}")
             for write in plan.get("cache_updates", []):
                 lines.append(f"  cache update: {write.get('path')}")
 

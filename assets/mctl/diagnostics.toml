@@ -75,10 +75,67 @@ meaning = "Legacy decisions-track manifest could not be parsed."
 policy_ref = "B2.10"
 module = "briefs.py"
 
+[MBRF014]
+severity = "FATAL"
+meaning = "briefs validate was called with neither a brief id nor --all."
+module = "cli.py"
+
+[MBRF020]
+severity = "ERROR"
+meaning = "Redundant decision cache disagrees with the canonical brief bead."
+policy_ref = "B2.8"
+module = "briefs.py"
+
+[MBRF021]
+severity = "WARN"
+meaning = "Canonical brief bead has no redundant cache artifact to cross-check."
+policy_ref = "B2.8"
+module = "briefs.py"
+
+[MBRF030]
+severity = "FATAL"
+meaning = "Proposed brief has an empty title, so it states no decision."
+policy_ref = "B1.1"
+module = "briefs.py"
+
+[MBRF031]
+severity = "FATAL"
+meaning = "Proposed brief has an empty body, so it carries no decision evidence."
+policy_ref = "B1.5"
+module = "briefs.py"
+
+[MBRF032]
+severity = "FATAL"
+meaning = "Proposed brief label requests a side or bypass presentation pile."
+policy_ref = "B2.4"
+module = "briefs.py"
+
+[MBRF033]
+severity = "FATAL"
+meaning = "Proposed brief label is not a usable bd label token."
+module = "briefs.py"
+
+[MBRF034]
+severity = "WARN"
+meaning = "Created brief has no source dependency, so it is B2.1-incomplete."
+policy_ref = "B2.1"
+module = "effects.py"
+
+[MBRF035]
+severity = "FATAL"
+meaning = "Resolved brief root does not exist; creation refuses to build a shadow brief tree."
+policy_ref = "B2.8"
+module = "effects.py"
+
 [MCTL_BEAD_UPDATE_RACE_LOST]
 severity = "FATAL"
 meaning = "Another actor changed the bead between plan and apply; the guarded write was skipped."
 policy_ref = "B2.8"
+module = "effects.py"
+
+[MCTL_CANONICAL_BEAD_CREATE_FAILED]
+severity = "FATAL"
+meaning = "Canonical decision bead creation failed; no redundant artifact was written."
 module = "effects.py"
 
 [MCTL_CANONICAL_BEAD_UPDATE_FAILED]
@@ -196,6 +253,12 @@ module = "effects.py"
 [MCTL_REDUNDANT_CACHE_UPDATE_FAILED]
 severity = "ERROR"
 meaning = "Redundant brief cache update failed after canonical bead update."
+module = "effects.py"
+
+[MCTL_REDUNDANT_CACHE_ROLLED_BACK]
+severity = "ERROR"
+meaning = "Redundant cache writes failed after bead creation and were rolled back; the canonical bead is intact."
+policy_ref = "B2.8"
 module = "effects.py"
 
 [MOPT001]

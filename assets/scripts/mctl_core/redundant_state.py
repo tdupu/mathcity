@@ -28,6 +28,11 @@ class RedundantArtifact:
 
 @dataclass(frozen=True)
 class ArtifactLayout:
+    # The brief root every other artifact path is derived from. Exposed, not
+    # recomputed: artifact_layout() is the single resolver, and a caller that
+    # re-derived the root would be the second resolution rule this module
+    # exists to prevent.
+    root: Path
     pile: Path
     stack: Path
     stack_index: Path
@@ -71,6 +76,7 @@ def artifact_layout(ctx: MctlContext) -> ArtifactLayout:
         ctx.rig_root, paths.get("decisions", str(root.relative_to(ctx.rig_root) / "decisions"))
     )
     return ArtifactLayout(
+        root=root,
         pile=pile,
         stack=stack,
         stack_index=manifest,
