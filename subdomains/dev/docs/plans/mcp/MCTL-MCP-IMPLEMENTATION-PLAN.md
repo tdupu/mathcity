@@ -120,7 +120,7 @@ class BriefRecord:
     diagnostics: tuple[Diagnostic, ...]
 
 @dataclass(frozen=True)
-class BriefOption:
+class BriefDecisionOption:
     label: str
     heading: str
     start_line: int
@@ -275,14 +275,14 @@ Core invariants:
 - `MOPT001`: brief has multiple options and adjudication omitted `--option`.
 - `MOPT002`: the named option is not one this brief offers.
 
-**Naming note.** This plan defines `BriefOption` twice, incompatibly: §2
-defines a *decision* option parsed from brief markdown (label, heading, line
-span, raw text, confidence), while Slice 2 defines an *enabled action*
-(adjudicate / defer / validate) and tells `briefs options` to compute those.
-The code implements the Slice 2 sense as `BriefOption`, and the §2 sense as
-`BriefDecisionOption`. `--option`, `--compare-options`, and `MOPT001`/`MOPT002`
-all refer to the §2 decision option. Renaming one of them in this plan would
-remove the ambiguity.
+**Naming.** Two distinct types, deliberately named apart (Taylor, 2026-08-18).
+`BriefDecisionOption` (§2) is a *decision* option parsed from brief markdown --
+label, heading, line span, raw text, confidence -- and is what `--option`,
+`--compare-options`, and `MOPT001`/`MOPT002` refer to. `BriefOption` (Slice 2)
+is an *enabled action* (adjudicate / defer / validate) and is what `briefs
+options` computes. Both names match the implementation. They previously shared
+the name `BriefOption` in this plan, which caused a proposed MOPT001 fix to
+gate on the action list -- a check that would have blocked every adjudication.
 - `MWRK001`: bead already has an active assignee.
 - `MWRK002`: open child workflow already exists for the same source.
 - `MWRK003`: dispatch command returned success but assignee verification failed.

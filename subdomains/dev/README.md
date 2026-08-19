@@ -101,3 +101,12 @@ Import independently of the parent pack:
 [imports."mathcity-dev"]
 source = "https://github.com/<github-owner>/mathcity/tree/main/subdomains/dev"
 ```
+
+## Open Design Questions
+
+[OPEN-DESIGN-QUESTIONS.md](./docs/OPEN-DESIGN-QUESTIONS.md) records questions
+about *intent* that surfaced during implementation and that the code cannot
+answer — behavior that is either deliberate-and-undocumented or accidental,
+where guessing wrong produces a plausible-looking bug. Add an entry whenever
+you had to pick a reading in order to keep moving, and record the reading you
+picked.
