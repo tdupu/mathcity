@@ -188,3 +188,69 @@ def test_mctl_and_the_shuffler_take_the_same_lock_file(tmp_path: Path):
     stack = tmp_path / "stack"
     stack.mkdir()
     assert _stack_index_lock_path(stack / ".index.jsonl") == stack / match.group(1)
+
+
+def test_stack_index_update_splices_and_leaves_other_rows_byte_identical(tmp_path: Path):
+    """Only the changed row may be re-serialized.
+
+    Live .index.jsonl is 83 rows compact + 1 spaced (measured in the pending
+    brief "index.jsonl two serialization producers"). Re-serializing every row
+    on each adjudication rewrites 83 unrelated lines and makes the file's
+    convention "whoever wrote last wins".
+    """
+    from mctl_core.effects import _update_stack_index
+
+    rows = [
+        {"slug": "a", "status": "pending", "title": "first \u2014 em dash"},
+        {"slug": "b", "status": "pending", "title": "second"},
+        {"slug": "c", "status": "pending", "title": "third"},
+    ]
+    compact = [
+        json.dumps(r, sort_keys=True, separators=(",", ":"), ensure_ascii=False) for r in rows
+    ]
+    path = tmp_path / ".index.jsonl"
+    path.write_text("\n".join(compact) + "\n", encoding="utf-8")
+
+    _update_stack_index(path, "b", {"status": "adjudicated"})
+
+    after = path.read_text(encoding="utf-8").splitlines()
+    assert after[0] == compact[0], "untouched row was re-serialized"
+    assert after[2] == compact[2], "untouched row was re-serialized"
+    assert json.loads(after[1])["status"] == "adjudicated"
+
+
+def test_stack_index_rewrite_preserves_non_ascii(tmp_path: Path):
+    """An em-dash must not come back as an escape sequence."""
+    from mctl_core.effects import _update_stack_index
+
+    path = tmp_path / ".index.jsonl"
+    path.write_text(
+        json.dumps(
+            {"slug": "a", "status": "pending", "title": "a \u2014 b"},
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    _update_stack_index(path, "a", {"status": "adjudicated"})
+
+    text = path.read_text(encoding="utf-8")
+    assert "\u2014" in text, "literal em-dash was escaped"
+    assert "\\u2014" not in text
+
+
+def test_changed_row_matches_the_files_compact_convention(tmp_path: Path):
+    from mctl_core.effects import _update_stack_index
+
+    path = tmp_path / ".index.jsonl"
+    path.write_text(
+        json.dumps({"slug": "a", "status": "pending"}, sort_keys=True, separators=(",", ":"))
+        + "\n",
+        encoding="utf-8",
+    )
+
+    _update_stack_index(path, "a", {"status": "adjudicated"})
+
+    line = path.read_text(encoding="utf-8").splitlines()[0]
+    assert '", "' not in line and '": "' not in line, f"row is not compact: {line}"

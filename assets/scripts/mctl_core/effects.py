@@ -526,24 +526,45 @@ def _update_simple_toml(path: Path, fields: Mapping[str, object]) -> None:
 
 
 def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, str]) -> None:
-    # Read and write inside the lock: the shuffler drains this same file, so a
-    # read-modify-write outside the lock is a lost update either way.
+    """Splice the matching row; leave every other line byte-identical.
+
+    The stack index has two producers with different json.dumps settings, so
+    re-serializing untouched rows makes the file's convention "whoever wrote
+    last wins" -- one adjudication would rewrite every unrelated line. Only the
+    row we actually change is re-emitted, in the file's compact convention and
+    without escaping non-ASCII.
+
+    Read and write happen inside the lock: the shuffler drains this same file,
+    so a read-modify-write outside it is a lost update either way.
+    """
     with _stack_index_lock(path):
-        rows: list[str] = []
+        lines = path.read_text(encoding="utf-8").splitlines()
+        spliced: list[str] = []
         changed = False
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in lines:
             if not line.strip():
                 continue
-            row = json.loads(line)
-            if isinstance(row, dict):
-                if _row_targets_brief(row, target_brief_id):
-                    row.update(fields)
-                    changed = True
-                rows.append(json.dumps(row, sort_keys=True))
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                spliced.append(line)
+                continue
+            if isinstance(row, dict) and _row_targets_brief(row, target_brief_id):
+                row.update(fields)
+                spliced.append(
+                    json.dumps(
+                        row,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    )
+                )
+                changed = True
             else:
-                rows.append(line)
+                # Untouched: preserve the original bytes exactly.
+                spliced.append(line)
         if changed:
-            _atomic_write(path, "\n".join(rows) + "\n")
+            _atomic_write(path, "\n".join(spliced) + "\n")
 
 
 def _row_targets_brief(row: Mapping[str, object], target_brief_id: str) -> bool:
