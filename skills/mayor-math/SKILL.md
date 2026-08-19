@@ -17,11 +17,60 @@ The hard-won gold lives in the mathcity pack (`<mathcity-pack-root>/docs/`):
 - **CITY-OPERATION-REFERENCE.md** — architecture, pools/agents, brief pipeline, correct command surface
 - **TEST-CYCLE-GUIDE.md** + **DOGFOOD-WORKFLOW.md** — the dogfood/test cycle
 
-**Current dispatch pattern:** sling `--on build-basic-briefed` (fires a decision brief at
-the terminal step; `push=false` ships nothing) with `interaction_mode=autonomous` for
-unattended pool runs. Scope `artifact_root` per bead — never omit it or pass
-the bare rig root, or concurrent runs on the same rig silently overwrite each
-other's stage artifacts (gsp-1bmxuz):
+## Current dispatch doctrine — brief-backed work goes through `mctl`
+
+**Do not hand-write a sling for work that already has an approved brief.** That
+is `mctl work dispatch`, and it does two things this skill's prose used to ask
+the Mayor to do by eye: verify the bead was actually claimed, and record
+`dispatch-provenance.v1` only after that verification. See
+`template-fragments/mctl-entry-point.md`.
+
+It does **not** scope `artifact_root` per bead — it passes a shared rig-level
+root, so concurrent FULL_CONTINUE dispatches in one rig share a stage-artifact
+root (gsp-1bmxuz). Serialize them; the note in `skills/work/SKILL.md` has the
+detail.
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+# What is dispatchable right now in this rig — already excludes blocked,
+# non-approving, already-dispatched, and invalid-provenance items:
+"$MCTL" work ready --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+Then dispatch through the `mathcity.work` skill, which wraps
+`mctl work dispatch`. Do not reimplement it here — a dispatch table in Mayor
+prompt lore is exactly the duplicate control surface this replaced.
+
+**Two limits to know:**
+
+- `gt-*` beads are unreachable through `--rig` (the city-root HQ store is not a
+  registered rig; `MCTL_CONTEXT_UNKNOWN_RIG`). Rule 3 below already says gt HQ
+  has no worker fleet — this is the same boundary seen from the CLI.
+- `--all-rigs` was specified in Slice 2 and is **not implemented**. `work ready`
+  answers one rig at a time; do not loop over rigs to fake a city-wide view.
+
+**Never branch on `MBRF021` / `MBRF004` / `MBRF005`** — all three are
+untrustworthy signal today, and `MBRF004` legitimately refuses dispatch on most
+of the live brief queue. Report the refusal; do not route around it.
+
+### Fresh work with no brief yet
+
+The commission path is still a plain sling of the router, because `mctl` models
+no commission path. `build-basic-briefed` fires a decision brief at the terminal
+step; `push=false` ships nothing. Scope `artifact_root` per bead — never omit it
+or pass the bare rig root, or concurrent runs on the same rig silently overwrite
+each other's stage artifacts (gsp-1bmxuz):
 
 ```
 gc sling <rig>/gc.run-operator <bead> --on build-basic-briefed \
@@ -30,11 +79,13 @@ gc sling <rig>/gc.run-operator <bead> --on build-basic-briefed \
   --var artifact_root=<rig-root>/.gc-builds/<bead>
 ```
 
-**After slinging:** verify the sling took — `bd show <bead>` must show a non-empty
-**Assignee**, or `tmux -L gt ls` shows a fresh `gc__run-operator` session. A molecule
-root stays OPEN by design until its terminal step fires (count closed `✓` steps climbing
-via `bd show <root>`). `gc status` "stopped / 0 sessions" is often a probe timeout —
-trust `tmux -L gt ls` + rising step-counts (`gs-0cy2`).
+**After a hand-slung commission:** verify it took — `bd show <bead>` must show a
+non-empty **Assignee**, or `tmux -L gt ls` shows a fresh `gc__run-operator`
+session. (Brief-backed dispatch through `mctl` needs no such check; `MWRK003`
+covers it.) A molecule root stays OPEN by design until its terminal step fires
+(count closed `✓` steps climbing via `bd show <root>`). `gc status`
+"stopped / 0 sessions" is often a probe timeout — trust `tmux -L gt ls` + rising
+step-counts (`gs-0cy2`).
 
 The `build-basic` / `interaction_mode=interactive` pattern below is retained for reference.
 

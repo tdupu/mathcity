@@ -24,12 +24,22 @@ COMMANDS/SKILLS:
 
 work runs through the skill:`mathcity.work`
 
-Canonical briefed dispatch scopes artifacts per bead:
+Brief-backed dispatch is `mctl work dispatch <brief-bead>` (wrapped by
+`mathcity.work`): it slings the `work-briefed` router, verifies the claim, and
+records provenance. Do not hand-write the brief-backed sling here.
+
+Fresh work with no brief yet still goes through a direct sling, and there you
+must scope `artifact_root` per bead — never the bare rig root, or concurrent
+runs overwrite each other's stage artifacts (gsp-1bmxuz):
 
 ```bash
 gc sling <rig>/gc.run-operator <artifact-bead> --on build-basic-briefed \
   --var artifact_root=<rig-root>/.gc-builds/<artifact-bead>
 ```
+
+(`mctl work dispatch` does **not** scope per bead either — it passes a shared
+rig-level root; see the note in `skills/work/SKILL.md`.) See [[mayor-math]] for
+both paths.
 
 get user input: fork a subagent and run `mathcity-brief-system.decisions-to-briefs`
 
@@ -143,29 +153,60 @@ availability and violates [[mayor-no-direct-grilling]]). Keep
 
 ## 5. Surface pending decisions
 
-/check-briefs. List the briefs **ready to adjudicate** for USER in short form (one line each:
-`#N slug — the decision`). Read them from the decisions-track manifest and show
-only those still awaiting a call:
+/check-briefs. List the briefs **ready to adjudicate** for USER in short form
+(one line each: `<brief-id> — the decision`).
+
+Read them from the **canonical bead store**, not from a cache file:
 
 ```bash
-python3 -c "
-import json
-for l in open('<city-root>/.beads/decisions-track/manifest.jsonl'):
-    r=json.loads(l)
-    if r.get('status')=='ready':
-        print('#'+str(r.get('id')), r.get('slug') or r.get('title',''))
-"
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+"$MCTL" briefs list --status pending --city "$CITY_ROOT" --rig "$RIG" --json \
+  | python3 -c 'import json,sys
+for b in json.load(sys.stdin)["briefs"]:
+    print(b["brief_id"], "—", b["title"])'
 ```
+
+**This replaces a direct read of
+`<city-root>/.beads/decisions-track/manifest.jsonl`.** That file is the *legacy*
+inventory: #37 demoted decisions-track to a migration fallback, and #38 is
+actively changing how its non-terminal statuses are classified. A prime step
+that reported `status == "ready"` rows from it was reporting the wrong queue,
+and a stale one.
+
+Run it once per rig; `--all-rigs` was specified in Slice 2 and is not
+implemented yet, so there is no city-wide call — do not loop over rigs to fake
+one. `gt-*` briefs are unreachable through `--rig` at all (the city-root HQ
+store is not a registered rig, `MCTL_CONTEXT_UNKNOWN_RIG`).
 
 Do not adjudicate them yourself — surface them so USER can drain the pile.
 
 ## 6. Session toolkit
 
-- **`mathcity.work`** — Dispatch work to the fleet. Use this after every brief approval or user request for work.
+- **`bin/mctl`** — the typed MathCity control CLI under the brief/work skills.
+  Direct reads are always safe and are the fastest orientation available:
+  `briefs list --status pending`, `briefs doctor`, `work ready`,
+  `trace show <id>`. Mutations fail closed, and their refusals
+  (`MBRF004` especially) are the machinery working — report them, do not route
+  around them, and never branch on `MBRF021` / `MBRF004` / `MBRF005`.
+- **`mathcity.work`** — Dispatch work to the fleet (`mctl work dispatch` for
+  brief-backed work). Use this after every brief approval or user request for work.
 - **`decisions-to-briefs`** — turn a pile of pending decisions into adjudicable brief artifacts.
 - **`present-briefs`** — batch-present N briefs to USER with a warm queue.
 - **`present-it`** — dump decision-ready context on ONE artifact into the conversation.
-- **`adjudicate-brief`** — record USER's verdict on a brief persistently (one-bead model: verdict on the brief bead).
+- **`adjudicate-brief`** — record USER's verdict on a brief persistently through
+  `mctl briefs adjudicate` / `mctl briefs defer` (one-bead model: verdict on the
+  brief bead). It reports an `MCTL-TRACE` id — keep it.
 - **`check-plan-hygiene`** — REQUIRED before executing any sling command copied from a brief body (catches deprecated vocabulary, boundary violations).
 
 ## 7. Restart sequence (end-of-session → next session):
