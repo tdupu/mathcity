@@ -124,6 +124,9 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
             _chip("/deferred", "deferred", counts.get("deferred")),
             _chip("/queue?scope=errors", "error briefs", counts.get("errors"), accent=True),
         )
+    ) + (
+        '<a href="#mc-keys" style="font-size: 12px; color: var(--color-neutral-700); '
+        'border-bottom: 1px dotted var(--color-accent-600);">keys</a>'
     )
     return (
         '<header data-region="masthead" style="display: flex; align-items: baseline; '

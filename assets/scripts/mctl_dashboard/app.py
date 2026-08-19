@@ -313,16 +313,44 @@ class Dashboard:
             "nobrainer": "No-brainers",
         }
         heading = titles.get(view.scope, "Brief stack")
+        scope_label = "all rigs" if self.city_wide else f"rig {rig}"
+        columns_open = request.query.get("columns_open") == "1"
+        base = view.url()
+        columns_href = base if columns_open else (
+            base + ("&" if "?" in base else "?") + "columns_open=1"
+        )
+
+        # The controls sit on the title row, as the design has them: scope,
+        # the column picker toggle, and a jump to the top brief. All three are
+        # links or forms -- nothing here needs script.
+        controls = (
+            '<div style="margin-left: auto; display: flex; gap: 10px; '
+            'align-items: center;">'
+            # The picker is a query flag, so opening it is a link and its
+            # state survives a reload -- no toggle handler, no hidden div.
+            f'<a class="btn btn-ghost" href="{render.esc(columns_href)}">Columns</a>'
+            + (
+                f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(briefs[0].get("brief_id"))))}">'
+                "Open top brief &rarr;</a>"
+                if briefs
+                else ""
+            )
+            + "</div>"
+        )
+
         sections = [
+            '<div style="display: flex; align-items: baseline; gap: 12px;">'
             f'<h1 style="font-family: var(--font-heading); font-size: 27px; '
-            f'font-weight: 600; margin: 0 0 2px;">{render.esc(heading)}</h1>'
-            f'<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
-            f"{len(briefs)} briefs &middot; sorted by "
+            f'font-weight: 600; margin: 0;">{render.esc(heading)}</h1>'
+            f'<span class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
+            f"{render.esc(scope_label)} &middot; {len(briefs)} briefs &middot; sorted by "
             f"{render.esc(view_state.COLUMN_LABEL.get(view.sort_key, view.sort_key))}"
-            f"{' descending' if view.sort_dir < 0 else ' ascending'}</div>"
+            f"{' descending' if view.sort_dir < 0 else ' ascending'}</span>"
+            + controls
+            + "</div>"
             '<div style="height: 2px; background: var(--color-neutral-900); '
-            'margin: 9px 0 0;"></div>',
-            stack.column_picker(view),
+            'margin: 8px 0 0;"></div>',
+            stack.column_picker(view) if columns_open else "",
             stack.table(briefs, view, queued=()),
             stack.key_legend(),
             stack.unfed_note(),
@@ -331,7 +359,14 @@ class Dashboard:
         # Counts come from the whole listing, not the scoped slice: the
         # sidebar has to report every lane, not just the one being viewed.
         return self._page(
-            heading, "/queue", context, sections, counts=self._counts(all_briefs)
+            heading,
+            "/queue",
+            context,
+            sections,
+            counts=self._counts(all_briefs),
+            # The masthead already states the resolved city, rig and store.
+            # A second Context panel here pushed the table below the fold.
+            context_bar="",
         )
 
     def _overview(self, request: Request) -> Response:

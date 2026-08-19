@@ -249,7 +249,7 @@ def _cell_style(key: str, numeric: bool) -> str:
     if key == "slug":
         return base + (
             " font-family: var(--font-heading); font-size: 14.5px; font-weight: 600;"
-            " white-space: normal; line-height: 1.25; color: var(--color-text);"
+            " line-height: 1.3; color: var(--color-text);"
         )
     if numeric:
         colour = "var(--color-accent-800)" if key == "score" else "var(--color-neutral-800)"
@@ -294,8 +294,9 @@ def _headers(view: ViewState) -> str:
         # overflow hidden on a fixed-width th, 5px clips the sort arrow.
         cells.append(
             f'<th class="mc-th" style="{sizing}text-align: {align}; padding: 6px 12px; '
-            "border: 0; font-family: var(--font-heading); font-size: 12.5px; "
-            f"font-weight: 600; letter-spacing: 0.02em; color: {colour}; "
+            "border: 0; font-family: var(--font-mono); font-size: 10.5px; "
+            "text-transform: uppercase; "
+            f"font-weight: 600; letter-spacing: 0.06em; color: {colour}; "
             'white-space: nowrap; overflow: hidden;">'
             f'<a href="{_e(view.sort_link(key))}">{_e(label)}'
             f'<span class="mono" style="color: var(--color-accent-700);">'
@@ -326,12 +327,10 @@ def _row(
             if brief.get("kind") == "error":
                 style += " font-weight: 600;"
         text = cell_text(brief, key)
-        inner = (
-            'style="display: -webkit-box; -webkit-line-clamp: 2; '
-            '-webkit-box-orient: vertical; overflow: hidden;"'
-            if key == "slug"
-            else 'style="display: block; overflow: hidden; text-overflow: ellipsis;"'
-        )
+        # One line per row, ellipsised. The design's density is the point:
+        # a stack you scan is a stack you can rank, and a wrapped title turns
+        # thirteen visible rows into seven.
+        inner = 'style="display: block; overflow: hidden; text-overflow: ellipsis;"' 
         cells.append(
             f'<td style="{style}"><a href="{_e(href)}" style="color: inherit;" '
             f"{inner}>{_e(text)}</a></td>"
