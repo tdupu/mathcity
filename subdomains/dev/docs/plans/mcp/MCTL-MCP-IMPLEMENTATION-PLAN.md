@@ -247,6 +247,17 @@ The dashboard ships after CLI and MCP semantics are stable. It provides:
 - trace/provenance view,
 - submit button that calls the same core effect planner as CLI and MCP.
 
+**Not shipped in Slice 8, and why (2026-08-19).** Four items on this list need data the Slice 6 tool surface does not expose, and Slice 8 step 2 forbids reaching around it:
+
+| Item | Blocker |
+| --- | --- |
+| option tabs for `(A)` / `Option A` / `Alternative A` / `Verdict A` | `decision_options()` parses the brief's markdown cache and has no MCP tool. It is also read through the Q5-affected artifact path, so its results would be unverifiable today. |
+| option comparison view | Same. |
+| full brief *body* view | `BriefRecord` carries title, status, decision state, labels, timestamps, artifacts, and policy refs -- not the body. `briefs_show` cannot return what the record does not hold. |
+| draft verdict storage, no-brainer leak marker | No canonical store for either; adding one would be new domain state invented at the presentation layer. |
+
+The adjudication form accepts a free-text `option` field so a multi-option verdict can still be recorded (`MOPT001`/`MOPT002` validate it server-side), but the options themselves are not listed for the operator. Closing these needs either a `briefs_options`-style tool that returns decision options, or Q5 resolved so the markdown cache is trustworthy.
+
 ## 4. Diagnostics, Invariants, Traceability, And Logging Model
 
 Stable diagnostic code prefixes:
@@ -996,6 +1007,23 @@ The dashboard provides operator controls for the same completed workflows:
 - Create dashboard tests in the matching test location.
 - Edit `README-development.md` with dashboard startup and smoke-test instructions.
 - Edit this plan if dashboard discovery finds an existing application boundary that changes file paths materially.
+
+**Discovery result (Slice 8, 2026-08-19): there is no dashboard application in this repository, and no framework was adopted.** `gc dashboard` is upstream Gas City and `ONBOARDING.md` records it as broken; the `127.0.0.1:8372` runs view in `subdomains/brief-system/README.md` is the gascity supervisor's, not mathcity's. `LAYOUT.md` names no dashboard directory. The dashboard therefore follows the `mctl` precedent from `LAYOUT.md` -- logic under `assets/`, entry points as thin shims -- and is standard library only (`http.server` plus server-rendered HTML), for the same reason Slice 6 declined the installed `mcp` SDK: the repository declares no Python dependencies, so a `pip install` or `npm install` requirement would make CI depend on a developer's machine.
+
+As-built paths:
+
+| Path | Holds |
+| --- | --- |
+| `assets/scripts/mctl_dashboard/client.py` | MCP client (stdio subprocess + in-process), fifteen-tool allowlist |
+| `assets/scripts/mctl_dashboard/review.py` | Diagnostic codes that may not be presented as actionable |
+| `assets/scripts/mctl_dashboard/preview.py` | Dry-run previews, fingerprints, staleness |
+| `assets/scripts/mctl_dashboard/render.py` | HTML and the severity/code treatment |
+| `assets/scripts/mctl_dashboard/app.py` | Routes; `Request` -> `Response`, no socket |
+| `assets/scripts/mctl_dashboard/server.py` | `http.server` glue and `mctl dashboard serve` |
+| `assets/scripts/mctl_core/cli.py` | `mctl dashboard serve` subcommand (lazy import) |
+| `tests/mctl/test_dashboard_views.py` | Context, list/detail, diagnostics, untrusted state, no passthrough, no repair-on-read |
+| `tests/mctl/test_dashboard_mutation_safety.py` | Preview-before-apply and the stale-preview guard |
+| `tests/mctl/test_dashboard_transport.py` | Real stdio subprocess behind real HTTP |
 
 #### Implementation steps
 

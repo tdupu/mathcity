@@ -391,6 +391,136 @@ schema to `tests/mctl/fixtures/mcp_tool_schemas.json`; regenerate
 deliberately with `MCTL_UPDATE_MCP_SNAPSHOT=1` and read the diff as a
 client-compatibility review.
 
+### Mctl Operator Dashboard
+
+The dashboard is the operator surface over the same core, and a **client of
+the MCP tools** rather than a third adapter: it launches its own
+`mctl mcp serve` subprocess and every fact on every page arrives through
+`tools/call`. It parses no bead store and reads no brief file.
+
+There was no dashboard application in this repository before this slice, and
+none was adopted: `gc dashboard` is upstream Gas City (and `ONBOARDING.md`
+records it as broken), and the `127.0.0.1:8372` runs view named in
+`subdomains/brief-system/README.md` belongs to the gascity supervisor. The
+dashboard is therefore stdlib `http.server` plus server-rendered HTML, for the
+same reason Slice 6 declined the installed `mcp` SDK: this repository declares
+no Python dependencies, so anything needing `pip install` or `npm install`
+would make the suite depend on one developer's machine. No build step, no
+client-side framework, and it works with JavaScript off.
+
+Start it:
+
+```sh
+python3 assets/scripts/mctl.py dashboard serve --city <city-root> --rig <rig>
+bin/mctl dashboard serve --city <city-root> --rig <rig> --port 8471
+```
+
+It prints the bound URL on stderr and defaults to `http://127.0.0.1:8471`.
+`--host` defaults to loopback and is deliberately not given an
+all-interfaces default; see the rollout-gate note below for why that matters.
+
+Smoke test:
+
+```sh
+python3 -m pytest tests/mctl/test_dashboard_views.py \
+  tests/mctl/test_dashboard_mutation_safety.py \
+  tests/mctl/test_dashboard_transport.py
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8471/
+```
+
+`test_dashboard_transport.py` is the end-to-end smoke: it runs the shipped
+path -- a real `mctl mcp serve` subprocess over stdio behind a real
+`http.server` -- and drives preview-then-apply with `urllib`.
+
+| Route | Tools it calls |
+| --- | --- |
+| `GET /` | `context_resolve`, `briefs_list` |
+| `GET /briefs` | `context_resolve`, `briefs_list` |
+| `GET /briefs/<id>` | `context_resolve`, `briefs_show`, `briefs_options`, `briefs_doctor` |
+| `GET /diagnostics` | `context_resolve`, `briefs_validate` |
+| `GET /validate` | `context_resolve`, `briefs_validate` |
+| `GET /work` | `context_resolve`, `work_ready` |
+| `GET /trace` | `context_resolve`, `trace_show`, `trace_replay_preview` |
+| `POST /preview` | `briefs_adjudicate` / `briefs_defer` / `work_dispatch` / `briefs_create`, always `dry_run: true` |
+| `POST /apply` | the same tool with `dry_run: false`, only after the freshness check |
+
+`POST /preview` and `POST /apply` are the only routes that can write anything.
+There is no route that accepts a command, and `mctl_dashboard.client`
+allowlists the fifteen typed tools by name and refuses anything else before it
+reaches the wire. `tests/mctl/test_dashboard_views.py` cross-checks that
+allowlist against `mcp_server.TOOLS_BY_NAME` and `FORBIDDEN_TOOL_NAMES`, and
+asserts that rendering a view calls no mutating tool and writes nothing under
+the rig -- there is no repair-on-read anywhere in the dashboard, and no
+"fix it" affordance for any diagnostic.
+
+#### Rollout gate: the dashboard runs as an `internal` client
+
+Slice 6 defaults external clients to **zero tools**, and mutating tools stay
+`external_ready = false` however the environment is set. So an `external`
+dashboard could not list a brief, let alone adjudicate one. The dashboard
+spawns its MCP server with `--client-class internal` and therefore sees all
+fifteen tools including the mutating three. That is the only class in which it
+can do its job, and it is why the bind address matters: the safety story is
+"loopback, plus a preview-first confirm path", not the rollout gate. Do not
+put this on a routable interface.
+
+#### Mutation is preview-first, and the preview must still be true
+
+The confirm control is rendered **only** on a preview page, never on a brief
+page, so there is no apply button to come back to. Confirming re-resolves the
+context, re-reads the target bead, and re-plans, then compares three
+fingerprints against the ones recorded when the preview was taken:
+
+| Fingerprint | Catches |
+| --- | --- |
+| context | the city registry being re-pointed under a running dashboard |
+| target | the brief bead itself moving -- status, title, labels, timestamps |
+| plan | everything else, e.g. a redundant cache file appearing or vanishing |
+
+If any differs, **nothing is applied**: the confirm returns `409` with
+`MCTL_DASH_PREVIEW_STALE` naming which component moved, and a *fresh* preview
+of the current state replaces the stale one. Tokens are single use and are
+consumed by the first confirm attempt, so a resubmitted form cannot apply
+twice and a stale token cannot be retried. The plan digest redacts per-call
+volatile fields (`trace_id`, `mctl_trace_id`, `adjudicated_at`,
+`deferred_at`) -- otherwise every preview would be stale the instant it was
+taken and the guard would become noise an operator clicks through.
+
+#### Three diagnostic codes the dashboard refuses to make actionable
+
+`MBRF021`, `MBRF004`, and `MBRF005` are shown in full, with their codes, and
+kept out of every actionable count. Each carries the document that owns the
+open question, and none has a repair control:
+
+- **`MBRF021`** -- mass false positive, 66 of 70 briefs in one rig, cause is
+  open question Q5 (`subdomains/dev/docs/OPEN-DESIGN-QUESTIONS.md`). Slice 6
+  already moves it into `untrusted_diagnostics`; the dashboard renders that
+  array in its own `Under review` panel rather than flattening it back in.
+- **`MBRF004`/`MBRF005`** -- instrumentation under review per
+  `subdomains/dev/docs/MALFORMED-BRIEF-TRIAGE-2026-08-19.md`. `malformed`
+  means *closed with no verdict field*, not damaged: the verdicts are mostly
+  present in `close_reason` and `notes`, which the verdict reader does not
+  consult, and roughly 39 of the 74 are git-operation receipts that were never
+  briefs. The decision-queue badge carries that caveat inline; a bare
+  "74 malformed" count would be a defect.
+
+Every response that reports artifact state also renders its `artifact_trust`
+verdict -- **both ways**, so "trusted" is distinguishable from "this page
+forgot to say". When it is false the panel names the open question and the
+reference, and artifacts the core read as `missing` are shown as `unverified`
+with the raw core reading preserved beside them.
+
+Severity gets colour and a badge; the code always renders in its own
+`diagnostic-code` element beside it. `MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS`
+names the code that actually blocked it only in `facts`, so the dashboard
+lifts that out and additionally renders the brief's own diagnostics on the
+blocked page -- "blocked by ERROR diagnostics" without saying which is exactly
+the friendly-message-instead-of-a-code failure this surface must not make.
+
+Verified in a browser at 1280x800 and 375x812: the layout collapses to a
+single column at the 720px breakpoint, the page never scrolls horizontally,
+and wide tables scroll inside their own container.
+
 ### Mctl Diagnostic Codes
 
 `assets/mctl/diagnostics.toml` is the single source of truth for stable
