@@ -45,6 +45,8 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote
 
 from . import render
+from . import state as view_state
+from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
@@ -195,14 +197,88 @@ class Dashboard:
         status: int = 200,
         compact_context: bool = True,
         context_bar: str | None = None,
+        counts: Mapping[str, int] | None = None,
     ) -> Response:
         if context_bar is None:
             context_bar = (
                 self._context_bar(context, compact=compact_context) if context is not None else ""
             )
-        return Response(status, render.page(title, current, sections, context_bar=context_bar))
+        return Response(
+            status,
+            render.page(
+                title,
+                current,
+                sections,
+                context_bar=context_bar,
+                counts=counts or {},
+                context=context or {},
+            ),
+        )
+
+    @staticmethod
+    def _counts(briefs: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+        """Header and sidebar counts, derived from a listing already read.
+
+        Deliberately a pure function over briefs the caller already has rather
+        than a fetch of its own: a city-wide page costs exactly one cross-rig
+        read, and `test_dashboard_city_wide.py` asserts that. Counting by
+        issuing a second `briefs_list` would double the most expensive call on
+        the page to render five numbers.
+
+        Counts with no source yet -- the pile and the no-brainer lane are not
+        readable through the typed surface (issue #66) -- are omitted rather
+        than zeroed, and the chip renders without a number. A zero would be
+        read as "nothing there", which is a claim nobody can currently make.
+        """
+        states: dict[str, int] = {}
+        for brief in briefs:
+            state = str(brief.get("decision_state") or "unknown")
+            states[state] = states.get(state, 0) + 1
+        return {
+            "stack": states.get("pending", 0),
+            "deferred": states.get("deferred", 0),
+            "adjudicated": states.get("adjudicated", 0),
+        }
 
     # -- read views --
+
+    def _queue(self, request: Request) -> Response:
+        """The brief stack in the adopted design.
+
+        Reads the same `briefs_list` the older `/briefs` view does; the view
+        state -- sort, columns, scope -- comes off the query string so the
+        whole screen works with scripting disabled.
+        """
+        view = view_state.parse(request.query)
+        rig = self._rig_for(request) or self.rig
+        context = self._context(rig) if not self.city_wide else None
+        listing = self.client.call("briefs_list", self._args(rig))
+        briefs = list(listing.payload.get("briefs") or ())
+
+        titles = {
+            "stack": "Brief stack",
+            "errors": "Invariant errors",
+            "nobrainer": "No-brainers",
+        }
+        heading = titles.get(view.scope, "Brief stack")
+        sections = [
+            f'<h1 style="font-family: var(--font-heading); font-size: 27px; '
+            f'font-weight: 600; margin: 0 0 2px;">{render.esc(heading)}</h1>'
+            f'<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
+            f"{len(briefs)} briefs &middot; sorted by "
+            f"{render.esc(view_state.COLUMN_LABEL.get(view.sort_key, view.sort_key))}"
+            f"{' descending' if view.sort_dir < 0 else ' ascending'}</div>"
+            '<div style="height: 2px; background: var(--color-neutral-900); '
+            'margin: 9px 0 0;"></div>',
+            stack.column_picker(view),
+            stack.table(briefs, view, queued=()),
+            stack.key_legend(),
+            stack.unfed_note(),
+            render.artifact_trust_panel(listing.artifact_trust, rig=rig),
+        ]
+        return self._page(
+            heading, "/queue", context, sections, counts=self._counts(briefs)
+        )
 
     def _overview(self, request: Request) -> Response:
         if self.city_wide:
@@ -667,6 +743,8 @@ class Dashboard:
             return self._not_found(request)
         if request.path == "/":
             return self._overview(request)
+        if request.path == "/queue":
+            return self._queue(request)
         if request.path == "/briefs":
             return self._briefs(request)
         if request.path.startswith("/briefs/"):
