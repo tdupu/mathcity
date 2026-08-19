@@ -9,7 +9,7 @@ description: Use whenever a STANDALONE decision needs to be recorded persistentl
 
 ## FORK WRAPPER — calling agent's only job
 
-**adjudicate-brief is a fork-composition.** The calling agent MUST immediately fork a subagent to do all recording/dispatch work, then report one line and stop. The calling agent executes NO bd commands itself — it only launches the fork.
+**adjudicate-brief is a fork-composition.** The calling agent MUST immediately fork a subagent to do all recording/dispatch work, then report one line and stop. The calling agent executes NO `bd` or `mctl` commands itself — it only launches the fork.
 
 ### Step 1 — collect from invocation args + context
 
@@ -27,7 +27,7 @@ Agent(
   subagent_type: "fork",
   name: "adj-<BRIEF_BEAD>-<VERDICT>",
   description: "Adjudicate <BRIEF_BEAD> → <VERDICT>",
-  prompt: "You are a fork executing adjudicate-brief. Record the human adjudicator's verdict on brief bead <BRIEF_BEAD> (artifact: <ARTIFACT>): verdict=<VERDICT>, rationale='<RATIONALE>'[, defer_until=<DEFER_UNTIL>], rig=<RIG_DIR>. Execute the FORK BODY section of the adjudicate-brief skill now in your inherited context. Run all bd commands. If verdict=approve, dispatch via mathcity.work. Report one summary line when done."
+  prompt: "You are a fork executing adjudicate-brief. Record the human adjudicator's verdict on brief bead <BRIEF_BEAD> (artifact: <ARTIFACT>): verdict=<VERDICT>, rationale='<RATIONALE>'[, defer_until=<DEFER_UNTIL>], rig=<RIG_DIR>. Execute the FORK BODY section of the adjudicate-brief skill now in your inherited context. Route the verdict through bin/mctl (briefs adjudicate / briefs defer) — no raw bd writes. If verdict=approve, dispatch with mctl work dispatch. Report one summary line INCLUDING every MCTL-TRACE id when done."
 )
 ```
 
@@ -43,38 +43,121 @@ Do NOT wait for the fork. Do NOT run any bd commands. Stop here.
 
 *You are a fork. Execute the following:*
 
-### 1. Add verdict comment to the brief bead
+### 0. Resolve the mctl entry point
+
+Brief verdicts are canonical bead state. `mctl` owns the write — the bead
+update **and** every redundant cache artifact that has to move with it
+(`decisions/<brief>.toml`, `stack/.index.jsonl`). See
+`template-fragments/mctl-entry-point.md`.
 
 ```bash
-cd <RIG_DIR> && bd comments add <BRIEF_BEAD> \
-  "<VERDICT> (the human adjudicator $(date +%Y-%m-%d) via clerk). Rationale: <RATIONALE>"
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+# Bead prefix -> rig NAME registered in city.toml.
+case "$BRIEF_BEAD" in
+  he-*)  RIG=hecke ;;   gsp-*) RIG=gascity-packs ;;  gs-*) RIG=gascity ;;
+  as-*)  RIG=agent_skills ;;  mc-*) RIG=mathcity ;;  lm-*) RIG=lmfdb ;;
+  tgi-*) RIG=tdupu_github_io ;; ho-*) RIG=homog ;;   ja-*) RIG=jacobi ;;
+  dv-*)  RIG=differential_valuations ;;
+  mca-*) RIG=magma_clifford_algebras ;; mda-*) RIG=magma_diff_alg ;;
+  *)     RIG="" ;;
+esac
 ```
 
-### 2. Close or defer the bead
+**`gt-*` beads have no route through `mctl`.** The city-root HQ store is not a
+registered rig in `city.toml`, so `--rig gt` fails with
+`MCTL_CONTEXT_UNKNOWN_RIG`. For an unmapped prefix, stop and hand the verdict
+to a human rather than improvising a second write path — recording a `gt-*`
+verdict by hand is exactly the redundant write this skill no longer does.
+
+### 1. Preview the verdict before applying it
+
+`--dry-run` renders the full `EffectPlan` — the bead update and every cache
+write — without touching anything. Run it first on any verdict you are not
+certain of:
 
 ```bash
-# verdict = approve / reject / revise → close:
-bd close <BRIEF_BEAD> --reason "<VERDICT>: <RATIONALE>"
-
-# verdict = defer → defer with date, leave open:
-bd defer <BRIEF_BEAD> --until=<DEFER_UNTIL> \
-  --reason="<RATIONALE>"
+"$MCTL" briefs adjudicate "$BRIEF_BEAD" --verdict "$VERDICT" \
+  --reason "$RATIONALE" --city "$CITY_ROOT" --rig "$RIG" --dry-run --json
 ```
 
-### 2b. Sync the decisions-track file + manifest (decision-briefs — MANDATORY when present)
+### 2. Record the verdict
 
-If this verdict resolves a `decisions-to-briefs` file-brief — a
-`<NN>-<slug>-brief.md` in `<city-root>/.beads/decisions-track/` with a
-`manifest.jsonl` entry — you MUST update **both** the file frontmatter
-`status:` line **and** the manifest entry in the same step. Updating only one
-diverges the two records: `present-briefs` Method 3 trusts the manifest, but
-any file-status scan re-surfaces the resolved decision. (Observed 2026-08-04:
-17 briefs marked `adjudicated` in the manifest still read
-`status: ready-for-adjudication` in-file, re-presenting decided decisions —
-this step is the fix.)
+`approve` / `reject` / `revise` close the brief bead with the verdict recorded
+on it (one-bead model, B2.2). `defer` leaves it open with a defer window.
+
+```bash
+if [ "$VERDICT" = "defer" ]; then
+  out=$("$MCTL" briefs defer "$BRIEF_BEAD" \
+          --reason "$RATIONALE" --until "$DEFER_UNTIL" \
+          --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+else
+  out=$("$MCTL" briefs adjudicate "$BRIEF_BEAD" \
+          --verdict "$VERDICT" --reason "$RATIONALE" \
+          --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+fi
+TRACE_ID=$(printf '%s' "$out" \
+  | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("trace_id",""))
+except Exception: print("")')
+echo "MCTL-TRACE: $TRACE_ID"
+```
+
+Add `--option <LABEL>` when the brief offers more than one option; without it
+a multi-option brief fails closed with `MOPT001`, which is the gate working.
+
+**A non-zero exit is a refusal, not a crash.** `mctl` fails closed when the
+brief's invariants do not hold, and it prints the blocking diagnostic. Relay
+the diagnostic verbatim and stop. In particular:
+
+> **`MBRF004` ("Brief bead has no source dependency", B2.1) is an `ERROR`, and
+> `effects.py::_blocking_preconditions` refuses any mutation carrying one.** It
+> currently fires on 146 of 185 live briefs, including 88 that are `pending` and
+> otherwise healthy — so **most of the live queue will refuse adjudication**.
+> That is real current behavior, not a defect in this skill and not something to
+> route around. The remedy is a real source link
+> (`bd dep add <brief> <source-bead> --type related`), decided by a human.
+> Do **not** branch on `MBRF004`, `MBRF005`, or `MBRF021` — see
+> `template-fragments/mctl-entry-point.md`.
+
+### 2b. LEGACY-DECISIONS-TRACK sync (only when a decisions-track file exists)
+
+**This is the one cache write this skill still performs by hand, and it is a
+declared exemption rather than an oversight.** Run it only when this verdict
+resolves a `decisions-to-briefs` file-brief — a `<NN>-<slug>-brief.md` under
+`<city-root>/.beads/decisions-track/` with a `manifest.jsonl` row. If the brief
+has no decisions-track file, **skip 2b entirely**; the modern lane is finished
+at step 2.
+
+Why it survives the Slice 7 refactor:
+
+- `mctl briefs adjudicate|defer` writes the bead, `decisions/<id>.toml`, and
+  `stack/.index.jsonl`. It does **not** touch the legacy decisions-track
+  inventory, and it should not: `#38` is actively changing how that tree's
+  non-terminal statuses are classified, and the plan holds bulk live migration
+  until proof 5 is green and authorized.
+- Dropping the sync here does not hand the job to `mctl`; it hands it to nobody.
+  The divergence this step fixes is real and was measured: on 2026-08-04, 17
+  briefs read `adjudicated` in the manifest while their files still read
+  `status: ready-for-adjudication`, so `present-briefs` re-presented decided
+  decisions. `tests/present-briefs-defer-filter/test_defer_filter.sh` extracts
+  and executes the writer below to prove the defer half still holds.
+
+So: `mctl` is the canonical writer, this runs **after** it, and it touches only
+the decisions-track tree — never the pile, never `stack/.index.jsonl`.
 
 `BRIEF_FILE` = the decisions-track path this verdict resolves (the clerk /
-present-briefs passes it; if the brief has no decisions-track file, skip 2b).
+present-briefs passes it; empty means skip).
 
 ```bash
 DTRACK="$HOME/gt/.beads/decisions-track"
@@ -109,15 +192,62 @@ PY
 fi
 ```
 
-Invariant: after 2b, the file's `status:` and the manifest `status` for this
-brief are equal. Never leave one `ready`/`ready-for-adjudication` while the
-other is `adjudicated`.
+Invariant: after 2b, the decisions-track file's `status:` and its manifest
+`status` for this brief are equal. Never leave one `ready`/`ready-for-adjudication`
+while the other is `adjudicated`.
 
-### 3. If verdict = approve → dispatch via mathcity.work (MANDATORY)
+**Do not generalise this exemption.** It covers the legacy decisions-track tree
+and nothing else. Retire it when #38 lands and the legacy lane is migrated.
 
-Scope `artifact_root` per bead — never omit it or pass the bare rig root, or
-concurrent runs on the same rig silently overwrite each other's stage
-artifacts (gsp-1bmxuz):
+### 3. If verdict = approve → dispatch through `mctl work dispatch`
+
+```bash
+if [ "$VERDICT" = "approve" ]; then
+  "$MCTL" work status "$BRIEF_BEAD" --city "$CITY_ROOT" --rig "$RIG" --json
+  out=$(MCTL_ENABLE_LIVE_DISPATCH=1 "$MCTL" work dispatch "$BRIEF_BEAD" \
+          --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+  DISPATCH_TRACE=$(printf '%s' "$out" \
+    | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("trace_id",""))
+except Exception: print("")')
+  echo "MCTL-TRACE: $DISPATCH_TRACE"
+fi
+```
+
+`mctl work dispatch` does mechanically what this skill used to ask the fork to
+do by hand, and it does the parts the prose kept getting wrong:
+
+- it slings through the `work-briefed` **router**, which selects the formula
+  from the live catalog, instead of hardcoding `build-basic-briefed`;
+- it fills `source_bead`, `brief_slug`, and `routing_path` from canonical state
+  rather than from retyped prose;
+- it re-reads the bead after the sling and raises `MWRK003` if the sling exited
+  zero **without** the bead actually being claimed — replacing the eyeballed
+  `bd show | grep -i assignee` check;
+- it writes `dispatch-provenance.v1` only after that verified handoff, so a
+  phantom provenance record cannot block every later retry.
+
+**`MCTL_ENABLE_LIVE_DISPATCH=1` is required.** Unarmed, `work dispatch` returns
+the dry-run payload and slings nothing. It is exported for this one command
+only, deliberately — arming it session-wide would arm every later dispatch too.
+
+`MCTL_CONTROL_PLANE_NOT_ACTIVE` means the supervisor is not confirmed running,
+so a sling would have nowhere to route: run `gc start` and retry. Do not
+work around it with a raw `gc sling`.
+
+> **Known gap — `mctl` does not scope `artifact_root` per bead.**
+> `mctl_core/work.py::_formula_invocation` passes
+> `artifact_root=<rig-root>/.beads/briefs`, a shared rig-level root, and
+> `work-briefed` hands it through to `build-basic-briefed` on the FULL_CONTINUE
+> route. Two concurrent FULL_CONTINUE dispatches in one rig therefore share a
+> stage-artifact root (gsp-1bmxuz). Serialize approvals on one rig rather than
+> re-slinging by hand. See `skills/work/SKILL.md` for the full note.
+
+### Direct `build-basic-briefed` dispatch (when the continuation names it)
+
+A commission brief may carry a `commission-dispatch.v1` continuation that names
+`build-basic-briefed` directly. There, scope `artifact_root` per bead — never
+omit it and never pass the bare rig root (gsp-1bmxuz):
 
 ```bash
 gc sling hecke/gc.run-operator <ARTIFACT> --on build-basic-briefed \
@@ -126,17 +256,27 @@ gc sling hecke/gc.run-operator <ARTIFACT> --on build-basic-briefed \
   --var artifact_root=<city-root>/hecke/.gc-builds/<ARTIFACT>
 ```
 
-Verify assignee within ~60s:
-
-```bash
-bd show <ARTIFACT> | grep -i assignee   # must be non-empty
-```
-
-If assignee is empty after 60s, escalate to mayor.
-
 ### 4. Report
 
-Emit one line: `"Adjudicated <BRIEF_BEAD>: <VERDICT>. [closed/deferred] [<ARTIFACT> dispatched if approve]"`
+Emit one line, and keep the trace ids — they are how this fork's writes are
+audited afterwards with `mctl trace show <id>`:
+
+`"Adjudicated <BRIEF_BEAD>: <VERDICT>. [closed/deferred] [<ARTIFACT> dispatched if approve] MCTL-TRACE: <verdict-trace>[, <dispatch-trace>]"`
+
+### What this fork no longer does, and why
+
+- **No `bd comments add` / `bd close` / `bd defer`.** `mctl briefs
+  adjudicate|defer` performs the canonical bead update through a checked
+  `EffectPlan` with an `if_status` guard, so a concurrent writer loses the race
+  loudly (`MCTL_BEAD_UPDATE_RACE_LOST`) instead of silently overwriting.
+- **No pile or stack-index writes.** `mctl_core/effects.py::_cache_updates`
+  moves `decisions/<brief>.toml` and `stack/.index.jsonl` with the bead, so the
+  skill no longer rewrites either. The one hand-written cache sync that
+  remains is step 2b, confined to the legacy decisions-track tree — see the
+  exemption stated there, and the `blocked-by-policy` row for it in
+  `SKILL-IMPACT-REGISTER.md`.
+- **No hand-written `dispatch-provenance.v1` TOML on the approve path.**
+  `mctl work dispatch` writes it, and only after the claim is verified.
 
 ---
 
@@ -145,6 +285,16 @@ Emit one line: `"Adjudicated <BRIEF_BEAD>: <VERDICT>. [closed/deferred] [<ARTIFA
 When to use: a verdict that closes deliberation with recorded rationale — architecture choices, policy locks, gate-criterion additions, push/kill-switch authorizations.
 
 **NOT for brief verdicts** (those go through the fork body above). NOT for ephemeral observations, cross-session facts (`bd remember`), or work items (`bd create --type task`).
+
+**This half stays on `bd create -t decision`, deliberately.** `mctl briefs
+create` is the *brief-pipeline* creator: alongside the decision bead it writes a
+`.pile/<id>.md` artifact and a `decisions/<id>.toml` cache row, and it refuses
+when the rig has no brief root (`MBRF035`). A standalone decision — a policy
+lock, a kill-switch authorization — is not a brief and has no pipeline artifacts,
+so routing it through `mctl briefs create` would manufacture pile entries for
+decisions that will never be presented, shuffled, or adjudicated. The canonical
+store is the same either way (`BeadStoreAdapter`, `bd type=decision`); only the
+`BriefCacheAdapter` artifacts differ, and here there should be none.
 
 ### Canonical command
 
@@ -202,10 +352,21 @@ If asked to record a decision via non-canonical path:
 - ❌ Use `bd remember "<decision text>"` (that's for facts, not verdicts)
 - ❌ Create a "decision" bead with `--type task` + title-marker (use `--type decision`)
 - ❌ Skip the Decision / Rationale / Alternatives / Affects template
+- ❌ Record a brief verdict with raw `bd close` / `bd defer` / `bd comments add`
+      (brief verdicts go through `mctl briefs adjudicate|defer`)
+- ❌ Rewrite `stack/.index.jsonl`, `decisions/<brief>.toml`, a brief's
+      frontmatter, or the legacy `decisions-track/manifest.jsonl`
+      (`mctl_core/effects.py` owns every cache write that moves with a verdict)
+- ❌ Hand-sling `build-basic-briefed` on approve (use `mctl work dispatch`)
 
 ## Why this skill exists
 
-Prior to grill-2 (2026-06-26), decisions were scattered across 3 `.jsonl` files + bd memories + title-marker beads + markdown files. The session locked `bd decision` as canonical (LD #10 + AP2). The fork-wrapper pattern (added 2026-07-22) keeps the calling session's context free during recording + dispatch — heavy bd + sling work runs in a background fork.
+Prior to grill-2 (2026-06-26), decisions were scattered across 3 `.jsonl` files + bd memories + title-marker beads + markdown files. The session locked `bd decision` as canonical (LD #10 + AP2). The fork-wrapper pattern (added 2026-07-22) keeps the calling session's context free during recording + dispatch — heavy write + sling work runs in a background fork.
+
+Slice 7 (2026-08-19) moved the fork body onto `mctl`. The verdict write, the
+cache artifacts that move with it, the dispatch, and the claim verification were
+four separate hand-rolled steps that could each half-succeed; they are now one
+checked `EffectPlan` per operation, each stamped with a trace id.
 
 ## What stays in the legacy stores (do NOT migrate)
 

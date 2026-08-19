@@ -80,10 +80,17 @@ Draft the brief per [[create-brief]] — the gated `.md`-artifact producer (fron
 
 **Invokability fallback**: if your session cannot invoke the Agent tool (e.g., in polecat/overnight-supervisor sessions where Agent/Task/Workflow dispatch is stripped — note: Skill tool remains available in polecats and should be used normally), inline-compose the sections per the [[present-it]] full-form template directly. The 7 grill-ordered sections are: §1 What is being decided, §2 Recommended answer + rationale, §3 Assumptions surfaced, §4 Alternatives named, §5 Risks foregrounded, §6 Supporting evidence (why-created, LoC, tests, math, timeline), §7 Plan membership + required gates. Do not skip sections; if a section is genuinely empty, write "None surfaced" + 1-line reason.
 
-Save to: `<city-root>/.beads/briefs/.pile/<artifact-safe-name>-brief.md` — FLAT in
-`.pile/` (no per-slug subdirectory). The brief-shuffle-pile order only globs
-depth-1 flat `.pile/*.md` (P1.17 invariant, orders/brief-shuffle-pile.toml);
-a brief saved anywhere else is invisible to the shuffle and never promotes.
+**Draft to staging, not to the pile.** Write the working copy to
+`<rig-root>/.beads/briefs/.staging/<artifact-safe-name>-brief.md` (the
+`staging` path in `assets/brief-pipeline/paths.toml`, and the same directory the
+formula twin's `initialize-staging` step uses). The pile deposit happens in
+**Phase 5c**, through `mctl briefs create`, once the gates have converged.
+
+You no longer pick the pile path or worry about the P1.17 flat-glob invariant:
+`mctl_core/redundant_state.py::artifact_layout` is the single resolver, and it
+reads `paths.toml`. Drafting straight into `.pile/` was how briefs ended up
+depth-2, or in the city-root tree instead of the rig tree, and invisible to the
+shuffle forever after.
 
 Add frontmatter per [[project_brief_stack_workflow]] schema:
 
@@ -171,7 +178,7 @@ Invoke [[coordinate-review]] on the brief:
 
 ```
 coordinate-review
-  artifact=$HOME/gt/.beads/briefs/.pile/<artifact-safe-name>-brief.md
+  artifact=<rig-root>/.beads/briefs/.staging/<artifact-safe-name>-brief.md
   reviewer_persona=<the persona for this artifact type>
   cap=4
   store_beads=false
@@ -194,6 +201,69 @@ Trigger conditions (any TRUE):
 
 If triggered (and `second_opinion` is not force-off): invoke `coordinate-review` a second time with an INDEPENDENT reviewer_persona ("independent skeptic, fresh eyes; you have not seen this brief before"). Cap at 2 rounds. Both reviews must converge to APPROVING before status → `approved`.
 
+### Phase 5c — deposit through `mctl briefs create`
+
+The gates have converged; now the brief becomes canonical state. The brief bead
+is the source of truth (`BeadStoreAdapter`); the pile `.md` and the
+`decisions/<id>.toml` row are cache (`BriefCacheAdapter`) and **one
+implementation owns those writes**.
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+STAGED="<rig-root>/.beads/briefs/.staging/<artifact-safe-name>-brief.md"
+RIG=<rig owning the source bead>    # he-* -> hecke, gsp-* -> gascity-packs, ...
+
+# Preview: the effect plan names the exact pile path and decision TOML it would
+# write, plus the bead it would create. Nothing is touched.
+"$MCTL" briefs create --title "<§1 what is being decided>" --body-file "$STAGED" \
+  --source "$SOURCE_BEAD" --city "$CITY_ROOT" --rig "$RIG" --dry-run --json
+
+out=$("$MCTL" briefs create --title "<§1 what is being decided>" --body-file "$STAGED" \
+        --source "$SOURCE_BEAD" --requested-by "brief-prep-worker" \
+        --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+TRACE_ID=$(printf '%s' "$out" \
+  | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("trace_id",""))
+except Exception: print("")')
+echo "MCTL-TRACE: $TRACE_ID"
+
+# Prove canonical and cache agree before claiming the deposit landed.
+"$MCTL" briefs validate "$BRIEF_ID" --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+**`--source` is mandatory in practice, whatever the flag says.** Omitting it
+yields `MBRF034` now and a brief that `mctl briefs adjudicate` will later refuse
+with `MBRF004` — an unadjudicable brief, which is worse than no brief. This is
+also why self-rejection condition #6 (unlock_count uncomputable because `bd` is
+unreachable) is a stop: without the store you cannot establish the source link
+either.
+
+**`MBRF035`** means the resolved brief root does not exist. `mctl` names the
+path it resolved and refuses rather than `mkdir -p`-ing a shadow tree. Fix
+`paths.brief_root`; do not create the directory to get past it.
+
+**Do not branch on `MBRF021` / `MBRF004` / `MBRF005`** — all three are
+untrustworthy signal today; see `template-fragments/mctl-entry-point.md`.
+
+**What still belongs to this skill, and why.** `mctl` models the *adjudication
+verdict*, not the *brief-quality gate flags*. `status:`, `review_gate:`,
+`unlock_count:`, `deposited_at:`, and the `## Gate Evidence` section are
+pipeline-gate vocabulary with no representation in `mctl_core`, so Phases 3–5
+still own them — on the **staged** file, before the deposit. After Phase 5c the
+pile copy is mctl's; re-editing it in place is the redundant write this phase
+exists to remove.
+
 ### Phase 6 — bookkeeping (per [[project_brief_stack_workflow]] §"Bookkeeping convention")
 
 1. **File a `[brief-record]` tracker bead** with:
@@ -213,7 +283,9 @@ Return ONE concise summary to the caller:
 
 ```
 ARTIFACT: <artifact-id>
-BRIEF-PATH: <city-root>/.beads/briefs/.pile/<file>.md
+BRIEF-BEAD: <id returned by mctl briefs create>
+BRIEF-PATH: <pile path reported in the mctl effect plan>
+MCTL-TRACE: <trace id from the deposit>
 VERDICT: <brief's recommended action — MERGE / DELETE / CLOSE-CONFIRMED / INVESTIGATE / ...>
 UNLOCK-COUNT: <int>
 FP-ROUNDS: <N> (and <M> for second-opinion if triggered)
@@ -285,6 +357,9 @@ Rationale: user-skill files are loaded by every polecat session globally. An err
 - **NO presenting to the human adjudicator.** The clerk owns the human adjudicator-facing presentation (per the mayor-no-direct-grilling / clerk-is-intermediary-only memories); Mayor pulls/promotes from the stack and dispatches. Return the bead-id.
 - **NO `bd close` on adjudication-class beads.** the human adjudicator decides; agents propose.
 - **NO commits or pushes.** Brief deposits are local-only artifact writes.
+- **NO hand-placed pile files, and no in-place edits to a deposited brief.**
+  Phase 5c hands the staged draft to `mctl briefs create`, which owns the pile
+  `.md`, the `decisions/<id>.toml` row, and the stack index.
 - **NO `gh issue close`.** The brief recommends; the human adjudicator or Mayor (via decisions.jsonl) executes.
 - **NO branch deletes.**
 - **Credential discipline** per [[never-echo-credentials]] — no `echo $TOKEN`, no `${VAR:-X}` expansions, no grep on env.
@@ -314,4 +389,13 @@ Rationale: user-skill files are loaded by every polecat session globally. An err
 - **v1.1 — user-skill-touching SAFETY OVERRIDE** (2026-06-24, per [[as-wjv]]): added "Safety overrides" section codifying both server-touching (he-lele cat-E) and user-skill-touching (as-wjv) negative classifiers; brief-prep now computes `server_touching` and `user_skill_touching_override` frontmatter booleans in Phase 3 for downstream enforcement by catch-no-brainer ([[he-6wej]]) / shuffler ([[he-p2jv]]) / pile-processor ([[he-x3se]]).
 - **v1.2 — better briefs: Decision-at-Top INVARIANT + compact form + capability-blocker awareness** (2026-06-30, per as-niek per the human adjudicator "better briefs" epic): hardened §1 ("What is being decided") from convention to invariant with auto-reject enforcement in Phase 4; adopted the grill-with-docs shape from [[present-it]] (decision-first; §3 assumptions surfaced, §4 alternatives named, §5 risks foregrounded, §6 evidence, §7 gates); added Phase 3 shape-branch selecting between full-form and compact form based on [[catch-no-brainer]] output (compact requires a known registry category + `compact_eligible: true` + BOTH safety overrides clear + shape ≠ `capability-blocker`); added `capability-blocker` awareness — briefs where the recommended disposition WOULD be no-brainer if a permission/capability gap were resolved route through "resolve the blocker, then re-classify", never compact; added self-rejection conditions #1 (invariant violated) and #2 (compact misclassified).
 - **v1.3 — two-skill split recomposition** (2026-07-03, per as-4nu): Phase 3 now drafts per [[create-brief]] (the new gated `.md`-artifact producer); [[present-it]] is terminal-only (context dump in-conversation, no file, no gates, no batch) and supplies only the section structure; migrated residual old-numbering references (§10 → §2/§5/§7, test-evidence declarations → §6) left over from the pre-as-niek 10-section template.
+- **v1.5 — deposit through `mctl`** (2026-08-19, plan Slice 7): Phase 3 drafts to
+  `.staging/` instead of hand-placing a `.pile/` file; new **Phase 5c** hands the
+  converged draft to `mctl briefs create`, which owns the pile `.md`, the
+  `decisions/<id>.toml` row, and the bead — one resolver
+  (`mctl_core/redundant_state.py::artifact_layout`) instead of three prose
+  descriptions of where the pile is. Phase 7 returns the brief bead id and the
+  `MCTL-TRACE` id. The gate-flag frontmatter (`status`, `review_gate`,
+  `unlock_count`, `## Gate Evidence`) stays with this skill because `mctl` models
+  the adjudication verdict, not the pipeline gates.
 - **v1.4 — shuffle-conformant output** (2026-07-16, Mayor-session shuffler audit + gsp beads): the SKILL had drifted from its formula twin — briefs it produced had NO `## Gate Evidence` section and informal G14, so the shuffle's fail-closed apply-gates rejected every one (gt-vx0g3). Phase 3 now requires the Gate Evidence section (one entry per active-profile gate, evidence_key-keyed, G14 literal tri-state); Phase 4 checks it; Phase 5 stamps `review_gate: approved`/`review-failed` alongside `status` (patrol paused — stamp at source); deposit path codified FLAT to `.beads/briefs/.pile/<slug>.md` (P1.17 glob invariant).

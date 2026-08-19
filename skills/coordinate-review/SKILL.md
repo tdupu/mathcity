@@ -40,6 +40,8 @@ You do NOT make this judgment in-skill. After each revisor finishes, you call `g
 
 - **spec** (required if no artifact): description of what to create.
 - **artifact** (optional): existing file path or text block to improve. If provided, skip to the critic step.
+- **brief_id** (optional): the `type=decision` bead behind the artifact, when the
+  artifact is a brief. Enables the brief-artifact pre-check below.
 - **reviewer_persona** (optional): a lens for the critic.
 - **creator_persona** (optional): context for the creator/revisor.
 - **store_beads** (optional, default false): write a bead file each iteration in `docs/beads/review-<artifact-basename>-<timestamp>/`.
@@ -62,6 +64,63 @@ Initialize iteration counter to **N = 1**. Stamp `WALL_START=$(date -u +%FT%TZ)`
       || ls ~/.claude/skills/revise-artifact/SKILL.md
 
 If a path does not exist, stop and ask. Strip the YAML frontmatter (`---` … `---`) before embedding.
+
+## Setup step: brief-artifact pre-check (only when the artifact is a brief)
+
+coordinate-review is artifact-agnostic — SKILL.md files, plans, theorems, LaTeX,
+code. **One artifact type has canonical state behind it**: a brief. When
+[[brief-prep]] Phase 5 or [[create-brief]] gate 3 calls this skill, the file
+under review is (or will become) the cache side of a `type=decision` bead, and
+the critic cannot see that bead. Run the two read-only mctl reports first and
+hand them to the critic as evidence.
+
+Skip this whole section when the artifact is not a brief. It reads only; it
+mutates nothing and needs no trace id.
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+# BRIEF_ID is the decision bead; RIG is the rig that owns it.
+"$MCTL" briefs doctor --brief "$BRIEF_ID" --city "$CITY_ROOT" --rig "$RIG" --json
+"$MCTL" briefs options "$BRIEF_ID" --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+- **`briefs doctor`** reports where canonical bead state and the cache artifacts
+  disagree. A critic reviewing prose cannot detect that the brief it is polishing
+  is already adjudicated, or that its stack row points at a file that moved.
+- **`briefs options`** enumerates the actions the brief actually enables. It is
+  the mechanical check on §4 *"alternatives named"*: a brief whose prose offers
+  three options while `options` reports one is not a well-formed brief, and that
+  finding belongs in the critic's action items rather than in a later
+  `MOPT001` failure at adjudication time.
+
+**Fold the output into the critic prompt as evidence, under a
+`## Canonical brief state` heading. Do NOT branch the loop on it.** These are
+read commands; `mctl` never repairs drift and neither does this skill.
+Specifically:
+
+> **Drop `MBRF021`, `MBRF004`, and `MBRF005` before you hand anything to the
+> critic.** All three are known-untrustworthy today — `MBRF021` is a mass false
+> positive (66 of 70 briefs in one rig), and `MBRF004`/`MBRF005` are
+> instrumentation under review where `malformed` means *closed with no verdict
+> field*, not damaged. A critic handed these will spend rounds "fixing" findings
+> that are artifacts of the reader. See
+> `template-fragments/mctl-entry-point.md` and
+> `subdomains/dev/docs/MALFORMED-BRIEF-TRIAGE-2026-08-19.md`.
+
+`MCTL_CONTEXT_UNKNOWN_RIG` on a `gt-*` brief is the known HQ-store gap, not an
+error in the brief: the city-root store is not a registered rig. Note it and
+review without the pre-check.
 
 ## Step 0 (only if no artifact): Initial creation
 

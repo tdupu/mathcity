@@ -34,7 +34,18 @@ Record the answer in frontmatter as `lane: code-artifact | escalation`. **The la
 
 ## Artifact format
 
-**Path:** `<city-root>/.beads/briefs/<artifact-safe-name>-brief.md` — the canonical HQ stack (S6 2026-07-15: cross-rig consolidation completed; ALL rigs deposit briefs here for uniform landing, per the human adjudicator — supersedes the old per-rig `<city-root>/hecke/.beads/briefs/` hardcode). One canonical file per artifact; revisions in place with a `.bak` before any FP-revision; no `-vN-` suffixes.
+**Path: you no longer choose one.** In the code-artifact lane the deposit is
+`mctl briefs create` (see "Deposit" below), and `mctl` resolves the pile path
+from `assets/brief-pipeline/paths.toml` through the single resolver
+`mctl_core/redundant_state.py::artifact_layout`. **This retires the standing
+three-way path conflict** between this skill, `paths.toml`, and [[brief-prep]]
+that the old text called out and asked you to guess your way through — a brief
+in the wrong directory is read by nobody, and now nobody has to pick. One
+canonical file per brief bead; revisions in place with a `.bak` before any
+FP-revision; no `-vN-` suffixes.
+
+The escalation lane still writes the file itself, because `mctl briefs create`
+shells out to `bd` — see "Escalation lane — delivery" below.
 
 **Frontmatter (required, per the stack schema + safety overrides):**
 
@@ -79,7 +90,11 @@ These fields have no measurable answer while blocked. **Every one has a required
 
 - The stack sorts by `unlock_count`, and how consumers order a non-integer is unspecified. `UNKNOWN-NOT-COMPUTED` protects the record's honesty; **it does not guarantee visibility.** This is why `priority` carries the ranking here, and why delivery must signal a human rather than trusting the sort.
 - **`escalation-unreviewed`, `escalation-self-checked`, and `.escalation-drop/` are new vocabulary that no consumer yet parses.** `formulas/brief-review-patrol.toml` only advances briefs at `review_gate: pending`, so a brief marked `escalation-self-checked` is invisible to the patrol. That is deliberate — it is better than borrowing `review-failed`, which asserts a review ran — but it means **an escalation brief will not move through the pipeline on its own.** Say so in the delivery line.
-- **The deposit path is contested.** This skill says `<city-root>/.beads/briefs/<name>-brief.md`; `assets/brief-pipeline/paths.toml` is rig-relative with a distinct `stack`/`.pile` layout; [[brief-prep]] deposits flat to `.beads/briefs/.pile/<slug>.md`. **Write to the path [[brief-prep]] uses if you can reach it, and record which path you chose** — a brief in the wrong directory is read by nobody.
+- **The deposit path used to be contested; it is not any more.** In the
+  code-artifact lane `mctl briefs create` resolves it from `paths.toml` via one
+  resolver. This bullet survives only for the escalation lane, where you write
+  the file yourself: use the pile path `mctl briefs create --dry-run` reports
+  in its `effect_plan`, and if you cannot even run that, `<rig-root>/.beads/briefs/.pile/`.
 
 **Body:** the Decision-at-Top INVARIANT and the section structure are [[present-it]]'s, written to file instead of spoken:
 
@@ -170,8 +185,91 @@ Escalation-lane delivery therefore uses a **plain filesystem write**, which need
 3. **Draft the brief** — frontmatter + Decision-at-Top + full-form or compact body per "Artifact format" above. **Code-artifact lane:** compute `unlock_count` (bd queries per `project_brief_stack_workflow.md`; record the transcript in §7). **Escalation lane: do NOT run store queries — the store is what failed.** Write `UNKNOWN-NOT-COMPUTED` and record in §7 which queries you would have run and that none were run. Use the escalation-lane field-rules table for every other unmeasurable field.
 4. **Self-check** the Decision-at-Top INVARIANT and section completeness ("None surfaced" + reason is acceptable; blank is not).
 5. **Code-artifact lane: critical-review** (registry **G4**, not G3 — see the gate-ID warning above) to APPROVING; update `status` / `review_gate` per iteration. **Escalation lane: single-pass self-check** (E3) and set `review_gate: escalation-self-checked`. Do not run the FP loop.
-6. **Write the file** to the stack path; deliver per "Delivery" above.
+6. **Deposit.** Code-artifact lane: `mctl briefs create` (see "Deposit" below).
+   Escalation lane: the plain filesystem write in "Escalation lane — delivery".
+   Then deliver per "Delivery" above.
 7. **Return** the brief path + verdict + gate outcomes to the caller. When invoked from [[brief-prep]], the orchestrator's Phase 2/4/5 executions ARE gates 1–3 (do not run tests or coordinate-review a second time) and it owns deposit bookkeeping (brief-record bead, follow-up beads, epic links) — don't duplicate either; when invoked standalone, say explicitly in the return that bookkeeping has NOT been filed.
+
+## Deposit — `mctl briefs create` (code-artifact lane)
+
+The brief bead is canonical (`BeadStoreAdapter`); the `.md` file, the
+`decisions/<id>.toml` row, and the stack index are cache
+(`BriefCacheAdapter`). **One implementation owns the cache writes.** This skill
+drafts the body and hands it over; it does not place files.
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+BODY=<path to the drafted brief markdown>   # frontmatter + Decision-at-Top + body
+RIG=<rig owning the source bead>            # he-* -> hecke, gsp-* -> gascity-packs, ...
+
+# 1. Preview. The effect plan names the exact pile path, decision TOML, and
+#    bead create it WOULD perform. Nothing is written.
+"$MCTL" briefs create --title "<what is being decided>" --body-file "$BODY" \
+  --source "$SOURCE_BEAD" --city "$CITY_ROOT" --rig "$RIG" --dry-run --json
+
+# 2. Apply.
+out=$("$MCTL" briefs create --title "<what is being decided>" --body-file "$BODY" \
+        --source "$SOURCE_BEAD" --requested-by "$AGENT" \
+        --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+TRACE_ID=$(printf '%s' "$out" \
+  | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("trace_id",""))
+except Exception: print("")')
+echo "MCTL-TRACE: $TRACE_ID"
+
+# 3. Prove canonical and cache agree before you claim the deposit landed.
+"$MCTL" briefs validate "$BRIEF_ID" --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+**`--source` is not optional in practice.** Omitting it produces `MBRF034`
+(B2.1-incomplete) at creation, and the resulting brief is one that
+`mctl briefs adjudicate` will later refuse with `MBRF004`. Pass the source bead
+now; the alternative is a brief nobody can ever adjudicate.
+
+**`MBRF035` — refusing to create a brief tree.** If the resolved brief root does
+not exist, creation aborts and names the path it resolved rather than
+`mkdir -p`-ing a parallel shadow tree. That is the gate working: check
+`paths.brief_root` against the rig's actual tree, do not create the directory to
+get past it.
+
+**Never branch on `MBRF021`, `MBRF004`, or `MBRF005`** — see
+`template-fragments/mctl-entry-point.md` for why all three are untrustworthy
+signal today.
+
+### What this replaces
+
+The old step 6 told you to write the `.md` yourself and then *"record which path
+you chose"*, because this skill, `paths.toml`, and [[brief-prep]] named three
+different directories. That is exactly the redundant-artifact write the bead-first
+model forbids: a hand-placed file is cache with no canonical bead behind it, and
+half the time it landed where the shuffle does not glob.
+
+## Escalation lane — the sanctioned direct write
+
+`mctl briefs create` shells out to `bd`. In the escalation lane `bd` is very
+often the thing that failed — the same defect that blocked you. So this lane
+keeps the plain filesystem write, and that is a **deliberate, bounded exception**
+to "no skill writes brief artifacts directly", not an oversight:
+
+- Try `"$MCTL" briefs create --dry-run` first anyway. If it answers, you are not
+  actually blocked on the store — reclassify to the code-artifact lane and use
+  the normal deposit. If it fails, its diagnostic is E1 evidence: paste it in.
+- Then write the file per "Escalation lane — delivery when the store and the
+  mail channel are BOTH down" below.
+- Say in the brief that the deposit was a direct write and name the diagnostic
+  that forced it. An undeclared direct write is indistinguishable from a skill
+  that simply ignored the rule.
 
 ## Hard rules
 
@@ -180,6 +278,12 @@ Escalation-lane delivery therefore uses a **plain filesystem write**, which need
 - **NO commits or pushes.** Brief deposits are local-only artifact writes.
 - **NO `gh issue close`, NO branch deletes.** The brief recommends; the human adjudicator (via decisions.jsonl) executes.
 - **Credential discipline** per [[never-echo-credentials]].
+- **NO hand-placed brief files in the code-artifact lane.** `mctl briefs create`
+  owns the deposit; the escalation lane is the only sanctioned direct write, and
+  it must declare itself.
+- **NO edits to `stack/.index.jsonl`, `decisions/*.toml`, or the legacy
+  `decisions-track/manifest.jsonl`.** Those are `BriefCacheAdapter` artifacts;
+  `mctl_core/effects.py` is their only writer.
 
 ## Red flags — you are in the wrong lane, or about to fabricate
 
