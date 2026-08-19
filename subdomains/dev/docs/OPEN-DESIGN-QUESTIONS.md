@@ -84,6 +84,79 @@ This class of bug is not reachable without a live city.
 
 ---
 
+## Q5 — Is the brief stack per-rig or city-wide? `paths.toml` and reality disagree
+
+**Status:** OPEN · **Owner:** Taylor (brief-pipeline policy) ·
+**Raised:** 2026-08-19, from mctl Slice 5 work ·
+**Blocks:** live-rig e2e (pink), and any mctl code that trusts artifact state
+
+**Observed.** `assets/brief-pipeline/paths.toml` declares, in its own header:
+
+> Paths are RIG-RELATIVE (resolve against `<rig_root>`), matching the live pilot
+> layout at `<rig_root>/.beads/briefs/` (hecke pilot: `<city-root>/hecke`).
+
+`mctl_core/redundant_state.artifact_layout()` implements exactly that, resolving
+every path through `_rig_relative(ctx.rig_root, ...)`.
+
+**The declared layout does not exist.** Measured 2026-08-19:
+
+| path | state |
+|---|---|
+| `<city-root>/.beads/briefs/stack` | **101 entries** |
+| `<city-root>/gascity-packs/.beads/briefs/stack` | absent |
+| `<city-root>/hecke/.beads/briefs/stack` | absent |
+| `<city-root>/mathcity/.beads/briefs/stack` | absent |
+
+Every rig-root brief tree is gone. The live stack is city-root-level and
+**cross-rig** — it carries briefs from several rigs in one directory.
+
+**Why this went unnoticed for a month.** The shuffler never reads `paths.toml`.
+`assets/scripts/brief-stack-index.py` takes `--brief-root` as an explicit
+**required** argument, so the caller supplies the city root and the declared
+contract is bypassed entirely. mctl is the only component that reads the
+contract and resolves it, which is why the drift surfaced the moment mctl
+looked. This is not "mctl disagrees with the shuffler" — it is "the config
+disagrees with reality, and only mctl was listening."
+
+**The question.** Which is canonical?
+
+- **(a) City-wide cross-rig** — matches the live 101-entry stack. Implies
+  `paths.toml` is stale and should be rewritten city-relative, and that
+  `artifact_layout()` should resolve against `ctx.city_root`. Also implies the
+  stack is a single adjudication queue across rigs, which is arguably the point
+  of a brief *stack*.
+- **(b) Per-rig** — matches the declared contract and the original hecke pilot.
+  Implies the live layout is drift to be repaired, and that 101 briefs need
+  redistributing to their owning rigs.
+
+The live evidence points hard at (a), and a cross-rig queue reads like an
+intentional design change that was never written down. But (b) is what every
+document says, so this cannot be settled by an implementer picking the one that
+matches the filesystem.
+
+**Consequences while it is open.**
+
+- `scan_artifacts` reports `missing` for every artifact against the live city.
+  Any e2e built on the current model would assert `missing`, pass, and prove
+  nothing. pink is holding the live-rig e2e for this reason.
+- Slice 5's `briefs create` writes redundant artifacts through the same
+  resolver. Unguarded, it would have `mkdir -p`'d a **parallel shadow brief tree
+  under each rig root**, diverging from the real stack with nothing downstream
+  noticing until the two disagreed.
+
+**Interim guard (implemented, Slice 5).** `briefs create` aborts with `MBRF035`,
+naming the resolved path, when the brief root does not exist — rather than
+creating it. One resolver is retained; no city-root fallback was added, and
+`paths.toml` was not edited. That converts the open question into a visible
+error instead of silent corruption, and both callers inherit the fix once the
+root is decided.
+
+**What resolving it looks like.** Decide (a) or (b); update `paths.toml` and
+`artifact_layout()` together; keep them the single source of truth; and give the
+shuffler a reason to consult the contract rather than take a root by argument,
+or the same drift recurs.
+
+
 ## Q4 — Should the P1.14 pre-flight distinguish "the probe cannot run" from "the server is down"?
 
 **Status:** OPEN (narrowed) · **Owner:** Taylor (mathcity side) ·
