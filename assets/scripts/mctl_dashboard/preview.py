@@ -9,8 +9,14 @@ moved in between.
 So a preview records three fingerprints of the world it was computed against,
 and the confirm path recomputes all three:
 
+`rig`      which rig's bead store the mutation targets. On a city-wide
+           dashboard this is a real axis: the same page can address sixteen
+           stores, and a confirm that arrives naming a different rig than the
+           preview was taken against must not be applied to either.
 `context`  the resolved city/rig/db. Catches the registry being re-pointed
-           underneath a running dashboard.
+           underneath a running dashboard, and -- because `rig_id`, `rig_db`
+           and `rig_root` are all fingerprinted -- catches the rig changing
+           even when the form still claims the old one.
 `target`   the canonical bead record from `briefs_show`. Catches the brief
            itself changing -- status, title, labels, timestamps.
 `plan`     the effect plan itself, re-planned at confirm time. Catches
@@ -106,6 +112,7 @@ class Preview:
     tool: str
     arguments: dict[str, Any]
     brief_id: str | None
+    rig: str | None
     context_fingerprint: str
     target_fingerprint: str
     plan_digest: str
@@ -117,9 +124,16 @@ class Preview:
         plan = self.payload.get("effect_plan")
         return dict(plan) if isinstance(plan, Mapping) else {}
 
-    def matches(self, *, context: str, target: str, plan: str) -> tuple[str, ...]:
+    def matches(
+        self, *, context: str, target: str, plan: str, rig: str | None = None
+    ) -> tuple[str, ...]:
         """Return the names of the components that have changed since preview."""
         changed = []
+        if rig != self.rig:
+            # Named separately from `context` even though the context
+            # fingerprint would also move: "the rig changed" is the sentence
+            # an operator needs, and "the context changed" is not it.
+            changed.append("rig")
         if context != self.context_fingerprint:
             changed.append("context")
         if target != self.target_fingerprint:
@@ -147,6 +161,7 @@ class PreviewStore:
         tool: str,
         arguments: Mapping[str, Any],
         brief_id: str | None,
+        rig: str | None,
         context: Mapping[str, Any],
         target: Mapping[str, Any] | None,
         payload: Mapping[str, Any],
@@ -157,6 +172,7 @@ class PreviewStore:
             tool=tool,
             arguments=dict(arguments),
             brief_id=brief_id,
+            rig=rig,
             context_fingerprint=context_fingerprint(context),
             target_fingerprint=target_fingerprint(target),
             plan_digest=stable_digest(dict(payload).get("effect_plan")),

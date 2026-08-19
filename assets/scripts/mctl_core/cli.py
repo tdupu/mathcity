@@ -18,10 +18,11 @@ from .briefs import (
     validate_brief,
     validation_scope,
 )
+from .city import for_each_rig, merge_outcomes
 from .context import ContextError, MctlContext, resolve_context
 from .diagnostics import Diagnostic, render_diagnostic
 from .liveness import city_not_active_diagnostic
-from .trace import fold, read_rows, trace_not_found_diagnostic
+from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
 from .effects import (
     BriefCreateInput,
     MutationError,
@@ -61,6 +62,11 @@ def main(argv: list[str] | None = None) -> int:
         from mctl_dashboard.server import serve_from_args as serve_dashboard
 
         return serve_dashboard(args)
+    if getattr(args, "all_rigs", False):
+        # Cross-rig reads never resolve a single rig: on a multi-rig city that
+        # resolution is exactly the MCTL_CONTEXT_RIG_REQUIRED error this flag
+        # exists to answer. `city.py` resolves one context per rig instead.
+        return _all_rigs_command(args)
     try:
         context = resolve_context(
             Path.cwd(),
@@ -88,6 +94,97 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "trace":
         return _trace_command(args, context)
     return _work_command(args, context)
+
+
+#: Which arrays each cross-rig read contributes, mirroring the MCP server's
+#: `CROSS_RIG_ARRAYS`. Both adapters run the same `city.for_each_rig` over the
+#: same per-rig core call, so the CLI and the MCP tool cannot disagree about
+#: what a city-wide answer contains.
+_ALL_RIGS_ARRAYS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("briefs", "list"): ("briefs",),
+    ("briefs", "validate"): ("briefs", "brief_diagnostics"),
+    ("work", "ready"): ("work",),
+}
+
+
+def _all_rigs_command(args: argparse.Namespace) -> int:
+    """Run one read against every registered rig.
+
+    Exits non-zero when any rig could not be read. A shell caller that treats
+    a partial city-wide answer as complete is the failure this whole path
+    exists to prevent, and an exit code is the only signal a pipeline sees.
+    """
+    key = (args.command, getattr(args, "brief_command", None) or getattr(args, "work_command", None))
+    arrays = _ALL_RIGS_ARRAYS[key]
+
+    def run(context: MctlContext) -> dict[str, object]:
+        if key == ("briefs", "list"):
+            records = list_briefs(context, BriefFilters(args.status, args.label))
+            return _brief_payload(
+                context,
+                briefs=[brief.to_dict() for brief in records],
+                diagnostics=brief_command_diagnostics(context, records),
+            )
+        if key == ("briefs", "validate"):
+            report = validate_brief(context, _validation_scope(context, args))
+            payload = report.to_dict()
+            payload["diagnostics"] = _diagnostics_payload(context, report.diagnostics)
+            return payload
+        return {
+            "diagnostics": _diagnostics_payload(context, ()),
+            "work": [item.to_dict() for item in ready_work(context)],
+        }
+
+    try:
+        scope, outcomes = for_each_rig(
+            Path.cwd(), city=Path(args.city) if args.city else None, env=os.environ, run=run
+        )
+    except ContextError as error:
+        print(render_diagnostic(error.diagnostic), file=sys.stderr)
+        return 1
+    payload = merge_outcomes(
+        scope,
+        outcomes,
+        arrays=arrays,
+        trace_id=new_trace_id(),
+        validity=key == ("briefs", "validate"),
+    )
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(_render_all_rigs_payload(payload))
+    return 1 if any(not outcome.ok for outcome in outcomes) else 0
+
+
+def _render_all_rigs_payload(payload: dict[str, object]) -> str:
+    """Human output that leads with the per-rig breakdown.
+
+    The aggregate answers "how much is there"; the breakdown answers "where is
+    it", and a degraded rig has to be visible in the same glance -- a total
+    that quietly omits a rig reads as complete.
+    """
+    rigs = [entry for entry in payload.get("rigs") or () if isinstance(entry, dict)]
+    readable = [entry for entry in rigs if entry.get("ok")]
+    degraded = [entry for entry in rigs if not entry.get("ok")]
+    lines = [
+        f"city: {payload.get('city_root', '?')}  "
+        f"({len(readable)} of {len(rigs)} rigs readable)"
+    ]
+    for entry in rigs:
+        counts = entry.get("counts") or {}
+        detail = (
+            "  ".join(f"{name}={value}" for name, value in sorted(counts.items()))
+            if entry.get("ok")
+            else f"could not read ({entry.get('reason')})"
+        )
+        lines.append(f"  {'ok ' if entry.get('ok') else 'DEGRADED'} {entry.get('rig_id')}: {detail}")
+    if degraded:
+        lines.append(
+            f"  {len(degraded)} rig(s) could not be read; totals below are incomplete."
+        )
+    lines.append("")
+    lines.append(_render_brief_payload(payload))
+    return "\n".join(lines)
 
 
 def _trace_command(args: argparse.Namespace, context: MctlContext) -> int:
@@ -181,10 +278,26 @@ def _add_runtime_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="render deterministic JSON")
 
 
+def _add_all_rigs_argument(parser: argparse.ArgumentParser) -> None:
+    """The plan's explicit cross-rig opt-in (Global Constraints, Slice 2).
+
+    Explicit because a command that silently spanned rigs would make "which
+    store did that read" unanswerable from the command line. The name is the
+    plan's own; `mctl_core/city.py` is the single implementation behind it,
+    here and on the matching MCP `all_rigs` input.
+    """
+    parser.add_argument(
+        "--all-rigs",
+        action="store_true",
+        help="read every registered rig; rows carry their rig and unreadable rigs are named",
+    )
+
+
 def _add_brief_list_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = commands.add_parser("list", help="list canonical decision brief beads")
     parser.add_argument("--status", help="filter by raw bead or decision status")
     parser.add_argument("--label", help="filter by brief label")
+    _add_all_rigs_argument(parser)
     _add_runtime_arguments(parser)
 
 
@@ -243,6 +356,7 @@ def _add_brief_create_parser(commands: argparse._SubParsersAction[argparse.Argum
 
 def _add_brief_validate_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = commands.add_parser("validate", help="prove canonical and redundant state agree")
+    _add_all_rigs_argument(parser)
     parser.add_argument("brief_id", nargs="?")
     parser.add_argument("--all", action="store_true", help="validate every canonical brief")
     _add_runtime_arguments(parser)
@@ -250,6 +364,7 @@ def _add_brief_validate_parser(commands: argparse._SubParsersAction[argparse.Arg
 
 def _add_work_ready_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = commands.add_parser("ready", help="list ready brief-backed work")
+    _add_all_rigs_argument(parser)
     _add_runtime_arguments(parser)
 
 
