@@ -75,6 +75,67 @@ This class of bug is not reachable without a live city.
 
 ---
 
+---
+
+## Q4 — The P1.14 Dolt pre-flight reports a healthy data plane as unreachable
+
+**Status:** OPEN · **Owner:** Taylor (mathcity side) + Gas City upstream ·
+**Raised:** 2026-08-18
+
+**Observed.** `template-fragments/dolt-preflight.md` defines the canonical
+three-valued pre-flight every mathcity skill copies verbatim. It calls
+`gc dolt health` and treats exit 1 as "server unreachable — the only value that
+means Dolt is down", routing everything else to the same abort branch.
+
+The installed `gc` has **no `dolt` subcommand at all**:
+
+```
+$ gc dolt health
+gc: unknown command "dolt"
+$ gc dolt health >/dev/null 2>&1; echo $?
+1
+```
+
+Both binaries on PATH (`~/go/bin/gc`, `~/.local/bin/gc`) behave identically.
+Exit 1 is precisely the code the contract reserves for "Dolt is down", so the
+canonical block, run verbatim, currently prints:
+
+```
+I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads).
+```
+
+while Dolt is demonstrably **up** — listening on 127.0.0.1:58506, with `bd`
+resolving 9,570 beads and mctl reading 66 briefs off it in the same session.
+
+**Blast radius.** Roughly 18 call sites embed the block, including
+`check-briefs`, `check-work`, `push-the-fleet`, `wake-city`, `simple-work`,
+`check-molecules`, `city-status`, `testing-work`, `strand-sweep`. Each aborts
+before doing any work.
+
+**Why this is the issue #7/#8 bug in a new costume.** Those issues were about
+`||` collapsing the three-valued contract so a standing *quarantine* read as a
+connectivity failure. The contract was fixed to test 0 and 2 explicitly and
+route everything else to abort. That fix is correct for the failure modes it
+enumerates (1 unreachable, 78 port unresolved, 127 gc missing) — but a **gc
+that no longer has the subcommand** lands in the same catch-all, and once again
+a healthy data plane is reported as down with remediation advice
+(`gc dolt start`) that cannot work.
+
+**The question.** Did `gc dolt` move, get renamed, or get removed upstream? And
+should the pre-flight distinguish "the probe itself is unavailable" from "the
+server is unreachable"? A probe that cannot run is not evidence that the thing
+it probes is down — the two deserve different exits and different remediation.
+
+**What mctl does instead, and why it happens to work.** mctl does not use this
+fragment. It TCP-connects to the endpoint named in
+`.beads/dolt-server.port` and gates bead commands on that. That is a boolean
+probe of the kind this fragment warns against, and it was written without
+knowledge of the P1.14 contract — but it is the reason mctl reports Dolt
+correctly today while the canonical pre-flight does not. Reconciling the two is
+open: mctl should probably consume the canonical contract once the contract can
+actually run.
+
+
 ## Q2 — Should mctl core be the single writer of the brief stack index?
 
 **Status:** RESOLVED (direction set; implementation not started) · **Owner:**
