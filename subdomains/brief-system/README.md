@@ -255,6 +255,56 @@ match the merged source revision before running migration.
 
 ---
 
+## Operator commands: creating and validating a brief
+
+`mctl` is the typed operator surface for the same lifecycle. **The decision
+bead is the source of truth.** A brief *is* a `type=decision` bead (B2.1); the
+pile markdown, the decision TOML, the stack index, and the archive are
+redundant cache that may be regenerated from bead state at any time (B2.8). On
+any disagreement between a file and the bead store, the bead wins.
+
+Creation therefore writes the bead **first**, and the redundant artifacts only
+after `bd` has accepted it:
+
+```bash
+# Preview the effect plan without writing anything.
+mctl briefs create --title "Decide dispatch policy" --body-file /tmp/body.md \
+    --source he-q7r2 --dry-run --json
+
+# Create it for real: bd create runs first, then the .pile markdown and the
+# decision TOML cache.
+mctl briefs create --title "Decide dispatch policy" --body-file /tmp/body.md \
+    --source he-q7r2 --json
+```
+
+`--source` links the new brief to the source bead it decides about. It is
+optional only so the command can still be used mid-workflow; omitting it
+produces `MBRF034`, because a brief with no source link is malformed under
+B2.1 and cannot enter the pile.
+
+Creation writes to `.pile/` and never to `stack/.index.jsonl` — the shuffle is
+the single writer to the stack (B2.10), and a producer that wrote the stack
+directly would be skipping every gate.
+
+If the brief root it resolves does not exist, creation aborts with `MBRF035`
+and names the path rather than creating it. That is deliberate: the declared
+artifact layout and the live city's layout currently disagree, so a silent
+`mkdir` would build a second brief tree beside the real one.
+
+Validation is the read-only proof that the canonical bead and its redundant
+artifacts still agree. It reports drift; it never repairs it:
+
+```bash
+mctl briefs validate he-x8dk --json     # one brief
+mctl briefs validate --all --json       # every brief, with aggregate counts
+```
+
+`MBRF020` means the decision cache disagrees with the bead — trust the bead
+and regenerate the file. `MBRF021` means a canonical brief has no redundant
+artifact at all, which loses the cross-check but not the brief itself.
+
+---
+
 ## How to check on work
 
 ```bash

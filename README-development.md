@@ -126,6 +126,54 @@ nothing and exits 13 in that case, which maps to `MCTL_BEAD_UPDATE_RACE_LOST`
 — distinct from `MCTL_CANONICAL_BEAD_UPDATE_FAILED` so a lost race is not
 mistaken for a crash, and so callers know retrying the same guard is futile.
 
+### Mctl Brief Creation And Validation
+
+Creation is bead-first: the canonical `type=decision` bead is written first,
+and the redundant artifacts follow only once `bd` has accepted it.
+
+```sh
+python3 assets/scripts/mctl.py briefs create --title "Decide dispatch policy" --body-file /tmp/body.md --source mc-src --dry-run --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs create --title "Decide dispatch policy" --body-file /tmp/body.md --source mc-src --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs validate mc-abc --city <city-root> --rig mathcity --json
+python3 assets/scripts/mctl.py briefs validate --all --city <city-root> --rig mathcity --json
+```
+
+`create` writes exactly two redundant artifacts — the `.pile` markdown and the
+decision TOML. It deliberately does **not** touch `stack/.index.jsonl`:
+brief-system POLICY B2.10 makes brief-shuffle the single `.pile -> stack`
+writer, and producers write only to the pile.
+
+Input checks map to policy sections rather than restating them: `MBRF030`
+(empty title, B1.1), `MBRF031` (empty body, B1.5), `MBRF032` (a label
+requesting a side or bypass pile, B2.4), `MBRF033` (a label that is not a
+usable `bd` token). `--source` is optional but recommended: without it the
+plan carries `MBRF034`, because B2.1 makes a brief with no source link
+malformed and every downstream mctl command refuses to act on one.
+
+If the resolved brief root does not exist, `create` aborts with `MBRF035` and
+names the path it resolved, rather than creating it. `artifact_layout()`
+remains the single resolver — the guard only refuses to write through a
+resolution it could not confirm. This matters because
+`assets/brief-pipeline/paths.toml` declares rig-relative artifact paths while
+the live city keeps its brief tree at the city root, and the shuffler never
+reads `paths.toml` at all (it takes `--brief-root` explicitly). Reading
+through a missing root is harmless — it reports `missing` — but writing
+through one would silently build a parallel shadow brief tree that nothing
+downstream would notice. Which root is correct is an open policy question,
+not something creation may decide.
+
+If a redundant write fails after the bead was created, every file the
+operation had brought into existence is removed and `MCTL_REDUNDANT_CACHE_ROLLED_BACK`
+is reported with a non-zero exit. The bead survives — it is canonical — and a
+half-written cache would read as a real invariant violation to `briefs doctor`.
+
+`validate` composes `briefs doctor` with stricter per-brief invariants:
+`MBRF020` when the decision cache disagrees with the bead, `MBRF021` when a
+canonical brief has no redundant artifact to cross-check at all. It is
+read-only and never repairs what it reports. `--all` reads the bead store
+exactly once and threads the snapshot, so its `bd` call count does not grow
+with the number of briefs (`tests/mctl/test_bd_invocation_count.py`).
+
 ### Mctl Work Controls
 
 Inspect brief-backed work and dispatch provenance from the same explicit city
