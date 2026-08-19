@@ -11,10 +11,16 @@ description: >
 
 # mathcity.work
 
-The Mayor-facing dispatch skill. Keep this skill thin: it starts the
-`work-briefed` router and verifies that the city claimed the bead. Formula
-selection and dispatch-plan design belong to the formulas, not to Mayor prompt
+The Mayor-facing dispatch skill. Keep this skill thin: **brief-backed dispatch
+is one `mctl work dispatch` call**, which starts the `work-briefed` router,
+verifies that the city claimed the bead, and records provenance. Formula
+selection and dispatch-plan design belong to the formulas; readiness, claim
+verification, and provenance belong to `mctl` — neither belongs to Mayor prompt
 lore.
+
+Fresh work with no brief yet still goes through a plain `gc sling` of the
+router, because `mctl` models no commission path. The two are path A and path B
+below.
 
 ## Pre-flight
 
@@ -70,13 +76,138 @@ gc formula list 2>/dev/null | sort
 
 At this surface, only verify that `work-briefed` is available before slinging.
 
-## Sling
+## The mctl entry point
+
+Brief-backed dispatch is canonical state: readiness, the source link, the
+approving verdict, the claim, and `dispatch-provenance.v1` all live behind
+`mctl`. Resolve the shim once (see `template-fragments/mctl-entry-point.md`):
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+RIG=<rig owning the bead>   # he-* -> hecke, gsp-* -> gascity-packs, mc-* -> mathcity, ...
+```
+
+**`gt-*` beads are out of reach.** The city-root HQ store is not a registered
+rig in `city.toml`, so `--rig gt` fails with `MCTL_CONTEXT_UNKNOWN_RIG`.
+`gt-*` work uses the commission path below, run from the city root.
+
+**Cross-rig views do not exist yet.** `--all-rigs` was specified in Slice 2 and
+is not implemented. Call one rig at a time; do not loop over rigs here.
+
+## Which path — brief-backed or commission?
+
+```bash
+"$MCTL" work ready --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+`work ready` lists brief-backed work that is genuinely dispatchable: it excludes
+blocked, non-approving, already-dispatched, and invalid-provenance items. If the
+bead you were asked to work on appears there (via its approved brief), take path
+A. If it does not, ask `work status` why:
+
+```bash
+"$MCTL" work status "$BRIEF_BEAD" --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+`work status` returns `readiness` plus the exact `blockers`. Read them before
+deciding anything — the answer is usually one of:
+
+| blocker | meaning |
+| --- | --- |
+| `MWRK010` | the brief has no approving verdict — it has not been adjudicated yet |
+| `MWRK011` | the brief has no source-bead dependency, so there is nothing to dispatch |
+| `MWRK001` | the source bead already has an active assignee |
+| `MWRK002` | an open child workflow already exists for this source |
+| `MWRK_ALREADY_DISPATCHED` | provenance exists; this is the duplicate-dispatch gate |
+| `MWRK_BRIEF_NOT_FOUND` | not a brief bead — this is fresh work, take path B |
+
+**`MBRF004` will refuse a great many live briefs.** It is an `ERROR`
+("Brief bead has no source dependency", B2.1) and `_blocking_preconditions`
+refuses any mutation carrying one; it currently fires on 146 of 185 live briefs.
+Report the refusal with the diagnostic verbatim. **Do not branch on `MBRF004`,
+`MBRF005`, or `MBRF021`, and do not route around the gate** — see
+`template-fragments/mctl-entry-point.md`.
+
+## Path A — brief-backed dispatch (`mctl work dispatch`)
+
+```bash
+# Preview first: the effect plan names the exact sling it would run.
+"$MCTL" work dispatch "$BRIEF_BEAD" --city "$CITY_ROOT" --rig "$RIG" \
+  --dry-run --json
+
+out=$(MCTL_ENABLE_LIVE_DISPATCH=1 "$MCTL" work dispatch "$BRIEF_BEAD" \
+        --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+TRACE_ID=$(printf '%s' "$out" \
+  | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("trace_id",""))
+except Exception: print("")')
+echo "MCTL-TRACE: $TRACE_ID"
+```
+
+One command now does what this skill used to spread across three prose sections
+that an agent could each get half-right:
+
+- **the sling** — `work-briefed` through `<rig>/gc.run-operator`, with
+  `source_bead`, `brief_slug`, and `routing_path` filled from canonical state
+  instead of retyped;
+- **the claim verification** — the bead is re-read after the sling, and
+  `MWRK003` fires when the sling exits zero without the bead actually being
+  claimed. This replaces `sleep 5; bd show | grep -i assignee` and the
+  "if it is still empty after 30-60 seconds" judgement call;
+- **the provenance event** — `dispatch-provenance.v1` is written *only after*
+  that verified claim. Writing it earlier records a handoff that never happened
+  and then blocks every retry with `MWRK_ALREADY_DISPATCHED`, which is exactly
+  what hand-authored provenance TOML used to do.
+
+**`MCTL_ENABLE_LIVE_DISPATCH=1` is required and is exported for this one
+command only.** Unarmed, `work dispatch` returns the dry-run payload and slings
+nothing — deliberately, so a fixture or a stray invocation cannot dispatch. Do
+not export it for the session.
+
+`MCTL_CONTROL_PLANE_NOT_ACTIVE` means the supervisor is not confirmed running,
+so a sling would have nowhere to route. `gc stop` leaves Dolt up, so the
+pre-flight above can pass while this still refuses. Run `gc start`; do not fall
+back to a raw `gc sling`.
+
+Afterwards, the provenance record is readable:
+
+```bash
+"$MCTL" work provenance "$BRIEF_BEAD" --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+> **Known gap — `artifact_root` is NOT scoped per bead on this path.**
+> `mctl_core/work.py::_formula_invocation` passes
+> `artifact_root=<rig-root>/.beads/briefs`, a **shared rig-level** root, while
+> `formulas/work-briefed.toml` documents the var as *"For builds, scope per bead
+> (for example `<rig-root>/.gc-builds/<bead>`)"* and passes it straight through
+> to `build-basic-briefed` on the FULL_CONTINUE route. Two concurrent
+> FULL_CONTINUE dispatches in one rig therefore share a stage-artifact root —
+> the gsp-1bmxuz hazard. **Do not work around it by re-slinging by hand**; check
+> `work provenance` and the effect plan's `formula_invocation.command` before
+> arming a second concurrent dispatch in the same rig, and prefer to serialize
+> them. Fixing the core is a `mctl_core` change, not a skill change.
+
+
+## Path B — commission fresh work (no brief yet)
+
+`mctl work dispatch` addresses an **approved brief**. Fresh, ambiguous, or
+design-shaped work has no brief yet, and `mctl` models no commission path — so
+this stays a `gc sling` of the router, which files the commission brief. Once
+that brief is approved, dispatch goes back through path A.
 
 Run from the source bead's rig directory so `bd` resolves the bead correctly.
-Use a bead-scoped artifact root; never use a shared bare rig root.
-For build paths, the required shape is
-`artifact_root=<rig-root>/.gc-builds/<bead>`; when running from the rig root,
-`.gc-builds/$SOURCE_BEAD` is that same per-bead path.
+Use a bead-scoped artifact root; never a shared bare rig root.
 
 ```bash
 SOURCE_BEAD=<bead-id>
@@ -102,24 +233,29 @@ If you have extra context that must not be lost in translation, pass it through:
 --var context="<paths, issue URLs, or user notes>"
 ```
 
-## Verify Assignment
+### Verify the commission sling landed
 
-A sling you did not verify may have stranded. Immediately confirm the worker
-claimed the source bead:
+Path B gets no mctl provenance, so this one check stays manual. A sling you did
+not verify may have stranded:
 
 ```bash
 sleep 5
 bd show "$SOURCE_BEAD" | grep -i assignee
 ```
 
-The assignee must be non-empty. If it is still empty after 30-60 seconds, do
-not assume the fleet is healthy. Record a dispatch-provenance event and
-escalate or run the appropriate city-status/check-work skill.
+The assignee must be non-empty. If it is still empty after 30-60 seconds, do not
+assume the fleet is healthy — escalate, or run the appropriate
+`mathcity.check-work` / `mathcity.check-molecules` skill.
 
-## Dispatch Provenance Event
+### Path-B dispatch provenance event (required — the lost-bead filter reads it)
 
-Every `gc sling` outcome gets a linked event bead. Use
-`dispatch-provenance.v1` so downstream lost-bead filters can distinguish a
+Path A gets `dispatch-provenance.v1` from `mctl work dispatch`, behind a verified
+claim. **Path B has no mctl route, so this event is still written by hand** — and
+it is not optional: `assets/scripts/lost-bead-filter.py` and the rollup formulas
+key their classification on it, and a commission sling with no provenance event
+is invisible to them.
+
+Use `dispatch-provenance.v1` so downstream lost-bead filters can distinguish a
 healthy claim from an immediate strand.
 
 Healthy claim:
@@ -155,6 +291,25 @@ Create and relate the event before escalating:
 ```bash
 event_bead="$(bd create "dispatch provenance for <bead>" --type event --event-category dispatch.provenance --event-target <bead> --event-payload '<dispatch-provenance.v1 TOML or JSON>' --silent)"
 bd dep relate "$event_bead" <bead>
+```
+
+**Do not write one on path A.** There, `mctl work dispatch` has already written
+the record after re-reading the bead; a hand-authored second one asserts a claim
+nobody checked and double-counts the dispatch.
+
+### Direct `build-basic-briefed` dispatch (outside both paths)
+
+When a bead is dispatched straight to `build-basic-briefed` rather than through
+the router — a convoy build, or an approve continuation that names it — scope
+`artifact_root` per bead. Never omit it and never pass the bare rig root, or
+concurrent runs on the same rig silently overwrite each other's stage artifacts
+(gsp-1bmxuz):
+
+```
+gc sling <rig>/gc.run-operator <bead> --on build-basic-briefed \
+  --var interaction_mode=autonomous --var review_mode=agent \
+  --var drain_policy=separate --var push=false --var open_pr=false \
+  --var artifact_root=<rig-root>/.gc-builds/<bead>
 ```
 
 ## Commission Briefs
