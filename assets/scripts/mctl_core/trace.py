@@ -15,10 +15,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Iterable, Mapping, Sequence
 from uuid import uuid4
 
+from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard, context imports this module
+    from .context import MctlContext
 
 PHASE_PLANNED = "planned"
 PHASE_APPLIED = "applied"
@@ -89,6 +93,23 @@ def read_rows(rig_root: Path) -> list[dict[str, object]]:
             if isinstance(row, dict):
                 rows.append(row)
     return rows
+
+
+def trace_not_found_diagnostic(ctx: "MctlContext", trace_id: str) -> Diagnostic:
+    """Shared by `mctl trace show` and the MCP trace tools."""
+    return Diagnostic(
+        severity=Severity.FATAL,
+        code="MCTL_TRACE_NOT_FOUND",
+        message=f"No trace rows recorded for {trace_id!r}.",
+        hint="List recent traces under .beads/mctl/traces/.",
+        facts={
+            "city_path": str(ctx.city_root),
+            "implementation_provenance": "mctl trace show",
+            "rig_name": ctx.rig_id,
+            "rig_path": str(ctx.rig_root),
+        },
+        trace_id=ctx.trace_id,
+    )
 
 
 def fold(rows: Iterable[Mapping[str, object]], trace_id: str) -> dict[str, object] | None:

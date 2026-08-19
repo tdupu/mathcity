@@ -277,6 +277,120 @@ python3 assets/scripts/mctl.py trace show <trace-id> --city <city-root> --rig ma
 down. Both mutation paths write through `mctl_core/trace.py` so they cannot
 drift apart again.
 
+### Mctl MCP Server
+
+The MCP server is the second adapter over the same core the CLI uses. It
+never shells out to `bin/mctl`; both front ends call the same `context.py` /
+`briefs.py` / `work.py` / `effects.py` / `trace.py` functions, so there is
+one set of semantics and one mutation path.
+
+Start it over stdio:
+
+```sh
+python3 assets/scripts/mctl.py mcp serve --city <city-root> --rig mathcity
+python3 assets/scripts/mctl.py mcp serve --city <city-root> --rig mathcity --client-class internal
+```
+
+The transport is newline-delimited JSON-RPC 2.0 (`initialize`, `ping`,
+`tools/list`, `tools/call`) implemented with the standard library only — the
+repository declares no Python dependencies, so an installed-but-undeclared
+`mcp` package would make the suite depend on the developer's machine. Each
+tool advertises an `inputSchema` and an `outputSchema` and returns
+`structuredContent`.
+
+Fifteen typed domain tools are registered:
+
+| Group | Tools |
+| --- | --- |
+| context | `context_resolve` |
+| briefs (read) | `briefs_list`, `briefs_show`, `briefs_options`, `briefs_doctor`, `briefs_validate` |
+| briefs (mutating) | `briefs_adjudicate`, `briefs_defer`, `briefs_create` |
+| work | `work_ready`, `work_status`, `work_provenance`, `work_dispatch` |
+| trace | `trace_show`, `trace_replay_preview` |
+
+**There is no generic command-execution tool** — no `shell`, `gc`, `bd`,
+`mctl`, `exec`, or `run_command` passthrough, and no tool accepts a raw
+`command` or `argv` field. That is asserted by `tests/mctl/test_mcp_server.py`,
+by the schema snapshot, and by the harness, so it is checked rather than
+trusted.
+
+Mutating tools take `dry_run`, which **defaults to `true`**: omitting it
+previews an `EffectPlan` and writes nothing. Pass `dry_run: false` to apply.
+Applied mutations use the same phased trace helper as the CLI.
+
+Arguments are validated against the declared input schema *before* any core
+function runs. A violation is a JSON-RPC `-32602` whose `data` carries an
+`MCTL_MCP_INVALID_ARGUMENTS` diagnostic and a `schema_errors` array of
+`{path, keyword, expected, actual, message}` — never a traceback, never a
+prose string. An unexpected exception inside a handler becomes a typed
+`MCTL_MCP_INTERNAL_ERROR` for the same reason.
+
+#### Rollout gate — current state
+
+Per the plan's rollout controls, MCP tools stay disabled from external
+clients until the surface is proven. As shipped:
+
+| Client class | `MCTL_MCP_ENABLE_EXTERNAL_TOOLS` | Tools visible |
+| --- | --- | --- |
+| `external` (**default**) | unset | **none** |
+| `external` | `1` / `true` / `yes` | the 11 read-only tools |
+| `internal` (`--client-class internal`) | any | all 15 |
+
+Mutating tools are `external_ready = false` and stay internal-only whatever
+the environment says. `--client-class` defaults to `external`, and an
+unrecognised value falls back to `external`, so a typo cannot arm a client
+class. `MCTL_MCP_CLIENT_CLASS` overrides the flag. A blocked call returns
+`MCTL_MCP_TOOL_DISABLED`.
+
+#### Artifact state is reported as untrustworthy while Q5 is open
+
+`subdomains/dev/docs/OPEN-DESIGN-QUESTIONS.md` Q5 is unresolved: mctl
+resolves the brief root rig-root-relative while the live stack is
+city-root-level, and looks up `<root>/.pile/<bead_id>.md` while real pile
+files are named `<NN>-<slug>-brief.md` and carry the bead id in an
+`artifact:` frontmatter key. Live consequence: 66 of 70 briefs falsely report
+`MBRF021`.
+
+Slice 6 does **not** fix Q5 — the per-rig-versus-city-wide question is a
+pipeline policy decision — but it refuses to launder the resulting state
+through a typed API. Every artifact-bearing response carries a required
+`artifact_trust` object (`trusted`, `reason`, `open_question`, `reference`,
+`resolved_brief_root`, `resolved_pile`, `withheld_codes`). When it is not
+trusted:
+
+- artifacts the core read as `missing` are reported with `state:
+  "unverified"`, and the raw reading is preserved in
+  `state_reported_by_core`;
+- `MBRF021` moves out of `diagnostics` into `untrusted_diagnostics`, so
+  nothing downstream treats it as actionable;
+- a `MCTL_MCP_ARTIFACT_STATE_UNTRUSTED` WARN is added naming Q5.
+
+No path resolver was changed, no city-root fallback was added, and
+`paths.toml` was not edited.
+
+#### MCP client harness
+
+Slice 6 ships a client with the server, because a server nothing calls cannot
+be demonstrated:
+
+```sh
+python3 assets/scripts/mctl_mcp_harness.py --city <city-root> --rig mathcity
+python3 assets/scripts/mctl_mcp_harness.py --city <city-root> --rig mathcity --json
+```
+
+It launches a real `mctl mcp serve` subprocess and speaks the real stdio
+transport, then runs six checks: `connect`, `tools_list`,
+`typed_read_round_trip` (validated against the `outputSchema` the server
+*transmitted*, not one compiled into the harness), `typed_schema_error`,
+`no_passthrough_tool`, and `rollout_gate`. It exits non-zero if any check
+fails, and `--expect-tool <name>` proves it can fail.
+
+The harness runs in CI as `tests/mctl/test_mcp_client_harness.py`, not only
+by hand. `tests/mctl/test_mcp_schema_snapshots.py` snapshots every tool
+schema to `tests/mctl/fixtures/mcp_tool_schemas.json`; regenerate
+deliberately with `MCTL_UPDATE_MCP_SNAPSHOT=1` and read the diff as a
+client-compatibility review.
+
 ### Mctl Diagnostic Codes
 
 `assets/mctl/diagnostics.toml` is the single source of truth for stable

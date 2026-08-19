@@ -823,13 +823,30 @@ An MCP client can perform the same completed CLI workflows through typed tools:
 
 The server exposes typed task tools, not a generic shell, `gc`, `bd`, or `mctl` passthrough.
 
+#### Amendment: the slice ships a client harness too
+
+Agreed 2026-08-19 (two agents plus the repository owner). A server with no
+client cannot be demonstrated end to end, and "horizontal scaffolding that no
+vertical slice consumes" is what this plan's own slice rules forbid. Slice 6
+therefore ships a minimal client harness in the SAME slice. The harness is a
+proof, not a product: it connects, lists tools, round-trips one read tool
+against the output schema the server transmitted, and proves that a
+deliberately invalid call fails as a TYPED schema error rather than a stack
+trace or a prose string. That last check is the slice's central claim -- the
+whole argument for MCP over prose skills is that failures stop being advisory.
+
 #### Files to create or edit
 
 - Create `assets/scripts/mctl_core/mcp_server.py`.
 - Create `assets/scripts/mctl_core/schemas.py`.
+- Create `assets/scripts/mctl_mcp_harness.py` (the client harness).
 - Create `tests/mctl/test_mcp_server.py`.
 - Create `tests/mctl/test_mcp_schema_snapshots.py`.
-- Edit `assets/scripts/mctl.py` or future repository-standard package metadata to expose the MCP server entry point.
+- Create `tests/mctl/test_mcp_client_harness.py`.
+- Create `tests/mctl/fixtures/mcp_tool_schemas.json` (the schema snapshot).
+- Edit `assets/scripts/mctl_core/cli.py` to expose the server as `mctl mcp serve`
+  (`assets/scripts/mctl.py` is a two-line shim; the parser is in `cli.py`).
+- Edit `assets/mctl/diagnostics.toml` with the new MCP diagnostic codes.
 - Edit `README-development.md` with local MCP startup and smoke-test commands.
 
 #### Core interfaces
@@ -839,6 +856,12 @@ The server exposes typed task tools, not a generic shell, `gc`, `bd`, or `mctl` 
 #### Implementation steps
 
 1. Choose the MCP SDK already used in this workspace if one exists; otherwise add the smallest local dependency-free server layer compatible with the target runtime.
+   *Resolved:* the repository declares no Python dependencies and its stated tech
+   stack is the standard library, so an installed-but-undeclared `mcp` package is
+   not "already used in this workspace". The server implements the MCP stdio
+   transport directly -- newline-delimited JSON-RPC 2.0 with `initialize`,
+   `tools/list`, and `tools/call`, advertising `outputSchema` and returning
+   `structuredContent`.
 2. Define schemas for all request and response payloads. Include diagnostic arrays and trace ids in every response.
 3. Implement `context_resolve` first and prove it returns the same payload shape as `mctl context --json`.
 4. Add read-only brief tools by wrapping Slice 2 core functions.
@@ -847,6 +870,20 @@ The server exposes typed task tools, not a generic shell, `gc`, `bd`, or `mctl` 
 7. Add trace tools that expose recorded trace entries and replay previews without reapplying effects.
 8. Add schema snapshot tests so accidental breaking changes are visible.
 9. Document that the MCP server has no generic command-execution tool.
+10. Implement the rollout gate before exposing anything. `client_class` defaults
+    to `external`; an external client sees an EMPTY tool list until an operator
+    sets `MCTL_MCP_ENABLE_EXTERNAL_TOOLS=1`, and even then mutating tools stay
+    internal-only. `--client-class internal` opens the full surface.
+11. Build the client harness (see the amendment above) and put it under CI, not
+    beside it. It exercises the gate explicitly -- asking for the internal
+    surface and separately proving the external surface is closed -- rather than
+    bypassing it.
+12. Do not present redundant-artifact state as trustworthy while Q5 is open.
+    Every artifact-bearing response carries a required `artifact_trust` verdict,
+    unverifiable `missing` readings are reported as `unverified` with the core's
+    raw reading preserved, and `MBRF021` moves to `untrusted_diagnostics`. Q5
+    itself stays open: no path resolver was changed and `paths.toml` was not
+    edited.
 
 #### Tests
 
@@ -857,21 +894,26 @@ Write failing tests before implementation for:
 - `briefs_show` returns canonical bead and redundant artifact fields;
 - mutation tools respect dry-run and fail-closed behavior;
 - `work_dispatch` returns the same effect-plan shape as CLI dispatch;
-- no tool named `shell`, `gc`, `bd`, `mctl`, `run_command`, or `exec` is registered.
+- no tool named `shell`, `gc`, `bd`, `mctl`, `run_command`, or `exec` is registered;
+- invalid arguments produce a typed schema error, never a traceback or prose;
+- the rollout gate actually blocks a disabled tool;
+- artifact-bearing responses cannot omit the Q5 trust verdict;
+- the client harness runs green in CI, and fails loudly when a check cannot be met.
 
 #### Verification commands
 
 ```bash
 cd <repo-root>
 python3 -m pytest tests/mctl
-git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core tests/mctl README-development.md
+python3 assets/scripts/mctl_mcp_harness.py --city <city-root> --rig <rig>
+git diff --check -- assets/scripts/mctl.py assets/scripts/mctl_core assets/scripts/mctl_mcp_harness.py tests/mctl README-development.md
 ```
 
 #### Commit boundary
 
 Commit message: `mctl: expose typed MCP tools`.
 
-The commit is ready only when every MCP tool is a thin typed wrapper around a CLI-proven core workflow.
+The commit is ready only when every MCP tool is a thin typed wrapper around a CLI-proven core workflow, AND the client harness demonstrates the surface end to end from CI.
 
 ### Slice 7: Skill Refactor And Audit On Top Of `mctl`
 

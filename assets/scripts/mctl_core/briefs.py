@@ -266,6 +266,43 @@ def validate_brief_input(
     return clean_title, clean_body, tuple(dict.fromkeys(clean_labels))
 
 
+def validation_scope(ctx: MctlContext, brief_id: str | None, all_briefs: bool) -> str | None:
+    """Resolve the validate scope, or fail closed with MBRF014.
+
+    "Exactly one of a brief id or every brief" is a domain rule, not an
+    argparse limitation, so both adapters resolve it here rather than each
+    inventing its own answer to "validate what?".
+    """
+    if all_briefs and brief_id:
+        raise BriefError(_validation_scope_diagnostic(ctx, both=True))
+    if all_briefs:
+        return None
+    if brief_id:
+        return brief_id
+    raise BriefError(_validation_scope_diagnostic(ctx, both=False))
+
+
+def _validation_scope_diagnostic(ctx: MctlContext, *, both: bool) -> Diagnostic:
+    message = (
+        "briefs validate takes a brief id or --all, not both."
+        if both
+        else "briefs validate requires a brief id or --all."
+    )
+    return Diagnostic(
+        severity=Severity.FATAL,
+        code="MBRF014",
+        message=message,
+        hint="Run `mctl briefs validate <brief-id>` or `mctl briefs validate --all`.",
+        facts={
+            "city_path": str(ctx.city_root),
+            "implementation_provenance": "mctl Slice 5 brief validation",
+            "rig_name": ctx.rig_id,
+            "rig_path": str(ctx.rig_root),
+        },
+        trace_id=ctx.trace_id,
+    )
+
+
 def validate_brief(ctx: MctlContext, brief_id: str | None) -> ValidationReport:
     """Validate one brief, or every brief when `brief_id` is None.
 

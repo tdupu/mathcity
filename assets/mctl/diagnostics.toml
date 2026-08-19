@@ -147,7 +147,7 @@ module = "effects.py"
 [MCTL_CITY_NOT_ACTIVE]
 severity = "FATAL"
 meaning = "The Gas City data plane for this rig is not reachable, so canonical bead state cannot be read."
-module = "cli.py"
+module = "liveness.py"
 
 [MCTL_CONTEXT_BEADS_FIXTURE_MISSING]
 severity = "FATAL"
@@ -223,7 +223,43 @@ module = "briefs.py"
 [MCTL_TRACE_NOT_FOUND]
 severity = "FATAL"
 meaning = "No trace rows were recorded for the requested trace id."
-module = "cli.py"
+module = "trace.py"
+
+[MCTL_TRACE_REPLAY_BLOCKED]
+severity = "WARN"
+meaning = "A replay preview of this trace is advisory only: the trace already applied, or aborted with unresolved blockers."
+module = "mcp_server.py"
+
+[MCTL_MCP_INVALID_ARGUMENTS]
+severity = "FATAL"
+meaning = "MCP tool arguments do not satisfy the tool's declared input schema."
+module = "mcp_server.py"
+
+[MCTL_MCP_UNKNOWN_TOOL]
+severity = "FATAL"
+meaning = "No MCP tool with the requested name is registered."
+module = "mcp_server.py"
+
+[MCTL_MCP_TOOL_DISABLED]
+severity = "FATAL"
+meaning = "The requested MCP tool is disabled for this client class by the Slice 6 rollout gate."
+module = "mcp_server.py"
+
+[MCTL_MCP_OUTPUT_SCHEMA_VIOLATION]
+severity = "FATAL"
+meaning = "An MCP tool produced a response that violates the output schema it advertises."
+module = "mcp_server.py"
+
+[MCTL_MCP_INTERNAL_ERROR]
+severity = "FATAL"
+meaning = "An MCP tool raised an unexpected exception; the failure is reported typed rather than as a traceback."
+module = "mcp_server.py"
+
+[MCTL_MCP_ARTIFACT_STATE_UNTRUSTED]
+severity = "WARN"
+meaning = "Redundant-artifact state in this response is unverifiable while OPEN-DESIGN-QUESTIONS Q5 is unresolved; artifact findings must not be acted on."
+policy_ref = "B2.8"
+module = "mcp_server.py"
 
 [MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS]
 severity = "FATAL"

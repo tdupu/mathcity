@@ -11,6 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 import socket
 import subprocess
+from typing import TYPE_CHECKING
+
+from .diagnostics import Diagnostic, Severity
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard, context imports this module
+    from .context import MctlContext
 
 
 PROBE_TIMEOUT_SECONDS = 0.5
@@ -96,6 +102,34 @@ def probe_city(
         return CityLiveness(
             active=False, endpoint=endpoint, detail=f"{endpoint} refused a connection: {error}"
         )
+
+
+def city_not_active_diagnostic(ctx: "MctlContext") -> Diagnostic:
+    """The shared fail-closed gate for a dead data plane.
+
+    Both adapters need it -- the CLI before running a command, the MCP server
+    before running a tool -- and a second copy would be a second definition of
+    "the city is down". It lives beside the probe that decides that.
+    """
+    facts = {
+        "city_path": str(ctx.city_root),
+        "implementation_provenance": "mctl city liveness gate",
+        "rig_name": ctx.rig_id,
+        "rig_path": str(ctx.rig_root),
+    }
+    if ctx.city_endpoint is not None:
+        facts["data_location"] = ctx.city_endpoint
+    return Diagnostic(
+        severity=Severity.FATAL,
+        code="MCTL_CITY_NOT_ACTIVE",
+        message=(
+            "The Gas City data plane for this rig is not reachable, so canonical "
+            "bead state cannot be read."
+        ),
+        hint="Start the city with `gc supervisor run`, then re-run this command.",
+        facts=facts,
+        trace_id=ctx.trace_id,
+    )
 
 
 CONTROL_PLANE_TIMEOUT_SECONDS = 10
