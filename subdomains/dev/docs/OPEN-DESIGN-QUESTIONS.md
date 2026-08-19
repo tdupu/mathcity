@@ -41,10 +41,17 @@ not by the supervisor. Verified live: `gc supervisor status` reporting
 "Supervisor is not running" while `lsof -i :58506` showed `dolt` PID 25668 in
 LISTEN, and `bd`-backed reads continued to answer normally.
 
-There is also no supported inverse. There is no `gc dolt stop`; the only lever
-is `gc dolt restart`, which bounces the data plane shared by every rig on the
-machine. So the control plane has a clean stop and the data plane effectively
-does not.
+There is also no *safe* inverse. `bd dolt stop` does exist (`bd dolt
+start`/`stop`/`status`), but it is not the per-project lever it appears to be:
+its only guard is a remote-host check (`beads/cmd/bd/dolt.go`, stop command),
+which does not fire on 127.0.0.1. A rig's `.beads/dolt-server.port` here points
+at 58506 — the gc-supervisor-managed process — while `bd dolt show` self-reports
+"Mode: per-project". So `bd dolt stop` from a rig would likely signal the shared
+server under the wrong lifecycle owner.
+
+*(Amended 2026-08-18: an earlier revision of this entry claimed there was no
+`bd dolt stop` at all, then briefly claimed it was a safe per-project lever.
+Both were wrong. It exists and is not safe to use here.)*
 
 **The question.** Is that asymmetry intended?
 
@@ -121,7 +128,17 @@ that no longer has the subcommand** lands in the same catch-all, and once again
 a healthy data plane is reported as down with remediation advice
 (`gc dolt start`) that cannot work.
 
-**The question.** Did `gc dolt` move, get renamed, or get removed upstream? And
+**Root cause, found 2026-08-18.** Neither moved nor removed. `gc dolt health`
+ships as a **shell command pack** at
+`gascity/examples/bd/dolt/commands/health/run.sh` — the same path the fragment
+cites — and that pack is **not installed in this city**. The compiled `gc` has
+only hyphenated `dolt-*` commands (`dolt-cleanup`, `dolt-state`, `dolt-config`,
+`dolt-gc`); there is no `dolt` parent command in the source at `16fbca8d7`. So
+this is neither a stale PATH nor a wrong binary in the fragment: the command is
+real, upstream, and simply absent from this install.
+
+**The remaining question.** Should the pre-flight distinguish "the probe is
+unavailable" from "the server is unreachable"? And
 should the pre-flight distinguish "the probe itself is unavailable" from "the
 server is unreachable"? A probe that cannot run is not evidence that the thing
 it probes is down — the two deserve different exits and different remediation.
