@@ -18,7 +18,24 @@ from typing import Any
 
 
 OWNER = "brief-shuffle-fast-drain"
-STATUS_PATTERN = re.compile(r"^(.+?):\s*(PASS|N/A|FAIL|BLOCKED|PENDING)\b", re.MULTILINE)
+# Longest alternatives first: Python alternation is first-match, so `PASS`
+# ahead of `PASSED` would leave `PASSED` unmatched on the trailing `\b`.
+# `REQUIRED` is tokenised but never accepted — recognising it turns a
+# policy-conformant "execution still owed" declaration into a precise
+# rejection reason instead of a misleading "missing required gate".
+STATUS_PATTERN = re.compile(
+    r"^(.+?):\s*(PASSED|PASS|NOT APPLICABLE|N/A|FAIL|BLOCKED|PENDING|REQUIRED)\b",
+    re.MULTILINE,
+)
+# POLICY B1.4: every gate carries evidence or an explicit N/A.
+DEFAULT_ACCEPTED_STATUSES = ("PASS", "N/A")
+# POLICY T7 mandates a tri-state declaration for G14 — PASSED / NOT APPLICABLE
+# / REQUIRED — of which only the first two are passing states. The widening is
+# per-gate, matching brief-check.sh's `require_gate`, so the two gate-evidence
+# enforcers accept exactly the same vocabulary.
+GATE_ACCEPTED_STATUSES = {
+    "G14": ("PASSED", "PASS", "NOT APPLICABLE", "N/A"),
+}
 GATE_EVIDENCE_HEADING = re.compile(r"^(?:#{1,6}\s+)?Gate Evidence\s*$", re.MULTILINE)
 MARKDOWN_HEADING = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 CLASSIFIER_STATES = {
@@ -182,9 +199,10 @@ def evaluate(path: Path, gate_config: dict[str, Any]) -> tuple[str, str, dict[st
             return profile, f"gate profile {profile} references unknown gate {gate_id}", metadata
         evidence_key = gate["evidence_key"]
         evidence_statuses = statuses.get(evidence_key, [])
-        if evidence_statuses and all(status in ("PASS", "N/A") for status in evidence_statuses):
+        accepted = GATE_ACCEPTED_STATUSES.get(gate_id, DEFAULT_ACCEPTED_STATUSES)
+        if evidence_statuses and all(status in accepted for status in evidence_statuses):
             continue
-        failed_status = next((status for status in evidence_statuses if status not in ("PASS", "N/A")), None)
+        failed_status = next((status for status in evidence_statuses if status not in accepted), None)
         if failed_status:
             return profile, f"{evidence_key}: {failed_status}", metadata
         return profile, f"missing required gate {evidence_key}", metadata

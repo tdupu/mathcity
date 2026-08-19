@@ -211,14 +211,23 @@ require_toml_key_value() {
   ' "$path" || fail "TOML $key must equal $expected in $path"
 }
 
+# Default gate-evidence vocabulary is POLICY B1.4's "evidence or an explicit
+# N/A". A gate whose rule mandates its own vocabulary passes it as $3; see the
+# G14 call site below. Widening is deliberately per-gate, never global: the
+# literal `PASS` token is what gate-test-evidence.sh keys on to fire G1's
+# five-field structural check, so accepting `PASSED` for G1 would silently
+# skip that check.
+GATE_STATUS_DEFAULT="PASS|N/A"
+
 require_gate() {
   path="$1"
   key="$2"
+  accepted="${3:-$GATE_STATUS_DEFAULT}"
   if grep -Eq "$key:[[:space:]]*(FAIL|BLOCKED)\\b" "$path"; then
     fail "$key is failing or blocked"
   fi
-  grep -Eq "$key:[[:space:]]*(PASS|N/A)\\b" "$path" ||
-    fail "$key must be PASS or N/A"
+  grep -Eq "$key:[[:space:]]*($accepted)\\b" "$path" ||
+    fail "$key must be one of: $accepted"
 }
 
 check_jsonl() {
@@ -256,7 +265,10 @@ check_mechanical_gates() {
   require_gate "$path" "G11 Breadcrumb"
   require_gate "$path" "G12 Auto-merge-kill-switch"
   require_gate "$path" "G13 Stale-claim"
-  require_gate "$path" "G14 Test-execution-silent"
+  # POLICY T7 gives G14 its own tri-state vocabulary — PASSED / NOT APPLICABLE
+  # / REQUIRED. Only the first two are passing states; REQUIRED means execution
+  # is still owed before adjudication, so it falls through and fails closed.
+  require_gate "$path" "G14 Test-execution-silent" "PASSED|PASS|NOT APPLICABLE|N/A"
   require_gate "$path" "G15 Improve-README-silent"
   require_gate "$path" "G16 Master-current"
 }
