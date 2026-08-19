@@ -529,6 +529,17 @@ def brief_options_report(ctx: MctlContext, brief_id: str) -> tuple[tuple[BriefOp
 
 
 
+#: Where a set of decision options was parsed from. Recorded on every option
+#: for the same reason `verdicts.Verdict` records it: the bead and the markdown
+#: cache are different lanes with different authority, and a surface that
+#: rendered them identically would assert a uniformity the corpus does not
+#: have. `bead_description` is canonical (B2.4/B2.8); the two file lanes are
+#: regenerable cache.
+OPTION_SOURCE_BEAD_DESCRIPTION = "bead_description"
+OPTION_SOURCE_STACK_FILE = "stack_file"
+OPTION_SOURCE_PILE_FILE = "pile_file"
+
+
 @dataclass(frozen=True)
 class BriefDecisionOption:
     """One decision option offered by a brief, per plan §2.
@@ -544,6 +555,8 @@ class BriefDecisionOption:
     end_line: int
     raw_text: str
     confidence: str
+    #: Which of the brief's bodies these options were parsed out of.
+    source: str = OPTION_SOURCE_BEAD_DESCRIPTION
 
 
 # Real briefs enumerate options as list items under an options section:
@@ -557,19 +570,48 @@ _OPTION_ITEM = re.compile(
 )
 
 
-def parse_decision_options(markdown: str) -> tuple[BriefDecisionOption, ...]:
+def _heading_names_options(heading: str) -> bool:
+    """True when the heading's own words say "options", whatever number it wears.
+
+    `_classify_heading` lets an explicit `§N` prefix win over the vocabulary,
+    which is right for §1 and §7 and wrong here: real briefs do not hold the
+    options section at a fixed number. Across the 89 live city stack files,
+    17 enumerate labeled options and only 5 head them `§4`; the rest write
+    `§5 — Options`, `§6 — Options`, `§3 — Options`. Matching the number alone
+    missed twelve briefs whose heading says Options in as many words.
+
+    Reuses `_SECTION_TOKENS` rather than adding a second options vocabulary,
+    so "Alternatives Considered" and "Decision options" keep resolving here
+    exactly as they do everywhere else.
+    """
+    normalized = re.sub(r"[^a-z0-9]+", " ", heading.lower()).strip()
+    for token, index in _SECTION_TOKENS:
+        if token in normalized:
+            return index == 4
+    return False
+
+
+def parse_decision_options(
+    markdown: str, *, source: str = OPTION_SOURCE_BEAD_DESCRIPTION
+) -> tuple[BriefDecisionOption, ...]:
     """Extract the decision options a brief offers, if any.
 
-    Scoped to §4 via `parse_brief_sections` rather than to a heading spelled
-    exactly `Options`. The exact-match version found nothing on the live rig:
-    the one open hecke brief that enumerates options heads them "Options
-    presented", and "Alternatives Considered" -- the second most common
-    heading on the rig -- never matched at all. Both are §4.
+    Scoped to the brief's options *section* -- §4, or any section whose
+    heading names options -- via `parse_brief_sections`, rather than to a
+    heading spelled exactly `Options`. The exact-match version found nothing
+    on the live rig: the one hecke brief that enumerates options heads them
+    "Options presented", and "Alternatives Considered" -- the second most
+    common heading on that rig -- never matched at all.
+
+    The scope is what keeps this honest. A bolded `**(B) …**` bullet under
+    `§7 — Risks` is not an option, and live brief 243 has exactly one; so does
+    the §7 of several others. Widening to the whole document would turn those
+    into options and fire `MOPT001` on briefs that offered no choice.
     """
     lines = markdown.splitlines()
     options: list[BriefDecisionOption] = []
     for section in parse_brief_sections(markdown):
-        if section.section_index != 4:
+        if section.section_index != 4 and not _heading_names_options(section.heading):
             continue
         body = section.body
         # `body` is `lines[heading .. end]` rejoined after stripping blank
@@ -590,6 +632,7 @@ def parse_decision_options(markdown: str) -> tuple[BriefDecisionOption, ...]:
                     end_line=first_body_line + body.count("\n", 0, end_in_body),
                     raw_text=body[match.start():end_in_body].strip(),
                     confidence="explicit",
+                    source=source,
                 )
             )
     return tuple(options)
@@ -800,15 +843,38 @@ def brief_body(ctx: MctlContext, brief_id: str, bead: Bead | None = None) -> str
 
 
 def _cached_body(ctx: MctlContext, brief_id: str) -> str:
+    cached = _cached_brief_file(ctx, brief_id)
+    return "" if cached is None else cached[1]
+
+
+def _cached_brief_file(ctx: MctlContext, brief_id: str) -> tuple[str, str] | None:
+    """The brief's markdown cache, and which lane it came from.
+
+    One lookup rule, shared by `brief_body` and `decision_options`, because
+    two readers disagreeing about where a brief's text lives is the defect
+    this slice exists to remove (issue #65).
+
+    The prefix form is the pipeline's own file-naming convention: the stack
+    index records `source: he-a9cfa` beside `path: …/he-a9cfa-brief.md`. It is
+    anchored on the whole id followed by `-`, so it cannot drift onto a
+    neighbouring bead, and it is sorted so a brief with two snapshots resolves
+    the same way twice.
+    """
     layout = artifact_layout(ctx)
-    for directory in (layout.pile, layout.stack):
-        path = directory / f"{brief_id}.md"
-        if path.is_file():
+    for source, directory in (
+        (OPTION_SOURCE_PILE_FILE, layout.pile),
+        (OPTION_SOURCE_STACK_FILE, layout.stack),
+    ):
+        exact = directory / f"{brief_id}.md"
+        candidates = [exact] if exact.is_file() else sorted(directory.glob(f"{brief_id}-*.md"))
+        for path in candidates:
+            if not path.is_file():
+                continue
             try:
-                return path.read_text(encoding="utf-8")
+                return source, path.read_text(encoding="utf-8")
             except OSError:
-                return ""
-    return ""
+                return source, ""
+    return None
 
 
 def _bead_for(ctx: MctlContext, brief_id: str) -> Bead | None:
@@ -818,22 +884,80 @@ def _bead_for(ctx: MctlContext, brief_id: str) -> Bead | None:
 def decision_options(
     ctx: MctlContext, brief_id: str, body: str | None = None
 ) -> tuple[BriefDecisionOption, ...]:
-    """Decision options for a brief, read from its canonical body.
+    """Decision options for a brief, read from wherever the brief wrote them.
 
-    This used to read `<brief_root>/.pile/<brief_id>.md` only. That path does
-    not resolve on the live rig -- 0 of 25 sampled hecke briefs returned an
-    option -- and the function failed open, so §4 was empty for every real
-    brief and MOPT001 could never fire. The bead description is canonical and
-    present on 62 of 64 open hecke decision beads, so it is the source now;
-    the cache remains a fallback via `brief_body`.
+    Two sources, in B2.4/B2.8 order: the canonical bead description first, the
+    markdown cache second. Both are needed, because the two lanes hold
+    almost-disjoint populations. Measured across the live city on 2026-08-19:
+    **1 of 280** decision beads carries labeled options in its `description`,
+    while **17 of 89** city stack files do -- and all 17 are `form: full`. A
+    reader that consults only the bead sees one brief; a reader that consults
+    only the file loses the canonical lane the pipeline is migrating onto.
+
+    Every option records its `source`, so a front end can show provenance
+    instead of implying the cache and the bead speak with the same authority.
+    When both offer options and they disagree, the bead wins and the
+    disagreement is reported as `MOPT003` -- see `decision_options_report`.
 
     `body` lets a caller that already read the body pass it in, so resolving
     options costs no additional `bd` subprocess.
     """
+    return decision_options_report(ctx, brief_id, body)[0]
+
+
+def decision_options_report(
+    ctx: MctlContext, brief_id: str, body: str | None = None
+) -> tuple[tuple[BriefDecisionOption, ...], tuple[Diagnostic, ...]]:
+    """`decision_options`, plus the reason to distrust what it returned.
+
+    Split out for the same reason `brief_options_report` is: a caller that
+    only wants the options should not have to handle diagnostics, and a
+    caller that has to explain the answer to an operator needs the fact that
+    the two lanes disagree -- which resolving silently in the bead's favour
+    would destroy.
+    """
+    cached = _cached_brief_file(ctx, brief_id)
+    cache_source, cache_text = cached if cached is not None else (None, "")
     resolved = brief_body(ctx, brief_id) if body is None else body
-    if not resolved.strip():
-        return ()
-    return parse_decision_options(resolved)
+    # `brief_body` already applies B2.4/B2.8, so `resolved` is the description
+    # whenever there is one. Comparing against the cache text is what says
+    # which of the two it turned out to be -- no second bead read required.
+    resolved_source = (
+        cache_source
+        if cache_source is not None and resolved == cache_text
+        else OPTION_SOURCE_BEAD_DESCRIPTION
+    )
+    primary = (
+        parse_decision_options(resolved, source=resolved_source) if resolved.strip() else ()
+    )
+    secondary: tuple[BriefDecisionOption, ...] = ()
+    if cache_source is not None and cache_text.strip() and cache_text != resolved:
+        secondary = parse_decision_options(cache_text, source=cache_source)
+    if not primary:
+        return secondary, ()
+    if not secondary or _option_labels(primary) == _option_labels(secondary):
+        return primary, ()
+    return primary, (
+        _diagnostic(
+            ctx,
+            Severity.WARN,
+            "MOPT003",
+            "The bead and its markdown cache offer different decision options; "
+            "the bead is canonical and was used.",
+            brief_id=brief_id,
+            data_location=_canonical_bead_location(ctx),
+            detail=(
+                f"{resolved_source}=" + ", ".join(sorted(_option_labels(primary)))
+                + f"; {cache_source}=" + ", ".join(sorted(_option_labels(secondary)))
+            ),
+            suggested_next_command=f"mctl briefs doctor {brief_id} --json",
+        ),
+    )
+
+
+def _option_labels(options: Iterable[BriefDecisionOption]) -> frozenset[str]:
+    return frozenset(option.label.upper() for option in options)
+
 
 def doctor_briefs(
     ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ...] | None = None
