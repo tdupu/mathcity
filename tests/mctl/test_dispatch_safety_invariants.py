@@ -115,6 +115,12 @@ def runtime(tmp_path: Path, rows: list[dict[str, object]], *, sling_assigns: boo
     shim.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
+        # The control-plane gate is CITY-scoped and fails closed: an armed
+        # dispatch refuses unless `gc status --json` confirms a running
+        # controller. Declare one so these tests exercise the sling path.
+        "if sys.argv[1:2] == ['status']:\n"
+        "    sys.stdout.write(json.dumps({'controller': {'running': True,\n"
+        "        'status': 'ready'}, 'suspended': False})); sys.exit(0)\n"
         f"assign = {sling_assigns!r}\n"
         f"path = {str(fixture)!r}\n"
         "if assign:\n"

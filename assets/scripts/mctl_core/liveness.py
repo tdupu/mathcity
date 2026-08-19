@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import socket
+import json
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -132,23 +133,40 @@ def city_not_active_diagnostic(ctx: "MctlContext") -> Diagnostic:
     )
 
 
-CONTROL_PLANE_TIMEOUT_SECONDS = 10
+# gc carries seconds of baseline overhead per invocation and has been
+# measured past 10s for a plain `gc status` on a healthy machine. A timeout
+# tighter than the tool turns every slow call into 'cannot tell'.
+CONTROL_PLANE_TIMEOUT_SECONDS = 30
 
 
-def probe_control_plane(timeout: float = CONTROL_PLANE_TIMEOUT_SECONDS) -> bool | None:
-    """Whether the Gas City supervisor is running.
+def probe_control_plane(
+    city_root: Path | str | None = None,
+    timeout: float = CONTROL_PLANE_TIMEOUT_SECONDS,
+) -> bool | None:
+    """Whether THIS city's controller is up and able to route work.
 
     This is a SEPARATE question from `probe_city`. `gc stop` brings down the
-    supervisor and city controller but leaves the managed Dolt server running
-    under its own watchdog, so the data plane keeps answering while nothing is
-    left to route work to. Bead reads only need Dolt; dispatch needs both.
+    city controller but leaves the managed Dolt server running under its own
+    watchdog, so the data plane keeps answering while nothing is left to route
+    a sling to. Bead reads only need Dolt; dispatch needs both.
 
-    Returns None when `gc` is unavailable, so callers can distinguish "no
-    supervisor" from "cannot tell".
+    The question must be asked PER CITY, not per machine. `gc supervisor status`
+    reports the launchd-managed daemon, which stays up across `gc stop` — it
+    exited 0 in exactly the state this gate exists to catch, so the gate never
+    fired and an armed dispatch sling'd into a stopped city (found live
+    2026-08-19). `gc status --city <root> --json` answers for this city:
+    `controller.running` is false while the city is stopped or still starting,
+    and `suspended` is true for a city that routes nothing regardless.
+
+    Returns None when `gc` is unavailable or its answer cannot be parsed, so
+    callers can distinguish "not routing" from "cannot tell".
     """
+    command = ["gc", "status", "--json"]
+    if city_root is not None:
+        command[2:2] = ["--city", str(city_root)]
     try:
         result = subprocess.run(
-            ["gc", "supervisor", "status"],
+            command,
             text=True,
             capture_output=True,
             check=False,
@@ -156,4 +174,18 @@ def probe_control_plane(timeout: float = CONTROL_PLANE_TIMEOUT_SECONDS) -> bool 
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    return result.returncode == 0
+    try:
+        payload = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("suspended") is True:
+        return False
+    controller = payload.get("controller")
+    if not isinstance(controller, dict):
+        return None
+    running = controller.get("running")
+    if not isinstance(running, bool):
+        return None
+    return running

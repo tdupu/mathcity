@@ -178,6 +178,12 @@ def test_armed_dispatch_writes_provenance_and_event_with_trace(tmp_path: Path):
     fixture = beads_fixture(rig_root)
     shim.write_text(
         "#!/usr/bin/env python3\nimport json, sys\n"
+        # The control-plane gate is CITY-scoped and fails closed: an armed
+        # dispatch refuses unless `gc status --json` confirms a running
+        # controller. Declare one so these tests exercise the sling path.
+        "if sys.argv[1:2] == ['status']:\n"
+        "    sys.stdout.write(json.dumps({'controller': {'running': True,\n"
+        "        'status': 'ready'}, 'suspended': False})); sys.exit(0)\n"
         # A real sling claims the bead; MWRK003 verifies the claim landed.
         f"path = {str(fixture)!r}\n"
         "rows = [json.loads(l) for l in open(path).read().splitlines() if l.strip()]\n"

@@ -63,10 +63,15 @@ def runtime(
         "import json, sys\n"
         "argv = sys.argv[1:]\n"
         f"supervisor_up = {supervisor_up!r}\n"
+        # The control-plane probe is CITY-scoped: `gc status --city <root> --json`.
+        # It deliberately does NOT ask `gc supervisor status`, which reports the
+        # machine-wide daemon and stays up across `gc stop`.
+        "if argv[:1] == ['status']:\n"
+        "    sys.stdout.write(json.dumps({'controller': {'running': supervisor_up,\n"
+        "        'status': 'ready' if supervisor_up else 'stopped'}, 'suspended': False}))\n"
+        "    sys.exit(0)\n"
         "if argv[:2] == ['supervisor', 'status']:\n"
-        "    if supervisor_up:\n"
-        "        sys.stdout.write('Supervisor is running (PID 1)\\n'); sys.exit(0)\n"
-        "    sys.stdout.write('Supervisor is not running\\n'); sys.exit(1)\n"
+        "    sys.stderr.write('probe asked the machine-wide daemon\\n'); sys.exit(97)\n"
         f"open({str(gc_log)!r}, 'a').write(json.dumps(argv) + '\\n')\n"
         f"code = {gc_exit}\n"
         "if code:\n"
