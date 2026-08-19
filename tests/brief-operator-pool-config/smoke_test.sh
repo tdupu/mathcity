@@ -49,10 +49,21 @@ check() {
 
 # Collect every agent.toml in the pack, excluding VCS internals and any nested
 # formula worktrees (which are transient checkouts, not shipped pack config).
+#
+# The exclusions are matched against the path RELATIVE to $PACK_ROOT, not against
+# the absolute path. Matching absolutely was a latent bug: when the pack is
+# checked out inside a directory named "worktrees" -- which is exactly what
+# .claude/worktrees/<name> is -- every discovered file matched '*/worktrees/*',
+# so the scan collected nothing and the whole test aborted before asserting
+# anything.
 AGENT_TOMLS=()
 while IFS= read -r f; do
+  rel="${f#"$PACK_ROOT"/}"
+  case "$rel" in
+    .git/*|*/.git/*|worktrees/*|*/worktrees/*) continue ;;
+  esac
   AGENT_TOMLS+=("$f")
-done < <(find "$PACK_ROOT" -name agent.toml -not -path '*/.git/*' -not -path '*/worktrees/*' | sort)
+done < <(find "$PACK_ROOT" -name agent.toml | sort)
 
 # Check 1: the scan actually found agent.toml files. Without this a broken find
 # would make every later assertion pass vacuously.
@@ -64,6 +75,11 @@ fi
 
 # Check 2: THE INVARIANT — no agent pairs wake_mode="fresh" with min>=1.
 # min_active_sessions is optional and defaults to 0 when absent.
+#
+# violations must be pre-declared. Under `set -u`, when the array is empty the
+# && below short-circuits and skips the assignment entirely, so the else branch
+# dereferences an unbound variable and kills the run before any result prints.
+violations="(scan found no agent.toml files to inspect)"
 if [ "${#AGENT_TOMLS[@]}" -gt 0 ] && violations=$(python3 - "${AGENT_TOMLS[@]}" 2>&1 << 'PY'
 import sys, tomllib
 bad = []
