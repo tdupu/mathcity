@@ -122,6 +122,35 @@ def _dashboard_diagnostic(
     }
 
 
+#: Which decision states belong to which lane of the pipeline.
+#:
+#: The stack is what is *ready for a verdict*, which is what the header chip
+#: counts. Showing every brief regardless of state under a chip that counts
+#: pending ones would make the chip disagree with its own destination -- the
+#: exact failure the design's counts rule exists to prevent.
+SCOPE_STATES: dict[str, frozenset[str]] = {
+    "stack": frozenset({"pending"}),
+}
+
+
+def _scoped(
+    briefs: Sequence[Mapping[str, Any]], scope: str
+) -> list[Mapping[str, Any]]:
+    """The briefs belonging to one lane.
+
+    `errors` and `nobrainer` have no source yet: error briefs are not filed at
+    all (CHANGELOG §G1) and the no-brainer classifier writes no bead state, so
+    both scopes are genuinely empty rather than unimplemented. Returning an
+    empty list makes the screen say so.
+    """
+    if scope in ("errors", "nobrainer"):
+        return []
+    states = SCOPE_STATES.get(scope)
+    if states is None:
+        return list(briefs)
+    return [b for b in briefs if str(b.get("decision_state") or "") in states]
+
+
 class Dashboard:
     """The operator surface. A client of the typed MCP tools, nothing more."""
 
@@ -275,7 +304,8 @@ class Dashboard:
         rig = self._rig_for(request) or self.rig
         context = self._context(rig) if not self.city_wide else None
         listing = self.client.call("briefs_list", self._args(rig))
-        briefs = list(listing.payload.get("briefs") or ())
+        all_briefs = list(listing.payload.get("briefs") or ())
+        briefs = _scoped(all_briefs, view.scope)
 
         titles = {
             "stack": "Brief stack",
@@ -298,8 +328,10 @@ class Dashboard:
             stack.unfed_note(),
             render.artifact_trust_panel(listing.artifact_trust, rig=rig),
         ]
+        # Counts come from the whole listing, not the scoped slice: the
+        # sidebar has to report every lane, not just the one being viewed.
         return self._page(
-            heading, "/queue", context, sections, counts=self._counts(briefs)
+            heading, "/queue", context, sections, counts=self._counts(all_briefs)
         )
 
     def _overview(self, request: Request) -> Response:
