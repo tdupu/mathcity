@@ -151,6 +151,42 @@ creating it. One resolver is retained; no city-root fallback was added, and
 error instead of silent corruption, and both callers inherit the fix once the
 root is decided.
 
+**Live measurement, 2026-08-19 (city UP, supervisor running).** Running the
+merged mctl against the real `gascity-packs` rig:
+
+```
+mctl briefs validate --all --rig gascity-packs
+  70 briefs
+  MBRF021 ("no redundant cache artifact") x 66
+```
+
+66 of 70 briefs report a missing artifact. The artifacts are not missing.
+
+**And the root is only half of it — the filename convention is wrong too.**
+mctl looks for `<brief_root>/.pile/<bead_id>.md`. The live pile holds 68 files
+named `<NN>-<slug>-brief.md`, carrying the bead id in frontmatter:
+
+```
+$ ls <city-root>/.beads/briefs/.pile/ | head -2
+19-mc-x6a-dead-target-router-beads-brief.md
+20-migration-merged-gated-ungated-populations-brief.md
+
+$ head -3 19-mc-x6a-dead-target-router-beads-brief.md
+---
+artifact: mc-x6a
+```
+
+So `scan_artifacts` would fail to find these files **even if it were pointed at
+the correct root**. Resolving Q5 requires deciding the root *and* the lookup:
+by filename, or by scanning frontmatter for `artifact:`.
+
+**This makes the question urgent rather than academic.** `MBRF021` is a
+B2.8 violation code — "canonical and redundant state disagree". Its documented
+remedy is to repair the filesystem to match the bead store. Acting on the
+current 66 hits would mean *creating* 66 artifacts that already exist, under
+different names, in a different tree. Nothing should act on `MBRF021` until this
+resolves.
+
 **What resolving it looks like.** Decide (a) or (b); update `paths.toml` and
 `artifact_layout()` together; keep them the single source of truth; and give the
 shuffler a reason to consult the contract rather than take a root by argument,
