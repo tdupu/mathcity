@@ -46,6 +46,7 @@ from urllib.parse import parse_qs, unquote
 
 from . import render
 from . import state as view_state
+from .screens import brief as brief_screen
 from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
@@ -240,6 +241,27 @@ class Dashboard:
             "adjudicated": states.get("adjudicated", 0),
         }
 
+    def _knowls(self, brief: Mapping[str, Any]) -> dict[str, Any]:
+        """Reference data the knowls in a brief's prose can resolve against.
+
+        Only what is genuinely available: the brief's own policy references,
+        and the diagnostic registry. A full rule-id index with file, line and
+        rule text is issue #66 item 3 and does not exist yet, so a rule cited
+        in prose but absent from this brief's own references stays plain text
+        rather than opening an empty panel.
+        """
+        rules: dict[str, Any] = {}
+        for reference in brief.get("policy_references") or ():
+            raw = str(reference.get("reference") or "")
+            token = raw.split()[-1] if raw else ""
+            if token:
+                rules[token] = {
+                    "name": reference.get("description") or token,
+                    "text": reference.get("description") or "",
+                    "file": raw,
+                }
+        return {"rules": rules}
+
     # -- read views --
 
     def _queue(self, request: Request) -> Response:
@@ -424,9 +446,14 @@ class Dashboard:
         options = self._options(brief_id, rig)
         doctor = self._doctor(brief_id, rig)
         option_rows = (options.payload.get("options") or ()) if options else ()
+        # The redesigned detail leads: it is what the operator reads to decide.
+        # The existing panels stay beneath it -- `brief_detail_panel` carries
+        # canonical fields the new screen deliberately does not duplicate, and
+        # the option forms are still the only mutation path until Slice 3.
         sections = [
-            render.brief_detail_panel(brief),
+            brief_screen.detail(brief, view_state.parse(request.query), knowls=self._knowls(brief)),
             render.artifact_trust_panel(shown.artifact_trust, rig=rig),
+            render.brief_detail_panel(brief),
             render.options_panel(option_rows) if options else "",
             render.operation_forms(brief_id, option_rows, rig=rig),
             render.diagnostics_sections(

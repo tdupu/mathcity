@@ -322,3 +322,176 @@ def test_the_page_still_declares_a_responsive_viewport():
     assert 'name="viewport"' in html
     assert "width=device-width" in html
     assert "@media (max-width:" in html
+
+
+# --------------------------------------------------------------------------
+# knowls
+# --------------------------------------------------------------------------
+
+
+def test_a_knowl_needs_no_javascript():
+    """Disclosure is <details>, which also brings keyboard and AT behaviour."""
+    from mctl_dashboard import knowl
+
+    html = knowl.tokenize(
+        "This violates B2.4.",
+        key="s1",
+        rules={"B2.4": {"name": "Source dependency required", "text": "...", "file": "POLICY.md"}},
+    )
+    assert "<details" in html and "<summary" in html
+    assert "onclick" not in html.lower()
+
+
+def test_an_unresolved_identifier_stays_plain_text():
+    """A knowl that expands to nothing is worse than no knowl.
+
+    The design's fixtures cite MC-E101/E113/E207, none of which exist in the
+    real 72-code registry. Rendering them as knowls would promise an
+    explanation the dashboard cannot give.
+    """
+    from mctl_dashboard import knowl
+
+    html = knowl.tokenize("Raises MC-E101.", key="s1")
+    assert "MC-E101" in html
+    assert "<details" not in html
+
+
+def test_a_real_diagnostic_code_resolves_from_the_registry():
+    from mctl_dashboard import knowl
+
+    registry = knowl.diagnostic_registry()
+    assert "MBRF004" in registry, "the 72-code registry should load"
+    html = knowl.tokenize("Blocked by MBRF004.", key="s1")
+    assert "<details" in html
+    assert "source dependency" in html.lower()
+
+
+def test_knowl_text_is_escaped():
+    from mctl_dashboard import knowl
+
+    html = knowl.tokenize("<script>alert(1)</script> cites B2.4", key="s1")
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+
+
+# --------------------------------------------------------------------------
+# brief detail
+# --------------------------------------------------------------------------
+
+
+def test_the_renderer_contains_no_markdown_parser():
+    """The core parses; the dashboard renders.
+
+    A second parser here would re-implement the section mapping and drift from
+    what `briefs_show` reports, which is the failure `client.py` exists to
+    prevent.
+    """
+    import inspect
+
+    from mctl_dashboard.screens import brief
+
+    source = inspect.getsource(brief)
+    for banned in ("startswith('#')", 'startswith("#")', "lstrip('#')", 'split("\\n#")'):
+        assert banned not in source, f"looks like markdown parsing: {banned}"
+
+
+def test_unmapped_sections_are_rendered_not_dropped():
+    """Most real sections do not map to a numbered slot.
+
+    Across 25 live hecke briefs there were 42 unmapped sections against 31
+    mapped. Dropping the unmapped ones would silently discard the majority of
+    every brief's content.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    payload = {
+        "bead_id": "he-1",
+        "title": "t",
+        "sections": [
+            {"section_index": 1, "section_key": "what_is_being_decided",
+             "heading": "Decision", "body": "Pick A.", "match": "heading"},
+            {"section_index": None, "section_key": None,
+             "heading": "Encoding", "body": "The chain complex.", "match": "unmapped"},
+        ],
+        "body_diagnostics": [],
+    }
+    html = brief.detail(payload, state.ViewState())
+    assert "Encoding" in html
+    assert "The chain complex." in html
+
+
+def test_a_brief_with_no_headings_renders_its_body_and_says_why():
+    """36% of live pending briefs have no headings at all (MBRF041)."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    payload = {
+        "bead_id": "he-2",
+        "title": "t",
+        "body": "One paragraph of prose, no headings anywhere.",
+        "sections": [],
+        "body_diagnostics": [{"code": "MBRF041", "message": "no markdown headings"}],
+    }
+    html = brief.detail(payload, state.ViewState())
+    assert "One paragraph of prose" in html
+    assert "MBRF041" in html
+
+
+def test_absent_sections_are_not_rendered_as_empty_slots():
+    """An empty §5 would assert the author omitted a required section.
+
+    No live brief carries all seven. Rendering the five it lacks as empty
+    headings would make every brief look non-compliant, when in fact the
+    parser simply found no heading that mapped.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    payload = {
+        "bead_id": "he-3",
+        "title": "t",
+        "sections": [
+            {"section_index": 1, "section_key": "what_is_being_decided",
+             "heading": "Decision", "body": "Pick A.", "match": "heading"},
+        ],
+        "body_diagnostics": [],
+    }
+    html = brief.detail(payload, state.ViewState())
+    assert "Risks" not in html, "an absent section must not be drawn as an empty slot"
+
+
+def test_the_decision_section_is_flagged_when_it_is_not_first():
+    """Decision-at-Top is an invariant of the brief form, so a violation shows."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    payload = {
+        "bead_id": "he-4",
+        "title": "t",
+        "sections": [
+            {"section_index": 2, "section_key": "recommended_answer",
+             "heading": "Rationale", "body": "Because.", "match": "heading"},
+            {"section_index": 1, "section_key": "what_is_being_decided",
+             "heading": "Decision", "body": "Pick A.", "match": "heading"},
+        ],
+        "body_diagnostics": [],
+    }
+    html = brief.detail(payload, state.ViewState())
+    assert "decision-at-top" in html.lower()
+
+
+def test_brief_detail_escapes_body_content():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    payload = {
+        "bead_id": "he-5",
+        "title": "<script>x</script>",
+        "body": "<img src=x onerror=alert(1)>",
+        "sections": [],
+        "body_diagnostics": [],
+    }
+    html = brief.detail(payload, state.ViewState())
+    assert "<script>x</script>" not in html
+    assert "onerror=alert(1)>" not in html
