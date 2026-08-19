@@ -16,10 +16,12 @@ from .briefs import (
     list_briefs,
     show_brief,
     validate_brief,
+    validation_scope,
 )
 from .context import ContextError, MctlContext, resolve_context
-from .diagnostics import Diagnostic, Severity, render_diagnostic
-from .trace import fold, read_rows
+from .diagnostics import Diagnostic, render_diagnostic
+from .liveness import city_not_active_diagnostic
+from .trace import fold, read_rows, trace_not_found_diagnostic
 from .effects import (
     BriefCreateInput,
     MutationError,
@@ -43,6 +45,14 @@ from .work import (
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.command == "mcp":
+        # The MCP server resolves a fresh context per tool call, so resolving
+        # one here would only produce a stale trace id nothing uses. Imported
+        # lazily: mcp_server imports this module's siblings, and starting a
+        # server is not a cost every `mctl briefs list` should pay.
+        from .mcp_server import serve_from_args
+
+        return serve_from_args(args)
     try:
         context = resolve_context(
             Path.cwd(),
@@ -63,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             print(_render_explain(context))
         return 0
     if context.city_active is False and args.command != "trace":
-        print(render_diagnostic(_city_not_active_diagnostic(context)), file=sys.stderr)
+        print(render_diagnostic(city_not_active_diagnostic(context)), file=sys.stderr)
         return 1
     if args.command == "briefs":
         return _briefs_command(args, context)
@@ -76,21 +86,7 @@ def _trace_command(args: argparse.Namespace, context: MctlContext) -> int:
     record = fold(read_rows(context.rig_root), args.trace_id)
     if record is None:
         print(
-            render_diagnostic(
-                Diagnostic(
-                    severity=Severity.FATAL,
-                    code="MCTL_TRACE_NOT_FOUND",
-                    message=f"No trace rows recorded for {args.trace_id!r}.",
-                    hint="List recent traces under .beads/mctl/traces/.",
-                    facts={
-                        "city_path": str(context.city_root),
-                        "rig_name": context.rig_id,
-                        "rig_path": str(context.rig_root),
-                        "implementation_provenance": "mctl trace show",
-                    },
-                    trace_id=context.trace_id,
-                )
-            ),
+            render_diagnostic(trace_not_found_diagnostic(context, args.trace_id)),
             file=sys.stderr,
         )
         return 1
@@ -122,6 +118,7 @@ def _build_parser() -> argparse.ArgumentParser:
     trace_show = trace_commands.add_parser("show", help="fold every phase row for one trace id")
     trace_show.add_argument("trace_id")
     _add_runtime_arguments(trace_show)
+    _add_mcp_parser(commands)
     work = commands.add_parser("work", help="inspect and dispatch brief-backed work")
     work_commands = work.add_subparsers(dest="work_command", required=True)
     _add_work_ready_parser(work_commands)
@@ -129,6 +126,27 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_work_provenance_parser(work_commands)
     _add_work_dispatch_parser(work_commands)
     return parser
+
+
+def _add_mcp_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Expose the typed MCP server through the same entry point as the CLI.
+
+    One binary, two adapters. `--client-class` defaults to `external`, the
+    closed surface, so an operator who forgets the flag gets no tools rather
+    than the whole surface.
+    """
+    parser = commands.add_parser("mcp", help="serve the typed MCP tool surface")
+    subcommands = parser.add_subparsers(dest="mcp_command", required=True)
+    serve = subcommands.add_parser("serve", help="serve MCP over stdio (JSON-RPC 2.0)")
+    serve.add_argument("--city", help="default registered Gas City root for every tool call")
+    serve.add_argument("--rig", help="default registered rig identifier for every tool call")
+    serve.add_argument(
+        "--client-class",
+        dest="client_class",
+        choices=["internal", "external"],
+        default=None,
+        help="internal exposes the full surface; external is gated (default)",
+    )
 
 
 def _add_runtime_arguments(parser: argparse.ArgumentParser) -> None:
@@ -319,34 +337,7 @@ def _has_blocking_diagnostic(payload: dict[str, object]) -> bool:
 
 
 def _validation_scope(context: MctlContext, args: argparse.Namespace) -> str | None:
-    if args.all and args.brief_id:
-        raise BriefError(_validation_scope_diagnostic(context, both=True))
-    if args.all:
-        return None
-    if args.brief_id:
-        return args.brief_id
-    raise BriefError(_validation_scope_diagnostic(context, both=False))
-
-
-def _validation_scope_diagnostic(context: MctlContext, *, both: bool) -> Diagnostic:
-    message = (
-        "briefs validate takes a brief id or --all, not both."
-        if both
-        else "briefs validate requires a brief id or --all."
-    )
-    return Diagnostic(
-        severity=Severity.FATAL,
-        code="MBRF014",
-        message=message,
-        hint="Run `mctl briefs validate <brief-id>` or `mctl briefs validate --all`.",
-        facts={
-            "city_path": str(context.city_root),
-            "implementation_provenance": "mctl Slice 5 brief validation",
-            "rig_name": context.rig_id,
-            "rig_path": str(context.rig_root),
-        },
-        trace_id=context.trace_id,
-    )
+    return validation_scope(context, args.brief_id, args.all)
 
 
 def _brief_body(context: MctlContext, args: argparse.Namespace) -> str:
@@ -517,28 +508,6 @@ def _diagnostic_line(diagnostic: dict[str, object]) -> str:
     return (
         f"[{diagnostic.get('severity', '?')}] {diagnostic.get('code', '?')}: "
         f"{diagnostic.get('message', '')}"
-    )
-
-
-def _city_not_active_diagnostic(context: MctlContext) -> Diagnostic:
-    facts = {
-        "city_path": str(context.city_root),
-        "implementation_provenance": "mctl city liveness gate",
-        "rig_name": context.rig_id,
-        "rig_path": str(context.rig_root),
-    }
-    if context.city_endpoint is not None:
-        facts["data_location"] = context.city_endpoint
-    return Diagnostic(
-        severity=Severity.FATAL,
-        code="MCTL_CITY_NOT_ACTIVE",
-        message=(
-            "The Gas City data plane for this rig is not reachable, so canonical "
-            "bead state cannot be read."
-        ),
-        hint="Start the city with `gc supervisor run`, then re-run this command.",
-        facts=facts,
-        trace_id=context.trace_id,
     )
 
 
