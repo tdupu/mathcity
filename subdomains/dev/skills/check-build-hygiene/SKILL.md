@@ -174,24 +174,53 @@ that rig's sync immediately).
 
 ```bash
 # P1.12 — conf-reading skills must have a setup-* companion in the same pack
-grep -rl '\.conf\b\|data-generation\.conf\|conf.example' \
-  <mathcity-pack-root>/*/skills/*/SKILL.md \
-  <mathcity-pack-root>/subdomains/*/skills/*/SKILL.md 2>/dev/null \
-  | grep -v '/setup-' | while read f; do
-    pack=$(dirname $(dirname $(dirname "$f")))
-    ls "$pack"/skills/setup-* >/dev/null 2>&1 || echo "NO SETUP SKILL: $f"
-  done
-# P1.13 — every skill dir has a README table row, no ghost rows
+#
+# "Reads a conf" means: the skill names a conf file THIS PACK SHIPS AN EXAMPLE
+# FOR (<pack>/assets/<name>.conf.example). Matching a bare /\.conf\b/ instead
+# flags any skill that merely says the word in prose — it reported
+# check-computing-policy (a parenthetical "priority.conf" example on a
+# blockquote line) and check-build-hygiene (which contains the search pattern
+# by construction and so always matched itself).
 for pack in <mathcity-pack-root> <mathcity-pack-root>/subdomains/*; do
   [ -d "$pack/skills" ] || continue
-  for s in "$pack"/skills/*/; do n=$(basename "$s")
-    grep -q "\`$n\`" "$pack/README.md" 2>/dev/null || echo "NO README ROW: $pack -> $n"
+  confs=$(ls "$pack"/assets/*.conf.example 2>/dev/null \
+    | xargs -n1 basename 2>/dev/null | sed 's/\.example$//')
+  [ -n "$confs" ] || continue
+  for f in "$pack"/skills/*/SKILL.md; do
+    [ -f "$f" ] || continue
+    case "$f" in */setup-*/SKILL.md) continue ;; esac
+    hit=0
+    for c in $confs; do grep -qF "$c" "$f" && hit=1; done
+    [ "$hit" -eq 1 ] || continue
+    ls "$pack"/skills/setup-* >/dev/null 2>&1 \
+      || echo "NO SETUP SKILL: $f"
   done
+done
+
+# P1.13 — every skill dir is indexed, no ghost rows
+#
+# The canonical index is the single top-level README-skills.md, which covers the
+# parent pack AND every subdomain in per-subdomain sections. Grepping each
+# pack's own README.md is what the standalone layout moved away from: most
+# subdomain READMEs have no skills table at all, so that form reported every
+# skill in the pack as unindexed.
+INDEX="<mathcity-pack-root>/README-skills.md"
+[ -f "$INDEX" ] || echo "P1.13 FAIL: no canonical skills index at $INDEX"
+known=$(ls -d <mathcity-pack-root>/skills/*/ \
+  <mathcity-pack-root>/subdomains/*/skills/*/ 2>/dev/null \
+  | xargs -n1 basename | sort -u)
+printf '%s\n' "$known" | while read -r n; do
+  [ -n "$n" ] || continue
+  grep -q "\`$n\`" "$INDEX" || echo "NO INDEX ROW: $n"
+done
+grep -oE '^\| *`[a-z0-9][a-z0-9._-]*`' "$INDEX" | tr -d '|` ' | while read -r n; do
+  [ -n "$n" ] || continue
+  printf '%s\n' "$known" | grep -Fxq "$n" || echo "GHOST ROW: $INDEX -> $n"
 done
 ```
 
-A conf-reading skill with no setup companion, or a skill with no README
-row → **revise**.
+A conf-reading skill with no setup companion, an unindexed skill, or a ghost
+index row → **revise**.
 
 **8. Dependency pre-flight (P1.14).**
 
