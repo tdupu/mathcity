@@ -86,9 +86,69 @@ This class of bug is not reachable without a live city.
 
 ## Q5 — Is the brief stack per-rig or city-wide? `paths.toml` and reality disagree
 
-**Status:** OPEN · **Owner:** Taylor (brief-pipeline policy) ·
-**Raised:** 2026-08-19, from mctl Slice 5 work ·
-**Blocks:** live-rig e2e (pink), and any mctl code that trusts artifact state
+**Status:** **RESOLVED** (direction set; implementation deliberately deferred) ·
+**Owner:** Taylor · **Raised:** 2026-08-19 · **Decided:** 2026-08-19
+
+### Decision (Taylor, 2026-08-19)
+
+**Storage is per-rig. Reporting is city-wide.**
+
+> "The brief stack was originally a single stack but I think a better design is
+> per rig and having the agents/application report on the city-wide status. From
+> a user's perspective, I want all the briefs at the same time."
+
+So `paths.toml`'s rig-relative declaration and `artifact_layout()`'s rig-relative
+resolution are **correct as designed**. The live city-root cross-rig stack is the
+drift, not the contract. Option (b) below wins.
+
+The user-facing need that motivated the single stack — seeing every brief at
+once — is satisfied at the **presentation** layer, not the storage layer: the
+dashboard and the reporting skills aggregate across rigs. That decouples "where
+a brief lives" from "what a human sees", which is the property the single-stack
+design was really buying.
+
+**On the pile lookup:**
+
+> "I don't care how the pile look-up goes. I guess the briefs are supposed to be
+> decision beads so it should be however beads are looked-up."
+
+Bead identity is canonical. The artifact lookup should follow bead identity
+rather than invent a second addressing scheme — which is also what B2.4/B2.8
+already say (the bead store is canonical; files are cache).
+
+### Deliberately NOT being implemented yet
+
+> "If everything is working right now, I would file a separate issue on
+> everything before uprooting."
+
+Nothing is uprooted on this pass. The current state works: reads are correct,
+adjudication works, and the artifact mismatch is contained behind honest
+reporting (`artifact_trust`, `untrusted_diagnostics`). Migrating 101 city-root
+briefs into per-rig trees is a separate, larger, riskier change and gets its own
+issue.
+
+**Interim contract stands unchanged:** `MBRF021` remains a mass false positive
+and must not drive repair; `briefs create` still aborts with `MBRF035` rather
+than materializing a tree.
+
+### Consequent work, tracked separately
+
+1. **Dashboard must aggregate city-wide.** It is currently `--rig`-scoped, which
+   does not meet the stated need. This is the direct consequence of the decision
+   and the most user-visible gap.
+2. **Migration of the live city-root stack to per-rig trees**, plus reconciling
+   `paths.toml`, the shuffler's `--brief-root` argument, and the pile filename
+   convention with bead identity.
+
+**Blocks:** the live-rig e2e slice remains held until (2) lands, since artifact
+assertions against the current layout would prove nothing.
+
+---
+
+*Original analysis retained below for the evidence.*
+
+**Prior status:** OPEN · **Blocked:** live-rig e2e (pink), and any mctl code that
+trusts artifact state
 
 **Observed.** `assets/brief-pipeline/paths.toml` declares, in its own header:
 
