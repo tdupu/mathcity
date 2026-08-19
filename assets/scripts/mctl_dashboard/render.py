@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from html import escape
 import json
+from urllib.parse import quote
 from typing import Any, Iterable, Mapping, Sequence
 
 from .review import MALFORMED_CAVEAT, is_under_review, note_for, partition
@@ -344,12 +345,20 @@ def diagnostics_sections(
 
 
 def artifact_trust_panel(
-    trust: Mapping[str, Any] | None, trust_diagnostics: Sequence[Mapping[str, Any]] = ()
+    trust: Mapping[str, Any] | None,
+    trust_diagnostics: Sequence[Mapping[str, Any]] = (),
+    *,
+    rig: str | None = None,
 ) -> str:
     """State artifact trust wherever artifact state is shown -- both ways.
 
     Rendering only the untrusted case would leave an operator unable to tell
     "trusted" from "this page forgot to say".
+
+    `rig` names which rig the verdict is about. In a city-wide view that is
+    not decoration: the brief root and pile resolve per rig, so trust really
+    does differ per rig, and one banner covering sixteen of them would be a
+    claim about fifteen rigs nobody checked.
     """
     if trust is None:
         return ""
@@ -368,8 +377,10 @@ def artifact_trust_panel(
         else "Redundant-artifact state cannot be trusted, and is not being presented as fact."
     )
     body = [
-        f'<section class="panel" data-region="artifact-trust" data-artifact-trust="{"true" if trusted else "false"}">',
-        "<h2>Artifact state</h2>",
+        f'<section class="panel" data-region="artifact-trust" data-artifact-trust="{"true" if trusted else "false"}"'
+        + (f' data-rig="{_e(rig)}"' if rig else "")
+        + ">",
+        f'<h2>Artifact state{f" - rig {_e(rig)}" if rig else ""}</h2>',
         f'<div class="trust-banner{" trust-ok" if trusted else ""}">',
         f"<p><strong>{_e(headline)}</strong></p>",
         f'<p class="diagnostic-meta">{_e(trust.get("reason"))}</p>',
@@ -399,15 +410,30 @@ def _state_badge(state: str) -> str:
     return f'<span class="badge state-{_e(state)}">{_e(state)}</span>'
 
 
-def brief_rows(briefs: Sequence[Mapping[str, Any]]) -> str:
+def brief_href(brief_id: object, rig: str | None = None) -> str:
+    """The one place a brief link is built.
+
+    In a city-wide list the rig is not decoration: a brief id with no rig is
+    an address with no store behind it, and the detail view would have to
+    guess which of sixteen bead stores to open.
+    """
+    href = f"/briefs/{_e(brief_id)}"
+    return f"{href}?rig={quote(str(rig), safe='')}" if rig else href
+
+
+def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -> str:
     rows = []
     for brief in briefs:
         artifacts = ", ".join(
             sorted({str(item.get("state")) for item in brief.get("redundant_artifacts") or ()})
         )
+        rig = str(brief.get("rig_id") or "") or None
+        rig_cell = f'<td><span class="mono">{_e(rig or "-")}</span></td>' if show_rig else ""
         rows.append(
             "<tr>"
-            f'<td><a href="/briefs/{_e(brief.get("brief_id"))}"><span class="mono">{_e(brief.get("bead_id"))}</span></a></td>'
+            + rig_cell
+            + f'<td><a href="{brief_href(brief.get("brief_id"), rig)}">'
+            f'<span class="mono">{_e(brief.get("bead_id"))}</span></a></td>'
             f'<td>{_e(brief.get("title"))}</td>'
             f'<td>{_state_badge(str(brief.get("decision_state")))}</td>'
             f'<td><span class="mono">{_e(brief.get("status"))}</span></td>'
@@ -420,7 +446,8 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]]) -> str:
         return '<p class="lede">No briefs match this filter.</p>'
     return (
         '<div class="scroll-x"><table><thead><tr>'
-        "<th>Bead</th><th>Title</th><th>Decision state</th><th>Bead status</th>"
+        + ("<th>Rig</th>" if show_rig else "")
+        + "<th>Bead</th><th>Title</th><th>Decision state</th><th>Bead status</th>"
         "<th>Labels</th><th>Artifacts</th><th>Updated</th>"
         "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
     )
@@ -542,8 +569,19 @@ def options_panel(options: Sequence[Mapping[str, Any]]) -> str:
 # --- mutations ---------------------------------------------------------------
 
 
-def operation_forms(brief_id: str, options: Sequence[Mapping[str, Any]]) -> str:
+def operation_forms(
+    brief_id: str, options: Sequence[Mapping[str, Any]], *, rig: str | None = None
+) -> str:
+    """The mutation forms, each pinned to the rig whose store owns this brief.
+
+    The rig travels as a hidden field rather than being inferred at submit
+    time. A city-wide dashboard that let the target store be re-derived from
+    ambient state could adjudicate the wrong bead after the operator changed
+    the rig filter in another tab; carrying it makes the target explicit, and
+    the apply path refuses when the two disagree.
+    """
     enabled = {str(option.get("id")): bool(option.get("enabled")) for option in options}
+    rig_field = f'<input type="hidden" name="rig" value="{_e(rig)}">' if rig else ""
 
     def _blocked(name: str) -> str:
         if enabled.get(name, False):
@@ -560,7 +598,7 @@ def operation_forms(brief_id: str, options: Sequence[Mapping[str, Any]]) -> str:
         "<strong>dry run</strong> through the MCP tool and writes nothing; the confirm control "
         "appears only on the preview, and only while that preview is still true.</p>"
         '<form class="operation" method="post" action="/preview">'
-        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">'
+        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
         '<input type="hidden" name="operation" value="adjudicate">'
         "<label>Verdict"
         '<select name="verdict">'
@@ -575,7 +613,7 @@ def operation_forms(brief_id: str, options: Sequence[Mapping[str, Any]]) -> str:
         f"{_blocked('adjudicate')}"
         "</form>"
         '<form class="operation" method="post" action="/preview">'
-        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">'
+        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
         '<input type="hidden" name="operation" value="defer">'
         '<label>Defer for (days)<input type="text" name="days" value="7"></label>'
         '<label>Reason<textarea name="reason" rows="2"></textarea></label>'
@@ -583,7 +621,7 @@ def operation_forms(brief_id: str, options: Sequence[Mapping[str, Any]]) -> str:
         f"{_blocked('defer')}"
         "</form>"
         '<form class="operation" method="post" action="/preview">'
-        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">'
+        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
         '<input type="hidden" name="operation" value="dispatch">'
         '<div><button type="submit" class="secondary">Preview work dispatch</button></div>'
         f"{_blocked('dispatch-work')}"
@@ -628,7 +666,9 @@ def effect_plan_panel(plan: Mapping[str, Any], *, title: str) -> str:
     )
 
 
-def confirm_panel(token: str, operation: str, brief_id: str | None) -> str:
+def confirm_panel(
+    token: str, operation: str, brief_id: str | None, *, rig: str | None = None
+) -> str:
     return (
         '<section class="panel" data-region="confirm">'
         '<div class="confirm">'
@@ -638,10 +678,11 @@ def confirm_panel(token: str, operation: str, brief_id: str | None) -> str:
         "fresh preview replaces this one.</p>"
         '<form method="post" action="/apply">'
         f'<input type="hidden" name="token" value="{_e(token)}">'
-        f'<button type="submit">Apply this {_e(operation)}</button>'
+        + (f'<input type="hidden" name="rig" value="{_e(rig)}">' if rig else "")
+        + f'<button type="submit">Apply this {_e(operation)}</button>'
         "</form>"
         + (
-            f'<p class="lede"><a href="/briefs/{_e(brief_id)}">Back to the brief without applying</a></p>'
+            f'<p class="lede"><a href="{brief_href(brief_id, rig)}">Back to the brief without applying</a></p>'
             if brief_id
             else ""
         )
@@ -675,4 +716,200 @@ def notice_panel(
         f'<p class="lede">{_e(message)}</p>'
         + diagnostic_list(diagnostics, empty="No further detail was reported.")
         + "</section>"
+    )
+
+
+# --- city-wide views ---------------------------------------------------------
+
+
+def city_context_panel(payload: Mapping[str, Any], *, degraded: Sequence[str] = ()) -> str:
+    """Context for a city-wide page: the city, and every rig it registers.
+
+    The rig-scoped page names one rig; this names all of them, for the same
+    reason -- an operator who cannot see which stores a total covers cannot
+    tell a complete queue from a partial one.
+    """
+    rigs = list(payload.get("rigs") or ())
+    unreadable = set(degraded)
+    listed = ", ".join(
+        f'{_e(entry.get("rig_id"))}{" (degraded)" if entry.get("rig_id") in unreadable else ""}'
+        for entry in rigs
+    )
+    rows = [
+        ("City runtime", f'{_e(payload.get("city_root"))} <span class="badge">city-wide</span>'),
+        ("Scope", f"every registered rig ({len(rigs)})"),
+        ("Registered rigs", f'<span class="mono">{listed or "-"}</span>'),
+        ("Discovery", f'<span class="mono">{_e(payload.get("discovery_path"))}</span>'),
+    ]
+    facts = "".join(f"<dt>{_e(label)}</dt><dd>{value}</dd>" for label, value in rows)
+    return (
+        '<section class="panel" data-region="context" data-scope="city">'
+        "<h2>Context</h2>"
+        '<p class="lede">Resolved through the <span class="mono">context_rigs</span> MCP tool. '
+        "Storage is per rig and the bead store is canonical; this page reports across rigs "
+        'through <span class="mono">all_rigs</span>, and every brief stays addressed by the rig '
+        "that owns it.</p>"
+        f'<dl class="facts">{facts}</dl>'
+        "</section>"
+    )
+
+
+def degraded_rigs_panel(degraded: Sequence[Any], total: int) -> str:
+    """Name every rig that could not be read, and say the totals are partial.
+
+    Silence here would be the worst available behavior: a city-wide page that
+    drops a rig without saying so looks complete, and an operator would read
+    a missing queue as an empty one.
+    """
+    if not degraded:
+        return (
+            '<section class="panel" data-region="degraded-rigs" data-degraded-count="0">'
+            "<h2>Rig health</h2>"
+            f'<p class="lede">All {total} registered rigs answered, so the totals on this page '
+            "cover the whole city.</p></section>"
+        )
+    rows = "".join(
+        "<tr>"
+        f'<td><span class="mono">{_e(rig.rig_id)}</span></td>'
+        f"<td>{_e(rig.reason)}</td>"
+        f'<td><a href="/briefs?rig={quote(rig.rig_id, safe="")}">read this rig alone</a></td>'
+        "</tr>"
+        for rig in degraded
+    )
+    diagnostics = [item for rig in degraded for item in rig.diagnostics]
+    return (
+        '<section class="panel untrusted" data-region="degraded-rigs" '
+        f'data-degraded-count="{len(degraded)}">'
+        f"<h2>Degraded rigs ({len(degraded)} of {total})</h2>"
+        '<p class="lede"><strong>The totals on this page are incomplete.</strong> These rigs '
+        "could not be read, so their briefs are counted nowhere. Every other rig still "
+        "reports normally.</p>"
+        '<div class="scroll-x"><table><thead><tr><th>Rig</th><th>Why</th><th></th></tr></thead>'
+        f"<tbody>{rows}</tbody></table></div>"
+        + diagnostic_list(diagnostics, empty="No further detail was reported.")
+        + "</section>"
+    )
+
+
+def city_queue_panel(view: Any) -> str:
+    """City-wide totals with the per-rig breakdown beside them.
+
+    The aggregate answers "how much is there"; the breakdown answers "where
+    is it". Neither is sufficient alone, and the city row is only ever the sum
+    of the rig rows printed above it.
+    """
+    states = sorted(view.state_counts())
+    totals = view.state_counts()
+    header = "".join(f"<th>{_state_badge(state)}</th>" for state in states)
+    rows = []
+    for rig in view.rigs:
+        if not rig.ok:
+            rows.append(
+                f'<tr data-rig="{_e(rig.rig_id)}" data-degraded="true">'
+                f'<td><span class="mono">{_e(rig.rig_id)}</span></td>'
+                f'<td colspan="{len(states) + 1}">{_e(rig.rig_id)}: could not be read '
+                f"({_e(rig.reason)})</td></tr>"
+            )
+            continue
+        counts = view.state_counts(rig.rig_id)
+        cells = "".join(f'<td class="mono">{counts.get(state, 0)}</td>' for state in states)
+        rows.append(
+            f'<tr data-rig="{_e(rig.rig_id)}" data-degraded="false">'
+            f'<td><a href="/briefs?rig={quote(rig.rig_id, safe="")}">'
+            f'<span class="mono">{_e(rig.rig_id)}</span></a></td>'
+            + cells
+            + f'<td class="mono">{sum(counts.values())}</td></tr>'
+        )
+    total_cells = "".join(
+        f'<td class="mono" data-total-state="{_e(state)}">{totals.get(state, 0)}</td>'
+        for state in states
+    )
+    caveat = ""
+    if totals.get("malformed"):
+        caveat = (
+            '<p class="review-note"><strong>Read the malformed count carefully.</strong> '
+            f"{_e(MALFORMED_CAVEAT)}</p>"
+        )
+    return (
+        '<section class="panel" data-region="queue" data-scope="city" '
+        f'data-brief-total="{len(view.rows)}" data-rig-count="{len(view.rigs)}">'
+        f"<h2>Decision queue - whole city ({len(view.rows)} briefs across "
+        f"{len(view.healthy)} readable rigs)</h2>"
+        '<p class="lede">Canonical source: each rig\'s own <span class="mono">bead_store</span>. '
+        'Read through <span class="mono">briefs_list</span> with '
+        '<span class="mono">all_rigs</span>; storage stays per rig, only the reporting is '
+        "city-wide. The city total is the sum of the rig rows above it.</p>"
+        '<div class="scroll-x"><table><thead><tr><th>Rig</th>'
+        f"{header}<th>Total</th></tr></thead><tbody>"
+        + "".join(rows)
+        + f'<tr data-region="city-total"><td><strong>City</strong></td>{total_cells}'
+        f'<td class="mono" data-total-state="all">{len(view.rows)}</td></tr>'
+        "</tbody></table></div>"
+        + "".join(
+            f'<p class="lede"><span class="badge state-{_e(state)}">{_e(state)}</span> '
+            f"{_e(_state_gloss(state))}</p>"
+            for state in states
+        )
+        + caveat
+        + '<p class="lede"><a href="/briefs?status=open">Open the pending queue, city-wide</a></p>'
+        "</section>"
+    )
+
+
+def rig_filter_field(rig_ids: Sequence[str], selected: str | None) -> str:
+    options = "".join(
+        f'<option value="{_e(rig)}"{" selected" if rig == selected else ""}>{_e(rig)}</option>'
+        for rig in rig_ids
+    )
+    return (
+        '<label>Rig<select name="rig" data-region="rig-filter">'
+        f'<option value=""{" selected" if not selected else ""}>every rig</option>'
+        f"{options}</select></label>"
+    )
+
+
+def rig_trust_panels(view: Any) -> str:
+    """One artifact-trust verdict per rig, never one for the city.
+
+    `artifact_trust` is a statement about a resolved brief root and pile, and
+    those are per rig. Collapsing the verdicts into one would either understate
+    a healthy rig or -- far worse -- state "trusted" over rigs that are not.
+
+    Each rig's trust meta-diagnostic travels into its own banner. They are
+    stripped out of the findings list by `split_diagnostics` -- they are the
+    statement that the findings cannot be trusted, not findings themselves --
+    so if they did not land here they would be dropped entirely.
+    """
+    by_rig: dict[str, list[Mapping[str, Any]]] = {}
+    for item in view.diagnostics:
+        if str(item.get("code")) in TRUST_DIAGNOSTIC_CODES:
+            rig_id = str((item.get("facts") or {}).get("rig_name") or "")
+            by_rig.setdefault(rig_id, []).append(item)
+    panels = [
+        artifact_trust_panel(rig.artifact_trust, by_rig.get(rig.rig_id, ()), rig=rig.rig_id)
+        for rig in view.rigs
+        if rig.artifact_trust is not None
+    ]
+    if not panels:
+        return ""
+    return (
+        '<section class="panel" data-region="rig-artifact-trust" '
+        f'data-rig-trust-count="{len(panels)}">'
+        "<h2>Artifact state, per rig</h2>"
+        '<p class="lede">Trust is a verdict about one rig\'s resolved brief root and pile, so '
+        "it is reported per rig rather than collapsed into a single city-wide claim.</p>"
+        "</section>" + "".join(panels)
+    )
+
+
+def city_diagnostics_sections(view: Any, *, heading: str) -> str:
+    """The aggregate diagnostics split, with the withheld codes still withheld.
+
+    The concatenation is across rigs; the partition is the same one every
+    other view applies. An `MBRF021` from any rig lands under review, and the
+    actionable count on a city-wide page counts exactly what the rig-scoped
+    pages would have counted, summed.
+    """
+    return diagnostics_sections(
+        list(view.diagnostics), list(view.untrusted_diagnostics), None, heading=heading
     )

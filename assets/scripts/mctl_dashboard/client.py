@@ -8,10 +8,15 @@ client of it.
 
 `ALLOWED_TOOLS` is spelled out rather than derived from the server's registry.
 Deriving it would make the dashboard call whatever the server happened to
-expose next, including something shell-shaped; naming the fifteen makes the
+expose next, including something shell-shaped; naming the sixteen makes the
 constraint reviewable, and `test_dashboard_views.py` cross-checks the list
 against `mcp_server.TOOLS_BY_NAME` and `FORBIDDEN_TOOL_NAMES` so it cannot rot
 into a lie.
+
+A city-wide page is still ONE call: `mctl_core/city.py` does the cross-rig
+fan-out behind the declared `all_rigs` option, so the dashboard asks for a
+city the same way it asks for a rig. It is not this layer's job to know that
+sixteen bead stores were read.
 """
 from __future__ import annotations
 
@@ -21,6 +26,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 from typing import Any, Mapping, Protocol
 
 
@@ -30,10 +36,11 @@ MCTL = SCRIPTS_ROOT / "mctl.py"
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT_INFO = {"name": "mctl-dashboard", "version": "0.8.0"}
 
-#: The fifteen typed domain tools Slice 6 registered. Nothing else is callable.
+#: The sixteen typed domain tools Slice 6 registered. Nothing else is callable.
 ALLOWED_TOOLS = frozenset(
     {
         "context_resolve",
+        "context_rigs",
         "briefs_list",
         "briefs_show",
         "briefs_options",
@@ -109,6 +116,12 @@ class _JsonRpcClient:
     def __init__(self) -> None:
         self._next_id = 0
         self._initialized = False
+        # One pipe, one request at a time. `ThreadingHTTPServer` already
+        # serves requests concurrently, and a city-wide page fans out on top
+        # of that, so interleaved writes are reachable rather than theoretical
+        # -- and two half-written JSON-RPC frames on one stdin is a corrupt
+        # session, not a slow one.
+        self._lock = threading.RLock()
 
     # -- transport hook --
 
@@ -116,10 +129,16 @@ class _JsonRpcClient:
         raise NotImplementedError
 
     def _request(self, method: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        self._next_id += 1
-        response = self._exchange(
-            {"jsonrpc": "2.0", "id": self._next_id, "method": method, "params": dict(params or {})}
-        )
+        with self._lock:
+            self._next_id += 1
+            response = self._exchange(
+                {
+                    "jsonrpc": "2.0",
+                    "id": self._next_id,
+                    "method": method,
+                    "params": dict(params or {}),
+                }
+            )
         if response is None:  # pragma: no cover - defensive
             raise ToolFailure(method, [], {})
         return response
@@ -168,7 +187,7 @@ class InProcessMcpClient(_JsonRpcClient):
     `test_dashboard_transport.py` covers the shipped stdio path.
     """
 
-    def __init__(self, *, city: Path, rig: str, env: Mapping[str, str] | None = None):
+    def __init__(self, *, city: Path, rig: str | None = None, env: Mapping[str, str] | None = None):
         super().__init__()
         from mctl_core.mcp_server import MctlMcpServer
 
@@ -256,3 +275,4 @@ class StdioMcpClient(_JsonRpcClient):
                 self.process.wait(timeout=15)
             except subprocess.TimeoutExpired:  # pragma: no cover - defensive
                 self.process.kill()
+

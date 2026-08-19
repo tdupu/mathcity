@@ -59,27 +59,45 @@ def make_handler(dashboard: Dashboard) -> type[BaseHTTPRequestHandler]:
 
 
 def make_server(
-    client: McpClient, *, host: str = "127.0.0.1", port: int = 8471
+    client: McpClient,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8471,
+    city_wide: bool = False,
+    rig: str | None = None,
 ) -> tuple[ThreadingHTTPServer, str]:
     """Build a server and report the URL it is actually bound to.
 
     Returns the real port so a caller that asked for 0 can print something an
     operator can paste into a browser.
     """
-    httpd = ThreadingHTTPServer((host, port), make_handler(Dashboard(client)))
+    httpd = ThreadingHTTPServer(
+        (host, port), make_handler(Dashboard(client, city_wide=city_wide, rig=rig))
+    )
     bound_host, bound_port = httpd.server_address[0], httpd.server_address[1]
     return httpd, f"http://{bound_host}:{bound_port}"
 
 
 def serve_from_args(args: argparse.Namespace) -> int:
     """Entry point for `mctl dashboard serve`, wired from mctl_core.cli."""
+    # `--rig` omitted means city-wide. The MCP server is then started without
+    # a default rig, and every read either names one explicitly or opts into
+    # `all_rigs` -- so a page can never silently resolve to "whichever rig the
+    # server happened to be pinned to".
+    city_wide = not args.rig
     client = StdioMcpClient(
         city=Path(args.city) if args.city else None,
         rig=args.rig,
     )
-    httpd, url = make_server(client, host=args.host, port=args.port)
+    httpd, url = make_server(
+        client, host=args.host, port=args.port, city_wide=city_wide, rig=args.rig
+    )
     print(f"mctl dashboard on {url}", file=sys.stderr)
-    print(f"  MCP client class: internal (all 15 tools); server: {' '.join(client.command)}", file=sys.stderr)
+    print(
+        f"  scope: {'city-wide (every registered rig)' if city_wide else 'rig ' + args.rig}",
+        file=sys.stderr,
+    )
+    print(f"  MCP client class: internal (all 16 tools); server: {' '.join(client.command)}", file=sys.stderr)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

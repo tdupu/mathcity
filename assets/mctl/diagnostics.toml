@@ -154,6 +154,16 @@ severity = "FATAL"
 meaning = "The explicit MCTL_BEADS_FIXTURE path is not a file."
 module = "context.py"
 
+[MCTL_CITY_RIG_TIMEOUT]
+severity = "ERROR"
+meaning = "A rig did not answer a cross-rig read within the deadline and is reported degraded rather than allowed to hold the whole answer."
+module = "city.py"
+
+[MCTL_CITY_RIG_UNREADABLE]
+severity = "ERROR"
+meaning = "A rig could not be read during a cross-rig read; the remaining rigs still report."
+module = "city.py"
+
 [MCTL_CONTEXT_CITY_NOT_FOUND]
 severity = "FATAL"
 meaning = "The requested city root does not contain city.toml."

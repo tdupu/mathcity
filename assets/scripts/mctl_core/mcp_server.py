@@ -53,7 +53,8 @@ from .briefs import (
     validate_brief,
     validation_scope,
 )
-from .context import ContextError, MctlContext, resolve_context
+from .city import for_each_rig, merge_outcomes
+from .context import CityScope, ContextError, MctlContext, resolve_city, resolve_context
 from .diagnostics import Diagnostic, Severity
 from .effects import (
     BriefCreateInput,
@@ -83,7 +84,7 @@ from .schemas import (
     response_schema,
     schema_errors,
 )
-from .trace import fold, read_rows, trace_not_found_diagnostic
+from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
 from .work import (
     WorkError,
     apply_dispatch_plan,
@@ -347,6 +348,37 @@ def apply_artifact_trust(
 # --- tool specifications ----------------------------------------------------
 
 
+#: A tool resolves either one rig (`rig`) or the city registry alone (`city`).
+#: City-scoped tools answer questions that must stay answerable when a rig is
+#: unselectable or its data plane is down -- "which rigs exist" above all,
+#: since a city-wide reader cannot report a rig as degraded without first
+#: knowing the rig is there.
+RIG_SCOPE = "rig"
+CITY_SCOPE = "city"
+
+#: `all_rigs` is the plan's own name for the explicit cross-rig opt-in (Slice 2
+#: Global Constraints, and the `briefs_list` input schema). The tools that
+#: accept it name the arrays their per-rig payloads contribute; `city.py` does
+#: the fan-out and the merge, so no consumer assembles a city-wide answer for
+#: itself. Cross-rig *mutation* stays forbidden -- an assertion below refuses
+#: to register a mutating tool here.
+CROSS_RIG_ARRAYS: dict[str, tuple[str, ...]] = {
+    "briefs_list": ("briefs",),
+    "briefs_validate": ("briefs", "brief_diagnostics"),
+    "work_ready": ("work",),
+}
+
+ALL_RIGS_PROPERTY: Schema = {
+    "type": "boolean",
+    "default": False,
+    "description": (
+        "Read every registered rig instead of one. Rows carry `rig_id`, and `rigs` reports "
+        "each rig's outcome -- a rig that cannot be read is a degraded entry, not a failure "
+        "of the call."
+    ),
+}
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     name: str
@@ -354,8 +386,13 @@ class ToolSpec:
     description: str
     input_schema: Schema
     output_schema: Schema
-    handler: Callable[[MctlContext, Mapping[str, Any]], dict[str, object]]
+    handler: Callable[[Any, Mapping[str, Any]], dict[str, object]]
     mutating: bool = False
+    scope: str = RIG_SCOPE
+
+    @property
+    def cross_rig(self) -> bool:
+        return self.name in CROSS_RIG_ARRAYS
     # Plan §8: "Keep MCP tools disabled from external clients until CLI
     # behavior for the same core function is proven." Read paths are proven by
     # Slices 1-5; mutation stays internal until the MCP surface itself has a
@@ -375,6 +412,7 @@ class ToolSpec:
                     "artifact_state": self.artifact_state,
                     "external_ready": self.external_ready,
                     "mutating": self.mutating,
+                    "scope": self.scope,
                 }
             },
         }
@@ -388,6 +426,22 @@ def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> d
     payload = dict(ctx.to_dict())
     payload["diagnostics"] = [warning.to_dict() for warning in ctx.warnings]
     return payload
+
+
+def _handle_context_rigs(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """The city registry, with no rig selected and nothing probed.
+
+    A city-wide client asks this first. It reads configuration only, so it
+    still answers when Dolt is down -- which is exactly when the client most
+    needs the roster, because a rig it cannot name is a rig it cannot report
+    as degraded.
+    """
+    return {
+        "city_root": str(scope.city_root),
+        "diagnostics": [],
+        "discovery_path": scope.discovery_path,
+        "rigs": [rig.to_dict() for rig in scope.rigs],
+    }
 
 
 def _handle_briefs_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -603,6 +657,9 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "gates_toml": {"type": "string"},
                 "invocation_cwd": {"type": "string"},
                 "paths_toml": {"type": "string"},
+                "registered_rigs": dict(
+                    STRING_ARRAY, description="Every rig this city registers, in registry order."
+                ),
                 "rig_db": {"type": "string"},
                 "rig_id": {"type": "string"},
                 "rig_root": {"type": "string"},
@@ -613,6 +670,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "city_active",
                 "city_root",
                 "discovery_path",
+                "registered_rigs",
                 "rig_db",
                 "rig_id",
                 "rig_root",
@@ -623,6 +681,38 @@ TOOLS: tuple[ToolSpec, ...] = (
         handler=_handle_context_resolve,
     ),
     ToolSpec(
+        name="context_rigs",
+        title="List registered rigs",
+        description=(
+            "Enumerate every rig this city registers, selecting none. Configuration only: "
+            "it answers while a rig's data plane is down, which is when a city-wide reader "
+            "needs the roster most."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "city_root": {"type": "string"},
+                "discovery_path": {"type": "string"},
+                "rigs": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "rig_db": {"type": "string"},
+                            "rig_id": {"type": "string"},
+                            "rig_root": {"type": "string"},
+                        },
+                        "required": ["rig_db", "rig_id", "rig_root"],
+                        "additionalProperties": True,
+                    },
+                },
+            },
+            ["city_root", "discovery_path", "rigs"],
+        ),
+        handler=_handle_context_rigs,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
         name="briefs_list",
         title="List brief beads",
         description="List canonical decision brief beads, optionally filtered by status or label.",
@@ -630,6 +720,7 @@ TOOLS: tuple[ToolSpec, ...] = (
             {
                 "status": nullable_string("Filter by raw bead or decision status."),
                 "label": nullable_string("Filter by brief label."),
+                "all_rigs": ALL_RIGS_PROPERTY,
             }
         ),
         output_schema=response_schema(
@@ -690,6 +781,7 @@ TOOLS: tuple[ToolSpec, ...] = (
             {
                 "brief_id": nullable_string("Validate exactly this brief."),
                 "all": {"type": "boolean", "description": "Validate every canonical brief."},
+                "all_rigs": ALL_RIGS_PROPERTY,
             }
         ),
         output_schema=response_schema(
@@ -777,7 +869,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         name="work_ready",
         title="List ready work",
         description="List brief-backed work whose canonical state permits dispatch.",
-        input_schema=request_schema(),
+        input_schema=request_schema({"all_rigs": ALL_RIGS_PROPERTY}),
         output_schema=response_schema(
             {"work": {"type": "array", "items": WORK_ITEM_SCHEMA}}, ["work"]
         ),
@@ -845,6 +937,20 @@ TOOLS: tuple[ToolSpec, ...] = (
 )
 
 TOOLS_BY_NAME: dict[str, ToolSpec] = {tool.name: tool for tool in TOOLS}
+
+_CROSS_RIG_MUTATORS = sorted(
+    name for name in CROSS_RIG_ARRAYS if TOOLS_BY_NAME.get(name) and TOOLS_BY_NAME[name].mutating
+)
+if _CROSS_RIG_MUTATORS:
+    # Plan Global Constraints: "Cross-rig mutations are forbidden until a
+    # command-specific batch mode is designed and reviewed." An `all_rigs`
+    # mutation would fan a write across every store in one unreviewed call.
+    raise RuntimeError(f"cross-rig mutation is forbidden: {_CROSS_RIG_MUTATORS}")
+
+if set(CROSS_RIG_ARRAYS) - set(TOOLS_BY_NAME):
+    raise RuntimeError(
+        f"CROSS_RIG_ARRAYS names unregistered tools: {sorted(set(CROSS_RIG_ARRAYS) - set(TOOLS_BY_NAME))}"
+    )
 
 if FORBIDDEN_TOOL_NAMES & set(TOOLS_BY_NAME):
     # Not an `assert`: `python -O` strips those, and this is the one invariant
@@ -985,6 +1091,10 @@ class MctlMcpServer:
         return self._ok(message_id, self._run(tool, arguments))
 
     def _run(self, tool: ToolSpec, arguments: Mapping[str, Any]) -> dict[str, object]:
+        if tool.scope == CITY_SCOPE:
+            return self._run_city_scoped(tool, arguments)
+        if tool.cross_rig and bool(arguments.get("all_rigs")):
+            return self._run_all_rigs(tool, arguments)
         try:
             ctx = self._context(arguments)
         except ContextError as error:
@@ -1020,6 +1130,99 @@ class MctlMcpServer:
             )
             return _tool_error(
                 [diagnostic.to_dict()], ctx.trace_id, extra={"schema_errors": violations}
+            )
+        return _tool_result(payload)
+
+    def _run_all_rigs(self, tool: ToolSpec, arguments: Mapping[str, Any]) -> dict[str, object]:
+        """The explicit cross-rig opt-in, run through the one core fan-out.
+
+        The handler is unchanged and runs once per rig against that rig's own
+        resolved context, including its own artifact-trust pass -- so a
+        city-wide answer is exactly the per-rig answers, assembled. Nothing
+        here re-derives a fact the single-rig path derives differently.
+        """
+        city = arguments.get("city") or self.default_city
+        per_rig = {key: value for key, value in arguments.items() if key not in {"rig", "all_rigs"}}
+
+        def run(ctx: MctlContext) -> dict[str, object]:
+            payload = tool.handler(ctx, per_rig)
+            payload.setdefault("diagnostics", [])
+            if tool.artifact_state:
+                payload = apply_artifact_trust(ctx, payload, assess_artifact_trust(ctx))
+            return payload
+
+        try:
+            scope, outcomes = for_each_rig(
+                self.cwd or Path.cwd(),
+                city=Path(city) if city else None,
+                env=self.env,
+                run=run,
+            )
+        except ContextError as error:
+            return _tool_error([error.diagnostic.to_dict()], None)
+        payload = merge_outcomes(
+            scope,
+            outcomes,
+            arrays=CROSS_RIG_ARRAYS[tool.name],
+            trace_id=new_trace_id(),
+            artifact_state=tool.artifact_state,
+            validity=tool.name == "briefs_validate",
+        )
+        violations = schema_errors(payload, tool.output_schema)
+        if violations:
+            diagnostic = _server_diagnostic(
+                "MCTL_MCP_OUTPUT_SCHEMA_VIOLATION",
+                f"{tool.name} produced a response that violates its declared output schema.",
+                "This is an mctl bug; the declared schema and the handler have drifted.",
+                requested_tool=tool.name,
+            )
+            return _tool_error(
+                [diagnostic.to_dict()],
+                str(payload.get("trace_id") or ""),
+                extra={"schema_errors": violations},
+            )
+        return _tool_result(payload)
+
+    def _run_city_scoped(self, tool: ToolSpec, arguments: Mapping[str, Any]) -> dict[str, object]:
+        """Run a tool that resolves the city registry and no rig.
+
+        Deliberately NOT gated on `city_active`. These tools read `city.toml`
+        and touch no bead store, so refusing them when Dolt is down would
+        deny a city-wide client the one fact it needs to say *which* rigs it
+        could not read.
+        """
+        city = arguments.get("city") or self.default_city
+        try:
+            scope = resolve_city(
+                self.cwd or Path.cwd(),
+                city=Path(city) if city else None,
+                require_runtime_city=True,
+                env=self.env,
+            )
+        except ContextError as error:
+            return _tool_error([error.diagnostic.to_dict()], None)
+        try:
+            payload = tool.handler(scope, arguments)
+        except Exception as error:  # noqa: BLE001 - a crash must not reach the wire raw
+            diagnostic = _server_diagnostic(
+                "MCTL_MCP_INTERNAL_ERROR",
+                f"{tool.name} failed unexpectedly: {type(error).__name__}.",
+                "Re-run the equivalent mctl CLI command to reproduce with a full traceback.",
+                requested_tool=tool.name,
+            )
+            return _tool_error([diagnostic.to_dict()], scope.trace_id)
+        payload.setdefault("diagnostics", [])
+        payload["trace_id"] = scope.trace_id
+        violations = schema_errors(payload, tool.output_schema)
+        if violations:
+            diagnostic = _server_diagnostic(
+                "MCTL_MCP_OUTPUT_SCHEMA_VIOLATION",
+                f"{tool.name} produced a response that violates its declared output schema.",
+                "This is an mctl bug; the declared schema and the handler have drifted.",
+                requested_tool=tool.name,
+            )
+            return _tool_error(
+                [diagnostic.to_dict()], scope.trace_id, extra={"schema_errors": violations}
             )
         return _tool_result(payload)
 

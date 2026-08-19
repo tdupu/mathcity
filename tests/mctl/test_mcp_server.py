@@ -41,6 +41,7 @@ DECLARED_TOOLS = (
     "briefs_show",
     "briefs_validate",
     "context_resolve",
+    "context_rigs",
     "trace_replay_preview",
     "trace_show",
     "work_dispatch",

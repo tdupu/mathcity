@@ -133,9 +133,28 @@ than materializing a tree.
 
 ### Consequent work, tracked separately
 
-1. **Dashboard must aggregate city-wide.** It is currently `--rig`-scoped, which
-   does not meet the stated need. This is the direct consequence of the decision
-   and the most user-visible gap.
+1. **Dashboard must aggregate city-wide.** ~~It is currently `--rig`-scoped,
+   which does not meet the stated need.~~ **DONE 2026-08-19.** Corrected in the
+   doing: this was framed as new dashboard work, but `--all-rigs` had been in
+   the plan since Slice 2 (Global Constraints; `briefs_list`'s `all_rigs` input)
+   and was simply never built, while `check-briefs` worked around its absence by
+   looping `mctl briefs list --rig X` in shell. So the cross-rig read went into
+   the **core** (`mctl_core/city.py`), not the dashboard:
+
+   - `mctl briefs list --all-rigs`, and the same flag on `briefs validate` and
+     `work ready`; matching `all_rigs` inputs on those three MCP tools.
+   - A new city-scoped `context_rigs` tool enumerates the registry without
+     selecting a rig, so a client can name a rig it could not read.
+   - Rigs are read concurrently behind one call: 16 live rigs, 200 briefs, 3.94s
+     in series versus ~1.3s. A rig that fails or times out becomes a named
+     degraded entry; the rest still report. `mctl ... --all-rigs` exits 1 when
+     any rig is unreadable, so a pipeline cannot mistake a partial answer for a
+     complete one.
+   - The dashboard drops `--rig` to serve the city, and is a *consumer* of the
+     above rather than a second implementation. Storage is untouched.
+
+   Cross-rig **mutation** remains forbidden, per the same Global Constraints; an
+   import-time check refuses to register a mutating tool as cross-rig.
 2. **Migration of the live city-root stack to per-rig trees**, plus reconciling
    `paths.toml`, the shuffler's `--brief-root` argument, and the pile filename
    convention with bead identity.

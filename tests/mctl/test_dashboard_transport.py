@@ -106,7 +106,7 @@ def test_the_dashboard_speaks_stdio_to_a_real_mctl_mcp_serve_subprocess(tmp_path
     assert command[2:4] == ["mcp", "serve"]
     assert "--client-class" in command
     assert command[command.index("--client-class") + 1] == "internal"
-    assert len(tools) == 15, "an external client would see zero tools here"
+    assert len(tools) == 16, "an external client would see zero tools here"
     assert "briefs_adjudicate" in tools
 
 

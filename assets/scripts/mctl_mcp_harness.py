@@ -48,6 +48,7 @@ MCTL = SCRIPTS_ROOT / "mctl.py"
 
 EXPECTED_TOOLS = (
     "context_resolve",
+    "context_rigs",
     "briefs_list",
     "briefs_show",
     "briefs_options",

@@ -190,9 +190,9 @@ mctl briefs adjudicate <brief> --verdict approve|revise|reject --reason <text> [
 mctl briefs defer <brief> --days <n> --reason <text> [--dry-run] [--json]
 mctl briefs create --source-bead <bead> --title <text> [--body <path>] [--json]
 mctl briefs create --source-kind manual --title <text> --body <path> [--json]
-mctl briefs validate <brief-or-path> [--json]
+mctl briefs validate <brief-or-path> [--all-rigs] [--json]
 
-mctl work ready [--json]
+mctl work ready [--all-rigs] [--json]
 mctl work status <bead> [--json]
 mctl work dispatch <bead> [--dry-run] [--json]
 mctl work provenance <bead> [--json]
@@ -214,6 +214,7 @@ MCP tool names and read/mutate status:
 | Tool | Mutates | Input schema highlights |
 | --- | --- | --- |
 | `context_resolve` | no | optional `city_path`, optional `rig_name` |
+| `context_rigs` | no | optional `city_path`; enumerates the registry, selects no rig |
 | `briefs_list` | no | `status`, `all_rigs` |
 | `briefs_show` | no | `brief`, optional `option`, `compare_options` |
 | `briefs_options` | no | `brief` |
@@ -221,8 +222,8 @@ MCP tool names and read/mutate status:
 | `briefs_adjudicate` | yes | `brief`, `verdict` enum, optional `option`, `reason`, `dry_run` |
 | `briefs_defer` | yes | `brief`, `days`, `reason`, `dry_run` |
 | `briefs_create` | yes | `source_kind` enum, `source_bead` or `body_path`, `title`, `dry_run` |
-| `briefs_validate` | no | `brief_or_path` |
-| `work_ready` | no | optional `rig_name` |
+| `briefs_validate` | no | `brief_or_path`, `all_rigs` |
+| `work_ready` | no | optional `rig_name`, `all_rigs` |
 | `work_status` | no | `bead` |
 | `work_dispatch` | yes | `bead`, `dry_run` |
 | `work_provenance` | no | `bead` |
