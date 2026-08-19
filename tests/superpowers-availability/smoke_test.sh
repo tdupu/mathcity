@@ -4,13 +4,29 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
+# Sibling-pack lookups must resolve against the PRIMARY checkout, not against
+# whatever tree this script happens to run from. When the test runs inside a git
+# worktree (e.g. .claude/worktrees/<name>), $ROOT is the worktree root and
+# "$ROOT/.." points at the worktree container, not at the repo's parent
+# directory -- so the sibling pack is not found. The git common dir always lives
+# in the primary checkout, so its parent is the primary checkout root in both
+# the worktree and non-worktree cases. Fall back to $ROOT outside a git repo.
+PACK_HOME="$ROOT"
+if common_dir="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+  && [ -n "$common_dir" ] && [ -d "$common_dir" ]; then
+  PACK_HOME="$(cd "$common_dir/.." && pwd)"
+fi
+
 if [ -n "${SUPERPOWERS_PACK:-}" ]; then
   SUPERPOWERS_ROOT="$SUPERPOWERS_PACK"
 else
-  SUPERPOWERS_ROOT="$ROOT/../gascity-packs/superpowers"
+  SUPERPOWERS_ROOT="$PACK_HOME/../gascity-packs/superpowers"
 fi
 
-CITY="${GC_CITY_PATH:-/Users/tdupuy/gt}"
+# No baked-in default city path: a machine-specific absolute path must not live
+# in a tracked file (subdomains/dev/POLICY.md P1.10). Only the opt-in live check
+# needs a city, and it requires GC_CITY_PATH explicitly.
+CITY="${GC_CITY_PATH:-}"
 RIG="${GC_RIG_NAME:-hecke}"
 
 fail() {
@@ -129,6 +145,7 @@ done
 
 if [ "${RUN_LIVE_GC:-0}" = "1" ]; then
   command -v gc >/dev/null 2>&1 || fail "RUN_LIVE_GC=1 requested but gc is not on PATH"
+  [ -n "$CITY" ] || fail "RUN_LIVE_GC=1 requires GC_CITY_PATH to be set to the city root"
 
   live_formulas="$(gc formula list --city "$CITY" --rig "$RIG" | awk '/^superpowers-/ {print $1}' | sort -u)"
   for formula in $expected_formulas; do

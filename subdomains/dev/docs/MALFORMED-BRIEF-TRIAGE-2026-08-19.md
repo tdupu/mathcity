@@ -417,16 +417,16 @@ for id in gsp-136z gsp-16js gsp-317y gsp-558u gsp-6iks gsp-84ca gsp-8qvk \
           gsp-afvh gsp-cd8g gsp-edafo gsp-hjbz gsp-hl4t gsp-k6y2 gsp-l1pn \
           gsp-mjv4 gsp-nx3v gsp-pc0dqg gsp-pxcu gsp-u4f6 gsp-vf5w gsp-vp9j \
           gsp-xo48; do
-  bd -C /Users/tdupuy/gt/gascity-packs update "$id" --add-label not-a-brief
+  bd -C <city-root>/gascity-packs update "$id" --add-label not-a-brief
 done
 
 # hecke (5)
 for id in he-am9lk he-hjw2y he-knox he-mgdb9 he-tz158; do
-  bd -C /Users/tdupuy/gt/hecke update "$id" --add-label not-a-brief
+  bd -C <city-root>/hecke update "$id" --add-label not-a-brief
 done
 
 # agent_skills (1)
-bd -C /Users/tdupuy/gt/agent_skills update as-coq0 --add-label not-a-brief
+bd -C <city-root>/agent_skills update as-coq0 --add-label not-a-brief
 ```
 
 **Safe because** it adds a label and nothing else; it changes no status, no
@@ -439,7 +439,7 @@ I extracted a verdict token from **21 of 21** by this grammar, in order:
 `^Taylor verdict[^:]*:\s*(\S+)`.
 
 ```bash
-bd -C /Users/tdupuy/gt/hecke update he-f1lt \
+bd -C <city-root>/hecke update he-f1lt \
   --set-metadata verdict=A-CLOSE-DONE \
   --set-metadata verdict_source=close_reason \
   --set-metadata verdict_backfilled=2026-08-19
@@ -479,7 +479,7 @@ docs + determine embedded-vs-server misconfiguration ... before upstream filing.
 `he-naqz3`, `he-496ab`, `gsp-4dhp`, `gsp-34n2`, `gsp-t1oa`, `gsp-un6x`.
 
 ```bash
-bd -C /Users/tdupuy/gt/gascity-packs update gsp-4dhp \
+bd -C <city-root>/gascity-packs update gsp-4dhp \
   --set-metadata verdict=revise \
   --set-metadata verdict_authorizer=Taylor \
   --set-metadata verdict_source=notes \
@@ -513,11 +513,11 @@ these six cannot be backfilled without inventing policy.
 Once answered, the write is mechanical for all six:
 
 ```bash
-bd -C /Users/tdupuy/gt/hecke update he-hljdhx \
+bd -C <city-root>/hecke update he-hljdhx \
   --set-metadata verdict=superseded \
   --set-metadata superseded_by=he-saeno4 \
   --set-metadata verdict_backfilled=2026-08-19
-bd -C /Users/tdupuy/gt/hecke dep add he-hljdhx he-saeno4 --type supersedes
+bd -C <city-root>/hecke dep add he-hljdhx he-saeno4 --type supersedes
 ```
 
 The `dep add` also clears `MBRF004` on these beads — though per §4.2 a
@@ -609,11 +609,11 @@ belongs to Q5's owner.
 ## Method
 
 ```
-bin/mctl briefs validate --all --city /Users/tdupuy/gt --rig <rig> --json
-bd -C /Users/tdupuy/gt/<rig> list --all --limit 0 --json --readonly
-bd -C /Users/tdupuy/gt/hecke show he-ldav4g
-bd -C /Users/tdupuy/gt/hecke dep list he-ldav4g
-bin/mctl briefs options he-ldav4g --city /Users/tdupuy/gt --rig hecke --json
+bin/mctl briefs validate --all --city <city-root> --rig <rig> --json
+bd -C <city-root>/<rig> list --all --limit 0 --json --readonly
+bd -C <city-root>/hecke show he-ldav4g
+bd -C <city-root>/hecke dep list he-ldav4g
+bin/mctl briefs options he-ldav4g --city <city-root> --rig hecke --json
 ```
 
 City up, Dolt managed at `127.0.0.1:58506`, supervisor running. All reads.

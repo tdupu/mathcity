@@ -15,11 +15,11 @@ Parent: [Dev README](../../../README.md)
 - Current date for this plan is 2026-08-16.
 - The 20X Anthropic account is at about 95% usage. Any live-city testing must be very efficient or routed through Codex-backed agents.
 - Do not let provider scarcity drive broad config churn. Prefer existing Codex-pinned workers or a narrow temporary provider override using `switch-city-worker-provider`.
-- `update-gascity-from-source` does not select an AI provider. It syncs `/Users/tdupuy/repos/gascity`, builds, installs `gc`, and verifies `/Users/tdupuy/gt`.
+- `update-gascity-from-source` does not select an AI provider. It syncs `<repos-root>/gascity`, builds, installs `gc`, and verifies `<city-root>`.
 - Provider selection for existing cities is config-driven: per-agent `provider = "codex"`, `[agent_defaults] provider = "codex"`, legacy `[workspace] provider = "codex"`, or targeted `patches.agent.provider`.
-- New cities can be initialized with `gc init --default-provider codex`, but `/Users/tdupuy/gt` is an existing city and currently has `[workspace] provider = "claude"`.
+- New cities can be initialized with `gc init --default-provider codex`, but `<city-root>` is an existing city and currently has `[workspace] provider = "claude"`.
 - MathCity already registers `[providers.codex]` in `pack.toml`, and `agents/codex-worker/agent.toml` uses `provider = "codex"`.
-- Build and test gascity PR candidates from `/Users/tdupuy/repos/gascity`; start/stop/runtime verification runs from `/Users/tdupuy/gt`.
+- Build and test gascity PR candidates from `<repos-root>/gascity`; start/stop/runtime verification runs from `<city-root>`.
 - Do not mutate live `.beads` or city runtime state for MRE proof unless the step explicitly says it is a controlled canary.
 - Every upstream gascity issue and PR must state that the intended lifecycle policy is not fully specified yet, and must describe the policy assumption the fix implements.
 - MCTL starts only after the new brief system has been tested end to end and the fast-drain plan has been reconciled with that evidence.
@@ -54,11 +54,11 @@ Parent: [Dev README](../../../README.md)
 ## Task 0: Provider And Usage Preflight
 
 **Files:**
-- Read: `/Users/tdupuy/repos/gascity/docs/reference/cli.md`
-- Read: `/Users/tdupuy/repos/gascity/docs/reference/config.md`
-- Read: `/Users/tdupuy/repos/gascity/docs/tutorials/02-agents.md`
-- Read: `/Users/tdupuy/repos/mathcity/subdomains/dev/skills/switch-city-worker-provider/SKILL.md`
-- Read: `/Users/tdupuy/gt/city.toml`
+- Read: `<repos-root>/gascity/docs/reference/cli.md`
+- Read: `<repos-root>/gascity/docs/reference/config.md`
+- Read: `<repos-root>/gascity/docs/tutorials/02-agents.md`
+- Read: `<repos-root>/mathcity/subdomains/dev/skills/switch-city-worker-provider/SKILL.md`
+- Read: `<city-root>/city.toml`
 
 **Interfaces:**
 - Consumes: current city config and provider readiness.
@@ -69,7 +69,7 @@ Parent: [Dev README](../../../README.md)
 Run:
 
 ```bash
-cd /Users/tdupuy/gt
+cd <city-root>
 gc config explain --provider codex --json
 gc config explain --provider claude --json
 ```
@@ -81,7 +81,7 @@ Expected: both providers resolve. Codex should resolve to command `codex`; Claud
 Run:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repos-root>/mathcity
 sed -n '1,40p' pack.toml
 sed -n '1,80p' agents/codex-worker/agent.toml
 ```
@@ -90,7 +90,7 @@ Expected: `pack.toml` contains `[providers.codex]`; `agents/codex-worker/agent.t
 
 - [ ] **Step 3: If live E2E needs workers today, smoke a Codex worker first**
 
-Use `/Users/tdupuy/repos/mathcity/subdomains/dev/skills/switch-city-worker-provider/SKILL.md` exactly. Prefer Step 2 of that runbook, which proves an existing Codex worker spawn without editing `city.toml`.
+Use `<repos-root>/mathcity/subdomains/dev/skills/switch-city-worker-provider/SKILL.md` exactly. Prefer Step 2 of that runbook, which proves an existing Codex worker spawn without editing `city.toml`.
 
 Expected: a scratch bead starts a `provider=codex` session and closes or blocks loudly.
 
@@ -103,9 +103,9 @@ Expected: no whole-city provider migration. The evidence directory records befor
 ## Task 1A: `gc start` False-Fatal Upstream Issue And PR
 
 **Files:**
-- Modify upstream branch: `/Users/tdupuy/repos/gascity/cmd/gc/cmd_supervisor.go`
-- Modify upstream branch: `/Users/tdupuy/repos/gascity/cmd/gc/cmd_supervisor_city.go`
-- Modify upstream branch: `/Users/tdupuy/repos/gascity/cmd/gc/cmd_supervisor_city_test.go`
+- Modify upstream branch: `<repos-root>/gascity/cmd/gc/cmd_supervisor.go`
+- Modify upstream branch: `<repos-root>/gascity/cmd/gc/cmd_supervisor_city.go`
+- Modify upstream branch: `<repos-root>/gascity/cmd/gc/cmd_supervisor_city_test.go`
 
 **Interfaces:**
 - Consumes: fork branch `tdupu/gascity:fix/gc-start-reload-timeout-success` at `16339194a`.
@@ -135,7 +135,7 @@ Candidate commit: 16339194a
 
 - [ ] **Step 2: Create a clean upstream PR branch**
 
-Run from `/Users/tdupuy/repos/gascity`:
+Run from `<repos-root>/gascity`:
 
 ```bash
 git fetch origin --prune
@@ -173,7 +173,7 @@ Expected: installed binary `vcs.revision` matches the PR branch HEAD and `vcs.mo
 
 - [ ] **Step 5: Run a self-contained runtime MRE from the city root**
 
-Run from `/Users/tdupuy/gt`, not from the source checkout. The MRE must use a temporary test city or fake supervisor endpoint. It must not start/stop the production city unless the test step explicitly asks for a controlled live canary.
+Run from `<city-root>`, not from the source checkout. The MRE must use a temporary test city or fake supervisor endpoint. It must not start/stop the production city unless the test step explicitly asks for a controlled live canary.
 
 Acceptance:
 
@@ -236,9 +236,9 @@ Expected: PASS.
 ## Task 1C: `gc stop` Durable Stop PR
 
 **Files:**
-- Modify upstream branch: `/Users/tdupuy/repos/gascity/cmd/gc/cmd_supervisor.go`
-- Modify upstream branch: `/Users/tdupuy/repos/gascity/cmd/gc/cmd_supervisor_lifecycle.go`
-- Modify upstream branch: `/Users/tdupuy/repos/gascity/cmd/gc/cmd_supervisor_test.go`
+- Modify upstream branch: `<repos-root>/gascity/cmd/gc/cmd_supervisor.go`
+- Modify upstream branch: `<repos-root>/gascity/cmd/gc/cmd_supervisor_lifecycle.go`
+- Modify upstream branch: `<repos-root>/gascity/cmd/gc/cmd_supervisor_test.go`
 
 **Interfaces:**
 - Consumes: fork branch `tdupu/gascity:fix/supervisor-stop-launchd-durable` at `e40b94a4`.
@@ -249,7 +249,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd /Users/tdupuy/repos/gascity
+cd <repos-root>/gascity
 git fetch origin --prune
 git fetch fork --prune
 git worktree add /private/tmp/gascity-pr-stop-launchd origin/main -b pr/supervisor-stop-launchd-durable
@@ -293,7 +293,7 @@ go version -m "$(go env GOPATH)/bin/gc"
 
 Expected: installed binary matches the PR branch HEAD and `vcs.modified=false`.
 
-- [ ] **Step 5: Run a self-contained stop MRE from `/Users/tdupuy/gt`**
+- [ ] **Step 5: Run a self-contained stop MRE from `<city-root>`**
 
 The MRE should fake or isolate launchd state so it proves durable stop behavior without risking the production supervisor. If a live canary is needed, it must use a temporary test city and record the exact launchd label/plist path before and after.
 
@@ -322,10 +322,10 @@ registration paths and fails closed when the platform stop is not durable.
 ## Task 2A: Brief System End-To-End Baseline
 
 **Files:**
-- Inspect and test: `/Users/tdupuy/repos/mathcity/formulas/*brief*.toml`
-- Inspect and test: `/Users/tdupuy/repos/mathcity/orders/*brief*.toml`
-- Inspect and test: `/Users/tdupuy/repos/mathcity/skills/present-briefs/SKILL.md`
-- Inspect and test: `/Users/tdupuy/repos/mathcity/subdomains/brief-system/skills/decisions-to-briefs/SKILL.md`
+- Inspect and test: `<repos-root>/mathcity/formulas/*brief*.toml`
+- Inspect and test: `<repos-root>/mathcity/orders/*brief*.toml`
+- Inspect and test: `<repos-root>/mathcity/skills/present-briefs/SKILL.md`
+- Inspect and test: `<repos-root>/mathcity/subdomains/brief-system/skills/decisions-to-briefs/SKILL.md`
 - Update docs with Task 2C.
 
 **Interfaces:**
@@ -348,7 +348,7 @@ README/testing-guide updates
 Create a hygienic branch before further E2E work, such as:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repos-root>/mathcity
 git switch -c fix/brief-feedback-runtime-repair
 ```
 
@@ -357,7 +357,7 @@ git switch -c fix/brief-feedback-runtime-repair
 Run:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repos-root>/mathcity
 bash tests/test-runner/test_runner_failure_propagation.sh
 bash tests/decisions-to-briefs-gate-evidence/smoke_test.sh
 bash tests/producer-decision-gate-profiles/smoke_test.sh
@@ -397,11 +397,11 @@ Do not run broad worker fleets under Claude while the 20X account is at 95%. Use
 ## Task 2C: README And Documentation Update
 
 **Files:**
-- Modify: `/Users/tdupuy/repos/mathcity/README.md`
-- Modify: `/Users/tdupuy/repos/mathcity/README-development.md`
-- Modify: `/Users/tdupuy/repos/mathcity/SETUP.md`
-- Modify: `/Users/tdupuy/repos/mathcity/docs/testing-guide.md`
-- Modify: related plan files under `/Users/tdupuy/repos/mathcity/subdomains/dev/docs/plans/mcp/`
+- Modify: `<repos-root>/mathcity/README.md`
+- Modify: `<repos-root>/mathcity/README-development.md`
+- Modify: `<repos-root>/mathcity/SETUP.md`
+- Modify: `<repos-root>/mathcity/docs/testing-guide.md`
+- Modify: related plan files under `<repos-root>/mathcity/subdomains/dev/docs/plans/mcp/`
 
 **Interfaces:**
 - Consumes: Task 2A evidence.
@@ -444,7 +444,7 @@ Confirm the plan still matches the tested brief lifecycle. If the E2E finds a di
 Use:
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repos-root>/mathcity
 git switch -c feat/brief-shuffle-fast-drain
 ```
 
@@ -497,7 +497,7 @@ This plan is complete only when:
 - Both gascity bug branches are either upstream PRs or explicitly blocked with issue-linked MRE evidence.
 - The `gc start` upstream issue exists and references `fix/gc-start-reload-timeout-success`.
 - The `gc stop` PR references `gastownhall/gascity#5324`.
-- Gascity runtime verification uses a source-built binary from `/Users/tdupuy/repos/gascity` and city commands from `/Users/tdupuy/gt`.
+- Gascity runtime verification uses a source-built binary from `<repos-root>/gascity` and city commands from `<city-root>`.
 - MathCity brief-system E2E evidence covers all three tracks.
 - The fast-drain implementation starts after, not before, the E2E baseline.
 - MCTL starts after the fast-drain contract is known.

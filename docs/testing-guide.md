@@ -146,8 +146,8 @@ python3 -m pytest tests/stuck-bead-watch tests/tail-end-detector
 For BART deployment, rerun the same commands in the exact runtime path that
 `gc` resolves. Pull-only deployment is enough only if live-resolved
 `present-briefs`, `decisions-to-briefs`, `assets/brief-pipeline/gates.toml`,
-and `check-brief-policy` match `/Users/tdupuy/repos/mathcity` at the merged
-commit. If those files resolve from `/Users/tdupuy/gt`, `~/.gc/cache`, or
+and `check-brief-policy` match `<repos-root>/mathcity` at the merged
+commit. If those files resolve from `<city-root>`, `~/.gc/cache`, or
 another installed pack location, run the existing pack import/build/install
 step first, then rerun the tests there before live migration.
 
