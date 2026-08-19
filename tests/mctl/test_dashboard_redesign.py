@@ -495,3 +495,110 @@ def test_brief_detail_escapes_body_content():
     html = brief.detail(payload, state.ViewState())
     assert "<script>x</script>" not in html
     assert "onerror=alert(1)>" not in html
+
+
+# --------------------------------------------------------------------------
+# adjudication panel
+# --------------------------------------------------------------------------
+
+
+def _option(enabled: bool, code: str = "", severity: str = "ERROR"):
+    entry = {"id": "adjudicate", "enabled": enabled, "description": "Record a verdict."}
+    if not enabled:
+        entry["disabled_reason"] = {
+            "code": code,
+            "severity": severity,
+            "message": "Brief bead has no source dependency.",
+            "policy_reference": "B2.1",
+        }
+    return [entry]
+
+
+def test_a_verdict_submits_without_javascript():
+    """The panel is a form into the existing preview route, not a widget."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
+    assert 'action="/preview"' in html
+    assert 'method="post"' in html.lower()
+    for banned in ("onclick", "onchange", "onsubmit", "javascript:"):
+        assert banned not in html.lower()
+
+
+def test_the_panel_never_offers_a_repair_affordance():
+    """GC4/GC7 -- CI bans these strings anywhere in rendered output."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
+    for banned in ('action="/repair"', ">Repair<", ">Fix<", "Fix these", "auto-repair"):
+        assert banned not in html
+
+
+def test_an_under_review_refusal_is_disabled_but_not_struck_through():
+    """MBRF004 is structural incompleteness, not a violation.
+
+    It means the brief is not linked to what it decides -- nothing is
+    known-bad and nothing would be ratified. Striking the verdicts through
+    would tell the operator the brief is wrong, when what is missing is an
+    edge. On the live queue this fires on roughly two thirds of pending
+    briefs, so getting it wrong would condemn most of the stack.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
+    assert "line-through" not in html
+    assert "MBRF004" in html
+    assert "not linked to what it decides" in html.lower()
+    assert 'data-panel-state="refused"' in html
+
+
+def test_a_real_gate_failure_is_held_and_strikes_every_verdict_but_reject():
+    """HELD is the other thing: approving would ratify a known violation."""
+    import re
+
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1"}, _option(False, "MBRF999"), state.ViewState()
+    )
+    assert 'data-panel-state="held"' in html
+    assert "line-through" in html
+    allowed = re.search(r'<input[^>]*value="reject"[^>]*>', html)
+    assert allowed and "disabled" not in allowed.group(0)
+
+
+def test_every_refused_state_still_disables_the_inputs():
+    """Styling is not a lock -- a disabled-looking radio that submits is a bug."""
+    import re
+
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    for code in ("MBRF004", "MBRF999"):
+        html = panel.entry({"bead_id": "he-1"}, _option(False, code), state.ViewState())
+        for verdict in ("approve", "revise"):
+            found = re.search(rf'<input[^>]*value="{verdict}"[^>]*>', html)
+            assert found and "disabled" in found.group(0), (code, verdict)
+
+
+def test_a_reason_is_required():
+    """No bare verdict -- the reason is what a future reader actually reads."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
+    assert "required" in html
+    assert 'name="reason"' in html
+
+
+def test_the_verdict_set_is_not_a_closed_four():
+    """12 of 86 closed briefs carry a compound verdict; leave room."""
+    from mctl_dashboard.screens import panel
+
+    names = {name for name, _label in panel.VERDICTS}
+    assert len(panel.VERDICTS) >= 4
+    assert {"approve", "reject"} <= names

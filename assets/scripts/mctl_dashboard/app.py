@@ -47,6 +47,7 @@ from urllib.parse import parse_qs, unquote
 from . import render
 from . import state as view_state
 from .screens import brief as brief_screen
+from .screens import panel as panel_screen
 from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
@@ -519,6 +520,7 @@ class Dashboard:
         # the option forms are still the only mutation path until Slice 3.
         sections = [
             brief_screen.detail(brief, view_state.parse(request.query), knowls=self._knowls(brief)),
+            panel_screen.entry(brief, option_rows, view_state.parse(request.query), rig=rig),
             render.artifact_trust_panel(shown.artifact_trust, rig=rig),
             render.brief_detail_panel(brief),
             render.options_panel(option_rows) if options else "",
