@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import subprocess
 from typing import Any, Iterable, Mapping
+from uuid import uuid4
 
 
 DEFAULT_BD_TIMEOUT_SECONDS = 30
@@ -113,6 +115,37 @@ class BeadUpdate:
         return payload
 
 
+@dataclass(frozen=True)
+class BeadCreate:
+    """A canonical bead that does not exist yet.
+
+    bd mints the id, so the plan that describes this write cannot name its own
+    target. `placeholder_id` is the token the plan uses for the not-yet-known
+    id; the apply step substitutes the real id into every derived path once bd
+    has accepted the create.
+    """
+
+    placeholder_id: str
+    title: str
+    body: str
+    issue_type: str = "decision"
+    labels: tuple[str, ...] = ()
+    metadata: Mapping[str, str] | None = None
+    sources: tuple[str, ...] = ()
+    source_link_type: str = "related"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "issue_type": self.issue_type,
+            "labels": list(self.labels),
+            "metadata": dict(sorted((self.metadata or {}).items())),
+            "placeholder_id": self.placeholder_id,
+            "source_link_type": self.source_link_type,
+            "sources": list(self.sources),
+            "title": self.title,
+        }
+
+
 def read_beads(
     rig_root: Path,
     *,
@@ -137,6 +170,19 @@ def apply_bead_update(
         _apply_fixture_update(fixture_path, update)
         return {"id": update.id, "mode": "fixture"}
     return _apply_bd_update(rig_root, update, timeout or bd_timeout_seconds())
+
+
+def apply_bead_create(
+    rig_root: Path,
+    create: BeadCreate,
+    *,
+    fixture_path: Path | None = None,
+    timeout: int | None = None,
+) -> dict[str, object]:
+    """Create one canonical decision bead through the fixture seam or bd."""
+    if fixture_path is not None:
+        return _apply_fixture_create(fixture_path, create)
+    return _apply_bd_create(rig_root, create, timeout or bd_timeout_seconds())
 
 
 def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
@@ -215,6 +261,91 @@ def _apply_bd_update(rig_root: Path, update: BeadUpdate, timeout: int) -> dict[s
     except json.JSONDecodeError:
         return {"id": update.id, "mode": "bd", "stdout": result.stdout.strip()}
     return {"id": update.id, "mode": "bd", "result": parsed}
+
+
+def _apply_bd_create(rig_root: Path, create: BeadCreate, timeout: int) -> dict[str, object]:
+    args = ["bd", "create", create.title, "--type", create.issue_type]
+    if create.body:
+        args.extend(("--description", create.body))
+    if create.labels:
+        args.extend(("--labels", ",".join(create.labels)))
+    if create.metadata:
+        args.extend(("--metadata", json.dumps(dict(sorted(create.metadata.items())), sort_keys=True)))
+    args.append("--json")
+    failure = f"Could not create bead {create.title!r}"
+    stdout = _run_bd_command(rig_root, args, timeout, failure)
+    try:
+        parsed: Any = json.loads(stdout)
+    except json.JSONDecodeError as error:
+        raise BeadWriteError(f"{failure}: bd returned invalid JSON: {error}") from error
+    bead_id = parsed.get("id") if isinstance(parsed, dict) else None
+    if not isinstance(bead_id, str) or not bead_id:
+        raise BeadWriteError(f"bd create returned no bead id for {create.title!r}")
+    # B2.1 wants the source link on the canonical bead, and bd has no
+    # create-time `related` dependency flag, so the link is a second call.
+    # bd link answers in prose, not JSON, so only its exit code is read.
+    for source in create.sources:
+        _run_bd_command(
+            rig_root,
+            ["bd", "link", bead_id, source, "--type", create.source_link_type],
+            timeout,
+            f"Could not link bead {bead_id} to source {source}",
+        )
+    return {"id": bead_id, "mode": "bd", "result": parsed}
+
+
+def _run_bd_command(rig_root: Path, args: list[str], timeout: int, failure: str) -> str:
+    try:
+        result = subprocess.run(
+            args,
+            cwd=rig_root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise BeadWriteError(f"{failure}: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise BeadWriteError(detail or f"{' '.join(args)} failed")
+    return result.stdout
+
+
+def _apply_fixture_create(path: Path, create: BeadCreate) -> dict[str, object]:
+    rows = list(_read_jsonl(path))
+    bead_id = _next_fixture_id(rows)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    row: dict[str, object] = {
+        "id": bead_id,
+        "title": create.title,
+        "status": "open",
+        "issue_type": create.issue_type,
+        "labels": list(create.labels),
+        "description": create.body,
+        "dependencies": [
+            {"issue_id": bead_id, "depends_on_id": source, "type": create.source_link_type}
+            for source in create.sources
+        ],
+        "created_at": now,
+        "updated_at": now,
+    }
+    if create.metadata:
+        row["metadata"] = dict(sorted(create.metadata.items()))
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, sort_keys=True) + "\n")
+    return {"id": bead_id, "mode": "fixture", "result": row}
+
+
+def _next_fixture_id(rows: list[Mapping[str, object]]) -> str:
+    """Mint a fixture bead id that looks like one the rig's prefix would."""
+    prefix = "mc"
+    for row in rows:
+        candidate = row.get("id")
+        if isinstance(candidate, str) and "-" in candidate:
+            prefix = candidate.split("-", 1)[0]
+            break
+    return f"{prefix}-{uuid4().hex[:7]}"
 
 
 def _apply_fixture_update(path: Path, update: BeadUpdate) -> None:

@@ -63,7 +63,7 @@ def beads_payload() -> list[dict[str, object]]:
 
 
 def recording_bd_runtime(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
-    """Runtime whose `bd` records every argv and answers list/update."""
+    """Runtime whose `bd` records every argv and answers list/update/create."""
     city_root = tmp_path / "city_root"
     source_checkout = tmp_path / "source_checkout"
     rig_root = city_root / "mathcity"
@@ -91,6 +91,10 @@ def recording_bd_runtime(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         f"open({str(argv_log)!r}, 'a').write(json.dumps(argv) + '\\n')\n"
         "if argv and argv[0] == 'update':\n"
         "    sys.stdout.write(json.dumps({'id': argv[1], 'status': 'closed'}))\n"
+        "elif argv and argv[0] == 'create':\n"
+        "    sys.stdout.write(json.dumps({'id': 'mc-created', 'status': 'open'}))\n"
+        "elif argv and argv[0] == 'link':\n"
+        "    sys.stdout.write('')\n"
         "else:\n"
         f"    sys.stdout.write(open({str(payload_path)!r}).read())\n",
         encoding="utf-8",
@@ -221,3 +225,45 @@ def test_bd_timeout_ignores_unusable_values(monkeypatch: pytest.MonkeyPatch):
     assert beads.bd_timeout_seconds() == beads.DEFAULT_BD_TIMEOUT_SECONDS
     monkeypatch.setenv("MCTL_BD_TIMEOUT_SECONDS", "0")
     assert beads.bd_timeout_seconds() == beads.DEFAULT_BD_TIMEOUT_SECONDS
+
+
+def test_create_builds_the_expected_bd_create_and_link_argv(tmp_path: Path):
+    """Brief creation is bead-first, so its argv is part of the contract."""
+    city_root, _rig_root, bin_dir, argv_log = recording_bd_runtime(tmp_path)
+    body = tmp_path / "body.md"
+    body.write_text("## What is being decided\n\nShip it?\n", encoding="utf-8")
+
+    result = run_mctl(
+        "briefs", "create", "--title", "Decide dispatch policy",
+        "--body-file", str(body), "--source", SOURCE_ID, "--label", "brief-open",
+        "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT, bin_dir=bin_dir,
+    )
+
+    assert result.returncode == 0, result.stderr
+    creates = [argv for argv in recorded_argv(argv_log) if argv and argv[0] == "create"]
+    assert len(creates) == 1, f"expected exactly one bd create, saw {creates}"
+    argv = creates[0]
+    assert argv[1] == "Decide dispatch policy"
+    assert argv[-1] == "--json"
+    assert argv[argv.index("--type") + 1] == "decision"
+    assert argv[argv.index("--labels") + 1] == "brief-open"
+    assert "## What is being decided" in argv[argv.index("--description") + 1]
+
+    links = [argv for argv in recorded_argv(argv_log) if argv and argv[0] == "link"]
+    assert len(links) == 1, f"expected exactly one bd link, saw {links}"
+    assert links[0][2] == SOURCE_ID
+    assert links[0][links[0].index("--type") + 1] == "related"
+
+
+@requires_bd
+def test_bd_accepts_every_flag_mctl_passes_to_bd_create():
+    advertised = help_flags(["bd", "create", "--help"])
+    for flag in ("--type", "--description", "--labels", "--metadata", "--json"):
+        assert flag in advertised, f"installed bd no longer advertises {flag}"
+
+
+@requires_bd
+def test_bd_accepts_every_flag_mctl_passes_to_bd_link():
+    advertised = help_flags(["bd", "link", "--help"])
+    assert "--type" in advertised, "installed bd link no longer advertises --type"
