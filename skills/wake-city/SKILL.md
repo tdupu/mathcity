@@ -55,7 +55,9 @@ tmux -L gt ls >/dev/null 2>&1 && echo "tmux: UP" || echo "tmux: DOWN"
 
 # B. Is Dolt reachable? (bd can't resolve beads otherwise — use gc dolt, NOT gc status)
 #    THREE-valued: 0 = UP, 2 = UP but compaction-quarantined (NOT a stall cause),
-#    1/other = genuinely DOWN. See template-fragments/dolt-preflight.md.
+#    1/other = genuinely DOWN. REPORTING skill (Variant B): surface the quarantine
+#    in full — working skills stay silent and rely on this. Do not narrow it.
+#    See template-fragments/dolt-preflight.md.
 _dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
 case "$_dolt_rc" in
   0) echo "dolt: UP" ;;

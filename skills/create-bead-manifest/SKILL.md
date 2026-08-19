@@ -29,10 +29,9 @@ is **non-fatal**; only exit 1 (or a missing `gc`) means Dolt is down:
 _dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
 case "$_dolt_rc" in
   0) ;;
-  2) echo "WARNING: Dolt is up, but auto-GC is blocked by a standing compaction quarantine:"
-     printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p' | sed 's/^/  /'
-     echo "  Not fatal: bd works. Reclaim with 'gc dolt compact' once an operator clears the marker."
-     ;;
+  2) ;;   # reachable; auto-GC blocked by a standing compaction quarantine.
+          # NON-FATAL and NOT this skill's business: bd resolves beads normally.
+          # Proceed SILENTLY — the reporting skills surface it (Variant B).
   *) echo "I'm sorry, I can't do that — Dolt is unreachable."
      echo "Run 'gc dolt status' / 'gc dolt start' to bring Dolt up, then retry."
      echo "(create-bead-manifest needs Dolt to resolve bead metadata.)"
