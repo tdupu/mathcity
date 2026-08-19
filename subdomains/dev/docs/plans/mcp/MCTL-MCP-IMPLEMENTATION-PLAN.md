@@ -2,7 +2,11 @@
 
 Parent: [Dev README](../../../README.md)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
+>
+> Note: this header previously claimed "Steps use checkbox (`- [ ]`) syntax for
+> tracking." That was never true — the document contains no checkboxes. Slice
+> status is tracked in the table below instead.
 
 **Goal:** Build a shared MathCity command core, `mctl` CLI, typed MCP server, and later dashboard so brief and work operations stop depending on loose prompt-skill command chains.
 
@@ -11,6 +15,33 @@ Parent: [Dev README](../../../README.md)
 **Tech Stack:** Python 3.11+ standard library (`argparse`, `dataclasses`, `enum`, `json`, `subprocess`, `tomllib`, `uuid`, `pathlib`), `pytest`, shell smoke tests, existing Gas City commands (`gc`, `bd`), existing TOML/JSONL assets.
 
 Related plan: [Brief Shuffle Fast Drain](./BRIEF-SHUFFLE-FAST-DRAIN-PLAN-2026-08-16.md). That plan owns the immediate deterministic `.pile -> stack` cache-drain fix; this plan treats those cache artifacts as derived state to inspect, validate, and expose through CLI/MCP/dashboard surfaces.
+
+## Slice Status (as of 2026-08-19)
+
+The slice bodies below are written in the original imperative voice and are left
+that way; this table is the status record. "Merged" means every deliverable the
+slice names exists in the repository and the slice's commit from the §8 commit
+sequence is in `main`.
+
+| Slice | Status | Evidence |
+| --- | --- | --- |
+| 1 — Context resolution and `mctl context` | Merged | `mctl_core/{cli,context,diagnostics,trace}.py`, `tests/mctl/test_context_cli.py`; commit `ec6f056`, merged `e825607` (PR #44) |
+| 2 — Read-only brief inspection | Merged | `mctl_core/{beads,briefs,redundant_state,policy_refs}.py`, `tests/mctl/test_briefs_read_cli.py`; commit `06c4a75`, merged `80beeaa` (PR #45) |
+| 3 — `briefs adjudicate` / `briefs defer` | Merged, one deviation | `mctl_core/{effects,events}.py`, `tests/mctl/test_briefs_mutation_cli.py`; commit `0f283c3`, merged `73ac9f8` (PR #46). Deviation: the planned `tests/mctl/fixtures/mutation_state/` was not created; the test builds its state inline. |
+| 4 — Work readiness, status, provenance, dispatch | Merged | `mctl_core/{work,provenance}.py`, `tests/mctl/test_work_cli.py`, `tests/mctl/fixtures/work_state/`; commit `201ae5f`, merged `4c89312` (PR #48) |
+| 5 — Brief creation and validation | Merged | `tests/mctl/test_briefs_create_validate_cli.py`, `tests/mctl/fixtures/create_validate_state/`; commits `5444b26`, `4f819e8`, merged `2b6cb6e` |
+| 6 — Typed MCP server | Merged | `mctl_core/{mcp_server,schemas}.py`, `assets/scripts/mctl_mcp_harness.py`, `tests/mctl/test_mcp_{server,schema_snapshots,client_harness}.py`; commits `8b95a30`, `55b63d3`, `f80e21c`, merged `05c825a`. In-slice amendment (line ~837) and the Q5 resolution note are as-built records. |
+| 7 — Skill refactor and audit | **In progress — do not edit this section** | Being implemented by another agent as of 2026-08-19. Status intentionally not asserted here. |
+| 8 — Operator dashboard | Merged, partial scope | `assets/scripts/mctl_dashboard/*`, `tests/mctl/test_dashboard_{views,mutation_safety,transport}.py`; commits `418a27a`, `a9cf3ce`, merged `c55dff7`. The slice's own as-built note (line ~1011) and the §3 carve-out (line ~250) record four items explicitly not shipped: option tabs, option comparison, full brief body view, and draft verdict storage / no-brainer marker. |
+
+**Out-of-plan work that this plan does not describe.** `bin/mctl` — now the only
+supported entry point for the CLI — is not mentioned anywhere in this document.
+It landed in commit `4e1be8b` with `tests/mctl/test_bin_mctl_shim.py`, merged
+`26c295c`. Every slice body below still shows operators running
+`python3 assets/scripts/mctl.py`; treat those invocations as historical. The
+current form is `bin/mctl <subcommand>`, documented in
+[README-development.md](../../../../../README-development.md) and
+[LAYOUT.md](../../../../../LAYOUT.md).
 
 ## Global Constraints
 

@@ -9,7 +9,7 @@ enough for a single-operator local tool and adds nothing to maintain.
 Bound to loopback by default and never given a listen-on-all default. The
 dashboard runs as an `internal` MCP client -- it must, since the rollout gate
 shows an external client zero tools -- so the surface it fronts is the full
-fifteen, including the mutating three. That is safe on 127.0.0.1 behind a
+fifteen, including the mutating four. That is safe on 127.0.0.1 behind a
 preview-first confirm path, and would not be safe on a routable interface.
 """
 from __future__ import annotations

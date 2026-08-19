@@ -54,12 +54,33 @@ Current cheap tests:
 bash scripts/run-local-tests.sh
 ```
 
+### Mctl Entry Point
+
+`bin/mctl` is the only supported entry point for the control CLI. It is a thin
+`sh` shim that resolves its own path through any symlink chain, derives the repo
+root from its own location, and `exec`s `python3 assets/scripts/mctl.py "$@"`.
+
+Do not invoke `assets/scripts/mctl.py` directly. The shim owns repo-root
+resolution and `mctl_core/context.py` owns city/rig discovery; calling the
+script by path bypasses the first and makes the invocation depend on the
+caller's working directory. The shim deliberately does not `cd` (the working
+directory is load-bearing for city discovery), does not default `--city` or
+`--rig`, and does not pin an interpreter — it uses `python3` from `PATH`, which
+must be 3.11 or newer for `tomllib`. See [LAYOUT.md](./LAYOUT.md) for the
+`bin/` convention and `tests/mctl/test_bin_mctl_shim.py` for the contract that
+holds the shim and the script to identical argv, stdout, stderr, and exit code.
+
+Subcommands: `context`, `briefs`, `trace`, `mcp`, `dashboard`, `work`. Every
+leaf except `mcp serve` and `dashboard serve` accepts `--city`, `--rig`, and
+`--json`; the mutating leaves (`briefs adjudicate`, `briefs defer`,
+`briefs create`, `work dispatch`) also accept `--dry-run`.
+
 ### Mctl Context
 
 Resolve an explicit local fixture context with:
 
 ```sh
-python3 assets/scripts/mctl.py context --city tests/mctl/fixtures/city_root --rig mathcity --json
+bin/mctl context --city tests/mctl/fixtures/city_root --rig mathcity --json
 ```
 
 `mctl` reads `rigs.imports.mathcity.source` (or the matching default import)
@@ -85,11 +106,11 @@ Read canonical brief beads and their redundant filesystem cache without
 repairing any drift:
 
 ```sh
-python3 assets/scripts/mctl.py briefs list --status open --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs show mc-abc --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs options mc-abc --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs doctor --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs doctor --brief mc-abc --city <city-root> --rig mathcity --json
+bin/mctl briefs list --status open --city <city-root> --rig mathcity --json
+bin/mctl briefs show mc-abc --city <city-root> --rig mathcity --json
+bin/mctl briefs options mc-abc --city <city-root> --rig mathcity --json
+bin/mctl briefs doctor --city <city-root> --rig mathcity --json
+bin/mctl briefs doctor --brief mc-abc --city <city-root> --rig mathcity --json
 ```
 
 From the MathCity source checkout, brief commands require both `--city` and
@@ -109,10 +130,10 @@ Decision mutations are dry-run first and bead-first. The canonical bead update
 is applied before redundant decision TOML, stack index, event, or trace writes:
 
 ```sh
-python3 assets/scripts/mctl.py briefs adjudicate mc-abc --verdict approve --reason "ready" --dry-run --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs adjudicate mc-abc --verdict approve --reason "ready" --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --dry-run --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --city <city-root> --rig mathcity --json
+bin/mctl briefs adjudicate mc-abc --verdict approve --reason "ready" --dry-run --city <city-root> --rig mathcity --json
+bin/mctl briefs adjudicate mc-abc --verdict approve --reason "ready" --city <city-root> --rig mathcity --json
+bin/mctl briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --dry-run --city <city-root> --rig mathcity --json
+bin/mctl briefs defer mc-abc --reason "waiting on owner" --until 2026-08-20 --city <city-root> --rig mathcity --json
 ```
 
 Mutation commands refuse to run without a reason, refuse to run when `briefs
@@ -132,10 +153,10 @@ Creation is bead-first: the canonical `type=decision` bead is written first,
 and the redundant artifacts follow only once `bd` has accepted it.
 
 ```sh
-python3 assets/scripts/mctl.py briefs create --title "Decide dispatch policy" --body-file /tmp/body.md --source mc-src --dry-run --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs create --title "Decide dispatch policy" --body-file /tmp/body.md --source mc-src --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs validate mc-abc --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py briefs validate --all --city <city-root> --rig mathcity --json
+bin/mctl briefs create --title "Decide dispatch policy" --body-file /tmp/body.md --source mc-src --dry-run --city <city-root> --rig mathcity --json
+bin/mctl briefs create --title "Decide dispatch policy" --body-file /tmp/body.md --source mc-src --city <city-root> --rig mathcity --json
+bin/mctl briefs validate mc-abc --city <city-root> --rig mathcity --json
+bin/mctl briefs validate --all --city <city-root> --rig mathcity --json
 ```
 
 `create` writes exactly two redundant artifacts — the `.pile` markdown and the
@@ -180,10 +201,10 @@ Inspect brief-backed work and dispatch provenance from the same explicit city
 context:
 
 ```sh
-python3 assets/scripts/mctl.py work ready --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py work status mc-abc --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py work provenance mc-abc --city <city-root> --rig mathcity --json
-python3 assets/scripts/mctl.py work dispatch mc-abc --dry-run --city <city-root> --rig mathcity --json
+bin/mctl work ready --city <city-root> --rig mathcity --json
+bin/mctl work status mc-abc --city <city-root> --rig mathcity --json
+bin/mctl work provenance mc-abc --city <city-root> --rig mathcity --json
+bin/mctl work dispatch mc-abc --dry-run --city <city-root> --rig mathcity --json
 ```
 
 `work ready` is derived from canonical decision beads and excludes blocked,
@@ -270,7 +291,7 @@ the real `actual_effects`) or `aborted` (with the blocking diagnostics). A
 failed or crashed mutation therefore still leaves evidence. Fold them with:
 
 ```sh
-python3 assets/scripts/mctl.py trace show <trace-id> --city <city-root> --rig mathcity --json
+bin/mctl trace show <trace-id> --city <city-root> --rig mathcity --json
 ```
 
 `trace show` reads local JSONL only, so it stays available when the city is
@@ -287,8 +308,8 @@ one set of semantics and one mutation path.
 Start it over stdio:
 
 ```sh
-python3 assets/scripts/mctl.py mcp serve --city <city-root> --rig mathcity
-python3 assets/scripts/mctl.py mcp serve --city <city-root> --rig mathcity --client-class internal
+bin/mctl mcp serve --city <city-root> --rig mathcity
+bin/mctl mcp serve --city <city-root> --rig mathcity --client-class internal
 ```
 
 The transport is newline-delimited JSON-RPC 2.0 (`initialize`, `ping`,
@@ -411,8 +432,8 @@ client-side framework, and it works with JavaScript off.
 Start it:
 
 ```sh
-python3 assets/scripts/mctl.py dashboard serve --city <city-root> --rig <rig>
-bin/mctl dashboard serve --city <city-root> --rig <rig> --port 8471
+bin/mctl dashboard serve --city <city-root> --rig <rig>
+bin/mctl dashboard serve --city <city-root> --rig <rig> --host 127.0.0.1 --port 8471
 ```
 
 It prints the bound URL on stderr and defaults to `http://127.0.0.1:8471`.
@@ -459,7 +480,8 @@ Slice 6 defaults external clients to **zero tools**, and mutating tools stay
 `external_ready = false` however the environment is set. So an `external`
 dashboard could not list a brief, let alone adjudicate one. The dashboard
 spawns its MCP server with `--client-class internal` and therefore sees all
-fifteen tools including the mutating three. That is the only class in which it
+fifteen tools including the mutating four (`briefs_adjudicate`, `briefs_defer`,
+`briefs_create`, `work_dispatch`). That is the only class in which it
 can do its job, and it is why the bind address matters: the safety story is
 "loopback, plus a preview-first confirm path", not the rollout gate. Do not
 put this on a routable interface.
