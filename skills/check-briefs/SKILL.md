@@ -22,10 +22,9 @@ One command, one table, zero side effects. Reports all actionable briefs
 _dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
 case "$_dolt_rc" in
   0) ;;
-  2) echo "WARNING: Dolt is up, but auto-GC is blocked by a standing compaction quarantine:"
-     printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p' | sed 's/^/  /'
-     echo "  Not fatal: bd works. Reclaim with 'gc dolt compact' once an operator clears the marker."
-     ;;
+  2) ;;   # reachable; auto-GC blocked by a standing compaction quarantine.
+          # NON-FATAL and NOT this skill's business: bd resolves beads normally.
+          # Proceed SILENTLY — the reporting skills surface it (Variant B).
   *) echo "I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads)."
      echo "Run 'gc dolt status' / 'gc dolt start' and retry."
      echo "(check-briefs reads bead status from the live store to filter already-closed briefs.)"

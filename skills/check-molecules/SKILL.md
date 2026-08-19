@@ -27,10 +27,12 @@ The enumeration script probes its dependencies and fails loud if missing:
 
 The Dolt probe is **three-valued**, not boolean
 (`template-fragments/dolt-preflight.md`): exit 0 is healthy, exit **2** means
-the server is reachable but a compaction quarantine is standing — non-fatal, so
-the script prints a warning naming the quarantined databases and **proceeds**.
-Only exit 1 (or a missing `gc`) aborts, with the standard P1.14 message; fix the
-dependency and re-run. (Do NOT trust `gc status` for this — bug `gs-0cy2`.)
+the server is reachable but a compaction quarantine is standing — non-fatal, and
+this is a *working* skill (Variant A), so the script says **nothing** and simply
+**proceeds**. The quarantine is surfaced by the reporting skills (`city-status`,
+`hourly-check`, `wake-city`), not here. Only exit 1 (or a missing `gc`) aborts,
+with the standard P1.14 message; fix the dependency and re-run. (Do NOT trust
+`gc status` for this — bug `gs-0cy2`.)
 
 ## Run it
 

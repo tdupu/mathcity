@@ -13,7 +13,9 @@ or modifies any bead.
 
 ```bash
 # Do NOT `head -n` this — the compaction-quarantine block is printed LAST and
-# gets truncated away. THREE-valued exit; see template-fragments/dolt-preflight.md.
+# gets truncated away. THREE-valued exit. REPORTING skill (Variant B): surface the
+# quarantine in full — working skills stay silent and rely on this. Do not narrow it.
+# See template-fragments/dolt-preflight.md.
 _dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
 printf '%s\n' "$_dolt_out" | sed -n '1,3p'
 printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p'
@@ -26,8 +28,8 @@ Report by exit code:
 - **2** — `DOLT QUARANTINED — reachable, but auto-GC is blocked` on the databases
   named in the quarantine block. **Not** a connectivity failure: `bd` resolves
   beads normally, so continue the full status run. Surface the quarantined
-  database names and how long each has been held; reclamation is `gc dolt
-  compact` after an operator clears the marker.
+  database names and how long each has been held; reclamation is
+  `gc dolt compact` after an operator clears the marker.
 - **1 or other** — `DOLT DOWN — most bd commands will fail`. Continue with
   tmux/session checks only.
 

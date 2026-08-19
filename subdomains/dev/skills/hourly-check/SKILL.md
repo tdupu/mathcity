@@ -64,6 +64,8 @@ IMPL=$(gc session list --state active 2>/dev/null | grep "gc\.implementation-wor
 ```bash
 # Capture the WHOLE report once. THREE-valued exit: 0 healthy, 2 reachable but
 # compaction-quarantined (non-fatal), 1/other unreachable.
+# REPORTING skill (Variant B): surface the quarantine in full — working skills stay
+# silent and rely on this watchdog. Do not narrow it.
 # See template-fragments/dolt-preflight.md.
 DOLT_OUT=$(gc dolt health 2>/dev/null); DOLT_RC=$?
 # Latency lives on the `Server: running (... latency Nms)` line — anchor there
