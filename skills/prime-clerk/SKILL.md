@@ -59,69 +59,125 @@ rules:
 - Verdict vocabulary: approve / revise / reject / defer (defer = timed
   bead defer, no verdict recorded, bead stays open).
 
-## The skill pipeline — present-briefs → adjudicate-brief → mathcity.work
+## The control surface — `mctl`, wrapped by three skills
 
-Your brief-cycle runs through three skills. Do not improvise any other
-presentation, recording, or dispatch channel.
+Your brief-cycle runs through three skills, and all three now sit on one typed
+CLI, `bin/mctl`. Do not improvise any other presentation, recording, or dispatch
+channel, and do not copy a `bd` or `gc sling` command out of a brief body.
 
-- **PRESENT — `present-briefs`.** Drains the unified ripe/approved brief
-  stack to the human adjudicator. New artifact, decision-only, lost-bead-filter,
-  and producer-repair briefs all reach this queue through
-  `.beads/briefs/.pile -> brief-shuffle -> stack`; `.beads/decisions-track`
-  is a preserved legacy/migration fallback, not a normal active lane. It
-  wraps `present-it` (Decision-at-Top: the FIRST thing the human adjudicator
-  hears is what is being decided) and walks the stack in `unlock_count`
-  order. `present-briefs` internally calls `brief-record-decision` via
-  `gc sling` when the human adjudicator gives a verdict — check its output to confirm the
-  sling landed before proceeding.
-- **RECORD — `adjudicate-brief`** (renamed from `record-decision`).
-  Records the human adjudicator's verdict: it writes the verdict fields onto the brief's
-  `type=decision` bead, **closes** that bead, and **rings the
-  `brief.decided` event**. Use this directly when you are NOT going through
-  `present-briefs` (e.g., a single-brief session or a re-adjudication).
-  **Fork-wrapper (added 2026-07-22):** invoking `/adjudicate-brief`
-  causes the calling session to launch a fork and emit exactly one line
-  (`"Fork launched: <bead> → <verdict>. Session free."`), then stop.
-  All bd commands and sling dispatch run inside the fork — the calling
-  session does not wait and does not run bd commands itself.
-- **DISPATCH — `mathcity.work`.** After an **approve** verdict, the clerk
-  dispatches the artifact directly — no mayor routing required. Run
-  `/mathcity.work` with the artifact bead ID immediately after recording.
-  See §After adjudication below.
+Resolve the entry point once at session start (see
+`template-fragments/mctl-entry-point.md`):
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+# What is actually pending, per rig, from the canonical bead store:
+"$MCTL" briefs list --status pending --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+- **PRESENT — `present-briefs`.** Drains the ripe/approved stack to the human
+  adjudicator, one brief at a time, in `unlock_count` order. New artifact,
+  decision-only, lost-bead-filter, and producer-repair briefs all reach this
+  queue through `.beads/briefs/.pile -> brief-shuffle -> stack`;
+  `.beads/decisions-track` is a preserved legacy/migration fallback, not a
+  normal active lane. It wraps `present-it` (Decision-at-Top: the FIRST thing
+  the human adjudicator hears is what is being decided), and it filters the
+  cache-derived queue against canonical `decision_state` from
+  `mctl briefs list` so a brief whose bead is already closed or defer-windowed
+  cannot be presented twice.
+- **RECORD — `adjudicate-brief`.** Records the verdict through
+  `mctl briefs adjudicate` (approve / reject / revise) or `mctl briefs defer`.
+  One checked `EffectPlan` writes the verdict onto the `type=decision` brief
+  bead, closes or defers it, and moves the cache artifacts that go with it.
+  **Fork-wrapper:** invoking `/adjudicate-brief` makes the calling session
+  launch a fork and emit exactly one line
+  (`"Fork launched: <bead> → <verdict>. Session free."`), then stop. Every write
+  runs inside the fork; the calling session does not wait.
+- **DISPATCH — `mathcity.work`.** After an **approve** verdict the clerk
+  dispatches directly — no mayor routing. The brief-backed path is
+  `mctl work dispatch <brief-bead>`, which slings the `work-briefed` router,
+  re-reads the bead to confirm the claim, and writes
+  `dispatch-provenance.v1` only after that. See §After adjudication.
 
 **The flow:**
-`present-briefs` (present + record) → the human adjudicator approves → **`mathcity.work`**
-(clerk dispatches directly) → verify assignee non-empty within ~60s → present
-next brief.
+`present-briefs` (present) → the human adjudicator approves → `adjudicate-brief`
+(records via `mctl briefs adjudicate`) → **`mathcity.work`** (`mctl work
+dispatch`) → present next brief.
 
-**No-brainers:** briefs classified `compact_eligible: true` appear collapsed
-to a one-line block during `present-briefs` (CONFIRM: y / n / grill-me-further).
+**Every mutation returns a trace id.** The fork reports `MCTL-TRACE: <id>`;
+keep it. `"$MCTL" trace show <id>` folds every phase of that operation — what
+was planned, what was applied — which is how you answer "did the verdict
+actually land" without guessing.
+
+**Refusals are the machinery working.** `mctl` fails closed. The one you will
+meet constantly:
+
+> **`MBRF004`** — *"Brief bead has no source dependency"* (B2.1). It is an
+> `ERROR`, and no mutation proceeds carrying one. It currently fires on **146 of
+> 185** live briefs, including **88 that are `pending` and otherwise healthy**,
+> so most of the live queue will simply refuse adjudication today. **This is
+> real current behavior, not a bug in the skill and not something to route
+> around.** Relay the diagnostic to the human adjudicator; the fix is a real
+> source link, which is a human decision. Do not branch on it, nor on
+> `MBRF005` or `MBRF021` — all three are untrustworthy signal
+> (`template-fragments/mctl-entry-point.md`).
+
+**No-brainers:** briefs classified `compact_eligible: true` appear collapsed to
+a one-line block during `present-briefs` (CONFIRM: y / n / grill-me-further).
 This is a speed-up, **not a bypass** — adjudication still happens. Full
-auto-execution (pile-processor he-x3se) is **not yet shipped**; no-brainer
-automation is currently inert beyond the compact presentation path.
+auto-execution (pile-processor he-x3se) is **not yet shipped**.
 
 **Who may adjudicate:** both the **clerk** AND the **Mayor** are valid
-adjudicators. Either outside agent may run `present-briefs` and
-`adjudicate-brief`; the two-skill flow is identical whichever runs it.
+adjudicators. Either outside agent may run the flow; it is identical whichever
+runs it.
 
 ## After adjudication — the dispatch loop (MANDATORY for approve)
 
-When the human adjudicator approves a brief, act immediately:
-
 ```
 the human adjudicator: "approve" / "A" / "yes" / "ship it"
-→ 1. Record verdict via adjudicate-brief (or present-briefs has already done it)
-→ 2. Read the brief's `artifact:` field (e.g., artifact: he-p4x5)
-→ 3. Run /mathcity.work to dispatch that bead directly
-→ 4. Verify assignee is non-empty within ~60s:
-     bd show <artifact-bead> | grep -i assignee
+→ 1. Record the verdict via adjudicate-brief (mctl briefs adjudicate)
+→ 2. Note the MCTL-TRACE id the fork reports
+→ 3. Run /mathcity.work — mctl work dispatch <brief-bead>
+→ 4. Note its MCTL-TRACE id; mctl has ALREADY verified the claim
 → 5. Present the next pre-loaded brief immediately
 ```
 
-The canonical dispatch (from `/mathcity.work`) — note artifact_root must be
-scoped per bead, never omitted or passed as the bare rig root (concurrent
-build-basic-briefed runs on the same rig that share an artifact_root
-silently overwrite each other's stage artifacts, gsp-1bmxuz):
+**Step 4 replaces the old `bd show <bead> | grep -i assignee` wait.**
+`mctl work dispatch` re-reads the bead after the sling and raises `MWRK003` if
+the sling exited zero without the bead actually being claimed; it records
+provenance only after a verified handoff. There is nothing left for you to eyeball.
+
+**`MCTL_ENABLE_LIVE_DISPATCH=1` is required for a real dispatch** and is
+exported for that one command only — unarmed, `work dispatch` returns a dry run
+and slings nothing. `MCTL_CONTROL_PLANE_NOT_ACTIVE` means the supervisor is not
+confirmed running (`gc stop` leaves Dolt up, so reads still work): run
+`gc start`, do not fall back to a raw sling.
+
+**`gt-*` beads have no `mctl` route.** The city-root HQ store is not a
+registered rig in `city.toml`, so `--rig gt` fails with
+`MCTL_CONTEXT_UNKNOWN_RIG`. Escalate a `gt-*` verdict to the mayor rather than
+inventing a second write path.
+
+**Never copy a sling command from inside a brief body.** Q16-era briefs often
+contain `gc sling <rig>/gastown.polecat` — `gastown.polecat` is deprecated, and
+so is hand-picking `build-basic-briefed`. `mctl work dispatch` goes through the
+`work-briefed` router, which selects the formula from the live catalog.
+
+**If a continuation genuinely names `build-basic-briefed`**, scope
+`artifact_root` per bead — never omit it, never pass the bare rig root, or
+concurrent runs on the same rig silently overwrite each other's stage artifacts
+(gsp-1bmxuz):
+
 ```bash
 gc sling <rig>/gc.run-operator <artifact-bead> --on build-basic-briefed \
   --var interaction_mode=autonomous --var review_mode=agent \
@@ -129,27 +185,20 @@ gc sling <rig>/gc.run-operator <artifact-bead> --on build-basic-briefed \
   --var artifact_root=<rig-root>/.gc-builds/<artifact-bead>
 ```
 
-**Rig detection by artifact prefix:** `he-*` → `hecke`; `gsp-*` →
-`gascity-packs`; `gt-*` → check the bead's home rig. For
-`gascity-packs` publish-path artifacts the role may be `gc.publisher`
-rather than `gc.run-operator` — check the brief's §7 for the
-expected publisher role. When in doubt let `/mathcity.work` build
-the command.
+Note that `mctl work dispatch` does **not** scope per bead either — it passes a
+shared rig-level root, so two concurrent approvals on one rig can collide
+(gsp-1bmxuz). Serialize them; `skills/work/SKILL.md` has the detail.
 
-**Never copy a sling command from inside a brief body.** Q16-era briefs
-often contain `gc sling <rig>/gastown.polecat` — `gastown.polecat` is
-deprecated. Always use the `build-basic-briefed` pattern above, or let
-`/mathcity.work` build the command for you.
-
-**Reject (R):** record via `adjudicate-brief`, close the bead; no sling.
-**Defer (D):** record via `adjudicate-brief`; leave bead open; re-surface next session.
-**Revise (V):** record via `adjudicate-brief`; file a follow-up task bead for the revision.
+**Reject (R):** `adjudicate-brief`, bead closes; no dispatch.
+**Defer (D):** `adjudicate-brief` → `mctl briefs defer` with a date; bead stays open.
+**Revise (V):** `adjudicate-brief`; file a follow-up task bead for the revision.
 
 ## The job, step by step
 
 1. Locate the live brief stack. `stack/` is presentation-ready, ordered by
    `unlock_count` desc via `stack/.index.jsonl`; `.pile/` is awaiting
-   `brief-shuffle` promotion. During the decisions-track migration window,
+   `brief-shuffle` promotion. **Those are cache.** Cross-check against
+   `"$MCTL" briefs list --status pending` before you trust a row is live. During the decisions-track migration window,
    treat `.beads/decisions-track` only as an explicit fallback/audit input
    and suppress any legacy item whose `legacy_source` already appears in the
    stack index. Skip any brief whose bead has `Status: HELD`.
@@ -184,13 +233,17 @@ deprecated. Always use the `build-basic-briefed` pattern above, or let
   `unlock_count` order, with a pre-loaded hot queue so the next brief is
   always ready. Call after session start and after each verdict to keep the
   queue flowing.
-- **`adjudicate-brief`** — fork-wrapper: records the human adjudicator's verdict (APPROVE /
-  REJECT / REVISE / DEFER) ON the brief bead, closes it, and dispatches if
-  approve. Calling session emits one line and stops — all bd commands and
-  sling work run in the fork.
-- **`mathcity.work`** — dispatch an approved artifact bead to the fleet via
-  `build-basic-briefed`. Run immediately after every APPROVE verdict; verify
-  assignee non-empty within ~60s.
+- **`adjudicate-brief`** — fork-wrapper: records the verdict (APPROVE / REJECT /
+  REVISE / DEFER) on the brief bead through `mctl briefs adjudicate|defer`, and
+  dispatches if approve. Calling session emits one line and stops; every write
+  runs in the fork, which reports its `MCTL-TRACE` ids.
+- **`mathcity.work`** — dispatch an approved brief through
+  `mctl work dispatch`. Run immediately after every APPROVE verdict; mctl
+  verifies the claim itself.
+- **`bin/mctl`** — the CLI underneath all of the above. Useful directly for
+  orientation: `briefs list --status pending`, `briefs show <id>`,
+  `briefs doctor`, `work ready`, `trace show <id>`. Reads are always safe;
+  mutations fail closed.
 - **`communicate-with-other-agent`** — V2 daily-folder inbox: send messages
   to the Mayor or repo-side landing agent. Use for questions about a brief, holds,
   sequencing constraints, or escalations. One topic per message, signed.

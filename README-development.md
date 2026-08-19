@@ -258,6 +258,17 @@ makes the current two-writer reality safe, but the boundary in those two
 documents still needs to be either amended deliberately or replaced by
 routing mctl's updates through the shuffler.
 
+**Known defect — dispatch does not scope `artifact_root` per bead.**
+`_formula_invocation` passes `artifact_root=<rig-root>/.beads/briefs`, a shared
+rig-level root, while `formulas/work-briefed.toml` documents the var as *"For
+builds, scope per bead (for example `<rig-root>/.gc-builds/<bead>`)"* and hands
+it straight to `build-basic-briefed` on the FULL_CONTINUE route. Two concurrent
+FULL_CONTINUE dispatches in one rig therefore share a stage-artifact root — the
+gsp-1bmxuz hazard, inside the typed command that was meant to remove it. Found
+while wiring the skills in Slice 7 (`tests/artifact-root-scoping/smoke_test.sh`
+is what caught the wrong assumption); the skills document it and say to
+serialize approvals on one rig. Fixing it belongs here, in `mctl_core`.
+
 Dispatch enforces plan §4's safety invariants: `MWRK001` blocks a source bead
 that already has an active assignee, `MWRK002` blocks when an open child
 workflow (`gc.root_bead_id`) already exists for the same source, and
@@ -411,6 +422,92 @@ by hand. `tests/mctl/test_mcp_schema_snapshots.py` snapshots every tool
 schema to `tests/mctl/fixtures/mcp_tool_schemas.json`; regenerate
 deliberately with `MCTL_UPDATE_MCP_SNAPSHOT=1` and read the diff as a
 client-compatibility review.
+
+### Mctl Skill Audit
+
+The skills are the top consumer of `mctl`, and they are prompt text executed as
+shell — so they call **`bin/mctl`**, never the MCP server. The MCP surface is
+for typed programmatic clients (the dashboard is one) and its rollout gate
+defaults external clients to zero tools; a bash block is the wrong caller.
+
+`subdomains/dev/docs/plans/mcp/SKILL-IMPACT-REGISTER.md` is the audit record.
+Its "Final Dispositions" table classifies every audited skill as
+`replace-with-mctl`, `wrap-with-mctl`, `no-change`, or `blocked-by-policy`, and
+every `no-change` row cites the plan §2 source-of-truth boundary that makes it
+legitimate (`BeadStoreAdapter` for canonical state, `BriefCacheAdapter` for
+derived artifacts).
+
+Run the audit in this order:
+
+```sh
+# 1. The executable gate. Parts 4-9 check the wiring, the trace ids, the
+#    absence of direct cache writes, register/skill agreement, the no-change
+#    reasons, and that nothing branches on the untrusted diagnostic codes.
+sh tests/mctl-shim-callsite/smoke_test.sh
+
+# 2. Which skills name mctl at all, and how often. Before Slice 7 exactly one
+#    did; a skill that claims a wrap disposition and scores 0 here has not been
+#    refactored.
+grep -rc 'bin/mctl' skills/*/SKILL.md subdomains/*/skills/*/SKILL.md \
+  | grep -v ':0$' | sort -t: -k2 -rn
+
+# 3. Remaining direct state manipulation. Every hit is either migrated to mctl
+#    or recorded in the register with a no-change / blocked-by-policy reason.
+grep -rnE 'bd close|bd defer|bd update|gc sling|\.index\.jsonl|decisions-track|sed -i' \
+  skills subdomains --include=SKILL.md
+
+# 4. The retired loose surfaces named by the register's post-implementation
+#    checklist.
+grep -rnE 'gc dolt health|brief-record-decision|build-basic-briefed' \
+  skills subdomains --include=SKILL.md
+
+# 5. The typed core itself.
+python3 -m pytest tests/mctl
+bash scripts/run-local-tests.sh
+```
+
+Step 3 is the one that matters and the one that will keep producing hits: two
+skills (`refine-bead-manifest`, `decisions-to-briefs`) still write the legacy
+decisions-track tree, deliberately, because that inventory is #38's lane and
+the plan holds bulk migration until proof 5 is green. Do not "clean them up" —
+check the register row first.
+
+Step 4 is expected to keep hitting `gc dolt health`: the P1.14 Dolt pre-flight
+is a separate contract, guarded by `tests/dolt-preflight-exit-codes/smoke_test.sh`,
+which fails if any call site is unclassified. **Do not add, remove, or edit a
+pre-flight block while doing mctl work** — the two audits are independent.
+
+Adding a new wired skill means three edits that must land together, or the gate
+fails:
+
+1. copy the call-site block from `template-fragments/mctl-entry-point.md` into
+   the skill;
+2. add its row to `WIRED` in `tests/mctl-shim-callsite/smoke_test.sh`, choosing
+   `mutation` (must emit an `MCTL-TRACE: <id>` line) or `read`;
+3. add its row to the register's Final Dispositions table.
+
+#### Three diagnostic codes no skill may branch on
+
+`MBRF021`, `MBRF004`, and `MBRF005` are untrustworthy signal today, and part 9
+of the smoke test enforces that no skill branches on them:
+
+- **`MBRF021`** is a mass false positive — 66 of 70 briefs in one rig report a
+  missing redundant artifact that exists under a different name in a different
+  tree (issue #58, `OPEN-DESIGN-QUESTIONS.md` Q5). Its documented remedy would
+  create 66 duplicates; `mctl_core/mcp_server.py` already moves it to
+  `untrusted_diagnostics`.
+- **`MBRF004` / `MBRF005`** are instrumentation under review. `malformed` means
+  *closed with no verdict field*, not damaged: the verdicts are in
+  `close_reason`/`notes`, which the reader does not consult, and ~39 of the 74
+  "malformed" beads were never briefs. See
+  `subdomains/dev/docs/MALFORMED-BRIEF-TRIAGE-2026-08-19.md`.
+
+**`MBRF004` nevertheless does gate `adjudicate` / `defer` / `dispatch`** — it is
+an `ERROR`, and `effects.py::_blocking_preconditions` refuses any mutation whose
+doctor report carries one. It fires on 146 of 185 live briefs, 88 of them
+`pending` and otherwise healthy. A wired skill will therefore be refused on most
+of the live queue: that is real current behavior, and the skills report the
+diagnostic verbatim rather than routing around it.
 
 ### Mctl Operator Dashboard
 

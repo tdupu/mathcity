@@ -216,6 +216,65 @@ The presentation queue is Method 1, optionally followed by Method 2, sorted by `
 { stack_selector_output; legacy_selector_output_if_enabled; } | sort -rn | awk '{print $2}' | awk '!seen[$0]++'
 ```
 
+### Canonical bead filter (MANDATORY, applied to the combined queue)
+
+The two selectors above read **cache**: `stack/.index.jsonl` rows and brief
+frontmatter. Under the one-bead model the brief bead is canonical
+(`BeadStoreAdapter`), and B2.3 — *never re-present an adjudicated brief* — is a
+statement about the **bead**, not about an index row. A stale row or a
+frontmatter `status:` that was never restamped re-presents a decided brief, and
+the human adjudicates it twice.
+
+Ask `mctl` once per distinct rig in the candidate set (this is one `bd list`
+per rig, not one `bd show` per brief):
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+# brief_id -> decision_state, for every decision bead in one rig
+"$MCTL" briefs list --json --city "$CITY_ROOT" --rig "$RIG" \
+  | python3 -c 'import json,sys
+for b in json.load(sys.stdin)["briefs"]:
+    print(b["brief_id"], b["decision_state"])'
+```
+
+Then, per candidate (keyed on `brief_bead:` when present, else `artifact:`):
+
+- **Drop** it when `decision_state` is `adjudicated`, `deferred`, or
+  `malformed`. `malformed` here means *closed with no verdict field* — the bead
+  is closed either way, so dropping it is right.
+- **Keep** it when `decision_state` is `pending`, **and keep it when mctl does
+  not know the id at all.** Unknown is common and benign: `briefs list`
+  enumerates decision beads only, while most stack files carry no `brief_bead:`
+  and their `artifact:` is a *work* bead. Keeping unknown ids matches the
+  pre-mctl behavior, where an unresolvable probe left the brief visible.
+
+This is the one place present-briefs' queue may now be **shorter** than before:
+briefs whose bead is closed or defer-windowed but whose cache row still says
+`ready` will no longer surface. That is the intended correction — the old
+behavior bypassed canonical bead-first state.
+
+**Do not branch on `MBRF021`, `MBRF004`, or `MBRF005`.** `MBRF004` in
+particular fires on 146 of 185 live briefs including healthy pending ones;
+treating it as a presentation filter would empty the queue. Filter on
+`decision_state` only. See `template-fragments/mctl-entry-point.md`.
+
+**`gt-*` fallback.** `gt-*` beads live in the city-root HQ store, which is not a
+registered rig, so `mctl --rig` cannot address them
+(`MCTL_CONTEXT_UNKNOWN_RIG`). Leave `gt-*` candidates in the queue and rely on
+the cache filters for them, as `check-briefs` does. Do not invent a second
+resolution path.
+
 If queue is empty: report "No ripe briefs in unified stack. Run /brief-prep, or /decisions-to-briefs to file a decision brief into the pile." and exit.
 
 ## Execution
@@ -311,6 +370,8 @@ On each decision: `hot` → present immediately; `queue.pop(0)` → fan out to r
 ## What this skill does NOT do
 
 - Does not create or modify briefs (that's `/brief-prep`)
+- Does not write brief cache artifacts — it reads `stack/.index.jsonl`, never
+  rewrites it (`mctl_core/effects.py` owns those writes)
 - Does not record decisions unilaterally — the human adjudicator's verdict is the trigger
 - Does not call `bd close` on any bead directly
 - Does not push any commits

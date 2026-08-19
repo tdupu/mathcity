@@ -505,3 +505,231 @@ Run this checklist after the shared core, CLI, MCP adapter, or dashboard land.
    same shared core.
 10. Send the updated checklist or diff back to QUIMBY and BART for final
     review before removing or retiring any skill.
+
+---
+
+# Final Dispositions — Slice 7 (2026-08-19)
+
+Slice 7 is the skill refactor onto the `mctl` surface. Everything above this
+line is the **pre-implementation** audit; this section is the **audit record**
+required by plan §6 ("Audit Output Format") and Slice 7 step 6.
+
+## How to read a disposition
+
+| Token | Meaning |
+| --- | --- |
+| `replace-with-mctl` | the skill's operational core was hand-rolled state manipulation; `mctl` now performs it |
+| `wrap-with-mctl` | the skill keeps its own job but calls `mctl` for the canonical read or the canonical write inside it |
+| `no-change` | the skill touches neither adapter's state, or its writes are outside both. **Every such row cites the §2 boundary that makes it legitimate** — `BeadStoreAdapter` (canonical) or `BriefCacheAdapter` (derived) |
+| `blocked-by-policy` | migrating it would change live state this plan holds frozen (#38, decisions-track), or the command it needs does not exist |
+
+`no-change` is a real verdict, not a shrug. Plan audit rule 3 admits it "only
+when the skill never touches brief/work state or when it is explicitly
+read-only and already respects the canonical bead-first model" — so each one
+below names which of those two it is, in §2's vocabulary.
+
+## Wiring facts, verified in this repo on 2026-08-19
+
+Before the slice, **`check-briefs` was the only skill in the repository that
+named `mctl` at all** (24 mentions). Every other skill — including
+`mayor-math-prime`, `mayor-math`, `prime-clerk`, `work`, `simple-work`,
+`formula-work`, `testing-work` — had zero. The CLI and the MCP server were
+typed and tested with nothing an agent runs pointing at them.
+
+Skills are prompt text executed as shell, so **every wiring below targets
+`bin/mctl`, not the MCP server.** The MCP surface exists for typed programmatic
+clients (the dashboard is one), and its rollout gate defaults external clients
+to zero tools; a bash block is the wrong caller for it.
+
+The canonical call-site block lives in
+[`template-fragments/mctl-entry-point.md`](../../../../template-fragments/mctl-entry-point.md)
+and is copied verbatim into each wired skill, matching the `check-briefs` pilot.
+`tests/mctl-shim-callsite/smoke_test.sh` greps every wired skill for it.
+
+## The table
+
+| Skill | Current behavior (before Slice 7) | Disposition | MCTL surface | Trace behavior | Verification | Residual risk |
+| --- | --- | --- | --- | --- | --- | --- |
+| `check-briefs` — `skills/check-briefs/SKILL.md` | per-brief `bd show` loop parsing a `^Status:` line that `bd` 1.1.0 no longer emits, so the filter was a silent no-op | `replace-with-mctl` (pilot, pre-existing) | `mctl briefs list --json` once per rig; `decision_state` is the filter | read-only; no trace reported | `tests/mctl-shim-callsite/smoke_test.sh` parts 2, 4 | `gt-*` beads keep a direct `bd` fallback whose `^Status:` parse is still broken; frontmatter fields (`unlock_count`, `deposited_at`, `epic`) are unmodelled in `mctl_core` and still scanned from disk |
+| `adjudicate-brief` — `skills/adjudicate-brief/SKILL.md` | fork body ran `bd comments add` + `bd close`/`bd defer`, rewrote the brief's `status:` frontmatter in place, rewrote the legacy decisions-track manifest, then hand-slung `build-basic-briefed` and eyeballed an assignee grep | `replace-with-mctl` (verdict + dispatch) / `blocked-by-policy` (step 2b, legacy decisions-track sync) | `mctl briefs adjudicate` / `mctl briefs defer` (`--dry-run` preview first); `mctl work status` + `mctl work dispatch` on approve | fork emits `MCTL-TRACE: <id>` per mutation and repeats them in its one-line summary | `tests/mctl-shim-callsite/smoke_test.sh` parts 4-6; `tests/present-briefs-defer-filter/test_defer_filter.sh` executes step 2b's writer; `tests/artifact-root-scoping/smoke_test.sh` | **step 2b survives as the one declared cache-write exemption** — `BriefCacheAdapter`'s legacy decisions-track rows are #38's lane and `mctl` models neither the file nor the manifest, so deleting the sync hands the job to nobody and re-opens the measured #18 re-presentation bug. It runs after the mctl write and touches decisions-track only. `gt-*` verdicts have no `mctl` route and are escalated instead |
+| `create-brief` — `skills/create-brief/SKILL.md` | chose its own deposit path, contested three ways between this skill, `paths.toml`, and `brief-prep`, and told the agent to "record which path you chose" | `replace-with-mctl` (code-artifact lane) | `mctl briefs create --body-file` then `mctl briefs validate` | `MCTL-TRACE: <id>` from the create payload | `tests/mctl-shim-callsite/smoke_test.sh` parts 4-6 | the escalation lane keeps a **declared** direct filesystem write — `mctl briefs create` shells out to `bd`, which is usually the thing that failed; it must try `--dry-run` first and name the diagnostic that forced the fallback |
+| `brief-prep` — `skills/brief-prep/SKILL.md` | Phase 3 hand-placed `.pile/<slug>.md` and Phase 5 edited that deposited file in place | `replace-with-mctl` (deposit only) | Phase 3 drafts to `.staging/`; new Phase 5c runs `mctl briefs create --body-file` + `mctl briefs validate` | `MCTL-TRACE: <id>` in the Phase 7 return block, alongside the brief bead id | `tests/mctl-shim-callsite/smoke_test.sh` parts 4-6 | gate-flag frontmatter (`status`, `review_gate`, `unlock_count`, `## Gate Evidence`) is unmodelled in `mctl_core`, so Phases 3-5 still own it — on the staged copy, before deposit |
+| `coordinate-review` — `skills/coordinate-review/SKILL.md` | artifact-agnostic FP loop; when the artifact was a brief the critic could not see the bead behind it | `wrap-with-mctl` | `mctl briefs doctor --brief` + `mctl briefs options`, read-only, folded into the critic prompt as evidence | read-only; no mutation, no trace reported | `tests/mctl-shim-callsite/smoke_test.sh` part 4 | pre-check is skipped for non-brief artifacts and for `gt-*` briefs; the three untrusted codes must be dropped before the critic sees them or the loop burns rounds on phantom findings |
+| `work` — `skills/work/SKILL.md` | hand-wrote the `gc sling`, then asked the agent to `sleep 5`, grep an assignee, judge "empty after 30-60 seconds", and author `dispatch-provenance.v1` TOML by hand | `replace-with-mctl` (brief-backed path) | `mctl work ready` / `mctl work status` to choose the path; `mctl work dispatch` for path A; `mctl work provenance` to read back | `MCTL-TRACE: <id>` from the dispatch payload | `tests/mctl-shim-callsite/smoke_test.sh` parts 4-6; `tests/lost-bead-filter/smoke_test.sh`; `tests/artifact-root-scoping/smoke_test.sh` | path B (commission of fresh work) stays a raw `gc sling` because `mctl` models no commission path, and keeps both the manual assignee check **and** the hand-written `dispatch-provenance.v1` event bead the lost-bead filter reads; `MCTL_ENABLE_LIVE_DISPATCH=1` must be set or dispatch is a silent dry run; **`mctl` does not scope `artifact_root` per bead** — see the core defect below |
+| `immediate-work` — `skills/immediate-work/SKILL.md` | spawned an inline agent for any task, including work with an approved brief behind it — no provenance, no duplicate-dispatch gate | `wrap-with-mctl` | step 0 `mctl work status`; `mctl work dispatch` when brief-backed | `MCTL-TRACE: <id>` when it dispatches | `tests/mctl-shim-callsite/smoke_test.sh` parts 4-6 | a brief-backed task now routes away from in-session execution, which is slower but is the point; `MWRK010` (unadjudicated) is a stop, and immediate-work must not be used to get ahead of it |
+| `priority-work` — `skills/priority-work/SKILL.md` | reordered and staffed the queue from a mental model of it, and hand-authored `dispatch-provenance.v1` with `verified_assignee` decided by eye | `wrap-with-mctl` | step 0 `mctl work ready` filter; `mctl work dispatch` + `mctl work provenance` on the brief-backed path | `MCTL-TRACE: <id>` recorded in the dispatch block even on the named-target path | `tests/mctl-shim-callsite/smoke_test.sh` parts 4-6 | named-target dispatch has no `mctl` route and still writes provenance by hand; ranking is per-rig until `--all-rigs` exists |
+| `present-briefs` — `skills/present-briefs/SKILL.md` | selected the queue from `stack/.index.jsonl` rows and brief frontmatter only — both cache — so a stale row re-presented a decided brief | `wrap-with-mctl` (read side) | `mctl briefs list --json` once per rig; drop `adjudicated` / `deferred` / `malformed` | read-only; verdict write still goes through the `brief-record-decision` formula | `tests/mctl-shim-callsite/smoke_test.sh` parts 4, 6 | **user-visible:** the queue can now be shorter — briefs whose bead is closed or defer-windowed but whose cache row still says `ready` no longer surface. The verdict write stays on the formula because that formula also rings `brief.decided`, archives the brief, and files the no-brainer-leak event bead, none of which `mctl` models — see "Deferred: the present-briefs verdict write" below |
+| `prime-clerk` — `skills/prime-clerk/SKILL.md` | taught `present-briefs → adjudicate-brief → mathcity.work` as prose, with a hardcoded `build-basic-briefed` sling and an eyeballed assignee wait | `wrap-with-mctl` | `mctl briefs list --status pending` for orientation; teaches the three skills as `mctl` wrappers and `mctl trace show` for confirmation | teaches the clerk to keep the `MCTL-TRACE` ids the fork reports | `tests/mctl-shim-callsite/smoke_test.sh` part 4 | the clerk will meet `MBRF004` refusals on most of the live queue; the skill now states that this is expected and is a human decision to resolve |
+| `mayor-math` — `skills/mayor-math/SKILL.md` | dispatch doctrine hardcoded `--on build-basic-briefed` for all work | `wrap-with-mctl` | `mctl work ready` for what is dispatchable; defers the dispatch itself to the `mathcity.work` skill | dispatch trace is reported by `mathcity.work` | `tests/mctl-shim-callsite/smoke_test.sh` part 4 | the commission sling is retained verbatim for fresh work; Rules 0-4 (fork-vs-sling, rig-scoped coordinator, convoy, gt HQ fleet) are unaffected |
+| `mayor-math-prime` — `skills/mayor-math-prime/SKILL.md` | §5 read `status == "ready"` rows straight out of the legacy `decisions-track/manifest.jsonl` — the inventory #37 demoted and #38 is actively reclassifying | `replace-with-mctl` (§5) / `wrap-with-mctl` (toolkit) | `mctl briefs list --status pending --json` | toolkit teaches `MCTL-TRACE` and `mctl trace show` | `tests/mctl-shim-callsite/smoke_test.sh` part 4 | per-rig until `--all-rigs` exists, so a Mayor priming across rigs must run it per rig and say so; `gt-*` briefs are invisible to it |
+| `mayor-math-handoff` — `skills/mayor-math-handoff/SKILL.md` | `city_state` was free prose; in-flight mutations left no handle for the next session | `wrap-with-mctl` | new step 0c: `mctl briefs list --status pending` + `mctl work ready` into a fixed `BRIEFS-PENDING / WORK-READY / HOLDS / IN-FLIGHT-TRACES` block | `IN-FLIGHT-TRACES` carries forward every unconfirmed `MCTL-TRACE` id so the next Mayor can `mctl trace show` it | `tests/mctl-shim-callsite/smoke_test.sh` part 4 | counts are per-rig and exclude `gt-*`; the skill says so rather than presenting one rig's number as the city's |
+| `mayor-math-restart` — `skills/mayor-math-restart/SKILL.md` | orientation only: reads the PROMPT, docs, catalog, run-log shard, handoff bead | `no-change` | none — it reads no `BeadStoreAdapter` brief/work state and writes no `BriefCacheAdapter` artifact; its dispatch doctrine is by reference to `mayor-math`, which is wrapped, and the restart PROMPT is generated by `mayor-math-handoff`, which is wrapped | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | none known — it names no retired command; if `mayor-math` doctrine changes again this file needs no edit, which is the point of the indirection |
+| `simple-work` — `skills/simple-work/SKILL.md` | slings `simple-work-briefed` for bounded work and lands a brief on the stack | `no-change` | none — it dispatches a bead that has **no brief yet**, so there is no `BeadStoreAdapter` decision bead for `mctl work dispatch` to address; it is the commission-shaped path, deliberately outside the brief-backed surface | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | its closing instructions still point at `check-briefs` / `present-briefs`, both of which are now mctl-backed, so the hand-off is correct without an edit here |
+| `push-the-fleet` — `subdomains/dev/skills/push-the-fleet/SKILL.md` | batch layer over `mathcity.work`; already forbids a raw `gc sling` loop and delegates each item | `no-change` | none in this slice — the register's target was `mctl work batch`, which **does not exist**; the plan's Global Constraints forbid cross-rig mutation until a reviewed batch mode is designed. Its per-item delegation to `mathcity.work` means each dispatch already reaches `mctl work dispatch` through the `BeadStoreAdapter` path | inherited from `mathcity.work` | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | the batch surface remains prose; when `mctl work batch` lands this becomes `replace-with-mctl` |
+| `catch-no-brainer` — `skills/catch-no-brainer/SKILL.md` | classifier; emits a JSON verdict line and copies matches into `.pile/.no-brainer/` | `no-change` | none — it is explicitly forbidden from `bd update`/`bd close`/`bd link`, so it never touches `BeadStoreAdapter`; its only writes are into two classifier-owned directories that no `mctl` command reads or reconciles. The register's `mctl briefs classify` was never built | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | its `.no-brainer/` copies are an unreconciled cache; if `mctl briefs classify` is built later this becomes `replace-with-mctl` |
+| `decisions-to-briefs` — `subdomains/brief-system/skills/decisions-to-briefs/SKILL.md` | converts pending decisions into brief artifacts and writes decisions-track pointer records | `blocked-by-policy` | none — its output straddles the pile and the legacy decisions-track tree, and `BriefCacheAdapter` owns decisions-track rows as **migration input only**. #38 is actively changing how unknown non-terminal statuses are classified, and the plan holds bulk live decisions-track migration until proof 5 is green and authorized. Rewiring it now would move live records between trees mid-migration | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | re-run this row after #38 lands; the eventual surface is `mctl briefs create` for the pile half |
+| `refine-bead-manifest` — `skills/refine-bead-manifest/SKILL.md` | writes `<N>-<slug>-brief.md` files into the legacy decisions-track tree and appends rows to its manifest | `blocked-by-policy` | none — this is a direct `BriefCacheAdapter` write to the legacy decisions-track inventory, which is #38's lane. Routing it to `mctl briefs create` would relocate its output from decisions-track into the pile: a live pipeline change the plan forbids in this slice | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | **this is the largest remaining direct cache write in the skill set.** It is knowingly deferred, not missed; re-run after #38 |
+| `file-briefs` — `skills/file-briefs/SKILL.md` | fans out `/brief-prep` per question, then surfaces the batch via `/present-briefs` | `no-change` | none — it composes two skills that are themselves wired, and performs no `BeadStoreAdapter` write and no `BriefCacheAdapter` write of its own (its one pile `ls` is a read) | inherited from `brief-prep` | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | its pile `ls` progress check reads the cache directly; harmless as a progress indicator, wrong as a source of truth |
+| `present-it` — `skills/present-it/SKILL.md` | terminal-only context dump; defines the section structure the brief artifacts use | `no-change` | none, **by design** — the register's own post-work audit says "do not route state changes through it". It writes no file and mutates neither adapter; making it a mutation surface would re-create the duplicate control surface this slice removes. Its `BeadStoreAdapter` reads are the caller's | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | none known |
+| `check-brief-policy` — `subdomains/brief-system/skills/check-brief-policy/SKILL.md` | policy checker over brief-system surfaces; declares itself read-only and forbids `bd close`/`bd update` | `no-change` | none — it is explicitly read-only over `BriefCacheAdapter` layout and writes nothing. `mctl briefs doctor` checks canonical-vs-cache invariants, which is a different question from "does this policy document say what it should" | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | its pile/stack path assumptions duplicate `paths.toml`; a future pass could have it read the same resolver |
+| `bead-check` — `skills/bead-check/SKILL.md` | read-only bead triage with an explicit allowed/forbidden command table (`bd show`/`list`/`search` allowed; `bd update`/`close`/`gc sling` forbidden) | `no-change` | none — it is read-only over `BeadStoreAdapter` and already respects the canonical bead-first model, which is exactly plan audit rule 3's second clause. It proposes commands for a human to run; it runs none | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | when it proposes a dispatch it should name `mctl work dispatch` rather than a raw sling; cosmetic, and the sling it shows is quoted, not run |
+| `check-work` — `skills/check-work/SKILL.md` | work health check | `no-change` | none — read-only over `BeadStoreAdapter`. `mctl work status` answers readiness for **one brief**; this skill answers fleet-shaped questions (stranded, commissioned, waiting) across many beads, which needs the unimplemented `--all-rigs` and a batch status | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | depends on `--all-rigs`; recorded rather than faked with a per-rig loop |
+| `check-molecules` — `skills/check-molecules/SKILL.md` | molecule/workflow health inspection | `no-change` | none — read-only over molecule state, which belongs to `gc`, not to either §2 adapter. `mctl` models briefs and brief-backed work, not molecule step graphs, so neither `BeadStoreAdapter` nor `BriefCacheAdapter` covers what this reads | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | none known |
+| `check-build-formulas-and-skills` — `subdomains/dev/skills/check-build-formulas-and-skills/SKILL.md` | validates MathCity-owned formulas and skills | `no-change` | none — it validates files, touching neither `BeadStoreAdapter` nor `BriefCacheAdapter`. The register wanted it to gate `mctl` migration; that gate is now `tests/mctl-shim-callsite/smoke_test.sh` parts 4-9, which is executable rather than a checklist item | n/a | `tests/mctl-shim-callsite/smoke_test.sh` parts 4-9 | the check lives in a test rather than in this skill; deliberate — a grep-based test cannot drift the way a prose checklist can |
+| `gate-test-execution-silent` — `skills/gate-test-execution-silent/SKILL.md` | G14 gate; moves failing briefs to `.pile/.rejected/test-execution-silent/` | `no-change` | none — G14 is brief-**quality** gate vocabulary. `mctl` models the adjudication verdict on the `BeadStoreAdapter` bead, not the pipeline gates, and `briefs validate` proves canonical-vs-cache agreement rather than gate satisfaction | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | its rejected-pile move is a `BriefCacheAdapter` write with no canonical counterpart; encoding gate evidence in brief validation stays an open plan item |
+| `improve-test-execution-silent` — `skills/improve-test-execution-silent/SKILL.md` | remediation path for G14 failures | `no-change` | none — same boundary as its gate sibling: it repairs gate evidence, which is unmodelled in `BeadStoreAdapter` and outside `BriefCacheAdapter`'s reconciled set | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | pointing its failure messages at `mctl briefs validate` output only becomes useful once validation covers gate evidence |
+| `grill-and-present` — `skills/grill-and-present/SKILL.md` | older gated presentation flow, superseded by `create-brief` + `present-it` | `no-change` | none — it is already proposed for retirement and creates no `BeadStoreAdapter` decision bead; wiring a superseded skill to `mctl` would give a retired standard a second life on the new surface, which is the xkcd-927 failure this slice exists to avoid | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | retirement is still unexecuted; it remains reachable |
+| `xkcd-927` — `skills/xkcd-927/SKILL.md` | handles duplicate/competing standards; cites `adjudicate-brief` for the reconciling decision | `no-change` | none — its reconciling decision is a **standalone** decision (`bd create -t decision`), not a brief. `mctl briefs create` would manufacture `BriefCacheAdapter` pile artifacts for a decision with no brief pipeline behind it; the canonical `BeadStoreAdapter` store is identical either way | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | none known — see the same reasoning in `adjudicate-brief`'s standalone half |
+| `intercept-bead` — `skills/intercept-bead/SKILL.md` | routes an incoming bead: supersede / duplicate / accept, closing beads that lose | `no-change` | none — it closes **work** beads in `BeadStoreAdapter`, not decision briefs. `mctl briefs adjudicate` closes a `type=decision` bead with a verdict; there is no brief here to adjudicate and no `BriefCacheAdapter` artifact to move | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | none known |
+| `revise-artifact` — `skills/revise-artifact/SKILL.md` | artifact revisor subagent invoked by `coordinate-review` | `no-change` | none — it edits arbitrary artifacts and reaches neither `BeadStoreAdapter` nor `BriefCacheAdapter`. When the artifact is a brief, its parent `coordinate-review` supplies the canonical context | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | none known |
+| `formula-work` — `subdomains/dev/skills/formula-work/SKILL.md` | dispatches formula-authoring work via `gc sling ... --on formula-creator-math` | `no-change` | none — it dispatches a bead with **no decision brief behind it**, so `mctl work dispatch` (which addresses an approved `BeadStoreAdapter` brief) cannot express it; this is the commission-shaped path | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | shares path B's gap with `work`: no mechanical claim verification |
+| `audit-recent-work` — `subdomains/dev/skills/audit-recent-work/SKILL.md` | audit report; lists recent pile files by mtime | `no-change` | none — read-only, and its one `BriefCacheAdapter` read is a *recency* question (`ls -lt`) that `mctl` deliberately does not answer: `briefs list` reports canonical `BeadStoreAdapter` state, not filesystem mtimes | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | mtime ordering is cache-derived and can disagree with bead history; acceptable for an audit sweep, not for a queue |
+| `hourly-check` — `subdomains/dev/skills/hourly-check/SKILL.md` | hourly city watchdog; counts pile files | `no-change` | none — read-only health reporting. Its pile **count** is a `BriefCacheAdapter` fact (how much is awaiting the shuffle), genuinely different from the `BeadStoreAdapter` pending count; swapping it would silently change what the watchdog watches | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | reporting both counts would be strictly better and is a good follow-up; it needs `--all-rigs` to be city-wide |
+| `city-status` — `subdomains/dev/skills/city-status/SKILL.md` | city health report; counts pile files | `no-change` | none — same boundary as `hourly-check`: a `BriefCacheAdapter`-shaped count, reported as such, in a read-only reporting skill | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | same `--all-rigs` dependency |
+| `check-zero` — `subdomains/dev/skills/check-zero/SKILL.md` | hallucination gate over draft content | `no-change` | none — it verifies claims in prose and touches neither `BeadStoreAdapter` nor `BriefCacheAdapter` | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | `mayor-math-handoff` step 0 now asks it to verify `bin/mctl --help` alongside `gc --help`; that is a change in the caller, not here |
+| `strand-sweep` — `subdomains/dev/skills/strand-sweep/SKILL.md` | sweeps for stranded work; greps bead bodies for dispatch language | `no-change` | none in this slice — the right fix is to read `mctl work provenance`, a typed `BeadStoreAdapter`-backed record, instead of grepping prose for "dispatched\|slung". That is a real improvement **and** a real behavior change to a sweep the fleet depends on, so it is recorded here rather than smuggled into a skills-refactor slice | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | **the strongest deferred candidate in this table.** Its grep heuristic will increasingly disagree with mctl-written provenance as dispatches move onto `mctl work dispatch` |
+| `check-labels-and-refs` — `subdomains/latex/skills/check-labels-and-refs/SKILL.md` | LaTeX label/reference checker | `no-change` | none — a LaTeX tool. It entered the pre-implementation grep only via the word "brief" in prose, and touches neither `BeadStoreAdapter` nor `BriefCacheAdapter` | n/a | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | none known — **unrelated**, per the lower-confidence bucket's own triage instruction |
+| `math-brief-prep` (formula) — `formulas/math-brief-prep.toml` | fan-out of `brief-prep` per pending source bead, then a single-writer shuffle | `no-change` | none at the formula level — it is a **drain over the `brief-prep` formula**, and the deposit it fans out to is `brief-prep`'s, now `mctl briefs create`. Its own steps write no `BriefCacheAdapter` artifact: the shuffle step explicitly forbids moving briefs to stack or appending index records directly | inherited from `brief-prep` | `tests/mctl-shim-callsite/smoke_test.sh` part 8 | the formula twin `formulas/brief-prep.toml` still describes the old hand-placed deposit; **the SKILL and its formula twin have drifted before (v1.4, gt-vx0g3) and have drifted again here** — reconciling the formula is the top follow-up from this slice |
+
+## Migration notes
+
+### What actually moved
+
+Five skills stopped hand-rolling state transitions:
+
+1. **`adjudicate-brief`** — verdict, cache artifacts, dispatch, and claim
+   verification were four hand-rolled steps that could each half-succeed. They
+   are now three `mctl` calls, each a checked `EffectPlan` with an `if_status`
+   guard, each stamped with a trace id.
+2. **`create-brief`** and **`brief-prep`** — both hand-placed the pile file. The
+   deposit path was contested three ways in prose; it is now resolved once, by
+   `mctl_core/redundant_state.py::artifact_layout`, from `paths.toml`.
+3. **`work`** — the sling, the assignee check, and the provenance record are one
+   command that fails closed if the bead was never actually claimed.
+4. **`present-briefs`** — the presentation queue is still built from cache, but
+   it is now filtered against canonical `decision_state`.
+
+### User-facing behavior changes (three, all deliberate)
+
+The rule for this slice was: preserve user-facing behavior **unless** the old
+behavior was unsafe *because* it bypassed canonical bead-first state. Three
+changes clear that bar, and are recorded here because they are visible:
+
+1. **`present-briefs` can present fewer briefs.** A brief whose bead is closed
+   or defer-windowed but whose stack-index row still reads `ready` used to be
+   presented; it no longer is. B2.3 ("never re-present an adjudicated brief") is
+   a statement about the bead, and the old selector never asked the bead.
+2. **`adjudicate-brief` on approve now slings `work-briefed`, not
+   `build-basic-briefed`.** `work-briefed` is the router; it selects the formula
+   from the live catalog. The old skill hardcoded one formula in prompt text.
+   The register's own post-work audit asked for exactly this ("not hand-slung
+   formula snippets").
+3. **`adjudicate-brief` still syncs the legacy decisions-track manifest, and
+   that is deliberate.** The first pass of this slice deleted step 2b as a
+   redundant-artifact write. That was wrong, and
+   `tests/present-briefs-defer-filter/test_defer_filter.sh` caught it: the test
+   extracts and *executes* step 2b's writer to prove a `defer` verdict records
+   `defer_until` and a terminal verdict clears it. `mctl` writes neither the
+   decisions-track file nor its manifest, so deleting the sync did not hand the
+   job to a single owner — it handed it to nobody, re-opening the divergence
+   step 2b was written to fix (17 briefs observed diverged on 2026-08-04,
+   re-presenting decided decisions). Step 2b is therefore retained as **one
+   declared, named exemption**: it runs after the `mctl` write, it touches only
+   the decisions-track tree, and `tests/mctl-shim-callsite/smoke_test.sh` part 6
+   allows it for this one file, conditional on the block being marked
+   `LEGACY-DECISIONS-TRACK`. Retire it when #38 lands.
+
+### Refusals you should expect, and must not route around
+
+`MBRF004` ("Brief bead has no source dependency", B2.1) is an `ERROR`, and
+`effects.py::_blocking_preconditions` refuses any mutation whose doctor report
+carries one. It fires on **146 of 185** live briefs, including **88 `pending`
+and otherwise healthy** ones. **So a refactored skill will legitimately be
+refused on most of the live queue today.** That is real current behavior. Every
+wired skill now says so, relays the diagnostic verbatim, and stops. The remedy is
+a real source link — a human decision — not a bypass.
+
+`MBRF021`, `MBRF004`, and `MBRF005` are the three codes **no skill may branch
+on**; `tests/mctl-shim-callsite/smoke_test.sh` part 9 enforces that across every
+skill directory. `MBRF021` is a mass false positive (66 of 70 briefs in one rig,
+issue #58 / Q5) whose documented remedy would create 66 duplicate artifacts;
+`mctl_core/mcp_server.py` already moves it to `untrusted_diagnostics`.
+`MBRF004`/`MBRF005` are instrumentation under review: `malformed` means *closed
+with no verdict field*, not damaged — the verdicts sit in `close_reason`/`notes`,
+which the reader does not consult, and ~39 of the 74 "malformed" beads were never
+briefs. See `subdomains/dev/docs/MALFORMED-BRIEF-TRIAGE-2026-08-19.md`.
+
+### Core defect found while wiring: `mctl work dispatch` shares one `artifact_root`
+
+`mctl_core/work.py::_formula_invocation` builds the sling with
+`artifact_root=<rig-root>/.beads/briefs` — a **shared rig-level** root.
+`formulas/work-briefed.toml` documents that var as *"Build or brief artifact
+root. For builds, scope per bead (for example `<rig-root>/.gc-builds/<bead>`)"*
+and passes it straight through to `build-basic-briefed` on the FULL_CONTINUE
+route. So two concurrent FULL_CONTINUE dispatches in one rig share a
+stage-artifact root: **the gsp-1bmxuz hazard, re-created inside the typed
+command that was meant to remove it.**
+
+This was found because `tests/artifact-root-scoping/smoke_test.sh` failed when
+the first pass of this slice deleted the per-bead `build-basic-briefed` examples
+from four skills, on the (wrong) grounds that `mctl` now scoped the root itself.
+It does not. The examples were restored, the false claim was removed from every
+skill that carried it, and each wired skill now states the gap and says to
+serialize approvals on one rig rather than re-slinging by hand.
+
+**Fixing it is a `mctl_core` change, not a skill change**, and it is out of
+Slice 7's scope. It is the highest-value follow-up in this document.
+
+### Known gaps, recorded rather than worked around
+
+- **`gt-*` beads are unreachable through `mctl`.** The city-root HQ store is not
+  a registered rig in `city.toml`, so `--rig gt` fails with
+  `MCTL_CONTEXT_UNKNOWN_RIG`. `check-briefs` keeps a direct `bd` fallback (whose
+  `^Status:` parse is separately broken against `bd` 1.1.0);
+  `adjudicate-brief` escalates instead of improvising a second write path;
+  `present-briefs` leaves `gt-*` candidates in the queue on the cache filters.
+  Every wired skill states the gap rather than pretending the rig resolves.
+- **`--all-rigs` was specified in Slice 2 and is not implemented.** Another agent
+  is adding it to the core. **No skill in this slice builds its own cross-rig
+  loop** — `mayor-math-prime`, `mayor-math-handoff`, `priority-work`,
+  `check-work`, `hourly-check`, and `city-status` all make the single-rig call
+  and name the dependency.
+- **`mctl work batch` does not exist**, which is why `push-the-fleet` is
+  `no-change`. Cross-rig mutation is forbidden by the plan's Global Constraints
+  until a command-specific batch mode is designed and reviewed.
+
+### Deferred: the `present-briefs` verdict write
+
+The register's expected disposition was to replace `present-briefs` Phase 4 with
+a typed verdict command. It was **not** done, and the reason is concrete rather
+than cautious: `formulas/brief-record-decision.toml` performs three effects
+`mctl` does not model —
+
+1. it rings `brief.decided`, which wakes the `post-decision-file-or-sendback`
+   order;
+2. it archives the decided brief and its staging directory under `archive/<slug>/`;
+3. on a no-brainer leak it writes a durable `no_brainer_leak` event bead plus its
+   replay cache.
+
+`mctl briefs adjudicate` writes the bead, the decision TOML, and the stack index
+row — a strict subset. Routing the verdict through `mctl` *and* the formula would
+double-write the decision record (keyed `<brief_id>.toml` versus
+`<brief_slug>.toml`, which are not even the same key); routing it through `mctl`
+*only* would silently drop the bell and the archive. Both are worse than leaving
+the write where it is. The read side was wired instead, and the right fix is to
+model the bell / archive / leak edges in `mctl_core` — a core change, not a skill
+change.
+
+### Follow-ups this slice deliberately did not take
+
+| Item | Why it was left | Unblocked by |
+| --- | --- | --- |
+| `refine-bead-manifest` decisions-track writes | live legacy-inventory writes mid-migration | #38 fail-closed classifier + proof 5 |
+| `decisions-to-briefs` rewiring | same | #38 |
+| `strand-sweep` reading `mctl work provenance` instead of grepping prose | changes a sweep the fleet depends on | its own brief |
+| `push-the-fleet` batch dispatch | `mctl work batch` unbuilt; cross-rig mutation forbidden | a reviewed batch-mode design |
+| `formulas/brief-prep.toml` deposit step | the formula twin still describes the hand-placed pile write the SKILL just stopped doing | this slice — **the drift is live now** |
+| `present-briefs` verdict write | `brief.decided` / archive / leak-event edges unmodelled | a core change to `mctl_core` |
+| `hourly-check` / `city-status` reporting both counts | needs `--all-rigs` for a city-wide number | Slice 2's `--all-rigs` |
+| **`mctl work dispatch` per-bead `artifact_root`** | core defect found while wiring; recreates gsp-1bmxuz inside the typed command | a `mctl_core/work.py` fix — **highest-value follow-up here** |
+| `adjudicate-brief` step 2b (legacy decisions-track sync) | `mctl` models neither the file nor the manifest; deleting it re-opens #18 | #38 |

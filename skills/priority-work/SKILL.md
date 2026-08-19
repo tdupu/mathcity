@@ -28,6 +28,70 @@ No pool, no claim race, no boomerang class.
 
 ## Protocol
 
+### Step 0 — Filter through `mctl work ready` before reordering anything
+
+Bumping a bead to P0 and staffing it is a queue mutation. Do it against the
+canonical readiness view, not against a mental model of the queue: `mctl work
+ready` already excludes blocked, non-approving, **already-dispatched**, and
+invalid-provenance items, so it is the cheapest way to avoid double-staffing
+work that is out with a worker right now.
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+"$MCTL" work ready --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+Two outcomes, and they take different paths:
+
+- **The bead appears** (via its approved brief) → the work is brief-backed.
+  **Take path A.** `mctl work dispatch` is the canonical route and it records
+  provenance behind a verified claim; a named-target hand-dispatch here would
+  leave the approved brief with no execution record.
+- **The bead does not appear** → it is not brief-backed, or it is blocked. Ask
+  `"$MCTL" work status "$BRIEF_BEAD" ... --json` for the blockers before
+  assuming it is simply unbriefed. Then take path B.
+
+**Cross-rig ranking is not available.** `--all-rigs` was specified in Slice 2
+and is not implemented; `work ready` answers for one rig. Do not loop over rigs
+here — record the need and rank within the rig.
+
+`gt-*` beads are unreachable through `--rig` (the city-root HQ store is not a
+registered rig; `MCTL_CONTEXT_UNKNOWN_RIG`). Treat them as path B.
+
+**Never branch on `MBRF021` / `MBRF004` / `MBRF005`** — see
+`template-fragments/mctl-entry-point.md`.
+
+### Path A — brief-backed: dispatch through mctl
+
+```bash
+out=$(MCTL_ENABLE_LIVE_DISPATCH=1 "$MCTL" work dispatch "$BRIEF_BEAD" \
+        --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+TRACE_ID=$(printf '%s' "$out" \
+  | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("trace_id",""))
+except Exception: print("")')
+echo "MCTL-TRACE: $TRACE_ID"
+
+# The provenance record mctl just wrote, read back:
+"$MCTL" work provenance "$BRIEF_BEAD" --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+Path A needs no hand-authored `dispatch-provenance.v1`: mctl writes it, and only
+after re-reading the bead and confirming an actual claim (`MWRK003` otherwise).
+Steps 1-5 below are **path B** — the named-target route for work `mctl` cannot
+address.
+
 ### Step 1 — Ensure the bead exists and is complete
 
 Priority-work runs unattended, so the bead IS the spec. It must contain everything a fresh agent needs: what to do, where, and what done looks like.
@@ -73,6 +137,11 @@ Record the dispatch as a linked `dispatch-provenance.v1` event bead. The event
 is canonical for downstream lost-bead filters; metadata fields on the source
 bead are convenience hints only.
 
+**Path B only.** On path A `mctl work dispatch` writes this record itself, after
+a verified claim — hand-authoring a second one there would double-count the
+dispatch and, worse, assert a claim nobody checked. Write it by hand *only* for
+a named-target dispatch that `mctl` cannot address.
+
 ```toml
 schema = "dispatch-provenance.v1"
 source_bead = "<bead-id>"
@@ -100,7 +169,12 @@ You are done at dispatch. Record in the current conversation:
 PRIORITY-DISPATCHED: <bead-id> → <target>
 DONE-CONDITION: <one line>
 REVIEW: result lands in bead notes; check with `bd show <bead-id>`
+MCTL-TRACE: <trace id from the step-0 readiness read, or the path-A dispatch>
 ```
+
+Record the `MCTL-TRACE` id even on path B. The readiness read is the evidence
+that the queue state was checked before it was reordered, and `mctl trace show
+<id>` replays it.
 
 Do NOT wait for the result — that is the whole point. If the human adjudicator wants to watch it happen, that was an immediate-work call, not a priority-work call.
 

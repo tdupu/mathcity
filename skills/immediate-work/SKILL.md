@@ -15,11 +15,69 @@ In-session synchronous dispatch: spawn the right agent in the CURRENT session to
 - You just created a bead and the human adjudicator says "sling it for immediate work"
 
 **Do NOT use for:**
+- **Work that already has an approved decision brief** → that is `mctl work
+  dispatch` (step 0 below). Spawning inline discards the provenance record.
 - Multi-day backlogs or parallel batches → use priority-work or overnight sling
 - Work that requires a separate git worktree context → use a new session
 - Work where you need to keep talking to the human adjudicator while it runs → fork the agent
 
 ## Protocol
+
+### Step 0 — Is this work brief-backed? (check before spawning anything)
+
+immediate-work exists to skip the pool and the sling. It must **not** skip the
+brief gate. If the task already has an approved decision brief behind it, the
+canonical dispatch path is `mctl work dispatch` — spawning an inline agent
+instead leaves no provenance, no duplicate-dispatch protection, and no record
+that the approved brief was ever executed.
+
+```bash
+CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
+
+# `bin/mctl` is the ONLY supported entry point for the MathCity control CLI.
+# Never invoke assets/scripts/mctl.py directly — the shim owns repo-root
+# resolution, and mctl_core/context.py owns city/rig discovery.
+PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
+  sed -n '/^\[defaults.rig.imports.mathcity\]/,/^\[/p' "$CITY_ROOT/city.toml" \
+    | sed -n 's/^source *= *"\(.*\)"/\1/p' | head -1
+)}"
+MCTL="$PACK_ROOT/bin/mctl"
+[ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
+
+# Is there a brief bead for this work, and is it dispatchable?
+"$MCTL" work status "$BRIEF_BEAD" --city "$CITY_ROOT" --rig "$RIG" --json
+```
+
+- **`MWRK_BRIEF_NOT_FOUND`** — not brief-backed. This is ordinary immediate
+  work; continue to step 1 and spawn in-session.
+- **`readiness: ready`** — brief-backed and approved. **Dispatch through mctl**,
+  do not spawn inline:
+
+  ```bash
+  out=$(MCTL_ENABLE_LIVE_DISPATCH=1 "$MCTL" work dispatch "$BRIEF_BEAD" \
+          --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
+  TRACE_ID=$(printf '%s' "$out" \
+    | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("trace_id",""))
+except Exception: print("")')
+  echo "MCTL-TRACE: $TRACE_ID"
+  ```
+
+  `MCTL_ENABLE_LIVE_DISPATCH=1` is exported for this one command only; unarmed,
+  `work dispatch` returns a dry run and slings nothing.
+- **`readiness: blocked`** — read the `blockers`. `MWRK010` (no approving
+  verdict) means the brief has not been adjudicated: **immediate-work is not a
+  way to get ahead of that.** `MWRK_ALREADY_DISPATCHED` means the work is
+  already out. `MWRK001` means the bead already has an assignee.
+
+**`MBRF004`** ("no source dependency") is an `ERROR` that refuses dispatch on
+most of the live brief queue today. Report the refusal verbatim; do not branch
+on it, nor on `MBRF005` or `MBRF021` — see
+`template-fragments/mctl-entry-point.md`.
+
+`gt-*` beads live in the city-root HQ store, which is not a registered rig, so
+`--rig gt` fails with `MCTL_CONTEXT_UNKNOWN_RIG`. Treat those as not
+brief-backed here and spawn in-session.
 
 ### Step 1 — Identify the work
 
