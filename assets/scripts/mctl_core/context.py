@@ -20,6 +20,27 @@ CITY_FILE_NAME = "city.toml"
 #: an aggregation bug pass a test by construction.
 BEADS_FIXTURE_ENV = "MCTL_BEADS_FIXTURE"
 
+#: The reserved identifier for the city's own bead store at `<city-root>/.beads`.
+#:
+#: That store is real -- its own `config.yaml`, its own Dolt database (`hq` on
+#: the live city), 80 decision beads including the process-policy briefs -- and
+#: it was unaddressable, because `city.toml` lists rigs and the HQ store is not
+#: one. `--rig gt` answered MCTL_CONTEXT_UNKNOWN_RIG and `--all-rigs` returned
+#: 200 of 280 decision beads without saying that 80 were missing.
+#:
+#: The fix is a reserved id here rather than a new `[[rigs]]` entry, for two
+#: reasons. `city.toml` is produced by pack updates, so a hand-added entry is
+#: transient. And the HQ store is not a rig: it has no source checkout of its
+#: own, no rig root beneath the city, and no rig lifecycle. Declaring it one in
+#: configuration would be a claim that is not true.
+#:
+#: `hq` is the name the store already answers to -- `dolt_database: "hq"` in its
+#: `metadata.json`, `prefix: hq` in its `config.yaml`, "the HQ store" everywhere
+#: it is discussed. Reserved means only that this module synthesises it; if a
+#: city ever registers a rig by this name, configuration wins (see
+#: `city_rig_entries`) and nothing is shadowed or listed twice.
+HQ_RIG_ID = "hq"
+
 
 @dataclass(frozen=True)
 class RegisteredRig:
@@ -161,9 +182,47 @@ def resolve_city(
         discovery_path=discovery_path,
         invocation_cwd=invocation_cwd,
         trace_id=trace_id,
-        rigs=registered_rigs(rig_entries, city_root),
+        rigs=registered_rigs(city_rig_entries(rig_entries, city_root), city_root),
         config=config,
     )
+
+
+def city_rig_entries(rig_entries: Sequence[object], city_root: Path) -> list[object]:
+    """`city.toml`'s rig entries, plus the reserved city-root store entry.
+
+    The one place that decides what a city contains. `resolve_city` builds the
+    roster from this and `resolve_context` selects out of it, so membership
+    cannot mean one thing to the enumerator and another to the selector.
+
+    Two properties are load-bearing.
+
+    **Configuration wins.** The synthetic entry is appended only when no
+    configured rig already claims `HQ_RIG_ID`. A real rig by that name is never
+    shadowed, and the id never appears twice.
+
+    **Membership is configuration, never a directory walk.** The city root is
+    the *only* path this function will ever synthesise an entry for. That is
+    what keeps the aliases out: several `.beads` directories under the live
+    city hold a `briefs/` folder and nothing else -- no config, no database --
+    so a `bd` call inside one walks up and reads the HQ store. Enumerating
+    directories would have reported HQ's 80 beads once per alias, and the
+    inflated total would have looked exactly like the correct one. Requiring a
+    `config.yaml` is the precondition for the city-root store specifically; it
+    is not offered as a general test of aliasing, because it is not one --
+    `gascity-packs-briefpath/.beads` has a `config.yaml` and still reads
+    another rig's store. Not walking the tree is what makes that moot.
+    """
+    entries = list(rig_entries)
+    claimed = any(
+        isinstance(entry, dict) and entry.get("name") == HQ_RIG_ID for entry in entries
+    )
+    if claimed or not (city_root / ".beads" / "config.yaml").is_file():
+        return entries
+    # `path = "."` resolves the rig root to the city root itself, and no
+    # `imports` means the source checkout comes from `[defaults.rig.imports]`
+    # -- the same fallback every rig that does not override it already uses.
+    entries.append({"name": HQ_RIG_ID, "path": ".", "db": HQ_RIG_ID})
+    return entries
 
 
 def registered_rigs(rig_entries: Sequence[object], city_root: Path) -> tuple[RegisteredRig, ...]:
@@ -222,7 +281,12 @@ def resolve_context(
     rig_entries = config.get("rigs")
     assert isinstance(rig_entries, list)  # resolve_city already refused anything else
 
-    selected_rig, warnings = _select_rig(rig_entries, rig, trace_id, city_root, scope.rigs)
+    # The same augmented list the roster was built from -- selecting out of the
+    # raw entries would make the reserved city-root store enumerable but not
+    # resolvable, which is the worst of both.
+    selected_rig, warnings = _select_rig(
+        city_rig_entries(rig_entries, city_root), rig, trace_id, city_root, scope.rigs
+    )
     rig_id = selected_rig["name"]
     rig_root = _resolve_rig_root(selected_rig, city_root)
     beads_fixture = _resolve_beads_fixture(env, trace_id, city_root, rig_id)
@@ -335,8 +399,11 @@ def _select_rig(
         raise _error(
             trace_id,
             "MCTL_CONTEXT_UNKNOWN_RIG",
-            f"Rig {rig!r} is not registered in city.toml.",
-            f"Pass a rig shown in the city configuration: {names}.",
+            # Not "not in city.toml": the roster is city.toml's rigs plus the
+            # reserved `hq` store, and an operator told to fix this in
+            # city.toml would hand-edit a file that pack updates overwrite.
+            f"Rig {rig!r} is not one of this city's addressable stores.",
+            f"Pass a store shown in the city roster: {names}.",
             city_root=str(city_root),
             registered_rigs=names,
             requested_rig=rig,
