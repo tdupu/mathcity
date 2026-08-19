@@ -41,6 +41,7 @@ mathcity/
 ├── tests/                 # smoke tests (one directory per behavior)
 ├── docs/                  # reference docs, ADRs, filters, rule-prefix registry
 ├── assets/                # scripts, images, and other static assets
+├── bin/                   # executable entry points (thin shims, e.g. mctl)
 ├── scripts/               # repo-level maintenance scripts
 ├── subdomains/            # mathematical sub-packs (see Subdomain pack model)
 └── .github/               # GitHub issue templates and labels
@@ -59,6 +60,7 @@ mathcity/
 | `tests/` | One directory per behavior, each with a `smoke_test.sh` | Fast, self-contained checks; keep green before any push. |
 | `docs/` | Reference material | ADRs under `docs/adr/`, repair filters under `docs/filters/`, and the authoritative `docs/rule-prefix-registry.md`. |
 | `assets/` | Static assets | Scripts, images, and other non-source support files. |
+| `bin/` | Executable entry points | Thin shims callers invoke by path (e.g. `bin/mctl` over `assets/scripts/mctl.py`). Logic belongs in `assets/`, not here. |
 | `scripts/` | Repo maintenance scripts | e.g. `dolt-remotes-sync.sh`. |
 | `.github/` | Issue templates + `LABELS.md` | GitHub-side scaffolding for the mathcity-owned issue workflow. |
 

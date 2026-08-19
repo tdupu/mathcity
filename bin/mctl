@@ -1,0 +1,32 @@
+#!/bin/sh
+# bin/mctl — the executable entry point for the MathCity control CLI.
+#
+# This is a shim, not a program. It resolves this checkout's root from its own
+# (symlink-resolved) location and hands every argument straight to
+# assets/scripts/mctl.py.
+#
+# Deliberately NOT done here:
+#   * no `cd` — mctl_core.context.resolve_context discovers the city by walking
+#     up from Path.cwd(); relocating the cwd would silently change discovery.
+#   * no --city/--rig defaulting — context.py already owns discovery (cwd
+#     ancestry for the city, sole-registered-rig for the rig) and already fails
+#     loudly rather than guessing when the choice is ambiguous
+#     (MCTL_CONTEXT_CITY_NOT_FOUND / MCTL_CONTEXT_RIG_REQUIRED /
+#     MCTL_CONTEXT_SOURCE_CHECKOUT). A second discovery rule here would diverge.
+#   * no interpreter path — `python3` comes from PATH (needs >= 3.11 for
+#     tomllib).
+set -eu
+
+self=$0
+# Resolve symlinks so `ln -s .../bin/mctl ~/bin/mctl` still finds this checkout.
+while [ -L "$self" ]; do
+    link=$(readlink "$self")
+    case $link in
+        /*) self=$link ;;
+        *) self=$(dirname "$self")/$link ;;
+    esac
+done
+
+repo_root=$(cd "$(dirname "$self")/.." && pwd)
+
+exec python3 "$repo_root/assets/scripts/mctl.py" "$@"
