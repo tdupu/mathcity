@@ -369,6 +369,12 @@ severity = "ERROR"
 meaning = "The named option is not one this brief offers."
 module = "effects.py"
 
+[MOPT003]
+severity = "WARN"
+meaning = "The bead and its markdown cache offer different decision options; the bead was used."
+policy_ref = "B2.4"
+module = "briefs.py"
+
 [MWRK001]
 severity = "ERROR"
 meaning = "The source bead already has an active assignee."
