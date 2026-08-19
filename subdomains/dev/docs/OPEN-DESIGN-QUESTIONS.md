@@ -84,73 +84,101 @@ This class of bug is not reachable without a live city.
 
 ---
 
-## Q4 — The P1.14 Dolt pre-flight reports a healthy data plane as unreachable
+## Q4 — Should the P1.14 pre-flight distinguish "the probe cannot run" from "the server is down"?
 
-**Status:** OPEN · **Owner:** Taylor (mathcity side) + Gas City upstream ·
-**Raised:** 2026-08-18
+**Status:** OPEN (narrowed) · **Owner:** Taylor (mathcity side) ·
+**Raised:** 2026-08-18 · **Substantially corrected 2026-08-18**
 
-**Observed.** `template-fragments/dolt-preflight.md` defines the canonical
-three-valued pre-flight every mathcity skill copies verbatim. It calls
-`gc dolt health` and treats exit 1 as "server unreachable — the only value that
-means Dolt is down", routing everything else to the same abort branch.
+**This entry originally claimed the P1.14 pre-flight was broken and that ~18
+skills were aborting on a healthy data plane. That was wrong.** Both the
+evidence and the root cause below are retracted; what survives is a much smaller
+question. The retraction is kept rather than deleted because the reasoning error
+is the interesting part.
 
-The installed `gc` has **no `dolt` subcommand at all**:
-
-```
-$ gc dolt health
-gc: unknown command "dolt"
-$ gc dolt health >/dev/null 2>&1; echo $?
-1
-```
-
-Both binaries on PATH (`~/go/bin/gc`, `~/.local/bin/gc`) behave identically.
-Exit 1 is precisely the code the contract reserves for "Dolt is down", so the
-canonical block, run verbatim, currently prints:
+### What was actually observed, and why it misled
 
 ```
-I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads).
+$ cd ~/repos/mathcity && gc dolt health >/dev/null 2>&1; echo $?
+1                      <- "server unreachable"
+
+$ cd ~/gt/mathcity && gc dolt health >/dev/null 2>&1; echo $?
+2                      <- reachable, standing compaction quarantine
 ```
 
-while Dolt is demonstrably **up** — listening on 127.0.0.1:58506, with `bd`
-resolving 9,570 beads and mctl reading 66 briefs off it in the same session.
+Same binary (`~/go/bin/gc`) both times. `gc dolt` is a **city-scoped command
+pack** — `gc dolt --help` from `~/gt` prints *"Commands from the dolt import"*
+and lists `health`, `status`, `compact`, `restart`, and the rest. Outside a Gas
+City root the `dolt` parent is never registered, so `gc` exits 1, which is
+exactly the code the contract reserves for "Dolt is down".
 
-**Blast radius.** Roughly 18 call sites embed the block, including
-`check-briefs`, `check-work`, `push-the-fleet`, `wake-city`, `simple-work`,
-`check-molecules`, `city-status`, `testing-work`, `strand-sweep`. Each aborts
-before doing any work.
+The original entry ran the probe from a non-city directory, saw exit 1, and
+concluded the command pack was absent from the install. It is not absent. The
+conclusion was an artifact of the working directory.
 
-**Why this is the issue #7/#8 bug in a new costume.** Those issues were about
-`||` collapsing the three-valued contract so a standing *quarantine* read as a
-connectivity failure. The contract was fixed to test 0 and 2 explicitly and
-route everything else to abort. That fix is correct for the failure modes it
-enumerates (1 unreachable, 78 port unresolved, 127 gc missing) — but a **gc
-that no longer has the subcommand** lands in the same catch-all, and once again
-a healthy data plane is reported as down with remediation advice
-(`gc dolt start`) that cannot work.
+### Retracted claims
 
-**Root cause, found 2026-08-18.** Neither moved nor removed. `gc dolt health`
-ships as a **shell command pack** at
-`gascity/examples/bd/dolt/commands/health/run.sh` — the same path the fragment
-cites — and that pack is **not installed in this city**. The compiled `gc` has
-only hyphenated `dolt-*` commands (`dolt-cleanup`, `dolt-state`, `dolt-config`,
-`dolt-gc`); there is no `dolt` parent command in the source at `16fbca8d7`. So
-this is neither a stale PATH nor a wrong binary in the fragment: the command is
-real, upstream, and simply absent from this install.
+- ❌ *"The installed `gc` has no `dolt` subcommand at all."* It has one, inside a
+  city root.
+- ❌ *"That pack is not installed in this city."* It is installed.
+- ❌ *"Roughly 18 call sites abort before doing any work."* None of them do.
+- ❌ *"This is the issue #7/#8 bug in a new costume."* Those issues are fixed.
 
-**The remaining question.** Should the pre-flight distinguish "the probe is
-unavailable" from "the server is unreachable"? And
-should the pre-flight distinguish "the probe itself is unavailable" from "the
-server is unreachable"? A probe that cannot run is not evidence that the thing
-it probes is down — the two deserve different exits and different remediation.
+### What is actually true
 
-**What mctl does instead, and why it happens to work.** mctl does not use this
-fragment. It TCP-connects to the endpoint named in
+`ae6e871 fix(mathcity): make Dolt pre-flight gates honor gc dolt health's exit
+contract` already converted every gate to the three-valued `case`. Verified:
+
+```
+$ bash tests/dolt-preflight-exit-codes/smoke_test.sh
+ok: 17 call sites, all exit-code-aware
+ok: exit 0 -> proceeds silently
+ok: exit 2 -> warns, names hecke/hq, points at gc dolt compact, proceeds
+ok: exit 1 / 78 / 127 -> aborts with the P1.14 message
+ALL DOLT-PREFLIGHT EXIT-CODE CHECKS PASSED
+```
+
+The contract works. The city's real exit code today is **2** — a standing
+compaction quarantine on `hecke` (33d) and `hq` (36d) — and the gates correctly
+warn and proceed rather than aborting.
+
+### The question that remains
+
+`template-fragments/dolt-preflight.md` already documents the cwd-dependence
+under **Known limitation**, and scopes it out of #7/#8. So the open design
+question is only this:
+
+> Should a probe that *cannot run* produce the same abort, with the same
+> remediation, as a server that is *unreachable*?
+
+A skill invoked from outside a city root today prints *"Dolt is unreachable —
+run `gc dolt status` / `gc dolt start`"*, which is false and unactionable; the
+true remediation is *"cd into the city root"*. That is one extra branch in the
+`*` case — detect the unknown-command shape and say so — but it is a change to
+the canonical fragment plus 17 embedded copies, so it wants a decision, not a
+drive-by edit.
+
+**Not a blocker for anything.** Skills are invoked from the city root in normal
+operation. This is a diagnosability improvement, not an outage.
+
+### Related, still open
+
+Issue **#8** is still OPEN while **#7** (same fix) is CLOSED. The mathcity-owned
+half of #8 — *"mathcity discards the one signal upstream provides"* — is
+satisfied by `ae6e871` and the smoke test. The upstream compaction race
+(`gastownhall/gascity#3341`) and the standing 33-day quarantine are **not**
+fixed and are not mathcity's to fix. Someone should decide whether #8 closes on
+the mathcity half or stays open tracking the quarantine.
+
+### What mctl does instead
+
+mctl does not use this fragment. It TCP-connects to the endpoint named in
 `.beads/dolt-server.port` and gates bead commands on that. That is a boolean
-probe of the kind this fragment warns against, and it was written without
-knowledge of the P1.14 contract — but it is the reason mctl reports Dolt
-correctly today while the canonical pre-flight does not. Reconciling the two is
-open: mctl should probably consume the canonical contract once the contract can
-actually run.
+probe of the kind the fragment warns against, and it was written without
+knowledge of the P1.14 contract. Because it probes the endpoint directly rather
+than shelling out to `gc`, it is immune to the cwd problem above — but it also
+cannot see a quarantine, which the canonical contract can. Reconciling the two
+remains open: mctl should probably consume the canonical contract, and the
+canonical contract should probably grow the fourth branch.
 
 
 ## Q2 — Should mctl core be the single writer of the brief stack index?
