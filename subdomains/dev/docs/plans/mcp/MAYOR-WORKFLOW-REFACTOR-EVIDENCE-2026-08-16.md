@@ -38,15 +38,15 @@ The agent should supply judgment only where interpretation is required.
 
 Local evidence used during the brainstorming session:
 
-- `/Users/tdupuy/gt/mathcity-mayor/session-catalog.json`
-- `/Users/tdupuy/gt/mathcity-mayor/session-catalog-recent.json`
-- `/Users/tdupuy/gt/mathcity-mayor/restart/PROMPT-mayor-restart.txt`
-- `/Users/tdupuy/gt/mathcity-mayor/restart/PROMPT-mayor-restart.j2`
-- `/Users/tdupuy/gt/mathcity-tests/run-log/S43.md`
-- `/Users/tdupuy/repos/mathcity/skills/mayor-math-prime/SKILL.md`
-- `/Users/tdupuy/repos/mathcity/skills/mayor-math-handoff/SKILL.md`
-- `/Users/tdupuy/repos/mathcity/subdomains/dev/docs/plans/mcp/MCTL-MCP-IMPLEMENTATION-PLAN.md`
-- `/Users/tdupuy/repos/mathcity/subdomains/dev/docs/plans/mcp/SKILL-IMPACT-REGISTER.md`
+- `<city-root>/mathcity-mayor/session-catalog.json`
+- `<city-root>/mathcity-mayor/session-catalog-recent.json`
+- `<city-root>/mathcity-mayor/restart/PROMPT-mayor-restart.txt`
+- `<city-root>/mathcity-mayor/restart/PROMPT-mayor-restart.j2`
+- `<city-root>/mathcity-tests/run-log/S43.md`
+- `<repos-root>/mathcity/skills/mayor-math-prime/SKILL.md`
+- `<repos-root>/mathcity/skills/mayor-math-handoff/SKILL.md`
+- `<repos-root>/mathcity/subdomains/dev/docs/plans/mcp/MCTL-MCP-IMPLEMENTATION-PLAN.md`
+- `<repos-root>/mathcity/subdomains/dev/docs/plans/mcp/SKILL-IMPACT-REGISTER.md`
 - GitHub issue `tdupu/mathcity#41`: `mctl` CLI, MCP, and dashboard control plane
 - GitHub issue `tdupu/mathcity#40`: brief-shuffle fast-drain contract
 

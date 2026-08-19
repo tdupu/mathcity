@@ -2,7 +2,7 @@
 
 Status: prompt for a planning agent
 Created: 2026-08-15
-Repository: `/Users/tdupuy/repos/mathcity`
+Repository: `<repos-root>/mathcity`
 Requested output: an implementation plan, not code
 
 ## Your Assignment
@@ -112,7 +112,7 @@ Use these decisions as requirements.
 Example:
 
 ```bash
-cd /Users/tdupuy/gt/mathcity
+cd <city-root>/mathcity
 mctl briefs list
 ```
 
@@ -120,7 +120,7 @@ This should list briefs for the `mathcity` rig because that directory is a
 registered rig.
 
 ```bash
-cd /Users/tdupuy/repos/mathcity
+cd <repos-root>/mathcity
 mctl briefs list
 ```
 
@@ -461,7 +461,7 @@ Use a safe explicit fixture for read/show/options/doctor behavior. The current
 known useful live fixture is:
 
 ```text
-/Users/tdupuy/gt/.beads/briefs/stack/gsp-71p9fz-approach-a-blast-radius.md
+<city-root>/.beads/briefs/stack/gsp-71p9fz-approach-a-blast-radius.md
 ```
 
 This fixture is useful for read/show/revise-preview behavior. Do not use it as

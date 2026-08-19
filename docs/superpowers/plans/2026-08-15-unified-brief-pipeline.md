@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Work in `/Users/tdupuy/repos/mathcity`, not `/Users/tdupuy/gt/mathcity`.
+- Work in `<repos-root>/mathcity`, not `<city-root>/mathcity`.
 - Branch name for this implementation is `unified-brief-pipeline-gate-profiles`.
 - Do not commit or push from this outside-agent session unless Taylor explicitly authorizes it.
 - Do not delete or move existing `.beads/decisions-track` files in this implementation.
@@ -553,7 +553,7 @@ Run:
 
 ```bash
 bash tests/decisions-track-migration/smoke_test.sh
-python3 assets/scripts/brief-decisions-track-inventory.py inventory --rig-root /Users/tdupuy/gt --output /private/tmp/codex-proof5-live-inventory.jsonl
+python3 assets/scripts/brief-decisions-track-inventory.py inventory --rig-root <city-root> --output /private/tmp/codex-proof5-live-inventory.jsonl
 python3 tests/decisions-track-migration/proof5_no_nonterminal_unmapped.py /private/tmp/codex-proof5-live-inventory.jsonl
 bash tests/unified-brief-gate-profiles/smoke_test.sh
 bash tests/present-briefs-unified-source/smoke_test.sh
@@ -577,11 +577,11 @@ Report:
 
 ```text
 branch: unified-brief-pipeline-gate-profiles
-source path: /Users/tdupuy/repos/mathcity
+source path: <repos-root>/mathcity
 do not run live migration until BART verifies live-resolved present-briefs, decisions-to-briefs, gates.toml, and check-brief-policy match this branch/merge commit
 do not run live migration unless proof 5 is green on the live decisions-track inventory
 track rig-local .beads/briefs residue separately; do not declare the pipeline fully unified across registered rigs until that follow-up has its own inventory/migration/proof
-pull-only is sufficient only if live gc resolves pack files directly from /Users/tdupuy/repos/mathcity; otherwise BART must run the existing pack import/build/install step
+pull-only is sufficient only if live gc resolves pack files directly from <repos-root>/mathcity; otherwise BART must run the existing pack import/build/install step
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 Status: pre-implementation audit register
 Created: 2026-08-15
-Repository: `/Users/tdupuy/repos/mathcity`
+Repository: `<repos-root>/mathcity`
 Requested location: `mathcity/dev/docs/plans/mcp/`
 Repo location: `subdomains/dev/docs/plans/mcp/`
 
@@ -22,13 +22,13 @@ adjudication.
 
 ## Coordination State
 
-- BART (`80b87468`, repo-side, `/Users/tdupuy/repos`) reviewed the scope on
+- BART (`80b87468`, repo-side, `<repos-root>`) reviewed the scope on
   2026-08-15. Current main is `cb32258`, deployed by pull. BART reported that
   #37 changed `present-briefs`, `prime-clerk`, `decisions-to-briefs`,
   `brief-check.sh`, `gates.toml`, `brief-shuffle.toml`,
   `brief-producer-failure-record.toml`, `brief-decisions-track-inventory.py`,
   brief docs, policy, and tests.
-- QUIMBY (`ddc2c0df`, mayor/HQ-side, `/Users/tdupuy/gt`) reviewed the live
+- QUIMBY (`ddc2c0df`, mayor/HQ-side, `<city-root>`) reviewed the live
   migration state. #38 Fix A is ruled: fail closed. Unknown non-terminal
   decisions-track statuses must migrate to a visible pile entry rather than be
   preserved invisibly.
@@ -47,7 +47,7 @@ adjudication.
   about legacy decisions-track rows. The post-MCP checklist must be re-run
   after fail-closed classifier behavior and proof 5 land.
 - Current first fixture for safe `list/show/revise --dry-run` work:
-  `/Users/tdupuy/gt/.beads/briefs/stack/gsp-71p9fz-approach-a-blast-radius.md`.
+  `<city-root>/.beads/briefs/stack/gsp-71p9fz-approach-a-blast-radius.md`.
   This is a live approved brief with `server_touching: false` and
   `user_skill_touching_override: false`, but its recommendation is `revise`,
   not approve.

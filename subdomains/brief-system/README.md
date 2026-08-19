@@ -245,10 +245,10 @@ items get normalized printouts in `.beads/briefs/.pile`; terminal items remain
 preserved and do not re-enter pile or stack.
 
 BART deployment must verify the runtime source path before live migration. A
-plain `git pull --ff-only` in `/Users/tdupuy/repos/mathcity` is sufficient only
+plain `git pull --ff-only` in `<repos-root>/mathcity` is sufficient only
 when the live `gc` runtime resolves skills, formulas, assets, and tests
 directly from that checkout. If the runtime resolves an installed pack under
-`/Users/tdupuy/gt`, `~/.gc/cache`, or another materialized location, BART must
+`<city-root>`, `~/.gc/cache`, or another materialized location, BART must
 run the existing pack import/build/install step and verify the live-resolved
 `present-briefs`, `decisions-to-briefs`, `gates.toml`, and policy-check files
 match the merged source revision before running migration.
