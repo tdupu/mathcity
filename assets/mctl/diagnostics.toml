@@ -92,6 +92,22 @@ meaning = "Canonical brief bead has no redundant cache artifact to cross-check."
 policy_ref = "B2.8"
 module = "briefs.py"
 
+[MBRF040]
+severity = "WARN"
+meaning = "Canonical brief bead carries no description, so it has no body to show."
+policy_ref = "B1.5"
+module = "briefs.py"
+
+[MBRF041]
+severity = "WARN"
+meaning = "Brief body has no markdown headings; only its raw text is available."
+module = "briefs.py"
+
+[MBRF042]
+severity = "WARN"
+meaning = "No brief body heading maps to a present-it section; only raw sections are available."
+module = "briefs.py"
+
 [MBRF030]
 severity = "FATAL"
 meaning = "Proposed brief has an empty title, so it states no decision."

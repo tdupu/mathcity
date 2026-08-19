@@ -320,6 +320,83 @@ BRIEF_RECORD_SCHEMA: Schema = {
     },
 }
 
+BRIEF_SECTION_SCHEMA: Schema = {
+    "type": "object",
+    "title": "BriefSection",
+    "description": "One markdown section of a brief body, already parsed.",
+    "required": [
+        "body",
+        "end_line",
+        "heading",
+        "level",
+        "match",
+        "section_index",
+        "section_key",
+        "start_line",
+    ],
+    "properties": {
+        "body": {
+            "type": "string",
+            "description": (
+                "Section text, running to the next heading at the same or a shallower "
+                "level, so a section keeps its own subsections."
+            ),
+        },
+        "end_line": {"type": "integer", "description": "1-based last line of the section."},
+        "heading": {"type": "string", "description": "Heading text as the brief wrote it."},
+        "level": {"type": "integer", "description": "Markdown heading depth, 1-6."},
+        "match": {
+            "type": "string",
+            "enum": ["explicit", "heading", "unmapped"],
+            "description": (
+                "How section_index was decided: an explicit §N marker, a recognised "
+                "heading name, or nothing matched."
+            ),
+        },
+        "section_index": {
+            "type": ["integer", "null"],
+            "description": "present-it section 1-7, or null when the heading names none.",
+        },
+        "section_key": {
+            "type": ["string", "null"],
+            "description": "Stable key for section_index, e.g. what_is_being_decided.",
+        },
+        "start_line": {"type": "integer", "description": "1-based line of the heading."},
+    },
+    "additionalProperties": False,
+}
+
+#: `briefs show` only. The body is the brief -- the evidence a verdict is
+#: given on -- but it is a per-brief content read, so it stays off the list
+#: schema: a city-wide roster carrying ~200 bodies is a regression for every
+#: caller that wanted titles. `body` is `""`, never absent, when the bead
+#: carries no description; `body_diagnostics` says why a parse yielded no
+#: sections, so an empty `sections` is never silent.
+BRIEF_DETAIL_SCHEMA: Schema = {
+    **BRIEF_RECORD_SCHEMA,
+    "title": "BriefDetail",
+    "description": "A brief record plus its canonical body and that body's parsed sections.",
+    "required": sorted(
+        [*BRIEF_RECORD_SCHEMA["required"], "body", "body_diagnostics", "sections"]
+    ),
+    "properties": {
+        **BRIEF_RECORD_SCHEMA["properties"],
+        "body": {
+            "type": "string",
+            "description": (
+                "The canonical bead description, verbatim. Empty string when the bead "
+                "carries none. Always authoritative over `sections`."
+            ),
+        },
+        "body_diagnostics": {
+            "type": "array",
+            "items": DIAGNOSTIC_SCHEMA,
+            "description": "Why the body parse produced what it did; empty on a clean parse.",
+        },
+        "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},
+    },
+}
+
 BRIEF_OPTION_SCHEMA: Schema = {
     "type": "object",
     "title": "BriefOption",

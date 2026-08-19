@@ -70,6 +70,7 @@ from .provenance import ProvenanceError
 from .redundant_state import artifact_layout
 from .schemas import (
     BRIEF_DIAGNOSTICS_SCHEMA,
+    BRIEF_DETAIL_SCHEMA,
     BRIEF_OPTION_SCHEMA,
     BRIEF_RECORD_SCHEMA,
     DRY_RUN_PROPERTY,
@@ -734,9 +735,13 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="briefs_show",
         title="Show one brief",
-        description="Show one brief's canonical bead state, redundant artifacts, and policy refs.",
+        description=(
+            "Show one brief's canonical bead state, its body, that body's parsed sections, "
+            "redundant artifacts, and policy refs. `body` is the verbatim canonical text and "
+            "stays authoritative: `sections` is a convenience over it, never a replacement."
+        ),
         input_schema=request_schema({"brief_id": _BRIEF_ID}, ["brief_id"]),
-        output_schema=response_schema({"brief": BRIEF_RECORD_SCHEMA}, ["brief"], artifact_state=True),
+        output_schema=response_schema({"brief": BRIEF_DETAIL_SCHEMA}, ["brief"], artifact_state=True),
         handler=_handle_briefs_show,
         artifact_state=True,
     ),

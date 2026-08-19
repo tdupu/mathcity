@@ -48,6 +48,10 @@ class Bead:
     updated_at: str | None
     raw: Mapping[str, object]
     assignee: str | None = None
+    #: The bead's long-form body. For a decision bead this is the brief
+    #: itself -- the evidence a verdict is given on -- so it is a typed
+    #: field rather than something every caller digs out of `raw`.
+    description: str | None = None
 
     @property
     def is_brief(self) -> bool:
@@ -393,6 +397,7 @@ def _bead_from_mapping(raw: Mapping[str, object]) -> Bead:
         updated_at=_string(raw, "updated_at"),
         raw=raw,
         assignee=_string(raw, "assignee"),
+        description=_string(raw, "description"),
     )
 
 

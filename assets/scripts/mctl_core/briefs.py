@@ -1,7 +1,7 @@
 """Canonical, read-only brief inspection core for mctl."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
 import tomllib
 from datetime import date
@@ -31,6 +31,45 @@ class BriefFilters:
 
 
 @dataclass(frozen=True)
+class BriefSection:
+    """One markdown section of a brief body.
+
+    `section_index` is the `present-it` slot this heading fills (§1 What is
+    being decided … §7 Plan membership) when the heading names one, and None
+    when it does not. `match` says how that was decided, so a consumer can
+    tell a heading that carried an explicit `§N` marker from one this module
+    recognised by name -- and can see, rather than guess, when nothing
+    matched.
+
+    `body` runs to the next heading at the same or a shallower level, so a
+    section keeps its own subsections and a §-level render is whole. Deeper
+    headings also appear as entries of their own, carrying `level`; a caller
+    wanting only top-level sections filters on the shallowest level present.
+    """
+
+    heading: str
+    level: int
+    start_line: int
+    end_line: int
+    body: str
+    section_index: int | None
+    section_key: str | None
+    match: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "body": self.body,
+            "end_line": self.end_line,
+            "heading": self.heading,
+            "level": self.level,
+            "match": self.match,
+            "section_index": self.section_index,
+            "section_key": self.section_key,
+            "start_line": self.start_line,
+        }
+
+
+@dataclass(frozen=True)
 class BriefRecord:
     brief_id: str
     bead_id: str
@@ -42,9 +81,19 @@ class BriefRecord:
     updated_at: str | None
     redundant_artifacts: tuple[RedundantArtifact, ...]
     policy_references: tuple[PolicyReference, ...]
+    #: The canonical bead description, verbatim. None means "not loaded" --
+    #: `list_briefs` deliberately leaves it off, because fetching every body
+    #: turns a roster read into a city-wide content read. `""` means loaded
+    #: and genuinely empty. Only `show_brief` populates it.
+    body: str | None = None
+    sections: tuple[BriefSection, ...] = ()
+    #: Why the parse produced what it did. A body that yields no sections
+    #: reports the reason here instead of returning an empty array that
+    #: reads like "this brief has no sections".
+    body_diagnostics: tuple[Diagnostic, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "bead_id": self.bead_id,
             "brief_id": self.brief_id,
             "canonical_source": "bead_store",
@@ -57,6 +106,13 @@ class BriefRecord:
             "title": self.title,
             "updated_at": self.updated_at,
         }
+        if self.body is not None:
+            payload["body"] = self.body
+            payload["sections"] = [section.to_dict() for section in self.sections]
+            payload["body_diagnostics"] = [
+                diagnostic.to_dict() for diagnostic in self.body_diagnostics
+            ]
+        return payload
 
 
 @dataclass(frozen=True)
@@ -181,7 +237,21 @@ def list_briefs(ctx: MctlContext, filters: BriefFilters) -> tuple[BriefRecord, .
 
 
 def show_brief(ctx: MctlContext, brief_id: str) -> BriefRecord:
-    return _find_record(ctx, _records(ctx), brief_id)
+    """One brief, with its body -- the decision evidence -- attached.
+
+    Detail is where the body belongs. `list_briefs` deliberately leaves it
+    off: a city-wide roster read that also fetched ~200 brief bodies would be
+    a performance regression for every caller that only wanted the titles.
+
+    The bead snapshot this already reads carries the description, so
+    attaching the body costs no extra `bd` subprocess.
+    """
+    beads = _beads(ctx)
+    record = _find_record(ctx, _records(ctx, beads), brief_id)
+    bead = next((item for item in beads if item.id == record.bead_id), None)
+    body = brief_body(ctx, brief_id, bead)
+    sections, diagnostics = brief_body_report(ctx, brief_id, body)
+    return replace(record, body=body, sections=sections, body_diagnostics=diagnostics)
 
 
 def brief_command_diagnostics(ctx: MctlContext, records: Iterable[BriefRecord]) -> tuple[Diagnostic, ...]:
@@ -475,15 +545,11 @@ class BriefDecisionOption:
     confidence: str
 
 
-# Real briefs enumerate options as list items under an Options section:
+# Real briefs enumerate options as list items under an options section:
 #     ## §4 — Options
 #     - **(A) Do it now.** *(recommended)* ...
-# Confirmed on 4 of 5 briefs on the live pile. Scoping to the section keeps
-# ordinary bolded prose elsewhere from fabricating options.
-_OPTIONS_SECTION = re.compile(
-    r"^##\s+(?:§\d+\s*[—-]\s*)?Options\s*$(?P<body>.*?)(?=^##\s|\Z)",
-    re.MULTILINE | re.DOTALL,
-)
+# Scoping to the section keeps ordinary bolded prose elsewhere from
+# fabricating options.
 _OPTION_ITEM = re.compile(
     r"^\s*[-*]\s+\*\*\((?P<label>[A-Za-z0-9]+)\)\s*(?P<heading>[^*]+?)\*\*",
     re.MULTILINE,
@@ -491,50 +557,282 @@ _OPTION_ITEM = re.compile(
 
 
 def parse_decision_options(markdown: str) -> tuple[BriefDecisionOption, ...]:
-    """Extract the decision options a brief offers, if any."""
-    section = _OPTIONS_SECTION.search(markdown)
-    if section is None:
-        return ()
-    body = section.group("body")
-    body_offset = section.start("body")
-    line_of = lambda index: markdown.count("\n", 0, index) + 1
+    """Extract the decision options a brief offers, if any.
 
-    matches = list(_OPTION_ITEM.finditer(body))
+    Scoped to §4 via `parse_brief_sections` rather than to a heading spelled
+    exactly `Options`. The exact-match version found nothing on the live rig:
+    the one open hecke brief that enumerates options heads them "Options
+    presented", and "Alternatives Considered" -- the second most common
+    heading on the rig -- never matched at all. Both are §4.
+    """
+    lines = markdown.splitlines()
     options: list[BriefDecisionOption] = []
-    for position, match in enumerate(matches):
-        start = body_offset + match.start()
-        end_in_body = (
-            matches[position + 1].start() if position + 1 < len(matches) else len(body)
-        )
-        raw = body[match.start():end_in_body].strip()
-        options.append(
-            BriefDecisionOption(
-                label=match.group("label"),
-                heading=match.group("heading").strip(),
-                start_line=line_of(start),
-                end_line=line_of(body_offset + end_in_body),
-                raw_text=raw,
-                confidence="explicit",
+    for section in parse_brief_sections(markdown):
+        if section.section_index != 4:
+            continue
+        body = section.body
+        # `body` is `lines[heading .. end]` rejoined after stripping blank
+        # edges, so offsets are recovered against the original line list.
+        first_body_line = section.start_line + 1
+        while first_body_line <= section.end_line and not lines[first_body_line - 1].strip():
+            first_body_line += 1
+        matches = list(_OPTION_ITEM.finditer(body))
+        for position, match in enumerate(matches):
+            end_in_body = (
+                matches[position + 1].start() if position + 1 < len(matches) else len(body)
             )
-        )
+            options.append(
+                BriefDecisionOption(
+                    label=match.group("label"),
+                    heading=match.group("heading").strip(),
+                    start_line=first_body_line + body.count("\n", 0, match.start()),
+                    end_line=first_body_line + body.count("\n", 0, end_in_body),
+                    raw_text=body[match.start():end_in_body].strip(),
+                    confidence="explicit",
+                )
+            )
     return tuple(options)
 
 
-def decision_options(ctx: MctlContext, brief_id: str) -> tuple[BriefDecisionOption, ...]:
-    """Decision options for a brief, read from its markdown cache.
+# --- brief body sections ----------------------------------------------------
 
-    The bead is canonical, so a missing or unreadable cache yields no options
-    rather than blocking a verdict.
+
+#: The `present-it` full-form sections, in grill order. The dashboard's brief
+#: detail screen renders these seven; the keys are what it addresses them by.
+PRESENT_IT_SECTIONS: tuple[tuple[int, str], ...] = (
+    (1, "what_is_being_decided"),
+    (2, "recommended_answer"),
+    (3, "assumptions_surfaced"),
+    (4, "alternatives_named"),
+    (5, "risks_foregrounded"),
+    (6, "supporting_evidence"),
+    (7, "plan_membership"),
+)
+
+_SECTION_KEYS = dict(PRESENT_IT_SECTIONS)
+
+
+def present_it_label(section_index: int | None, section_key: str | None) -> str | None:
+    """The canonical name of a present-it section, for display.
+
+    Derived from the key rather than kept in a second table, so the two
+    cannot drift into disagreeing about what §3 is called.
     """
+    if section_index is None or not section_key:
+        return None
+    return f"§{section_index} {section_key.replace('_', ' ').capitalize()}"
+
+#: Heading tokens that name a `present-it` section, most specific first: the
+#: first token found in the normalised heading wins. Ordering matters --
+#: "Decision options" is §4, not the §1 its "decision" substring would claim.
+#:
+#: Deliberately absent: "Related", "Affects", "Follow-up". They are common on
+#: live hecke briefs and they are *link lists*, not §7 plan-membership and
+#: gate statements. Rendering them under §7 would put a claim about required
+#: gates on screen that the brief never made, so they stay unmapped.
+_SECTION_TOKENS: tuple[tuple[str, int], ...] = (
+    ("what is being decided", 1),
+    ("what is decided", 1),
+    ("decision option", 4),
+    ("alternative", 4),
+    ("option", 4),
+    ("recommend", 2),
+    ("rationale", 2),
+    ("assumption", 3),
+    ("risk", 5),
+    ("safety", 5),
+    ("supporting evidence", 6),
+    ("evidence", 6),
+    ("plan membership", 7),
+    ("required gate", 7),
+    ("gate", 7),
+    ("blocking", 7),
+    ("blocker", 7),
+    ("decision required", 1),
+    ("decision", 1),
+    ("ruling", 1),
+)
+
+# `## §4 — Options`, `### §1 - What is being decided`, `## Section 4: Options`.
+_EXPLICIT_SECTION = re.compile(r"^(?:§|section\s+|sec\.\s*)(\d+)\b", re.IGNORECASE)
+# ATX headings only. Setext (`===` underlines) does not occur in brief bodies
+# and guessing at it would invent sections rather than find them.
+_HEADING_LINE = re.compile(r"^(?P<hashes>#{1,6})[ \t]+(?P<text>\S.*?)\s*$")
+_FENCE_LINE = re.compile(r"^\s*(?P<fence>`{3,}|~{3,})")
+
+
+def _classify_heading(heading: str) -> tuple[int | None, str | None, str]:
+    """Map a heading to its `present-it` section slot, and say how."""
+    explicit = _EXPLICIT_SECTION.match(heading.strip())
+    if explicit is not None:
+        index = int(explicit.group(1))
+        if index in _SECTION_KEYS:
+            return index, _SECTION_KEYS[index], "explicit"
+    normalized = re.sub(r"[^a-z0-9]+", " ", heading.lower()).strip()
+    for token, index in _SECTION_TOKENS:
+        if token in normalized:
+            return index, _SECTION_KEYS[index], "heading"
+    return None, None, "unmapped"
+
+
+def parse_brief_sections(markdown: str) -> tuple[BriefSection, ...]:
+    """Split a brief body into its markdown sections.
+
+    Never lossy by construction: this reports where sections *are*, and the
+    caller keeps the raw body regardless of what comes back. Fenced code is
+    skipped, so a `# comment` inside a shell block cannot fabricate a section
+    -- which would be the same silent-corruption failure in the other
+    direction.
+    """
+    lines = markdown.splitlines()
+    headings: list[tuple[int, int, str]] = []
+    fence: str | None = None
+    for number, line in enumerate(lines):
+        opened = _FENCE_LINE.match(line)
+        if fence is not None:
+            if opened is not None and opened.group("fence")[0] == fence[0]:
+                fence = None
+            continue
+        if opened is not None:
+            fence = opened.group("fence")
+            continue
+        matched = _HEADING_LINE.match(line)
+        if matched is not None:
+            text = matched.group("text").rstrip("#").strip()
+            if text:
+                headings.append((number, len(matched.group("hashes")), text))
+
+    # A lone leading `#` is the document title, not a section: counting it
+    # would report a section whose body is the entire brief, duplicating
+    # every real section inside it. The text is still in `title` and in the
+    # raw body, so nothing is lost by leaving it out here.
+    if headings and headings[0][1] == 1 and sum(level == 1 for _, level, _ in headings) == 1:
+        headings = headings[1:]
+
+    sections: list[BriefSection] = []
+    for position, (number, level, text) in enumerate(headings):
+        end = len(lines)
+        for later_number, later_level, _ in headings[position + 1 :]:
+            if later_level <= level:
+                end = later_number
+                break
+        index, key, match = _classify_heading(text)
+        sections.append(
+            BriefSection(
+                heading=text,
+                level=level,
+                start_line=number + 1,
+                end_line=end,
+                body="\n".join(lines[number + 1 : end]).strip("\n"),
+                section_index=index,
+                section_key=key,
+                match=match,
+            )
+        )
+    return tuple(sections)
+
+
+def brief_body_report(
+    ctx: MctlContext, brief_id: str, body: str
+) -> tuple[tuple[BriefSection, ...], tuple[Diagnostic, ...]]:
+    """Parse a brief body, reporting *why* when it yields nothing.
+
+    A parser that quietly returns nothing is indistinguishable from a brief
+    that genuinely has no sections, and the caller cannot tell which it got.
+    These diagnostics ride on the record next to the raw body, so the body is
+    always available whatever the parse did.
+    """
+    if not body.strip():
+        return (), (
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MBRF040",
+                "Canonical brief bead carries no description, so it has no body to show.",
+                brief_id=brief_id,
+                data_location=_canonical_bead_location(ctx),
+                policy_ref="B1.5",
+            ),
+        )
+    sections = parse_brief_sections(body)
+    if not sections:
+        return sections, (
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MBRF041",
+                "Brief body has no markdown headings; only its raw text is available.",
+                brief_id=brief_id,
+                data_location=_canonical_bead_location(ctx),
+                detail=f"body_characters={len(body)}",
+            ),
+        )
+    if not any(section.section_index is not None for section in sections):
+        return sections, (
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MBRF042",
+                "No brief body heading maps to a present-it section (§1-§7).",
+                brief_id=brief_id,
+                data_location=_canonical_bead_location(ctx),
+                detail="headings=" + ", ".join(section.heading for section in sections),
+            ),
+        )
+    return sections, ()
+
+
+def brief_body(ctx: MctlContext, brief_id: str, bead: Bead | None = None) -> str:
+    """The brief's body text: the canonical bead description, else the cache.
+
+    B2.4/B2.8 make the bead canonical and the markdown file a cache, so the
+    description wins whenever it exists. The file remains a fallback for
+    briefs written before bodies landed on the bead; it is never allowed to
+    override a description that is present.
+    """
+    if bead is None:
+        bead = _bead_for(ctx, brief_id)
+    description = (bead.description or "") if bead is not None else ""
+    if description.strip():
+        return description
+    return _cached_body(ctx, brief_id)
+
+
+def _cached_body(ctx: MctlContext, brief_id: str) -> str:
     layout = artifact_layout(ctx)
     for directory in (layout.pile, layout.stack):
         path = directory / f"{brief_id}.md"
         if path.is_file():
             try:
-                return parse_decision_options(path.read_text(encoding="utf-8"))
+                return path.read_text(encoding="utf-8")
             except OSError:
-                return ()
-    return ()
+                return ""
+    return ""
+
+
+def _bead_for(ctx: MctlContext, brief_id: str) -> Bead | None:
+    return next((bead for bead in _beads(ctx) if bead.id == brief_id), None)
+
+
+def decision_options(
+    ctx: MctlContext, brief_id: str, body: str | None = None
+) -> tuple[BriefDecisionOption, ...]:
+    """Decision options for a brief, read from its canonical body.
+
+    This used to read `<brief_root>/.pile/<brief_id>.md` only. That path does
+    not resolve on the live rig -- 0 of 25 sampled hecke briefs returned an
+    option -- and the function failed open, so §4 was empty for every real
+    brief and MOPT001 could never fire. The bead description is canonical and
+    present on 62 of 64 open hecke decision beads, so it is the source now;
+    the cache remains a fallback via `brief_body`.
+
+    `body` lets a caller that already read the body pass it in, so resolving
+    options costs no additional `bd` subprocess.
+    """
+    resolved = brief_body(ctx, brief_id) if body is None else body
+    if not resolved.strip():
+        return ()
+    return parse_decision_options(resolved)
 
 def doctor_briefs(
     ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ...] | None = None
