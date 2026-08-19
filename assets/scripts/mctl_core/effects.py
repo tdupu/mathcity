@@ -320,7 +320,9 @@ def plan_adjudication(
     diagnostics = list(_blocking_preconditions(doctor_briefs(ctx, brief_id).diagnostics))
     # Plan §4 MOPT001/MOPT002: a verdict on a multi-option brief has to say
     # which option it is approving, or it records a decision against nothing.
-    offered = decision_options(ctx, brief_id)
+    # `show_brief` already carries the canonical body, so options resolve
+    # from it rather than costing a second `bd list` subprocess.
+    offered = decision_options(ctx, brief_id, observed.body)
     if offered:
         labels = {item.label.upper() for item in offered}
         if option is None and len(offered) > 1:

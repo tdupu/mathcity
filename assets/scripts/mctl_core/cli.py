@@ -14,6 +14,7 @@ from .briefs import (
     brief_options_report,
     doctor_briefs,
     list_briefs,
+    present_it_label,
     show_brief,
     validate_brief,
     validation_scope,
@@ -570,6 +571,7 @@ def _render_brief_payload(payload: dict[str, object]) -> str:
         for key in ("title", "created_at", "canonical_source"):
             if brief.get(key):
                 lines.append(f"  {key}: {brief[key]}")
+        lines.extend(_brief_body_lines(brief))
 
     options = payload.get("options")
     if isinstance(options, list):
@@ -631,6 +633,39 @@ def _render_brief_payload(payload: dict[str, object]) -> str:
         lines.append(f"trace_id: {payload['trace_id']}")
 
     return "\n".join(lines) if lines else "(no output)"
+
+
+def _brief_body_lines(brief: dict[str, object]) -> list[str]:
+    """Summarize the body for a terminal; never dump it.
+
+    A live brief body runs to ~2,400 characters. Printing it into a command
+    whose other output is one line per field would bury every other field,
+    so the human shape is a table of contents: how big the body is, which
+    sections it has, and where each starts. `--json` is the full text.
+    """
+    if "body" not in brief:
+        return []
+    body = str(brief.get("body") or "")
+    sections = brief.get("sections")
+    sections = sections if isinstance(sections, list) else []
+    lines = [
+        f"  body: (empty)"
+        if not body.strip()
+        else f"  body: {len(body)} chars, {len(body.splitlines())} lines"
+    ]
+    lines.append(f"  sections: {len(sections)}")
+    for section in sections:
+        # Mapped sections show the canonical present-it name, so the table of
+        # contents reads the same across briefs that word their headings
+        # differently. Unmapped ones show the brief's own heading, since that
+        # is the only name they have. Either way `--json` carries both.
+        label = present_it_label(section.get("section_index"), section.get("section_key"))
+        lines.append(
+            f"    L{section.get('start_line')}  {label or section.get('heading', '')}"
+        )
+    for diagnostic in brief.get("body_diagnostics") or []:
+        lines.append(f"  {_diagnostic_line(diagnostic)}")
+    return lines
 
 
 def _brief_line(brief: dict[str, object]) -> str:

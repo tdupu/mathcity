@@ -99,10 +99,19 @@ def target_fingerprint(brief: Mapping[str, Any] | None) -> str:
     readings are unverifiable, and letting an unverifiable field invalidate
     previews would make the guard fire on noise. Real artifact changes still
     land in the plan digest, which is the axis that can see them honestly.
+
+    The digest redacts `VOLATILE_KEYS` for the same reason the plan digest
+    does. `briefs_show` now returns the brief body and that body's parse
+    diagnostics, and a diagnostic carries a fresh `trace_id` per call -- so a
+    raw digest would differ between two identical reads and every preview
+    would be born stale. The body itself still counts: a brief whose evidence
+    changed between preview and confirm must invalidate the preview.
     """
     if brief is None:
-        return _digest(None)
-    return _digest({key: value for key, value in brief.items() if key != "redundant_artifacts"})
+        return stable_digest(None)
+    return stable_digest(
+        {key: value for key, value in brief.items() if key != "redundant_artifacts"}
+    )
 
 
 @dataclass(frozen=True)
