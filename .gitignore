@@ -20,3 +20,6 @@ CONTEXT.md
 .agents/
 .gc/
 .gc-builds/
+
+# Local MCP client registration — session-specific, not shared config.
+.mcp.json
