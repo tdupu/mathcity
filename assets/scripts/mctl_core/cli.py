@@ -422,6 +422,21 @@ def _city_not_active_diagnostic(context: MctlContext) -> Diagnostic:
     )
 
 
+def _render_liveness(context: MctlContext) -> str:
+    """One line on the data plane.
+
+    This is the field an operator wants during an outage, so it belongs in the
+    human view -- not only under --json, which is the shape they are least
+    likely to be using while something is broken.
+    """
+    if context.city_active is None:
+        return "embedded Dolt (rig does not use a Dolt server)"
+    if context.city_active:
+        return f"reachable at {context.city_endpoint}"
+    endpoint = context.city_endpoint or "the configured endpoint"
+    return f"NOT REACHABLE at {endpoint} — bead commands will fail closed"
+
+
 def _render_explain(context: MctlContext) -> str:
     lines = [
         f"Trace ID: {context.trace_id}",
@@ -432,6 +447,7 @@ def _render_explain(context: MctlContext) -> str:
         f"Source checkout: {context.source_checkout}",
         f"paths.toml: {context.paths_toml}",
         f"gates.toml: {context.gates_toml}",
+        f"Data plane: {_render_liveness(context)}",
     ]
     for warning in context.warnings:
         lines.append(render_diagnostic(warning))

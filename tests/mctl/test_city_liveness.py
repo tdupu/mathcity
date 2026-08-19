@@ -130,3 +130,32 @@ def test_embedded_rig_without_server_config_is_not_probed(tmp_path: Path):
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["city_active"] is None
+
+
+def test_human_context_output_shows_liveness(tmp_path: Path):
+    """The field exists to diagnose a broken city, so the human view needs it.
+
+    Hiding city_active behind --json puts the one fact a human wants during an
+    outage in the output shape they are least likely to be using.
+    """
+    city_root, _rig_root = server_mode_runtime(tmp_path, closed_port())
+
+    result, _elapsed = run_mctl(
+        "context", "--city", str(city_root), "--rig", "mathcity", cwd=REPO_ROOT
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "city" in result.stdout.lower()
+    assert "not reachable" in result.stdout.lower() or "inactive" in result.stdout.lower()
+
+
+def test_human_context_output_shows_a_healthy_data_plane(tmp_path: Path):
+    city_root, rig_root = server_mode_runtime(tmp_path, None)
+    (rig_root / ".beads" / "config.yaml").write_text("issue_prefix: mc\n", encoding="utf-8")
+
+    result, _elapsed = run_mctl(
+        "context", "--city", str(city_root), "--rig", "mathcity", cwd=REPO_ROOT
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "embedded" in result.stdout.lower() or "not use a dolt server" in result.stdout.lower()
