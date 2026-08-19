@@ -53,6 +53,14 @@ def main(argv: list[str] | None = None) -> int:
         from .mcp_server import serve_from_args
 
         return serve_from_args(args)
+    if args.command == "dashboard":
+        # Same reasoning as `mcp`: the dashboard resolves a fresh context per
+        # request through its own MCP client, so a context resolved here would
+        # be stale before the first page render. Imported lazily so no ordinary
+        # CLI invocation pays for http.server.
+        from mctl_dashboard.server import serve_from_args as serve_dashboard
+
+        return serve_dashboard(args)
     try:
         context = resolve_context(
             Path.cwd(),
@@ -119,6 +127,7 @@ def _build_parser() -> argparse.ArgumentParser:
     trace_show.add_argument("trace_id")
     _add_runtime_arguments(trace_show)
     _add_mcp_parser(commands)
+    _add_dashboard_parser(commands)
     work = commands.add_parser("work", help="inspect and dispatch brief-backed work")
     work_commands = work.add_subparsers(dest="work_command", required=True)
     _add_work_ready_parser(work_commands)
@@ -147,6 +156,23 @@ def _add_mcp_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser
         default=None,
         help="internal exposes the full surface; external is gated (default)",
     )
+
+
+def _add_dashboard_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Expose the Slice 8 operator dashboard through the same entry point.
+
+    The dashboard is a client of the MCP surface, not a third adapter over the
+    core: it launches its own `mctl mcp serve` subprocess. `--host` defaults to
+    loopback and is not given an all-interfaces default, because the client
+    class it must run as (`internal`) sees the full mutating surface.
+    """
+    parser = commands.add_parser("dashboard", help="serve the operator dashboard over HTTP")
+    subcommands = parser.add_subparsers(dest="dashboard_command", required=True)
+    serve = subcommands.add_parser("serve", help="serve the dashboard on localhost")
+    serve.add_argument("--city", help="registered Gas City root the dashboard operates on")
+    serve.add_argument("--rig", help="registered rig identifier the dashboard operates on")
+    serve.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
+    serve.add_argument("--port", type=int, default=8471, help="bind port (default 8471)")
 
 
 def _add_runtime_arguments(parser: argparse.ArgumentParser) -> None:
