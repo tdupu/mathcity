@@ -251,4 +251,77 @@ $hits"
 done
 echo "ok: no skill branches on MBRF021 / MBRF004 / MBRF005"
 
+echo "=== 10. the primes teach the MCP surface and degrade to bin/mctl ==="
+
+# Slice 8 (#60 D1): MCP is the target surface, bin/mctl is the bridge. A PRIME is
+# how a fresh session orients, so a prime that assumes the MCP is present starts
+# the session blind -- external clients see ZERO tools by default
+# (mcp_server.py: client_class defaults to "external"), and the .mcp.json that
+# would change that is uncommitted and inert until a session restart.
+#
+# These checks enforce the honest-degradation contract, not prose quality:
+# every prime names the surface, names the fallback, and no skill tries to
+# detect the surface from a shell it cannot observe.
+MCP_PRIMED='
+skills/mayor-math-prime/SKILL.md
+skills/mayor-math/SKILL.md
+skills/mayor-math-handoff/SKILL.md
+skills/prime-clerk/SKILL.md
+'
+
+FRAGMENT="$PACK/template-fragments/mctl-entry-point.md"
+[ -f "$FRAGMENT" ] || fail "missing canonical call-site fragment: $FRAGMENT"
+
+# The fragment is the single source for the tool<->command mapping. Skills point
+# at it instead of restating 16 rows each; if it stops carrying the mapping, the
+# pointers in the primes become dangling.
+grep -q 'mcp__mctl__briefs_list' "$FRAGMENT" \
+  || fail "the canonical fragment does not carry the MCP tool<->CLI mapping
+(the primes delegate the tool list to it; it cannot be the source and not say so)"
+grep -qi 'client_class\|external' "$FRAGMENT" \
+  || fail "the canonical fragment does not explain the rollout gate
+(a caller that does not know tools are hidden by default reads absence as breakage)"
+
+printf '%s\n' "$MCP_PRIMED" | while read -r rel; do
+  [ -n "$rel" ] || continue
+  f="$PACK/$rel"
+  [ -f "$f" ] || fail "prime does not exist: $rel"
+
+  # 10a -- it names the typed surface at all.
+  grep -q 'mcp__mctl__' "$f" \
+    || fail "$rel never names the MCP surface (mcp__mctl__*)
+It is a prime: it is how a session learns what control surface exists."
+
+  # 10b -- it names the fallback. This is the load-bearing one: a prime that
+  # reaches for a tool with no CLI path behind it strands every session that
+  # does not have the MCP registered, which today is nearly all of them.
+  grep -q 'bin/mctl' "$f" \
+    || fail "$rel names the MCP but never names bin/mctl
+Prefer-MCP is only safe when the fallback is stated in the same skill."
+
+  # 10c -- it says how to tell which surface is available, and the answer must
+  # be "look at your own tool list", never "call it and see".
+  grep -qi 'tool list' "$f" \
+    || fail "$rel does not tell the session how to detect the surface
+(it must inspect its own tool list; there is no shell probe for this)"
+
+  # 10d -- absence must be stated as normal. A prime that presents a missing
+  # MCP as an error condition produces exactly the blind start this guards.
+  grep -qiE 'absent|absence|not connected' "$f" \
+    || fail "$rel does not state what happens when the MCP is absent
+Absence is the DEFAULT (external clients see zero tools), not an error."
+done
+echo "ok: every prime teaches the MCP surface, its detection, and the bin/mctl fallback"
+
+# 10e -- the tool list is not observable from the shell, so a shell test against
+# mcp__mctl__ can only ever take the wrong branch. It is also the shape that
+# turns an absent optional surface into a dead prime (`... || exit 1`).
+for d in $SEARCH_DIRS; do
+  hits=$(grep -rnE '(if |case |grep -q|test |\[ |\[\[ ).*mcp__mctl__' "$d" || true)
+  [ -z "$hits" ] || fail "a skill branches in SHELL on the MCP tool surface:
+$hits
+Detection is the agent reading its own tool list, not a shell probe."
+done
+echo "ok: no skill tries to detect the MCP surface from the shell"
+
 echo "ALL MCTL SHIM CALL-SITE CHECKS PASSED"

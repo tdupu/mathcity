@@ -25,6 +25,11 @@ Minimum checks:
 - Every command cited (`mctl work dispatch`, `gc sling`, `git push`, etc.)
   actually exists in the city surface (`bin/mctl --help`, `gc --help`,
   `git --help`).
+- Every `mcp__mctl__*` tool cited is one of the 16 real tools
+  (`template-fragments/mctl-entry-point.md` has the list). Verify against that
+  list, **not** against your current tool list: the MCP is absent from most
+  sessions by design, so "not in my tools right now" does not mean the tool
+  does not exist, and the next session may well have it.
 - No mathematical claims appear that were not verified at source this session.
 - No file paths are cited that do not exist on disk (`ls <path>`).
 
@@ -95,7 +100,13 @@ before 5 evaluations exist.
 
 `city_state` and `charge_for_next` are read by a session that has no memory of
 yours. "brief stack looking healthy" is not a handoff; a count the next Mayor
-can re-derive is. Take the numbers from the canonical bead store, per rig:
+can re-derive is. Take the numbers from the canonical bead store, per rig.
+
+**Use whichever surface this session has.** `mcp__mctl__*` in your tool list →
+`mcp__mctl__briefs_list` and `mcp__mctl__work_ready`. Otherwise the CLI block
+below. The numbers are identical either way, so the handoff never depends on
+which front door you had — and a missing MCP is never a reason to hand off
+without counts.
 
 ```bash
 CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
@@ -126,8 +137,14 @@ IN-FLIGHT-TRACES: <MCTL-TRACE ids for mutations you started but did not confirm>
 **`IN-FLIGHT-TRACES` is the load-bearing one.** Every `mctl` mutation this
 session performed — a verdict, a deposit, a dispatch — reported an
 `MCTL-TRACE` id. If you handed off before confirming one landed, name it here:
-the next Mayor runs `"$MCTL" trace show <id>` and sees exactly what was planned
-versus what was applied. A half-applied mutation you did not name is invisible.
+the next Mayor runs `"$MCTL" trace show <id>` — or `mcp__mctl__trace_show`, when
+that session has the MCP — and sees exactly what was planned versus what was
+applied. A half-applied mutation you did not name is invisible.
+
+Record the bare trace ids, never the surface you happened to use to produce
+them. Trace ids are core-level and resolve identically from the tool and the
+CLI; a handoff that instructs the next Mayor to "run the tool" strands a
+session that has no tools.
 
 Two limits to state honestly rather than paper over:
 
