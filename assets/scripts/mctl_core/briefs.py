@@ -22,6 +22,7 @@ from .redundant_state import (
     orphan_markdown_cache_ids,
     scan_artifacts,
 )
+from .verdicts import read_verdict
 
 
 @dataclass(frozen=True)
@@ -943,6 +944,20 @@ def _matches(record: BriefRecord, filters: BriefFilters) -> bool:
 
 
 def _decision_state(bead: Bead) -> str:
+    """adjudicated / deferred / pending / malformed for one decision bead.
+
+    `malformed` still means exactly "closed, and no verdict could be read".
+    What changed in Slice 2 is what can be read: a verdict recorded only in
+    `close_reason` or in the canonical `notes` block now resolves, so
+    `malformed` no longer swallows briefs that were adjudicated perfectly well
+    and simply written to a field nothing looked at.
+
+    It stays a deliberately narrow judgement. A `close_reason` that supersedes,
+    reports execution, or withdraws the brief is *not* read as a verdict, so
+    those beads stay `malformed` -- correctly, since no verdict was ever
+    recorded on them. `verdicts.read_verdict_reading` carries the code saying
+    which of those it was.
+    """
     status = bead.status.lower()
     if status in {"closed", "done"}:
         return "adjudicated" if _has_verdict(bead) else "malformed"
@@ -956,17 +971,22 @@ def _has_verdict(bead: Bead) -> bool:
 
 
 def _verdict(bead: Bead) -> str | None:
-    for key in ("verdict", "decision", "recorded_verdict"):
-        value = bead.raw.get(key)
-        if isinstance(value, str) and value:
-            return value
-    metadata = bead.raw.get("metadata")
-    if isinstance(metadata, dict):
-        for key in ("verdict", "decision", "recorded_verdict"):
-            value = metadata.get(key)
-            if isinstance(value, str) and value:
-                return value
-    return None
+    """The verdict text this bead carries, or None.
+
+    Delegates to `verdicts.read_verdict`, which reads `close_reason` -- the
+    field `bd close` actually writes, non-empty on 138 of the 139 closed
+    decision beads in the live city and previously never consulted -- and the
+    canonical `VERDICT: ... | AUTHORIZER: ...` block in `notes`, in addition to
+    the typed fields this function used to check on its own.
+
+    It returns a plain string because callers compare it to a cached verdict
+    string. Use `verdicts.read_verdict` directly for the `source` and
+    `confidence` a front end needs to show provenance, and
+    `verdicts.read_verdict_reading` for the typed reason a brief has no
+    readable verdict.
+    """
+    verdict = read_verdict(bead)
+    return verdict.text if verdict is not None else None
 
 
 def _approved_for_dispatch(bead: Bead) -> bool:

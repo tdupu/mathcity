@@ -143,6 +143,42 @@ meaning = "Resolved brief root does not exist; creation refuses to build a shado
 policy_ref = "B2.8"
 module = "effects.py"
 
+# MBRF050-MBRF054 say *why* a closed brief has no readable verdict. `bd close`
+# writes free text into `close_reason`, and across the live corpus that text is
+# five different things; only one of them is a verdict. Reading the other four
+# as verdicts would be the MBRF021 mass-false-positive failure again, so the
+# adapter refuses and names the shape instead.
+
+[MBRF050]
+severity = "WARN"
+meaning = "Closed brief's close_reason points at a successor bead; the decision was recorded there, not here."
+policy_ref = "B2.2"
+module = "verdicts.py"
+
+[MBRF051]
+severity = "WARN"
+meaning = "Closed brief's close_reason reports work carried out against a verdict given earlier and elsewhere."
+policy_ref = "B2.2"
+module = "verdicts.py"
+
+[MBRF052]
+severity = "WARN"
+meaning = "Closed brief was withdrawn, killed, or closed as moot; no verdict was given on it."
+policy_ref = "B2.2"
+module = "verdicts.py"
+
+[MBRF053]
+severity = "ERROR"
+meaning = "Closed brief carries no readable verdict in any known field."
+policy_ref = "B2.2"
+module = "verdicts.py"
+
+[MBRF054]
+severity = "INFO"
+meaning = "Decision bead is an authorize-git-operation receipt, not a brief; it belongs outside the brief population."
+policy_ref = "B2.1"
+module = "verdicts.py"
+
 [MCTL_BEAD_UPDATE_RACE_LOST]
 severity = "FATAL"
 meaning = "Another actor changed the bead between plan and apply; the guarded write was skipped."
