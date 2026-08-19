@@ -24,8 +24,24 @@ mistake one layer up. Rigs are read concurrently and the whole fan-out is
 bounded by a deadline. Measured on the live 16-rig city, 200 briefs: 3.94s in
 series, ~1.4s here.
 
+**"Every rig" includes the city's own store.** The fan-out iterates
+`CityScope.rigs`, which `context.city_rig_entries` builds from `city.toml`
+*plus* the reserved `hq` entry for `<city-root>/.beads`. That store held 80 of
+the live city's 280 decision beads and was invisible here for as long as
+"registered" meant "listed in `city.toml`" -- so a city-wide read reported 200
+and looked complete, which is the exact failure the degraded-entry rule above
+exists to prevent, arriving through enumeration instead of through error.
+Membership stays configuration-driven for a reason stated in full there: the
+city root holds several `.beads` directories that are not stores and read HQ's
+beads when walked, so a directory-driven fan-out would have reported the same
+80 beads six times.
+
 Cross-rig *mutation* stays forbidden (plan Global Constraints). Nothing in this
-module writes, and `for_each_rig` is only ever handed read functions.
+module writes, and `for_each_rig` is only ever handed read functions. The HQ
+store changes nothing there: it is addressed by the same per-rig
+`resolve_context`, so a brief in it is mutable only through `--rig hq`, whose
+`rig_root` is the city root and whose writes therefore land in that store and
+no other.
 """
 from __future__ import annotations
 

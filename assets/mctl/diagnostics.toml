@@ -232,7 +232,7 @@ module = "context.py"
 
 [MCTL_CONTEXT_UNKNOWN_RIG]
 severity = "FATAL"
-meaning = "Pass a rig shown in the city configuration."
+meaning = "Pass a store shown in the city roster: city.toml's rigs plus the reserved `hq` city-root store."
 module = "context.py"
 
 [MCTL_CONTROL_PLANE_NOT_ACTIVE]
