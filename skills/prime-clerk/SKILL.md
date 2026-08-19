@@ -11,6 +11,16 @@ verdicts. You are a strict intermediary — you do not work on tasks, write
 code, or adjudicate anything yourself. The human adjudicator decides; you present, record,
 and dispatch.
 
+> **Status: maintained, not developed.** The briefs dashboard designed in
+> `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/` is
+> explicitly clerk-facing and covers this skill's whole mechanism — pile, stack,
+> ranking, `present-it` full and compact forms, dry-run effect plan, two-step
+> submit. When it ships, the human adjudicates directly and the presenting
+> intermediary is largely redundant. It has **not** shipped (the plan is a
+> design mockup), and adjudication-by-conversation is still supported, so this
+> skill stays accurate and wired. Do not invest in expanding it; fix it when it
+> is wrong, and prefer putting new clerk capability into the dashboard.
+
 ## STEP 0 — Channel to the mayor (mandatory, before any brief work)
 
 You WILL have questions. Set up the agent-inbox channel first. This uses the
@@ -62,11 +72,31 @@ rules:
 ## The control surface — `mctl`, wrapped by three skills
 
 Your brief-cycle runs through three skills, and all three now sit on one typed
-CLI, `bin/mctl`. Do not improvise any other presentation, recording, or dispatch
-channel, and do not copy a `bd` or `gc sling` command out of a brief body.
+core. Do not improvise any other presentation, recording, or dispatch channel,
+and do not copy a `bd` or `gc sling` command out of a brief body.
 
-Resolve the entry point once at session start (see
-`template-fragments/mctl-entry-point.md`):
+**That core has two front doors** (#60 D1: MCP is the target, `bin/mctl` is the
+bridge — the clerk gets the same treatment and the same tools as the Mayor).
+Check your own tool list once, at session start:
+
+- `mcp__mctl__*` present → prefer the typed tools: `mcp__mctl__briefs_list`,
+  `mcp__mctl__briefs_show`, `mcp__mctl__briefs_doctor` for reading the queue,
+  `mcp__mctl__trace_show` for confirming a write landed.
+- absent → use `bin/mctl` below. External clients see zero tools by default, so
+  absence is the designed state and costs you nothing; every instruction in this
+  skill works unchanged. Never call a tool to test whether it exists, and never
+  hold up a session over a missing MCP.
+
+Mutations are a special case worth knowing: the four mutating tools
+(`briefs_adjudicate`, `briefs_defer`, `briefs_create`, `work_dispatch`) are
+**never** exposed to external clients at all. In practice you record verdicts
+through `adjudicate-brief` and dispatch through `mathcity.work` either way —
+those skills own the write path, and which front door they use is their
+business, not yours. Keep the `MCTL-TRACE` ids they report.
+
+Resolve the CLI entry point once at session start (see
+`template-fragments/mctl-entry-point.md` for the full tool↔command mapping, the
+rollout gate, and the degradation rule):
 
 ```bash
 CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
@@ -240,8 +270,12 @@ shared rig-level root, so two concurrent approvals on one rig can collide
 - **`mathcity.work`** — dispatch an approved brief through
   `mctl work dispatch`. Run immediately after every APPROVE verdict; mctl
   verifies the claim itself.
-- **`bin/mctl`** — the CLI underneath all of the above. Useful directly for
-  orientation: `briefs list --status pending`, `briefs show <id>`,
+- **`mcp__mctl__*`** — the same control surface as typed tools, when this
+  session has them. Read-only tools (`briefs_list`, `briefs_show`,
+  `briefs_doctor`, `work_ready`, `trace_show`) are the ones a clerk reaches for;
+  the mutating four stay internal-only. Absent by default — check, do not probe.
+- **`bin/mctl`** — the CLI underneath all of the above, always present and never
+  wrong. Useful directly for orientation: `briefs list --status pending`, `briefs show <id>`,
   `briefs doctor`, `work ready`, `trace show <id>`. Reads are always safe;
   mutations fail closed.
 - **`communicate-with-other-agent`** — V2 daily-folder inbox: send messages

@@ -156,7 +156,22 @@ availability and violates [[mayor-no-direct-grilling]]). Keep
 /check-briefs. List the briefs **ready to adjudicate** for USER in short form
 (one line each: `<brief-id> — the decision`).
 
-Read them from the **canonical bead store**, not from a cache file:
+Read them from the **canonical bead store**, not from a cache file.
+
+**Surface check (one look, no command).** Scan your own tool list for
+`mcp__mctl__*`:
+
+- **present** → call `mcp__mctl__briefs_list` with `status: "pending"` and
+  `all_rigs: true`. Typed arguments, no shell, no cwd sensitivity.
+- **absent** → the MCP is not connected in this session. That is the normal
+  default (`mcp_server.py` shows external clients zero tools), **not** a
+  failure. Use the `bin/mctl` block below.
+
+Never call a tool to find out whether it exists, and never stall priming over a
+missing MCP — see `template-fragments/mctl-entry-point.md`, "The degradation
+rule". State in one line which surface you used, then move on.
+
+The CLI path:
 
 ```bash
 CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
@@ -184,16 +199,26 @@ actively changing how its non-terminal statuses are classified. A prime step
 that reported `status == "ready"` rows from it was reporting the wrong queue,
 and a stale one.
 
-Run it once per rig; `--all-rigs` was specified in Slice 2 and is not
-implemented yet, so there is no city-wide call — do not loop over rigs to fake
-one. `gt-*` briefs are unreachable through `--rig` at all (the city-root HQ
-store is not a registered rig, `MCTL_CONTEXT_UNKNOWN_RIG`).
+**`--all-rigs` is implemented** (`mctl_core/city.py`) — pass it instead of
+`--rig` for the city-wide answer, and never loop over rigs to fake one. It
+exits 1 when any rig was unreadable while still printing the full payload, so
+branch on the payload and name every degraded rig rather than reporting a
+partial queue as the city's. `gt-*` briefs stay unreachable either way (the
+city-root HQ store is not a registered rig, `MCTL_CONTEXT_UNKNOWN_RIG`) — say
+so when you report the count.
 
 Do not adjudicate them yourself — surface them so USER can drain the pile.
 
 ## 6. Session toolkit
 
-- **`bin/mctl`** — the typed MathCity control CLI under the brief/work skills.
+- **`mcp__mctl__*` (16 typed tools)** — the target control surface: brief
+  reads (`briefs_list`, `briefs_show`, `briefs_doctor`), work reads
+  (`work_ready`, `work_status`), trace reads (`trace_show`), and four gated
+  mutations. Use them **when they appear in your tool list**; they are absent by
+  default and their absence is not an error. Full tool↔CLI mapping and the
+  rollout gate: `template-fragments/mctl-entry-point.md`.
+- **`bin/mctl`** — the same core behind a CLI: the bridge, always present, never
+  wrong, and the fallback whenever the MCP is not connected.
   Direct reads are always safe and are the fastest orientation available:
   `briefs list --status pending`, `briefs doctor`, `work ready`,
   `trace show <id>`. Mutations fail closed, and their refusals

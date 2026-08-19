@@ -30,6 +30,28 @@ root, so concurrent FULL_CONTINUE dispatches in one rig share a stage-artifact
 root (gsp-1bmxuz). Serialize them; the note in `skills/work/SKILL.md` has the
 detail.
 
+### Two front doors onto the same core
+
+Per #60 D1, **MCP is the target surface and `bin/mctl` is the bridge.** Check
+your own tool list once at session start:
+
+- `mcp__mctl__*` present → prefer the typed tools (`mcp__mctl__work_ready`,
+  `mcp__mctl__work_status`, `mcp__mctl__briefs_list`). Schema-validated
+  arguments, no shell quoting, no cwd sensitivity.
+- absent → use the CLI block below. External clients see zero tools by default,
+  so absence is the designed state, not breakage, and nothing about Mayor
+  operation depends on it.
+
+Either way the core, the diagnostics, and the trace ids are identical; the tool
+names mirror the commands one-for-one. See
+`template-fragments/mctl-entry-point.md` for the full mapping, the rollout
+gate, and the degradation rule.
+
+**What does NOT move to a tool.** Rules 0–4 below, and every dispatch judgment:
+whether a task is worth slinging, which rig owns it, how to sequence a convoy,
+when to escalate. Tools answer *what is dispatchable*; the Mayor decides *what
+to dispatch*. A judgment converted to a tool call is a judgment lost.
+
 ```bash
 CITY_ROOT="${CITY_ROOT:-$HOME/gt}"
 
@@ -57,8 +79,10 @@ prompt lore is exactly the duplicate control surface this replaced.
 - `gt-*` beads are unreachable through `--rig` (the city-root HQ store is not a
   registered rig; `MCTL_CONTEXT_UNKNOWN_RIG`). Rule 3 below already says gt HQ
   has no worker fleet — this is the same boundary seen from the CLI.
-- `--all-rigs` was specified in Slice 2 and is **not implemented**. `work ready`
-  answers one rig at a time; do not loop over rigs to fake a city-wide view.
+- `--all-rigs` **is implemented** for brief reads (`mctl_core/city.py`), so the
+  city-wide brief queue is one call. `work ready` still answers one rig at a
+  time — say which rig a count came from rather than presenting it as the
+  city's, and do not loop over rigs to fake a city-wide view.
 
 **Never branch on `MBRF021` / `MBRF004` / `MBRF005`** — all three are
 untrustworthy signal today, and `MBRF004` legitimately refuses dispatch on most

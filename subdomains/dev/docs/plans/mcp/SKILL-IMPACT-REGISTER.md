@@ -733,3 +733,160 @@ change.
 | `hourly-check` / `city-status` reporting both counts | needs `--all-rigs` for a city-wide number | Slice 2's `--all-rigs` |
 | **`mctl work dispatch` per-bead `artifact_root`** | core defect found while wiring; recreates gsp-1bmxuz inside the typed command | a `mctl_core/work.py` fix — **highest-value follow-up here** |
 | `adjudicate-brief` step 2b (legacy decisions-track sync) | `mctl` models neither the file nor the manifest; deleting it re-opens #18 | #38 |
+
+---
+
+# Final Dispositions — Slice 8 (2026-08-19): the primes get the MCP surface
+
+Slice 7 wired thirteen skills to `bin/mctl`. It did **not** mention the MCP
+anywhere: measured at `920487c`, `mcp` appeared **zero** times across every
+skill in the pack, including the `check-briefs` pilot. Slice 8 closes that gap
+for the four skills that *orient a session* — the primes — per issue #60 D1
+("MCP is the target; `bin/mctl` is the bridge") and D3 ("the Mayor gets tools
+for everything mechanical... the clerk gets the same treatment and probably the
+same tools").
+
+## Why the primes specifically
+
+A prime is how a fresh session learns what exists. Every other wired skill is
+invoked by someone who already knows what they are doing; a prime is read by an
+agent that knows nothing yet. That makes it the highest-leverage place to teach
+the surface — **and the most dangerous place to get the failure mode wrong.**
+
+## The honest-degradation contract (the crux of this slice)
+
+The rollout gate in `mctl_core/mcp_server.py` means the tools are usually
+**absent**: `client_class` defaults to `external`, an external client sees an
+empty tool list until `MCTL_MCP_ENABLE_EXTERNAL_TOOLS=1`, and the four mutating
+tools carry `external_ready=False` so they are never externally visible at all.
+The `.mcp.json` at the repo root that would register the server as `internal` is
+**uncommitted, untracked, inert until a session restart, and undecided** — this
+slice does not commit it and nothing here depends on it.
+
+So the contract every wired prime now states:
+
+| | |
+| --- | --- |
+| **Detect** | read your **own tool list** for `mcp__mctl__*`. It is a passive observation with no failure mode. |
+| **Never probe** | do not call a tool to discover whether it exists — invoking an unregistered tool is an error, and a detection step whose failure mode is an error is not a detection step. There is also no shell command that reports the session's tool list, and a `.mcp.json` on disk proves nothing, since it is inert until the session that reads it starts. |
+| **Prefer** | tools present → typed tool call. |
+| **Fall back** | tools absent → the `bin/mctl` block. Absence is the **designed default**, not breakage. |
+| **Never block** | no prime may stall, abort, or hard-fail because the MCP is missing. A prime that hard-fails on an absent optional surface is strictly worse than one that never mentioned it: the session starts blind. |
+
+## Where the doctrine lives
+
+In `template-fragments/mctl-entry-point.md`, the canonical call-site source
+already referenced by ten skills — not copied into four files. It gained the
+16-row tool↔command mapping, the rollout-gate explanation, the detection rule,
+and the degradation rule. The primes point at it and state the surface choice in
+their own terms. The other nine wired skills inherit the doctrine for free.
+
+## Dispositions
+
+| Skill | Before Slice 8 | Disposition | MCP surface taught | Degradation | Verification |
+| --- | --- | --- | --- | --- | --- |
+| `mayor-math-prime` — `skills/mayor-math-prime/SKILL.md` | §5 read the pending queue through `bin/mctl` only; §6 toolkit named no typed surface | `wrap-with-mctl` | §5 surface check before the read (`mcp__mctl__briefs_list` with `status`/`all_rigs`); §6 lists the 16 tools by class | explicit: "absent → normal default, use the CLI block", one line stating which surface was used | `tests/mctl-shim-callsite/smoke_test.sh` parts 4, 10 |
+| `mayor-math` — `skills/mayor-math/SKILL.md` | dispatch doctrine on `bin/mctl` | `wrap-with-mctl` | new "Two front doors onto the same core" ahead of the `work ready` block | explicit, plus a **judgment boundary**: Rules 0–4 and every dispatch decision stay prose | `tests/mctl-shim-callsite/smoke_test.sh` parts 4, 10 |
+| `mayor-math-handoff` — `skills/mayor-math-handoff/SKILL.md` | §0c captured counts through `bin/mctl` | `wrap-with-mctl` | §0c takes counts from either surface; §0 check-zero gains a rule for verifying cited tool names | counts are identical either way, so the handoff never depends on the front door; trace ids recorded **bare**, never surface-qualified | `tests/mctl-shim-callsite/smoke_test.sh` parts 4, 10 |
+| `prime-clerk` — `skills/prime-clerk/SKILL.md` | control-surface section on `bin/mctl` | `wrap-with-mctl` (**maintained, not developed** — see below) | read-only tools named; states that the four mutating tools are never externally visible and that the write path stays inside `adjudicate-brief` / `mathcity.work` regardless | explicit; "every instruction in this skill works unchanged" without the MCP | `tests/mctl-shim-callsite/smoke_test.sh` parts 4, 10 |
+
+## What was deliberately left as judgment (#60 D3)
+
+D3 converts *mechanism*, not the Mayor. Left as prose on purpose:
+
+- **`mayor-math` Rules 0–4** — fork-vs-sling, rig-scoped coordinator, convoy
+  requirement, gt-HQ fleet limits, rig-prefix routing. These are decision tables
+  a human or model applies with context; none is determined by its arguments.
+- **The dispatch decision itself.** `work ready` answers *what is dispatchable*;
+  the Mayor decides *what to dispatch*, in what order, and when to escalate.
+  The skill now says so in as many words: "A judgment converted to a tool call
+  is a judgment lost."
+- **`mayor-math-prime` §§0–4** — which docs to read, the ~30KB orientation
+  budget, the consistency guard between PROMPT and catalog, goal-setting.
+  Reading and weighing is the whole job.
+- **`mayor-math-handoff` §0b** — the session self-assessment, objective
+  evaluation, and drafting of next-session objectives. Pure introspection; two
+  runs *should* differ, which is the #60 D2 test read in reverse.
+- **`prime-clerk`'s role boundary** — strict intermediary, never adjudicates.
+  A rule about who decides cannot be a tool.
+
+## `MBRF004` is an expectation, not a bug
+
+Unchanged from Slice 7 and restated because a prime sets expectations for a
+whole session: `MBRF004` is an `ERROR`, `effects.py::_blocking_preconditions`
+refuses any mutation carrying one, and it fires on **88 of 114 pending briefs**.
+A primed session **will** meet refusals across most of the live queue. That is
+the machinery working. Report the diagnostic verbatim; never route around it;
+never branch on it (`tests/mctl-shim-callsite/smoke_test.sh` part 9 enforces the
+last clause for `MBRF021` / `MBRF004` / `MBRF005` alike).
+
+## Corrected while wiring: the stale `--all-rigs` claim
+
+`template-fragments/mctl-entry-point.md`, `mayor-math-prime` §5, and
+`mayor-math` each asserted that `--all-rigs` "was specified in Slice 2 and is
+**not implemented**", and instructed callers to make single-rig calls. That is
+false as of `920487c`: `mctl_core/city.py` implements it and `check-briefs` step
+3 is built on it. The claim was load-bearing in exactly the wrong direction — it
+told a priming Mayor to report one rig's count where a city-wide one was
+available, or to invent the per-rig loop the same paragraph forbade. All three
+now describe the implemented behavior, including the payload-not-exit-code rule
+and the requirement to name degraded rigs. `work ready` remains genuinely
+single-rig, and `mayor-math` now says only that.
+
+## `prime-clerk`: keep, but do not invest
+
+The owner called it "sort of deprecated". That is close to right, and the
+register records the reasoning rather than a polish job:
+
+- **Superseded in mechanism.** The dashboard designed in
+  `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/` is
+  described in its own README as "a clerk-facing dashboard for adjudicating
+  MathCity briefs", and covers this skill's entire loop: pile and stack views,
+  `unlock_count` ranking, the `present-it` full and compact forms with
+  Decision-at-Top, a dry-run effect plan, and a two-step submit. When a human
+  adjudicates directly from that surface, an agent whose job is reading briefs
+  aloud and typing verdicts back is largely redundant.
+- **Not yet superseded in fact.** The dashboard is a design mockup
+  (`Briefs-Dashboard.dc.html` + README), not shipped code, and
+  adjudication-by-conversation is still how verdicts get recorded today.
+- **Two parts are not superseded at all** and would have to move somewhere if
+  the skill were retired: STEP 0, the mandatory agent-inbox channel to the Mayor
+  (a dashboard does not do agent-to-agent messaging), and the one-bead-model
+  role boundary that keeps the clerk from adjudicating on the human's behalf.
+
+**Verdict: keep it wired and accurate; do not expand it.** New clerk capability
+belongs in the dashboard. The skill now carries a `Status: maintained, not
+developed` banner saying exactly this, so the next agent does not spend a slice
+improving a surface that is on its way out. Retiring it is a separate decision
+that should follow the dashboard actually shipping — it is not this slice's to
+make.
+
+## Test coverage added
+
+`tests/mctl-shim-callsite/smoke_test.sh` **part 10** (extends the existing
+checker; no parallel one was added). Per prime it asserts: the MCP surface is
+named (10a); `bin/mctl` is named in the same file (10b); detection is via the
+session's own tool list (10c); absence is stated as normal rather than as an
+error (10d). Two checks guard the canonical fragment: it must carry the
+tool↔command mapping and must explain the rollout gate, so the primes' pointers
+into it cannot dangle. **10e** is the structural one — no skill anywhere may
+branch in *shell* on `mcp__mctl__*`, because the tool list is not observable
+from a shell and such a test can only ever take the wrong branch; it is also the
+shape (`... || exit 1`) that would turn an absent optional surface into a dead
+prime.
+
+Each check was verified to fail when its condition is broken, not merely to pass
+today. One caveat recorded honestly: **10b is currently unreachable** — all four
+primes are also in the `WIRED` registry, so removing `bin/mctl` trips part 4
+first. It is kept because it is the assertion that stays meaningful if
+`MCP_PRIMED` ever grows beyond `WIRED`.
+
+## Follow-ups this slice deliberately did not take
+
+| Item | Why it was left | Unblocked by |
+| --- | --- | --- |
+| Committing `.mcp.json` | uncommitted, inert until session restart, disposition undecided; registering the server is an operator action, not a skill change | an owner decision on the rollout gate |
+| A `skill` client class in the rollout gate | #60 notes the gate "needs a client class for skill-running agents"; that is a `mcp_server.py` change and `mcp_server.py` is owned by another agent this cycle | #60 follow-up |
+| The other nine `wrap-with-mctl` skills | they inherit the doctrine through the fragment, but none states the surface choice in its own text; they are not primes, so the blind-start risk does not apply | a follow-up slice |
+| `POLICY-skills.md` — "agents call typed tools; bare shell is the exception" | #60 names it as a policy document to update; policy edits are governed by `POLICY-POLICY.md` and are not a skill-wiring change | #60 policy pass |
+| `mayor-math-restart` | remains `no-change`: it reads no brief/work state, and its doctrine is by reference to `mayor-math`, which is wired | unchanged from Slice 7 |
