@@ -1,6 +1,6 @@
 [pack]
-name = "mathcity"
-version = "0.2.0"
+name = "tdupu/mathcity"
+version = "0.2.1"
 schema = 2
 description = "portable mathematical work pack, including the brief pipeline formulas, orders, and gate policy registry."
 
@@ -9,7 +9,8 @@ source = "https://github.com/gastownhall/gascity-packs/tree/main/gascity"
 version = "sha:3b3b89f2011e06d84459aa7bea1552382f13930a"
 
 [imports.superpowers]
-source = "../gascity-packs/superpowers"
+source = "https://github.com/gastownhall/gascity-packs/tree/main/superpowers"
+version = "sha:3b3b89f2011e06d84459aa7bea1552382f13930a"
 
 [providers.codex]
 base = "builtin:codex"
