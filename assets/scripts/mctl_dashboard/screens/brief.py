@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from mctl_dashboard import knowl
+from mctl_dashboard import fields, knowl
 from mctl_dashboard.render import esc as _e
 from mctl_dashboard.state import ViewState
 
@@ -129,32 +129,35 @@ def _parse_notice(diagnostics: Sequence[Mapping[str, Any]]) -> str:
 
 
 def properties(brief: Mapping[str, Any]) -> str:
-    """The right-hand properties box, LMFDB's convention."""
-    rows = (
-        ("bead", brief.get("bead_id")),
-        ("brief", brief.get("brief_id")),
-        ("state", brief.get("decision_state")),
-        ("status", brief.get("status")),
-        ("source", brief.get("canonical_source")),
-        ("created", brief.get("created_at")),
-        ("updated", brief.get("updated_at")),
-        ("labels", ", ".join(brief.get("labels") or ()) or "—"),
+    """The right-hand properties box: every attribute the brief actually has.
+
+    Formerly a fixed list of eight rows, several of which were always empty.
+    It now renders whatever the payload carries, so a field a producer adds
+    tomorrow appears without a dashboard change -- and a field this brief does
+    not have simply is not drawn, rather than showing an em dash that reads as
+    missing data.
+
+    `field_sources` and `field_conflicts` are passed through when the core
+    supplies them, so a frontmatter-sourced value is distinguishable from a
+    bead-sourced one and a disagreement between the two is shown rather than
+    silently resolved.
+    """
+    body = fields.attributes(
+        brief,
+        sources=brief.get("field_sources") or {},
+        conflicts=brief.get("field_conflicts") or {},
+        region="properties",
     )
-    body = "".join(
-        "<tr>"
-        f'<td class="label">{_e(label)}</td>'
-        f'<td class="mono">{_e(value if value not in (None, "") else "—")}</td>'
-        "</tr>"
-        for label, value in rows
-    )
+    if not body:
+        return ""
     return (
-        '<aside class="properties-body" data-region="properties" '
+        '<aside class="properties-body" '
         'style="width: 254px; flex: none; border: 1px solid var(--color-divider); '
         'border-radius: var(--radius-md); overflow: hidden;">'
         '<h2 class="mc-section-head" style="font-size: 12px;">Properties</h2>'
-        '<table style="width: 100%; border-collapse: collapse; font-size: 12px; '
-        'background: var(--color-neutral-100);">'
-        f"<tbody>{body}</tbody></table></aside>"
+        '<div style="padding: 6px 10px; background: var(--color-neutral-100);">'
+        + body
+        + "</div></aside>"
     )
 
 

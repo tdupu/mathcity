@@ -856,3 +856,141 @@ def test_the_mbrf004_copy_reports_the_shrink_as_done():
     html = panel.entry({"bead_id": "he-1"}, options, state.ViewState())
     assert "expect this population to shrink" not in html.lower()
     assert "49" in html or "71" in html, "cite the measured outcome"
+
+
+# --------------------------------------------------------------------------
+# the generic attribute renderer
+# --------------------------------------------------------------------------
+
+
+def test_absent_fields_do_not_render_at_all():
+    """No em-dash rows, no 'not exposed' apology.
+
+    A brief that has no `verdict` has not been adjudicated -- that is a fact
+    about the brief, not a gap in the data, and drawing an empty row for it
+    invents a hole.
+    """
+    from mctl_dashboard import fields
+
+    html = fields.attributes({"status": "ready", "track": "pack-hygiene"})
+    assert "status" in html and "track" in html
+    for absent in ("verdict", "unlock_count", "gates", "priority"):
+        assert absent not in html, absent
+
+
+def test_an_unknown_field_still_renders():
+    """The point of the renderer: a producer adds a field, it appears.
+
+    If unknown keys were dropped, every new field would need a dashboard
+    release before anyone could see it.
+    """
+    from mctl_dashboard import fields
+
+    html = fields.attributes({"blast_radius": "shared paths", "invented_later": 7})
+    assert "blast_radius" in html or "blast radius" in html
+    assert "shared paths" in html
+    assert "invented_later" in html or "invented later" in html
+    assert "7" in html
+
+
+def test_known_fields_get_known_treatment():
+    """unlock_count is a figure; track is a filter; verdict is a verdict."""
+    from mctl_dashboard import fields
+
+    html = fields.attributes({"unlock_count": 9, "track": "pack-hygiene", "verdict": "APPROVE"})
+    assert "tnum" in html, "figures should be tabular"
+    assert 'href="/queue?' in html and "pack-hygiene" in html, "track should filter"
+    assert "APPROVE" in html
+
+
+def test_field_values_are_escaped():
+    from mctl_dashboard import fields
+
+    html = fields.attributes({"note": "<script>alert(1)</script>"})
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+
+
+def test_provenance_is_shown_when_given_and_never_invented():
+    """A frontmatter value and a bead value are not equally attested.
+
+    When the core says where a field came from, show it. When it does not,
+    show nothing rather than guessing -- a wrong provenance claim is worse
+    than none.
+    """
+    from mctl_dashboard import fields
+
+    with_src = fields.attributes({"unlock_count": 9}, sources={"unlock_count": "frontmatter"})
+    assert "frontmatter" in with_src
+
+    without = fields.attributes({"unlock_count": 9})
+    assert "frontmatter" not in without and "bead" not in without
+
+
+def test_a_disagreement_between_sources_is_shown_not_resolved():
+    """cozy preserves both when bead and file disagree; so must the page.
+
+    Picking a winner silently would make the dashboard the place a conflict
+    disappears.
+    """
+    from mctl_dashboard import fields
+
+    html = fields.attributes(
+        {"priority": "P1"},
+        conflicts={"priority": {"bead": "P2", "frontmatter": "P1"}},
+    )
+    assert "P1" in html and "P2" in html
+    assert "disagree" in html.lower()
+
+
+def test_empty_attributes_render_nothing_rather_than_an_empty_shell():
+    from mctl_dashboard import fields
+
+    assert fields.attributes({}) == ""
+
+
+# --------------------------------------------------------------------------
+# city-wide scope
+# --------------------------------------------------------------------------
+
+
+def _city_dashboard(tmp_path):
+    """A city-wide dashboard over the multi-rig fixture."""
+    import multi_rig
+    from mctl_dashboard.app import Dashboard
+    from mctl_dashboard.client import InProcessMcpClient
+
+    fixture = multi_rig.build(tmp_path)
+    client = InProcessMcpClient(city=fixture.city_root)
+    return Dashboard(client, city_wide=True, rig=None)
+
+
+def test_the_redesigned_screens_work_city_wide(tmp_path):
+    """Every new screen was built and tested rig-scoped only.
+
+    In city scope `rig` is None and `briefs_list` needs `all_rigs`, so the
+    handlers raised ToolFailure and the routes returned nothing at all.
+    """
+    from mctl_dashboard.app import Request
+
+    dashboard = _city_dashboard(tmp_path)
+    for path in ("/queue", "/deferred", "/adjudicated", "/malformed", "/priority"):
+        response = dashboard.handle(Request.get(path))
+        assert response.status == 200, f"{path} -> {response.status}"
+
+
+def test_a_degraded_rig_is_named_on_the_redesigned_screens(tmp_path):
+    """Honesty property 4, which the new screens were missing.
+
+    A rig that cannot be read contributes no rows, so a city-wide total is
+    silently short and looks complete. The older views render a named row with
+    the reason; the redesigned ones have to as well, or the redesign quietly
+    drops the property.
+    """
+    from mctl_dashboard.app import Request
+
+    dashboard = _city_dashboard(tmp_path)
+    html = dashboard.handle(Request.get("/queue")).body
+    assert 'data-region="degraded-rigs"' in html, (
+        "city-wide screens must account for unreadable rigs"
+    )
