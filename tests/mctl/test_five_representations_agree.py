@@ -27,13 +27,22 @@ these assert. There is no way to express "adjudication moves a pending manifest
 row" as a test, because a pending manifest row is exactly what B2.10 refuses to
 adjudicate.
 
-**2. The terminal test is an exact match**, against
-{closed, done, terminal, adjudicated, rejected, moot} (`redundant_state.py:57`).
-Every compound status the live corpus actually uses -- `adjudicated:ratify(...)`,
-`adjudicated:approve(bug-convoy)` -- fails that match and reads as NON-terminal.
-Measured: 27 of 83 untitled pending rows carry such a status. Seeded compound,
-this fixture trips the gate; seeded bare, it does not. That is a separate
-finding and it is not what these tests are for.
+**2. The terminal predicate is prefix-based** -- `_is_terminal_status` in
+`redundant_state.py` matches `startswith` against TERMINAL_STATUS_PREFIXES, so
+the compound statuses the live corpus uses (`adjudicated:ratify(...)`,
+`adjudicated:approve(bug-convoy)`) read as terminal. Verified empirically, not
+assumed.
+
+That was **not** true when these tests were written. The predicate was an exact
+match against a set, so every compound status read as NON-terminal and tripped
+B2.10 per-brief -- 27 of 83 untitled pending rows carried one. The same mismatch
+made a decisions-track migration target 42 of 85 rows and report completion.
+cozy replaced it with a single prefix-based definition (`e207e2a`, now on main).
+
+Recorded because the earlier revision of this docstring asserted the exact-match
+rule as current, and by then it was not. The fixture still seeds bare
+`"adjudicated"`, which is terminal under either rule, so nothing here depends on
+which one is in force.
 """
 from __future__ import annotations
 
