@@ -81,20 +81,46 @@ _e = esc
 CURRENT_TAB = ' aria-current="page"'
 
 
-def _chip(href: str, label: str, count: object, *, accent: bool = False) -> str:
+#: Lanes the typed surface cannot count at all yet (issue #66). Distinct from
+#: a lane that simply was not read on the current page: the first is a
+#: permanent gap, the second is a page that had no reason to ask.
+UNCOUNTABLE_LANES = frozenset({"pile", "errors", "nobrainer"})
+
+
+def _dash(key: str) -> str:
+    """The em dash a chip shows when it has no number, and why.
+
+    Two different absences would otherwise look identical. `pile` has no
+    source in the typed surface at all; `stack` on the diagnostics page simply
+    was not counted there, because that page reads diagnostics and not briefs.
+    Saying "not readable" on the second would be a claim about the core that
+    is not true.
+    """
+    reason = (
+        "not readable through the typed surface yet - issue #66"
+        if key in UNCOUNTABLE_LANES
+        else "not counted on this page"
+    )
+    return (
+        f' <span class="mono" style="color: var(--color-neutral-500);" '
+        f'title="{_e(reason)}">&mdash;</span>'
+    )
+
+
+def _chip(
+    href: str, label: str, count: object, *, key: str = "", accent: bool = False
+) -> str:
     """One header count, linked to the screen it counts.
 
-    `count is None` means no source read this number, and the chip renders
-    without one. Showing a zero instead would assert emptiness that nothing
-    measured -- the pile and the no-brainer lane are not readable through the
-    typed surface yet (issue #66).
+    `count is None` means nothing measured this number here, and the chip
+    renders without one. Showing a zero would assert an emptiness nobody
+    established.
     """
     colour = "var(--color-accent-800)" if accent else "var(--color-neutral-700)"
     value = (
         f' <b class="mono" style="font-weight: 600; color: var(--color-text);">{_e(count)}</b>'
         if count is not None
-        else ' <span class="mono" style="color: var(--color-neutral-500);" '
-        'title="not readable through the typed surface yet">&mdash;</span>'
+        else _dash(key)
     )
     return (
         f'<a href="{_e(href)}" style="font-size: 12px; color: {colour}; '
@@ -119,10 +145,13 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     store = context.get("rig_db") or ".beads"
     chips = "".join(
         (
-            _chip("/pile", "pile", counts.get("pile")),
-            _chip("/queue", "stack", counts.get("stack")),
-            _chip("/deferred", "deferred", counts.get("deferred")),
-            _chip("/queue?scope=errors", "error briefs", counts.get("errors"), accent=True),
+            _chip("/pile", "pile", counts.get("pile"), key="pile"),
+            _chip("/queue", "stack", counts.get("stack"), key="stack"),
+            _chip("/deferred", "deferred", counts.get("deferred"), key="deferred"),
+            _chip(
+                "/queue?scope=errors", "error briefs", counts.get("errors"),
+                key="errors", accent=True,
+            ),
         )
     ) + (
         '<a href="#mc-keys" style="font-size: 12px; color: var(--color-neutral-700); '
@@ -156,7 +185,7 @@ def sidebar(current: str, counts: Mapping[str, Any]) -> str:
         f"{CURRENT_TAB if href == current else ''}>"
         f"<span>{_e(label)}</span>"
         f'<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
-        f"{_e(counts.get(key)) if counts.get(key) is not None else '&mdash;'}</span></a>"
+        f"{_e(counts.get(key)) if counts.get(key) is not None else _dash(key)}</span></a>"
         for href, label, key in NAV
     )
     return (
