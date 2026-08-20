@@ -2294,10 +2294,149 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead and no file represents. `source` says which, and must be read before the record is trusted as attested.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
             "properties": {
               "bead_id": {
                 "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "body": {
+                "description": "The brief body verbatim -- the canonical bead description, or a manifest row's markdown file. Empty string when the store carries none; null on a manifest record only when no body file exists. Always authoritative over `sections`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "body_diagnostics": {
+                "description": "Why the body parse produced what it did; empty on a clean parse.",
+                "items": {
+                  "additionalProperties": false,
+                  "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                  "properties": {
+                    "bead_id": {
+                      "description": "Canonical bead this diagnostic is about.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "brief_slug": {
+                      "description": "Brief slug this diagnostic is about.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "city_path": {
+                      "description": "Resolved Gas City root.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "code": {
+                      "description": "Stable code from assets/mctl/diagnostics.toml.",
+                      "type": "string"
+                    },
+                    "data_location": {
+                      "description": "File or store the finding was read from.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "facts": {
+                      "description": "Untyped supporting facts.",
+                      "type": "object"
+                    },
+                    "hint": {
+                      "description": "Suggested operator action.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "message": {
+                      "description": "Human-readable finding.",
+                      "type": "string"
+                    },
+                    "policy_ref": {
+                      "description": "Policy clause the finding is grounded in.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "provenance_ref": {
+                      "description": "Implementation surface that raised it.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rig_name": {
+                      "description": "Resolved rig identifier.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rig_path": {
+                      "description": "Resolved rig root.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "severity": {
+                      "enum": [
+                        "INFO",
+                        "WARN",
+                        "ERROR",
+                        "FATAL"
+                      ],
+                      "type": "string"
+                    },
+                    "suggested_next_command": {
+                      "description": "Command that would advance the situation.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "trace_id": {
+                      "description": "Trace this diagnostic belongs to.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "bead_id",
+                    "brief_slug",
+                    "city_path",
+                    "code",
+                    "data_location",
+                    "facts",
+                    "message",
+                    "policy_ref",
+                    "provenance_ref",
+                    "rig_name",
+                    "rig_path",
+                    "severity",
+                    "suggested_next_command"
+                  ],
+                  "title": "Diagnostic",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "body_path": {
+                "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
                   "string",
                   "null"
@@ -2322,8 +2461,88 @@
                 ]
               },
               "decision_state": {
-                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated or `unreadable` for a manifest row. `unreadable` means the row was recorded and what it said cannot be shown -- it is deliberately not `pending`, because a row with no body cannot be decided.",
+                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
+              },
+              "fields": {
+                "additionalProperties": {
+                  "additionalProperties": false,
+                  "description": "Every store's answer for one field, in authority order. `readings[0]` is the record's canonical store where it holds the field, and `value`/`source` mirror it. `conflict` is true when two stores disagree; both readings are kept, because resolving silently would destroy the only record that they disagree.",
+                  "properties": {
+                    "conflict": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "readings": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One store's reading of one field, with its provenance.",
+                        "properties": {
+                          "confidence": {
+                            "enum": [
+                              "high",
+                              "medium",
+                              "low"
+                            ],
+                            "type": "string"
+                          },
+                          "field": {
+                            "description": "The exact field the value came from.",
+                            "type": "string"
+                          },
+                          "source": {
+                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                            "enum": [
+                              "bead",
+                              "manifest_row",
+                              "frontmatter"
+                            ],
+                            "type": "string"
+                          },
+                          "value": {
+                            "description": "The value verbatim, never normalised.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "confidence",
+                          "field",
+                          "source",
+                          "value"
+                        ],
+                        "title": "FieldValue",
+                        "type": "object"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "source": {
+                      "enum": [
+                        "bead",
+                        "manifest_row",
+                        "frontmatter"
+                      ],
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "conflict",
+                    "name",
+                    "readings",
+                    "source",
+                    "value"
+                  ],
+                  "title": "FieldReading",
+                  "type": "object"
+                },
+                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+                "title": "BriefFields",
+                "type": "object"
               },
               "labels": {
                 "items": {
@@ -2394,6 +2613,70 @@
                     "state_reported_by_core"
                   ],
                   "title": "RedundantArtifact",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "sections": {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One markdown section of a brief body, already parsed.",
+                  "properties": {
+                    "body": {
+                      "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
+                      "type": "string"
+                    },
+                    "end_line": {
+                      "description": "1-based last line of the section.",
+                      "type": "integer"
+                    },
+                    "heading": {
+                      "description": "Heading text as the brief wrote it.",
+                      "type": "string"
+                    },
+                    "level": {
+                      "description": "Markdown heading depth, 1-6.",
+                      "type": "integer"
+                    },
+                    "match": {
+                      "description": "How section_index was decided: an explicit \u00a7N marker, a recognised heading name, or nothing matched.",
+                      "enum": [
+                        "explicit",
+                        "heading",
+                        "unmapped"
+                      ],
+                      "type": "string"
+                    },
+                    "section_index": {
+                      "description": "present-it section 1-7, or null when the heading names none.",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "section_key": {
+                      "description": "Stable key for section_index, e.g. what_is_being_decided.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "start_line": {
+                      "description": "1-based line of the heading.",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "body",
+                    "end_line",
+                    "heading",
+                    "level",
+                    "match",
+                    "section_index",
+                    "section_key",
+                    "start_line"
+                  ],
+                  "title": "BriefSection",
                   "type": "object"
                 },
                 "type": "array"
@@ -2469,7 +2752,8 @@
                       "typed_field",
                       "close_reason",
                       "notes",
-                      "decisions_track"
+                      "decisions_track",
+                      "brief_frontmatter"
                     ],
                     "type": "string"
                   },
@@ -2493,9 +2777,11 @@
             },
             "required": [
               "bead_id",
+              "body_path",
               "brief_id",
               "canonical_source",
               "decision_state",
+              "fields",
               "labels",
               "policy_references",
               "redundant_artifacts",
@@ -2806,7 +3092,7 @@
     "title": "Report brief invariant violations"
   },
   "briefs_list": {
-    "description": "List briefs from both stores: canonical decision brief beads, plus decisions-track manifest rows that no bead and no stack file represents. Every record names its `source` (`bead` or `manifest`); a manifest row is attested by nothing else, carries no body, and is `adjudicated` only when the row itself holds a verdict -- otherwise `unreadable`, which is not the pending queue. Optionally filtered by status or label.",
+    "description": "List briefs from both stores: canonical decision brief beads, plus decisions-track manifest rows that no bead and no stack file represents. Every record names its `source` (`bead` or `manifest`); a manifest row is attested by no bead, and carries the markdown body sitting beside the manifest -- 157 of 158 live rows have one. `unreadable` means that file does not exist, and nothing else; a row with a body and no verdict is an ordinary `pending` brief. `fields` carries unlock_count, priority, track, form, gates and verdict, each naming the store it was read from, with `conflict` set where a bead and a document disagree. Optionally filtered by status or label.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -2908,10 +3194,149 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead and no file represents. `source` says which, and must be read before the record is trusted as attested.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
             "properties": {
               "bead_id": {
                 "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "body": {
+                "description": "The brief body verbatim -- the canonical bead description, or a manifest row's markdown file. Empty string when the store carries none; null on a manifest record only when no body file exists. Always authoritative over `sections`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "body_diagnostics": {
+                "description": "Why the body parse produced what it did; empty on a clean parse.",
+                "items": {
+                  "additionalProperties": false,
+                  "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                  "properties": {
+                    "bead_id": {
+                      "description": "Canonical bead this diagnostic is about.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "brief_slug": {
+                      "description": "Brief slug this diagnostic is about.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "city_path": {
+                      "description": "Resolved Gas City root.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "code": {
+                      "description": "Stable code from assets/mctl/diagnostics.toml.",
+                      "type": "string"
+                    },
+                    "data_location": {
+                      "description": "File or store the finding was read from.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "facts": {
+                      "description": "Untyped supporting facts.",
+                      "type": "object"
+                    },
+                    "hint": {
+                      "description": "Suggested operator action.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "message": {
+                      "description": "Human-readable finding.",
+                      "type": "string"
+                    },
+                    "policy_ref": {
+                      "description": "Policy clause the finding is grounded in.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "provenance_ref": {
+                      "description": "Implementation surface that raised it.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rig_name": {
+                      "description": "Resolved rig identifier.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rig_path": {
+                      "description": "Resolved rig root.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "severity": {
+                      "enum": [
+                        "INFO",
+                        "WARN",
+                        "ERROR",
+                        "FATAL"
+                      ],
+                      "type": "string"
+                    },
+                    "suggested_next_command": {
+                      "description": "Command that would advance the situation.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "trace_id": {
+                      "description": "Trace this diagnostic belongs to.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "bead_id",
+                    "brief_slug",
+                    "city_path",
+                    "code",
+                    "data_location",
+                    "facts",
+                    "message",
+                    "policy_ref",
+                    "provenance_ref",
+                    "rig_name",
+                    "rig_path",
+                    "severity",
+                    "suggested_next_command"
+                  ],
+                  "title": "Diagnostic",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "body_path": {
+                "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
                   "string",
                   "null"
@@ -2936,8 +3361,88 @@
                 ]
               },
               "decision_state": {
-                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated or `unreadable` for a manifest row. `unreadable` means the row was recorded and what it said cannot be shown -- it is deliberately not `pending`, because a row with no body cannot be decided.",
+                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
+              },
+              "fields": {
+                "additionalProperties": {
+                  "additionalProperties": false,
+                  "description": "Every store's answer for one field, in authority order. `readings[0]` is the record's canonical store where it holds the field, and `value`/`source` mirror it. `conflict` is true when two stores disagree; both readings are kept, because resolving silently would destroy the only record that they disagree.",
+                  "properties": {
+                    "conflict": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "readings": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One store's reading of one field, with its provenance.",
+                        "properties": {
+                          "confidence": {
+                            "enum": [
+                              "high",
+                              "medium",
+                              "low"
+                            ],
+                            "type": "string"
+                          },
+                          "field": {
+                            "description": "The exact field the value came from.",
+                            "type": "string"
+                          },
+                          "source": {
+                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                            "enum": [
+                              "bead",
+                              "manifest_row",
+                              "frontmatter"
+                            ],
+                            "type": "string"
+                          },
+                          "value": {
+                            "description": "The value verbatim, never normalised.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "confidence",
+                          "field",
+                          "source",
+                          "value"
+                        ],
+                        "title": "FieldValue",
+                        "type": "object"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "source": {
+                      "enum": [
+                        "bead",
+                        "manifest_row",
+                        "frontmatter"
+                      ],
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "conflict",
+                    "name",
+                    "readings",
+                    "source",
+                    "value"
+                  ],
+                  "title": "FieldReading",
+                  "type": "object"
+                },
+                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+                "title": "BriefFields",
+                "type": "object"
               },
               "labels": {
                 "items": {
@@ -3008,6 +3513,70 @@
                     "state_reported_by_core"
                   ],
                   "title": "RedundantArtifact",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "sections": {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One markdown section of a brief body, already parsed.",
+                  "properties": {
+                    "body": {
+                      "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
+                      "type": "string"
+                    },
+                    "end_line": {
+                      "description": "1-based last line of the section.",
+                      "type": "integer"
+                    },
+                    "heading": {
+                      "description": "Heading text as the brief wrote it.",
+                      "type": "string"
+                    },
+                    "level": {
+                      "description": "Markdown heading depth, 1-6.",
+                      "type": "integer"
+                    },
+                    "match": {
+                      "description": "How section_index was decided: an explicit \u00a7N marker, a recognised heading name, or nothing matched.",
+                      "enum": [
+                        "explicit",
+                        "heading",
+                        "unmapped"
+                      ],
+                      "type": "string"
+                    },
+                    "section_index": {
+                      "description": "present-it section 1-7, or null when the heading names none.",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "section_key": {
+                      "description": "Stable key for section_index, e.g. what_is_being_decided.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "start_line": {
+                      "description": "1-based line of the heading.",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "body",
+                    "end_line",
+                    "heading",
+                    "level",
+                    "match",
+                    "section_index",
+                    "section_key",
+                    "start_line"
+                  ],
+                  "title": "BriefSection",
                   "type": "object"
                 },
                 "type": "array"
@@ -3083,7 +3652,8 @@
                       "typed_field",
                       "close_reason",
                       "notes",
-                      "decisions_track"
+                      "decisions_track",
+                      "brief_frontmatter"
                     ],
                     "type": "string"
                   },
@@ -3107,9 +3677,11 @@
             },
             "required": [
               "bead_id",
+              "body_path",
               "brief_id",
               "canonical_source",
               "decision_state",
+              "fields",
               "labels",
               "policy_references",
               "redundant_artifacts",
@@ -3702,8 +4274,11 @@
               ]
             },
             "body": {
-              "description": "The canonical bead description, verbatim. Empty string when the bead carries none. Always authoritative over `sections`.",
-              "type": "string"
+              "description": "The brief body verbatim -- the canonical bead description, or a manifest row's markdown file. Empty string when the store carries none; null on a manifest record only when no body file exists. Always authoritative over `sections`.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "body_diagnostics": {
               "description": "Why the body parse produced what it did; empty on a clean parse.",
@@ -3830,6 +4405,13 @@
               },
               "type": "array"
             },
+            "body_path": {
+              "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "brief_id": {
               "type": "string"
             },
@@ -3849,8 +4431,88 @@
               ]
             },
             "decision_state": {
-              "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated or `unreadable` for a manifest row. `unreadable` means the row was recorded and what it said cannot be shown -- it is deliberately not `pending`, because a row with no body cannot be decided.",
+              "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
               "type": "string"
+            },
+            "fields": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "Every store's answer for one field, in authority order. `readings[0]` is the record's canonical store where it holds the field, and `value`/`source` mirror it. `conflict` is true when two stores disagree; both readings are kept, because resolving silently would destroy the only record that they disagree.",
+                "properties": {
+                  "conflict": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "readings": {
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "One store's reading of one field, with its provenance.",
+                      "properties": {
+                        "confidence": {
+                          "enum": [
+                            "high",
+                            "medium",
+                            "low"
+                          ],
+                          "type": "string"
+                        },
+                        "field": {
+                          "description": "The exact field the value came from.",
+                          "type": "string"
+                        },
+                        "source": {
+                          "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                          "enum": [
+                            "bead",
+                            "manifest_row",
+                            "frontmatter"
+                          ],
+                          "type": "string"
+                        },
+                        "value": {
+                          "description": "The value verbatim, never normalised.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "confidence",
+                        "field",
+                        "source",
+                        "value"
+                      ],
+                      "title": "FieldValue",
+                      "type": "object"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "source": {
+                    "enum": [
+                      "bead",
+                      "manifest_row",
+                      "frontmatter"
+                    ],
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "conflict",
+                  "name",
+                  "readings",
+                  "source",
+                  "value"
+                ],
+                "title": "FieldReading",
+                "type": "object"
+              },
+              "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+              "title": "BriefFields",
+              "type": "object"
             },
             "labels": {
               "items": {
@@ -4060,7 +4722,8 @@
                     "typed_field",
                     "close_reason",
                     "notes",
-                    "decisions_track"
+                    "decisions_track",
+                    "brief_frontmatter"
                   ],
                   "type": "string"
                 },
@@ -4086,9 +4749,11 @@
             "bead_id",
             "body",
             "body_diagnostics",
+            "body_path",
             "brief_id",
             "canonical_source",
             "decision_state",
+            "fields",
             "labels",
             "policy_references",
             "redundant_artifacts",
@@ -4611,10 +5276,149 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead and no file represents. `source` says which, and must be read before the record is trusted as attested.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
             "properties": {
               "bead_id": {
                 "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "body": {
+                "description": "The brief body verbatim -- the canonical bead description, or a manifest row's markdown file. Empty string when the store carries none; null on a manifest record only when no body file exists. Always authoritative over `sections`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "body_diagnostics": {
+                "description": "Why the body parse produced what it did; empty on a clean parse.",
+                "items": {
+                  "additionalProperties": false,
+                  "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                  "properties": {
+                    "bead_id": {
+                      "description": "Canonical bead this diagnostic is about.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "brief_slug": {
+                      "description": "Brief slug this diagnostic is about.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "city_path": {
+                      "description": "Resolved Gas City root.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "code": {
+                      "description": "Stable code from assets/mctl/diagnostics.toml.",
+                      "type": "string"
+                    },
+                    "data_location": {
+                      "description": "File or store the finding was read from.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "facts": {
+                      "description": "Untyped supporting facts.",
+                      "type": "object"
+                    },
+                    "hint": {
+                      "description": "Suggested operator action.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "message": {
+                      "description": "Human-readable finding.",
+                      "type": "string"
+                    },
+                    "policy_ref": {
+                      "description": "Policy clause the finding is grounded in.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "provenance_ref": {
+                      "description": "Implementation surface that raised it.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rig_name": {
+                      "description": "Resolved rig identifier.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rig_path": {
+                      "description": "Resolved rig root.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "severity": {
+                      "enum": [
+                        "INFO",
+                        "WARN",
+                        "ERROR",
+                        "FATAL"
+                      ],
+                      "type": "string"
+                    },
+                    "suggested_next_command": {
+                      "description": "Command that would advance the situation.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "trace_id": {
+                      "description": "Trace this diagnostic belongs to.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "bead_id",
+                    "brief_slug",
+                    "city_path",
+                    "code",
+                    "data_location",
+                    "facts",
+                    "message",
+                    "policy_ref",
+                    "provenance_ref",
+                    "rig_name",
+                    "rig_path",
+                    "severity",
+                    "suggested_next_command"
+                  ],
+                  "title": "Diagnostic",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "body_path": {
+                "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
                   "string",
                   "null"
@@ -4639,8 +5443,88 @@
                 ]
               },
               "decision_state": {
-                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated or `unreadable` for a manifest row. `unreadable` means the row was recorded and what it said cannot be shown -- it is deliberately not `pending`, because a row with no body cannot be decided.",
+                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
+              },
+              "fields": {
+                "additionalProperties": {
+                  "additionalProperties": false,
+                  "description": "Every store's answer for one field, in authority order. `readings[0]` is the record's canonical store where it holds the field, and `value`/`source` mirror it. `conflict` is true when two stores disagree; both readings are kept, because resolving silently would destroy the only record that they disagree.",
+                  "properties": {
+                    "conflict": {
+                      "type": "boolean"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "readings": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One store's reading of one field, with its provenance.",
+                        "properties": {
+                          "confidence": {
+                            "enum": [
+                              "high",
+                              "medium",
+                              "low"
+                            ],
+                            "type": "string"
+                          },
+                          "field": {
+                            "description": "The exact field the value came from.",
+                            "type": "string"
+                          },
+                          "source": {
+                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                            "enum": [
+                              "bead",
+                              "manifest_row",
+                              "frontmatter"
+                            ],
+                            "type": "string"
+                          },
+                          "value": {
+                            "description": "The value verbatim, never normalised.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "confidence",
+                          "field",
+                          "source",
+                          "value"
+                        ],
+                        "title": "FieldValue",
+                        "type": "object"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "source": {
+                      "enum": [
+                        "bead",
+                        "manifest_row",
+                        "frontmatter"
+                      ],
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "conflict",
+                    "name",
+                    "readings",
+                    "source",
+                    "value"
+                  ],
+                  "title": "FieldReading",
+                  "type": "object"
+                },
+                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+                "title": "BriefFields",
+                "type": "object"
               },
               "labels": {
                 "items": {
@@ -4711,6 +5595,70 @@
                     "state_reported_by_core"
                   ],
                   "title": "RedundantArtifact",
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "sections": {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One markdown section of a brief body, already parsed.",
+                  "properties": {
+                    "body": {
+                      "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
+                      "type": "string"
+                    },
+                    "end_line": {
+                      "description": "1-based last line of the section.",
+                      "type": "integer"
+                    },
+                    "heading": {
+                      "description": "Heading text as the brief wrote it.",
+                      "type": "string"
+                    },
+                    "level": {
+                      "description": "Markdown heading depth, 1-6.",
+                      "type": "integer"
+                    },
+                    "match": {
+                      "description": "How section_index was decided: an explicit \u00a7N marker, a recognised heading name, or nothing matched.",
+                      "enum": [
+                        "explicit",
+                        "heading",
+                        "unmapped"
+                      ],
+                      "type": "string"
+                    },
+                    "section_index": {
+                      "description": "present-it section 1-7, or null when the heading names none.",
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "section_key": {
+                      "description": "Stable key for section_index, e.g. what_is_being_decided.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "start_line": {
+                      "description": "1-based line of the heading.",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "body",
+                    "end_line",
+                    "heading",
+                    "level",
+                    "match",
+                    "section_index",
+                    "section_key",
+                    "start_line"
+                  ],
+                  "title": "BriefSection",
                   "type": "object"
                 },
                 "type": "array"
@@ -4786,7 +5734,8 @@
                       "typed_field",
                       "close_reason",
                       "notes",
-                      "decisions_track"
+                      "decisions_track",
+                      "brief_frontmatter"
                     ],
                     "type": "string"
                   },
@@ -4810,9 +5759,11 @@
             },
             "required": [
               "bead_id",
+              "body_path",
               "brief_id",
               "canonical_source",
               "decision_state",
+              "fields",
               "labels",
               "policy_references",
               "redundant_artifacts",

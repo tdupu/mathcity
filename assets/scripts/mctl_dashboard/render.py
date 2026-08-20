@@ -496,14 +496,20 @@ def queue_panel(briefs: Sequence[Mapping[str, Any]]) -> str:
 
 def _state_gloss(state: str) -> str:
     return {
-        "pending": "Open, no verdict recorded. This is the queue that needs a human.",
+        "pending": (
+            "Open, no verdict recorded. This is the queue that needs a human -- and since "
+            "Slice 7 it includes decisions-track rows with a body and no verdict, which "
+            "were previously filed as `unreadable` and never shown here."
+        ),
         "adjudicated": "Closed with a recorded verdict field.",
         "deferred": "Deferred with a defer window on the bead.",
         "malformed": "Closed with no verdict field. See the caveat below.",
         "unreadable": (
-            "Recorded in the decisions-track manifest with no verdict, and represented by no "
-            "bead and no file. The row proves a brief existed; it cannot show what it said. "
-            "Deliberately not in the pending queue -- there is nothing here to decide on."
+            "Recorded in the decisions-track manifest with no brief file anywhere on disk. "
+            "The row proves a brief existed; nothing shows what it said, so there is nothing "
+            "here to decide on and it is deliberately not in the pending queue. This is "
+            "about the missing body, not a missing verdict: a row with a body and no verdict "
+            "is pending, and 35 such rows were shown here in error before Slice 7."
         ),
     }.get(state, "Reported by the canonical bead store.")
 

@@ -1,12 +1,19 @@
-"""The decisions-track manifest as a third read-side source.
+"""The decisions-track manifest as a third read-side source, bodies included.
 
 Two of a brief's three representations -- bead, stack file, manifest row --
 had readers. The manifest did not, and on the live city 158 of its 204 rows
 are represented by neither of the others: nothing could read them, count them,
-or say they existed. This slice makes them reachable without minting anything,
+or say they existed. Slice 6 made them reachable without minting anything,
 because minting is what would make the measured state worse (105 of the 158
 name no source bead, so 105 new beads would fail POLICY B2.1 on creation and
 raise `MBRF004` apiece).
+
+**Slice 6 then read the manifest without listing the directory it sits in.**
+That directory holds 204 markdown bodies. 35 of the 36 rows Slice 6 filed as
+`unreadable` have one, so 35 undecided briefs with real text were kept out of
+the pending queue on the grounds that they could not be shown. The tests below
+now pin the corrected reading: `unreadable` means **no body file exists** --
+one live row -- and a row with a body and no verdict is `pending`.
 
 Every number asserted below comes from a fixture built in the test, not from
 the live city. The live counts are checked separately and loosely at the end:
@@ -32,11 +39,15 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from mctl_core.manifest import (  # noqa: E402
+    CODE_BODY_AMBIGUOUS,
+    CODE_BODY_NO_FRONTMATTER,
     CODE_MANIFEST_ROW_MALFORMED,
     CODE_MANIFEST_ROW_NO_SLUG,
     CODE_MANIFEST_UNREADABLE,
+    CODE_ROW_HAS_NO_BODY,
     SOURCE_MANIFEST,
     STATE_ADJUDICATED,
+    STATE_PENDING,
     STATE_UNREADABLE,
     manifest_records,
     normalize_stem,
@@ -77,7 +88,34 @@ def adjudicated(slug: str, **extra: object) -> dict[str, object]:
 
 
 def unreadable(slug: str, **extra: object) -> dict[str, object]:
+    """A row with no `verdict` key. Whether it is *unreadable* now depends on
+    whether a body file exists beside the manifest, which is the point."""
     return {"slug": slug, "status": "adjudicated", **extra}
+
+
+BODY = """---
+status: ready
+form: full
+track: brief-system
+---
+
+## §1 What is being decided
+
+Body text, so the row is not unreadable.
+"""
+
+
+def bodies_for(directory: Path, slugs: list[str], *, body: str = BODY) -> Path:
+    """A decisions-track directory holding one `NNN-<slug>-brief.md` per slug.
+
+    Numbered and suffixed exactly as the live directory writes them, because
+    the join is a filename normalisation and a test on bare `<slug>.md` files
+    would never exercise it.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    for number, slug in enumerate(slugs, start=1):
+        (directory / f"{number:02d}-{slug}-brief.md").write_text(body, encoding="utf-8")
+    return directory
 
 
 def runtime_fixture(tmp_path: Path) -> tuple[Path, Path]:
@@ -108,55 +146,102 @@ def run_mctl(city_root: Path, rig_root: Path, *args: str) -> dict[str, object]:
 # --- the two lanes -----------------------------------------------------------
 
 
-def test_rows_split_into_adjudicated_and_unreadable_by_whether_a_verdict_is_there(
-    tmp_path: Path,
-):
-    """The split the live corpus shows, at fixture scale: 122 vs 36 there."""
+def test_rows_split_into_three_lanes_by_body_then_verdict(tmp_path: Path):
+    """The live split, at fixture scale: 125 adjudicated / 32 pending / 1 not there.
+
+    Slice 6 read this as two lanes and put every verdictless row in
+    `unreadable`. Whether a body exists and whether a verdict exists are
+    independent facts, and the second is only askable once the first is yes.
+    """
+    bodies = bodies_for(tmp_path, ["decided-0", "decided-1", "silent-0", "silent-1"])
     path = write_manifest(
-        tmp_path / "manifest.jsonl",
-        [adjudicated(f"decided-{n}") for n in range(5)]
-        + [unreadable(f"silent-{n}") for n in range(3)]
+        bodies / "manifest.jsonl",
+        [adjudicated(f"decided-{n}") for n in range(2)]
+        + [unreadable(f"silent-{n}") for n in range(2)]
         + [{"slug": "blank-verdict", "status": "adjudicated", "verdict": "   "}]
-        + [{"slug": "null-verdict", "status": "adjudicated", "verdict": None}],
+        + [{"slug": "gone", "status": "adjudicated"}],
     )
 
     reading = read_manifest(path)
 
-    assert reading.rows_read == 10
-    assert reading.state_counts == {STATE_ADJUDICATED: 5, STATE_UNREADABLE: 5}
+    assert reading.rows_read == 6
+    assert reading.state_counts == {
+        STATE_ADJUDICATED: 2,
+        STATE_PENDING: 2,
+        STATE_UNREADABLE: 2,
+    }
 
 
-def test_a_row_with_no_verdict_is_never_pending(tmp_path: Path):
-    """`unreadable`, not `pending`: there is nothing here to decide on.
+def test_a_row_with_a_body_and_no_verdict_is_pending_not_unreadable(tmp_path: Path):
+    """The Slice 6 defect, stated as a test.
 
-    A row with no verdict has no bead, no file, and no body. Putting it in the
-    pending queue would present an un-decidable item to a human as decidable,
-    which is worse than leaving it unreachable.
+    35 of the 36 rows Slice 6 called `unreadable` have a markdown body in the
+    manifest's own directory. They are ordinary undecided briefs, and hiding
+    them from the pending queue hid the work a human was supposed to see.
     """
-    path = write_manifest(tmp_path / "manifest.jsonl", [unreadable("silent")])
+    bodies = bodies_for(tmp_path, ["silent"])
+    path = write_manifest(bodies / "manifest.jsonl", [unreadable("silent")])
+
+    (record,) = read_manifest(path).records
+
+    assert record.decision_state == STATE_PENDING
+    assert record.decision_state != STATE_UNREADABLE
+    assert record.verdict is None
+    assert record.body is not None
+
+
+def test_unreadable_means_no_body_file_exists_and_nothing_else(tmp_path: Path):
+    """One live row is in this lane. Slice 6 put 36 there.
+
+    `unreadable` is a statement about the corpus -- a brief was tracked and
+    nothing anywhere records what it said -- not about a missing verdict.
+    """
+    bodies = bodies_for(tmp_path, [])
+    path = write_manifest(bodies / "manifest.jsonl", [adjudicated("no-file-anywhere")])
 
     (record,) = read_manifest(path).records
 
     assert record.decision_state == STATE_UNREADABLE
-    assert record.decision_state != "pending"
-    assert record.verdict is None
+    assert record.body_path is None
+    assert record.body is None
+    # Not "" -- an empty string says the brief is empty rather than that it
+    # was never stored, which is precisely the conflation being corrected.
+    assert record.body != ""
+    # A verdict on the row does not rescue it: the verdict is readable and the
+    # brief is not, and the lane is about the brief.
+    assert record.verdict is not None
+
+
+def test_a_row_with_no_body_reports_why_per_row(tmp_path: Path):
+    bodies = bodies_for(tmp_path, ["here"])
+    path = write_manifest(
+        bodies / "manifest.jsonl", [adjudicated("here"), adjudicated("gone")]
+    )
+
+    reading = read_manifest(path)
+
+    assert [issue.code for issue in reading.issues] == [CODE_ROW_HAS_NO_BODY]
+    assert reading.issues[0].line == 2
+    assert "gone" in (reading.issues[0].detail or "")
 
 
 def test_a_status_string_never_stands_in_for_a_verdict(tmp_path: Path):
     """`status: adjudicated:defer-c(7d)` is not a readable verdict.
 
-    114 live rows carry a status that begins `adjudicated`, and 36 of those
-    carry no verdict. Reading the status as the decision would manufacture 36
-    adjudications nobody recorded.
+    114 live rows carry a status that begins `adjudicated`. Reading the status
+    as the decision would manufacture adjudications nobody recorded -- so a
+    row like this one is pending once its body is found, never adjudicated.
     """
+    bodies = bodies_for(tmp_path, ["deferred"])
     path = write_manifest(
-        tmp_path / "manifest.jsonl", [{"slug": "deferred", "status": "adjudicated:defer-c(7d)"}]
+        bodies / "manifest.jsonl", [{"slug": "deferred", "status": "adjudicated:defer-c(7d)"}]
     )
 
     (record,) = read_manifest(path).records
 
     assert record.status == "adjudicated:defer-c(7d)"
-    assert record.decision_state == STATE_UNREADABLE
+    assert record.verdict is None
+    assert record.decision_state == STATE_PENDING
 
 
 # --- provenance --------------------------------------------------------------
@@ -353,7 +438,7 @@ def test_a_missing_manifest_is_silent_rather_than_an_error(tmp_path: Path):
 
 def test_one_bad_line_costs_that_line_and_nothing_else(tmp_path: Path):
     """The strict reader behind the B2.10 gate loses the file; this one loses a row."""
-    path = tmp_path / "manifest.jsonl"
+    path = bodies_for(tmp_path / "track", ["good", "also-good"]) / "manifest.jsonl"
     path.write_text(
         json.dumps(adjudicated("good")) + "\n"
         + "{not json at all\n"
@@ -444,3 +529,233 @@ def test_the_live_manifest_reads_consistently():
         (record.timestamp is None) == (record.timestamp_field is None)
         for record in reading.records
     )
+
+
+# --- the body join -----------------------------------------------------------
+
+
+def test_a_row_resolves_to_its_numbered_and_suffixed_file(tmp_path: Path):
+    """`sigma18-done-vs-residual` -> `08-sigma18-done-vs-residual-brief.md`.
+
+    The whole defect in one assertion: the file was always there, under a name
+    the reader never constructed.
+    """
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "08-sigma18-done-vs-residual-brief.md").write_text(BODY, encoding="utf-8")
+    path = write_manifest(directory / "manifest.jsonl", [unreadable("sigma18-done-vs-residual")])
+
+    (record,) = read_manifest(path).records
+
+    assert record.body_path is not None
+    assert record.body_path.name == "08-sigma18-done-vs-residual-brief.md"
+    assert record.body == BODY
+    assert record.decision_state == STATE_PENDING
+
+
+def test_slug_normalisation_is_anchored_at_both_ends(tmp_path: Path):
+    """`257-decision-brief-gate-profile-brief.md` -> `decision-brief-gate-profile`.
+
+    An unanchored `.replace("-brief", "")` yields `decision-gate-profile`,
+    matches no row, and drops a 27KB brief into `unreadable` in silence. That
+    bug has shipped twice in this codebase -- once in a body-substring
+    discriminator and once in a slug matcher -- so the exact live filename is
+    pinned here rather than a synthetic stand-in.
+    """
+    assert normalize_stem("257-decision-brief-gate-profile-brief") == "decision-brief-gate-profile"
+    # The trailing digits of an ordering prefix are stripped only at the start,
+    # and only whole leading digits: an id inside the slug survives.
+    assert normalize_stem("240-dolt-quarantine-222-step2-brief") == "dolt-quarantine-222-step2"
+    # A slug that merely contains "brief" keeps it.
+    assert normalize_stem("01-brief-system-policy-brief") == "brief-system-policy"
+
+
+def test_the_anchored_filename_joins_to_its_row(tmp_path: Path):
+    """The same regression, end to end rather than on the normaliser alone."""
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "257-decision-brief-gate-profile-brief.md").write_text(BODY, encoding="utf-8")
+    path = write_manifest(
+        directory / "manifest.jsonl", [unreadable("decision-brief-gate-profile")]
+    )
+
+    (record,) = read_manifest(path).records
+
+    assert record.body == BODY
+    assert record.decision_state == STATE_PENDING
+    assert not any(issue.code == CODE_ROW_HAS_NO_BODY for issue in read_manifest(path).issues)
+
+
+def test_two_files_normalising_to_one_slug_are_reported_not_guessed(tmp_path: Path):
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "01-same-slug-brief.md").write_text(BODY, encoding="utf-8")
+    (directory / "99-same-slug-brief.md").write_text(BODY, encoding="utf-8")
+    path = write_manifest(directory / "manifest.jsonl", [unreadable("same-slug")])
+
+    reading = read_manifest(path)
+
+    (record,) = reading.records
+    assert record.body_path is not None
+    assert record.body_path.name == "01-same-slug-brief.md"
+    assert [issue.code for issue in reading.issues] == [CODE_BODY_AMBIGUOUS]
+    assert "99-same-slug-brief.md" in (reading.issues[0].detail or "")
+
+
+def test_a_body_with_no_frontmatter_degrades_that_row_only(tmp_path: Path):
+    """WARN per row, like MBRF060-062: one bad header must not sink the read."""
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "01-headerless-brief.md").write_text("# just a body\n", encoding="utf-8")
+    (directory / "02-fine-brief.md").write_text(BODY, encoding="utf-8")
+    path = write_manifest(
+        directory / "manifest.jsonl", [unreadable("headerless"), unreadable("fine")]
+    )
+
+    reading = read_manifest(path)
+
+    assert [record.slug for record in reading.records] == ["headerless", "fine"]
+    assert [issue.code for issue in reading.issues] == [CODE_BODY_NO_FRONTMATTER]
+    assert reading.issues[0].line == 1
+    headerless, fine = reading.records
+    # The body survives even though its header did not: the text is the
+    # evidence, and losing it because a header was malformed is the failure
+    # this whole slice is about.
+    assert headerless.body == "# just a body\n"
+    assert headerless.fields == ()
+    assert dict(fine.frontmatter)["form"] == "full"
+
+
+# --- fields, read and never derived -----------------------------------------
+
+
+def test_frontmatter_fields_are_exposed_with_their_provenance(tmp_path: Path):
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "01-counted-brief.md").write_text(
+        "---\nstatus: ready\nunlock_count: 6\npriority: P1\n"
+        "form: full\ngates: test-evidence N/A\ntrack: brief-system\n---\n\n## §1 What\n\nBody.\n",
+        encoding="utf-8",
+    )
+    path = write_manifest(directory / "manifest.jsonl", [{"slug": "counted", "status": "ready"}])
+
+    (record,) = read_manifest(path).records
+
+    by_name = {reading.name: reading for reading in record.fields}
+    assert by_name["unlock_count"].value == "6"
+    assert by_name["unlock_count"].source == "frontmatter"
+    assert by_name["unlock_count"].readings[0].field == "frontmatter.unlock_count"
+    assert by_name["unlock_count"].readings[0].confidence == "high"
+    assert by_name["priority"].value == "P1"
+    assert by_name["gates"].value == "test-evidence N/A"
+    assert not by_name["unlock_count"].conflict
+
+
+def test_unlock_count_is_read_and_never_derived(tmp_path: Path):
+    """A traversal returns ~0 -- 508 of 528 live edges are `related`.
+
+    The frontmatter number was written at production time by whoever knew what
+    the brief unblocked, so a brief that declares none reports none rather
+    than a computed zero. Zero and absent are different claims.
+    """
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "01-silent-brief.md").write_text(
+        "---\nstatus: ready\nform: full\n---\n\n## §1 What\n\nBody.\n", encoding="utf-8"
+    )
+    path = write_manifest(directory / "manifest.jsonl", [{"slug": "silent", "status": "ready"}])
+
+    (record,) = read_manifest(path).records
+
+    assert "unlock_count" not in {reading.name for reading in record.fields}
+    assert "unlock_count" not in record.to_dict()["fields"]
+
+
+def test_a_row_and_its_own_file_disagreeing_keeps_both(tmp_path: Path):
+    """17 live rows disagree with their body file. Resolving destroys the finding."""
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "01-split-brief.md").write_text(
+        "---\nstatus: ready\nunlock_count: 9\nform: full\n---\n\n## §1 What\n\nBody.\n",
+        encoding="utf-8",
+    )
+    path = write_manifest(
+        directory / "manifest.jsonl",
+        [{"slug": "split", "status": "ready", "unlock_count": 4, "form": "compact"}],
+    )
+
+    (record,) = read_manifest(path).records
+
+    unlock = next(reading for reading in record.fields if reading.name == "unlock_count")
+    assert unlock.conflict is True
+    assert [(item.value, item.source) for item in unlock.readings] == [
+        ("4", "manifest_row"),
+        ("9", "frontmatter"),
+    ]
+    # The row is this record's canonical store, so `value` follows it -- but
+    # nothing is discarded, and a surface can render both.
+    assert unlock.value == "4"
+    payload = record.to_dict()["fields"]["unlock_count"]
+    assert payload["conflict"] is True
+    assert len(payload["readings"]) == 2
+
+
+def test_a_frontmatter_verdict_is_read_when_the_row_has_none(tmp_path: Path):
+    """3 live rows are adjudicated only in their own document."""
+    directory = tmp_path / "decisions-track"
+    directory.mkdir()
+    (directory / "01-filed-brief.md").write_text(
+        "---\nstatus: adjudicated\nverdict: approve-b\n---\n\n## §1 What\n\nBody.\n",
+        encoding="utf-8",
+    )
+    path = write_manifest(
+        directory / "manifest.jsonl", [{"slug": "filed", "status": "adjudicated"}]
+    )
+
+    (record,) = read_manifest(path).records
+
+    assert record.decision_state == STATE_ADJUDICATED
+    assert record.verdict is not None
+    assert record.verdict.text == "approve-b"
+    # Not `decisions_track`: the manifest recorded nothing, the document did.
+    assert record.verdict.source == "brief_frontmatter"
+    assert record.verdict.field == "frontmatter.verdict"
+
+
+# --- the live corpus, after the join ----------------------------------------
+
+
+@pytest.mark.skipif(not LIVE_MANIFEST.is_file(), reason="no live decisions-track manifest")
+def test_the_live_corpus_has_almost_no_unreadable_rows():
+    """Slice 6 reported 36. The true figure is a small handful.
+
+    Bounded rather than frozen, for the reason the sibling live test gives:
+    the corpus moves. What cannot move without a defect is the order of
+    magnitude -- `unreadable` is meant to be the rare case where a brief was
+    tracked and nothing recorded what it said.
+    """
+    reading = manifest_records(LIVE_MANIFEST, LIVE_STACK)
+    counts = reading.state_counts
+
+    assert counts[STATE_UNREADABLE] <= 5, (
+        "unreadable is meant to mean 'no body file exists anywhere'. A jump back "
+        "toward 36 means the body join stopped resolving -- check the anchored "
+        "slug normalisation first."
+    )
+    assert counts[STATE_PENDING] + counts[STATE_ADJUDICATED] >= len(reading.records) - 5
+    for record in reading.records:
+        assert (record.body_path is None) == (record.decision_state == STATE_UNREADABLE)
+        assert record.body != ""
+
+
+@pytest.mark.skipif(not LIVE_MANIFEST.is_file(), reason="no live decisions-track manifest")
+def test_the_live_bodies_carry_the_fields_the_dashboard_asked_for():
+    reading = manifest_records(LIVE_MANIFEST, LIVE_STACK)
+    seen = {name for record in reading.records for name in (r.name for r in record.fields)}
+
+    assert {"unlock_count", "track", "form", "gates"} <= seen
+    with_unlock = [
+        record for record in reading.records
+        if any(item.name == "unlock_count" for item in record.fields)
+    ]
+    assert len(with_unlock) > 50, "unlock_count came back near zero -- it is being derived, not read"

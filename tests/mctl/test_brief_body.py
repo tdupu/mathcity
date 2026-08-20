@@ -219,8 +219,14 @@ def test_a_bead_with_no_description_returns_an_explicit_empty_body(tmp_path: Pat
     assert "MBRF040" in {item["code"] for item in brief["body_diagnostics"]}
 
 
-def test_briefs_list_carries_no_body(tmp_path: Path):
-    """A city-wide list read must not fetch 200 brief bodies."""
+def test_briefs_list_carries_no_bead_body(tmp_path: Path):
+    """A city-wide list read must not fetch 200 bead descriptions.
+
+    Still true, and still the reason `briefs show` exists. A manifest record
+    is the documented exception -- it reaches no other surface -- but a
+    bead-backed brief has `show`, so the roster keeps carrying only its
+    metadata plus `fields`, which is a frontmatter head-read, not a body.
+    """
     city_root, fixture = runtime(tmp_path, PRESENT_IT_BODY)
 
     result = run_mctl(city_root, fixture, "briefs", "list", "--json")
@@ -232,10 +238,12 @@ def test_briefs_list_carries_no_body(tmp_path: Path):
     assert "sections" not in listed
     assert set(listed) == {
         "bead_id",
+        "body_path",
         "brief_id",
         "canonical_source",
         "created_at",
         "decision_state",
+        "fields",
         "labels",
         "policy_references",
         "redundant_artifacts",
@@ -412,20 +420,34 @@ def test_the_briefs_show_output_schema_declares_body_and_sections():
     tool = next(item for item in mcp_server.TOOLS if item.name == "briefs_show")
     brief = tool.output_schema["properties"]["brief"]
 
-    assert brief["properties"]["body"]["type"] == "string"
+    # Nullable since Slice 7: a manifest record whose body file does not exist
+    # reports null, which is the `unreadable` lane and not an empty brief.
+    assert brief["properties"]["body"]["type"] == ["string", "null"]
     assert brief["properties"]["sections"]["type"] == "array"
     assert {"body", "sections", "body_diagnostics"} <= set(brief["required"])
 
 
-def test_the_briefs_list_output_schema_declares_no_body():
-    """Body on a list item is a 200-brief city-wide read; keep it off."""
+def test_the_briefs_list_output_schema_makes_body_optional_not_required():
+    """A list item may carry a body; a bead-backed one does not.
+
+    `briefs show` is where a bead's body belongs, so `body` is absent from
+    `required` and a client must not assume it. It is declared, because a
+    manifest record does carry one -- that record reaches no other surface, so
+    withholding it there withholds it everywhere.
+    """
     from mctl_core import mcp_server
 
     tool = next(item for item in mcp_server.TOOLS if item.name == "briefs_list")
     item_schema = tool.output_schema["properties"]["briefs"]["items"]
+    detail = next(
+        item for item in mcp_server.TOOLS if item.name == "briefs_show"
+    ).output_schema["properties"]["brief"]
 
-    assert "body" not in item_schema["properties"]
-    assert "sections" not in item_schema["properties"]
+    assert "body" in item_schema["properties"]
+    assert "sections" in item_schema["properties"]
+    assert "body" not in item_schema["required"]
+    assert "sections" not in item_schema["required"]
+    assert {"body", "sections", "body_diagnostics"} <= set(detail["required"])
 
 
 # --- the human renderer ------------------------------------------------------

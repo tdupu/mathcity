@@ -84,12 +84,23 @@ SOURCE_TYPED_FIELD = "typed_field"
 SOURCE_CLOSE_REASON = "close_reason"
 SOURCE_NOTES = "notes"
 SOURCE_DECISIONS_TRACK = "decisions_track"
+#: The `verdict:` key in a brief markdown file's own frontmatter. Distinct from
+#: `decisions_track`, which is the manifest *row*: 21 decisions-track files and
+#: 22 stack files carry a frontmatter verdict, and folding the two together
+#: would claim the manifest recorded a decision that only the document holds.
+SOURCE_BRIEF_FRONTMATTER = "brief_frontmatter"
 
 #: `notes` is a fourth value beyond the three the plan named. It is kept
 #: distinct rather than folded into `typed_field` because folding it in would
 #: report a parsed prose block as a typed column -- the exact over-claim of
 #: provenance this module exists to prevent. 7 live briefs resolve only here.
-SOURCES = (SOURCE_TYPED_FIELD, SOURCE_CLOSE_REASON, SOURCE_NOTES, SOURCE_DECISIONS_TRACK)
+SOURCES = (
+    SOURCE_TYPED_FIELD,
+    SOURCE_CLOSE_REASON,
+    SOURCE_NOTES,
+    SOURCE_DECISIONS_TRACK,
+    SOURCE_BRIEF_FRONTMATTER,
+)
 
 CONFIDENCE_HIGH = "high"
 CONFIDENCE_MEDIUM = "medium"

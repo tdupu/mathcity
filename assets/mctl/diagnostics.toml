@@ -217,6 +217,36 @@ meaning = "Decisions-track manifest row carries no slug, so it has no identity t
 policy_ref = "B2.10"
 module = "manifest.py"
 
+# MBRF063-MBRF066 belong to the body join Slice 7 added. Slice 6 read the
+# manifest without ever listing the directory it sits in, which holds 204
+# markdown bodies; 35 of the 36 rows it called "unreadable" have one. These
+# four say what happened per row, and are WARN for the same reason as
+# MBRF060-062: losing one brief's body must not take down the listing.
+
+[MBRF063]
+severity = "WARN"
+meaning = "Decisions-track row has no brief body file, so what it said cannot be shown. This, and only this, is what `unreadable` means."
+policy_ref = "B2.10"
+module = "manifest.py"
+
+[MBRF064]
+severity = "WARN"
+meaning = "Brief body file could not be read, or is empty, so the row keeps only what its manifest row says."
+policy_ref = "B2.10"
+module = "manifest.py"
+
+[MBRF065]
+severity = "WARN"
+meaning = "Brief body file has no parseable frontmatter, so its recorded fields are unavailable."
+policy_ref = "B2.10"
+module = "manifest.py"
+
+[MBRF066]
+severity = "WARN"
+meaning = "More than one brief body file normalises to the same slug; the sorted-first file was used."
+policy_ref = "B2.10"
+module = "manifest.py"
+
 [MCTL_BEAD_UPDATE_RACE_LOST]
 severity = "FATAL"
 meaning = "Another actor changed the bead between plan and apply; the guarded write was skipped."

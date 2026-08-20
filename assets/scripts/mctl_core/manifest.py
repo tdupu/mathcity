@@ -1,4 +1,4 @@
-"""The decisions-track manifest, read as a third source of brief records.
+r"""The decisions-track manifest, read as a third source of brief records.
 
 A brief has three representations -- a bead, a stack/pile file, and a row in
 `.beads/decisions-track/manifest.jsonl` -- and no identity spans them. Two of
@@ -43,24 +43,77 @@ assert that a decision bead attests it. Nothing attests these rows except the
 row itself. The verdict inside one carries its own provenance too
 (`verdicts.SOURCE_DECISIONS_TRACK`), for the same reason.
 
-## Two lanes, and why the second is not `pending`
+## Three lanes, and what `unreadable` actually means
 
-A row with a typed verdict is `adjudicated`: the verdict text is right there.
+**Slice 6 got this wrong, and correcting it is the point of Slice 7.** It read
+the manifest and never opened the directory the manifest lives in -- which
+holds **204 `.md` files with real bodies** (median 3,073 bytes, largest
+27,684). It concluded that a row without a verdict was "recorded but
+unreadable", and put 36 rows in that lane. 35 of those 36 have a body sitting
+beside the manifest, under a filename the reader never looked at.
 
-A row without one is `unreadable` -- recorded but unreadable. The row proves a
-brief existed and was tracked; it does not show what the brief said or what
-was decided. Calling that `pending` would put 36 rows with no body, no bead
-and no file into the queue a human works through, presenting an un-decidable
-item as decidable. Calling it `adjudicated` would claim a verdict nobody can
-read. It is its own lane because it is its own fact.
+Re-measured 2026-08-19 against the live city:
 
-## What a record does not carry
+===========================================  =====
+population                                      n
+===========================================  =====
+manifest rows                                  204
+files in ``decisions-track/*.md``              204
+rows whose slug resolves to a body file        203
+rows with no body file                           1
+Slice 6 ``unreadable`` rows that have a body    35
+===========================================  =====
 
-No body, no sections, no options. There is no file and no bead behind these
-rows, so there is nothing to parse; a `body: ""` would read as "this brief is
-empty" rather than "this brief was never stored here". Absent stays absent --
-which is also why a row with no timestamp reports `None` rather than a
-synthesised one. 60 rows would otherwise render a fabricated Age.
+So the lanes are:
+
+``adjudicated``
+    a verdict can be read -- from the row's ``verdict`` key, or failing that
+    from the body file's own frontmatter.
+
+``pending``
+    a body exists and no verdict does. That is an ordinary undecided brief and
+    belongs in the queue a human works through. Slice 6 hid 35 of them.
+
+``unreadable``
+    **no body file exists.** The row proves a brief was tracked; nothing
+    anywhere shows what it said. One live row (``he-rg5r-cascade-close``) is
+    in this lane, and it is a hole in the corpus rather than in the reader.
+
+Of the 158 rows this module emits, that is 125 adjudicated, 32 pending and 1
+unreadable, against Slice 6's 122 / 0 / 36.
+
+## Matching a row to its body, and the bug not to write a third time
+
+Filenames are ``<NNN>-<slug>-brief.md``, so ``sigma18-done-vs-residual``
+resolves to ``08-sigma18-done-vs-residual-brief.md``. Both affixes are
+stripped **anchored** -- ``^\d+-`` and ``-brief$`` -- by the same
+``normalize_stem`` the stack dedup already uses.
+
+The anchoring is load-bearing, and this codebase has got it wrong twice.
+``257-decision-brief-gate-profile-brief.md`` carries the slug
+``decision-brief-gate-profile``; an unanchored ``.replace("-brief", "")``
+yields ``decision-gate-profile``, matches no row, and drops that brief into
+``unreadable`` without a word. The tests pin that exact filename.
+
+## What a record carries, and what stays absent
+
+A record now carries its body, the sections that body parses into, and the
+fields its frontmatter declares -- ``unlock_count``, ``priority``, ``track``,
+``form``, ``gates``, ``verdict`` -- each as a ``fields.FieldReading`` naming
+the store it was read from. ``unlock_count`` is **read, never derived**: a
+graph traversal returns ~0, because 508 of the 528 edges in the live HQ store
+are ``related`` and one bead in 264 carries a blocking edge.
+
+Where the row and its own file disagree, both readings are kept and the
+reading is marked ``conflict``. Live: ``status`` disagrees 12 times, ``form``
+3, ``unlock_count`` twice. Resolving those silently would destroy the only
+copy of the fact that they disagree.
+
+Everything genuinely missing stays missing. A row with no body reports
+``body = None``, not ``""`` -- ``""`` reads as "this brief is empty" rather
+than "this brief was never stored here" -- and a row with none of the five
+date keys reports ``None`` rather than a synthesised timestamp. 60 rows would
+otherwise render a fabricated Age.
 
 ## Deduplication
 
@@ -88,13 +141,21 @@ never means silent.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 import json
 import re
 from typing import Iterable, Mapping
 
-from .verdicts import CONFIDENCE_HIGH, SOURCE_DECISIONS_TRACK, Verdict
+from . import fields as field_provenance
+from .fields import FieldReading
+from .verdicts import (
+    CONFIDENCE_HIGH,
+    SOURCE_BRIEF_FRONTMATTER,
+    SOURCE_DECISIONS_TRACK,
+    Verdict,
+)
 
 
 #: Which store a brief record came from. Reported on every record, from either
@@ -110,20 +171,35 @@ CANONICAL_SOURCE_BEAD = "bead_store"
 CANONICAL_SOURCE_MANIFEST = "decisions_track_manifest"
 CANONICAL_SOURCES = (CANONICAL_SOURCE_BEAD, CANONICAL_SOURCE_MANIFEST)
 
-#: The lane a manifest row lands in. `adjudicated` is the same word the bead
-#: population uses and means the same thing -- a verdict can be read.
+#: The lane a manifest row lands in. `adjudicated` and `pending` are the same
+#: words the bead population uses and mean the same things -- a verdict can be
+#: read, or the brief is still waiting for one.
 STATE_ADJUDICATED = "adjudicated"
-#: Recorded, but unreadable: the row exists, and what it said cannot be shown.
+STATE_PENDING = "pending"
+#: No body file exists anywhere for this row: the brief was tracked and what it
+#: said is not recoverable. Slice 6 used this word for "the row has no verdict",
+#: which was wrong for 35 of the 36 rows it applied to.
 STATE_UNREADABLE = "unreadable"
 
 #: Registered in assets/mctl/diagnostics.toml.
 CODE_MANIFEST_UNREADABLE = "MBRF060"
 CODE_MANIFEST_ROW_MALFORMED = "MBRF061"
 CODE_MANIFEST_ROW_NO_SLUG = "MBRF062"
+CODE_ROW_HAS_NO_BODY = "MBRF063"
+CODE_BODY_UNREADABLE = "MBRF064"
+CODE_BODY_NO_FRONTMATTER = "MBRF065"
+CODE_BODY_AMBIGUOUS = "MBRF066"
 
 #: The field a manifest verdict is read from, reported verbatim on the
 #: `Verdict` so a reader can see it was not read off a bead.
 VERDICT_FIELD = "decisions-track/manifest.jsonl:verdict"
+#: Where a verdict read out of the body file's own frontmatter came from.
+FRONTMATTER_VERDICT_FIELD = "frontmatter.verdict"
+
+#: Row keys carrying a field the body file's frontmatter also declares, and the
+#: name each is exposed under. Read from both, kept as two readings when they
+#: disagree -- see `fields`.
+ROW_FIELD_KEYS = ("form", "gates", "priority", "track", "unlock_count", "verdict")
 
 #: Timestamp keys, in the order a row's own history would have written them.
 #: `adjudicated_at` covers 97 of the 98 timestamped rows; `rescinded_at`
@@ -149,6 +225,12 @@ SLUG_KEYS = ("slug", "brief_id", "id")
 #: `NNN-` ordering prefix and `-brief` suffix, as the stack writes them.
 _ORDER_PREFIX = re.compile(r"^\d+-")
 _BRIEF_SUFFIX = re.compile(r"-brief$")
+
+
+#: Shared immutable default for a record with no frontmatter. A mutable `{}`
+#: default on a frozen dataclass would be one dict shared by every record that
+#: then looked writable.
+_EMPTY_FRONTMATTER: Mapping[str, str] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -189,14 +271,38 @@ class ManifestRecord:
     #: operator finds it again in a 204-line file of similar-looking JSON.
     line: int
     source: str = SOURCE_MANIFEST
+    #: The `decisions-track/*.md` file this row's slug resolves to, or None
+    #: when there is none. None is what `unreadable` means, and the only thing
+    #: it means.
+    body_path: Path | None = None
+    #: That file's text, verbatim. None exactly when `body_path` is None, or
+    #: when the file existed and could not be read -- `""` would say the brief
+    #: is empty rather than that it was never stored.
+    body: str | None = None
+    #: The body file's frontmatter block, as written. Empty when the file has
+    #: none; `MBRF065` says which of the two happened.
+    frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER
+    #: Every field the row and its file declare, each naming where it was read
+    #: and flagging where the two disagree.
+    fields: tuple[FieldReading, ...] = ()
 
     @property
     def decision_state(self) -> str:
-        return STATE_ADJUDICATED if self.verdict is not None else STATE_UNREADABLE
+        """Which lane this row is in -- see the module docstring.
+
+        `unreadable` is about the *body*, not the verdict. A row with a body
+        and no verdict is an ordinary undecided brief and goes in `pending`,
+        which is where a human will find it.
+        """
+        if self.body_path is None:
+            return STATE_UNREADABLE
+        return STATE_ADJUDICATED if self.verdict is not None else STATE_PENDING
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "body_path": str(self.body_path) if self.body_path is not None else None,
             "decision_state": self.decision_state,
+            "fields": field_provenance.readings_map(self.fields),
             "line": self.line,
             "slug": self.slug,
             "source": self.source,
@@ -223,7 +329,7 @@ class ManifestReading:
 
     @property
     def state_counts(self) -> dict[str, int]:
-        counts = {STATE_ADJUDICATED: 0, STATE_UNREADABLE: 0}
+        counts = {STATE_ADJUDICATED: 0, STATE_PENDING: 0, STATE_UNREADABLE: 0}
         for record in self.records:
             counts[record.decision_state] += 1
         return counts
@@ -254,8 +360,80 @@ def represented_slugs(stack_dir: Path) -> frozenset[str]:
     return frozenset(normalize_stem(path.stem) for path in entries)
 
 
+def body_index(directory: Path) -> tuple[dict[str, Path], tuple[ManifestIssue, ...]]:
+    """Every `*.md` in `directory`, keyed by the slug a manifest row carries.
+
+    Same `normalize_stem` the stack dedup uses, and for the same reason: one
+    normalisation rule, anchored at both ends, or the two readers drift and a
+    brief becomes visible to one and invisible to the other.
+
+    Two files that normalise to one slug is ambiguity, not a choice to make
+    quietly: the sorted-first file is used and `MBRF066` names both. The live
+    corpus has no such collision, which is exactly why an unreported one would
+    go unnoticed.
+    """
+    try:
+        entries = sorted(directory.glob("*.md"))
+    except OSError:
+        return {}, ()
+    index: dict[str, Path] = {}
+    collisions: dict[str, list[Path]] = {}
+    for path in entries:
+        slug = normalize_stem(path.stem)
+        if slug in index:
+            collisions.setdefault(slug, [index[slug]]).append(path)
+            continue
+        index[slug] = path
+    issues = tuple(
+        ManifestIssue(
+            CODE_BODY_AMBIGUOUS,
+            "More than one brief body file normalises to the same slug; the first was used.",
+            detail=f"slug={slug} files=" + ", ".join(item.name for item in paths),
+        )
+        for slug, paths in sorted(collisions.items())
+    )
+    return index, issues
+
+
+def read_body(path: Path) -> tuple[str | None, Mapping[str, str], tuple[ManifestIssue, ...]]:
+    """One brief body file: its text, its frontmatter, and what went wrong.
+
+    A file that cannot be decoded reports `None`, never `""`. The distinction
+    is the whole point of this slice: `""` says the brief is empty, `None` says
+    nothing readable is stored, and Slice 6 conflated exactly those two.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        return (
+            None,
+            _EMPTY_FRONTMATTER,
+            (
+                ManifestIssue(
+                    CODE_BODY_UNREADABLE,
+                    "Brief body file could not be read, so the row keeps only what its row says.",
+                    detail=f"{path.name}: {error}",
+                ),
+            ),
+        )
+    frontmatter = field_provenance.read_frontmatter(text)
+    if frontmatter:
+        return text, frontmatter, ()
+    return (
+        text,
+        _EMPTY_FRONTMATTER,
+        (
+            ManifestIssue(
+                CODE_BODY_NO_FRONTMATTER,
+                "Brief body file has no parseable frontmatter, so its recorded fields are unavailable.",
+                detail=path.name,
+            ),
+        ),
+    )
+
+
 def read_manifest(
-    path: Path, *, represented: Iterable[str] = ()
+    path: Path, *, represented: Iterable[str] = (), bodies: Path | None = None
 ) -> ManifestReading:
     """Read the manifest at `path`, minus rows `represented` already covers.
 
@@ -268,9 +446,12 @@ def read_manifest(
     if not path.is_file():
         return ManifestReading(path, (), (), 0)
 
+    body_dir = path.parent if bodies is None else Path(bodies)
+    index, issues_from_index = body_index(body_dir)
+
     records: list[ManifestRecord] = []
     suppressed: list[str] = []
-    issues: list[ManifestIssue] = []
+    issues: list[ManifestIssue] = list(issues_from_index)
     rows_read = 0
     try:
         text = path.read_text(encoding="utf-8")
@@ -332,29 +513,81 @@ def read_manifest(
         if slug in covered:
             suppressed.append(slug)
             continue
-        records.append(_record(parsed, slug, line_number))
+        record, row_issues = _record(parsed, slug, line_number, index.get(slug))
+        issues.extend(row_issues)
+        records.append(record)
     return ManifestReading(path, tuple(records), tuple(suppressed), rows_read, tuple(issues))
 
 
 def manifest_records(manifest_path: Path, stack_dir: Path) -> ManifestReading:
-    """The manifest-only records for one rig: read, then deduplicated."""
+    """The manifest-only records for one rig: read, joined to bodies, deduped.
+
+    Bodies come from the manifest's own directory, because that is where they
+    are: 204 `.md` files sit beside `manifest.jsonl`, and Slice 6 read the one
+    without ever listing the other.
+    """
     return read_manifest(manifest_path, represented=represented_slugs(stack_dir))
 
 
-def _record(row: Mapping[str, object], slug: str, line: int) -> ManifestRecord:
+def _record(
+    row: Mapping[str, object], slug: str, line: int, body_path: Path | None
+) -> tuple[ManifestRecord, tuple[ManifestIssue, ...]]:
     timestamp, timestamp_field = _timestamp(row)
-    return ManifestRecord(
+    if body_path is None:
+        body: str | None = None
+        frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER
+        issues: tuple[ManifestIssue, ...] = (
+            ManifestIssue(
+                CODE_ROW_HAS_NO_BODY,
+                "Decisions-track row has no brief body file, so what it said cannot be shown.",
+                line=line,
+                detail=f"slug={slug}",
+            ),
+        )
+    else:
+        body, frontmatter, issues = read_body(body_path)
+        issues = tuple(replace(issue, line=line) for issue in issues)
+    record = ManifestRecord(
         slug=slug,
         status=_text(row.get("status")),
-        verdict=_verdict(row),
-        track=_text(row.get("track")),
+        verdict=_verdict(row, frontmatter),
+        track=_text(row.get("track")) or _text(frontmatter.get("track")),
         timestamp=timestamp,
         timestamp_field=timestamp_field,
         line=line,
+        body_path=body_path,
+        body=body,
+        frontmatter=frontmatter,
+        fields=_fields(row, frontmatter),
     )
+    return record, issues
 
 
-def _verdict(row: Mapping[str, object]) -> Verdict | None:
+def _fields(
+    row: Mapping[str, object], frontmatter: Mapping[str, str]
+) -> tuple[FieldReading, ...]:
+    """Every exposed field, read from the row first and the file second.
+
+    Row first because the manifest is this record's `canonical_source`; the
+    file is the same brief's other account of itself. Both are kept, and a
+    disagreement is reported rather than resolved -- 17 live rows disagree
+    with their own body file, and that is a finding about the corpus.
+    """
+    readings = []
+    for name in ROW_FIELD_KEYS:
+        reading = field_provenance.reading(
+            name,
+            field_provenance.row_value(
+                row, name, field=f"decisions-track/manifest.jsonl:{name}"
+            ),
+            field_provenance.frontmatter_value(frontmatter, name),
+        )
+        if reading is not None:
+            readings.append(reading)
+    return tuple(readings)
+
+
+def _verdict(row: Mapping[str, object], frontmatter: Mapping[str, str]) -> Verdict | None:
     """The row's typed verdict, with its provenance, or None.
 
     Confidence is `high` -- the same grade `verdicts` gives a typed field on a
@@ -369,9 +602,18 @@ def _verdict(row: Mapping[str, object]) -> Verdict | None:
     onto a bead, which can pick the wrong row. There is no join here.
     """
     value = row.get("verdict")
-    if not isinstance(value, str) or not value.strip():
+    if isinstance(value, str) and value.strip():
+        return Verdict(value.strip(), SOURCE_DECISIONS_TRACK, CONFIDENCE_HIGH, VERDICT_FIELD)
+    # Failing the row, the brief's own file. 21 decisions-track files record a
+    # frontmatter verdict, and 3 of them sit on rows whose `verdict` key is
+    # absent -- Slice 6 could not see those at all. The source says which
+    # document attested it, so the two are never conflated.
+    from_file = field_provenance.frontmatter_value(frontmatter, "verdict")
+    if from_file is None:
         return None
-    return Verdict(value.strip(), SOURCE_DECISIONS_TRACK, CONFIDENCE_HIGH, VERDICT_FIELD)
+    return Verdict(
+        from_file.value, SOURCE_BRIEF_FRONTMATTER, CONFIDENCE_HIGH, FRONTMATTER_VERDICT_FIELD
+    )
 
 
 def _timestamp(row: Mapping[str, object]) -> tuple[str | None, str | None]:

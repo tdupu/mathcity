@@ -720,9 +720,13 @@ TOOLS: tuple[ToolSpec, ...] = (
             "List briefs from both stores: canonical decision brief beads, plus "
             "decisions-track manifest rows that no bead and no stack file represents. "
             "Every record names its `source` (`bead` or `manifest`); a manifest row is "
-            "attested by nothing else, carries no body, and is `adjudicated` only when "
-            "the row itself holds a verdict -- otherwise `unreadable`, which is not the "
-            "pending queue. Optionally filtered by status or label."
+            "attested by no bead, and carries the markdown body sitting beside the "
+            "manifest -- 157 of 158 live rows have one. `unreadable` means that file "
+            "does not exist, and nothing else; a row with a body and no verdict is an "
+            "ordinary `pending` brief. `fields` carries unlock_count, priority, track, "
+            "form, gates and verdict, each naming the store it was read from, with "
+            "`conflict` set where a bead and a document disagree. Optionally filtered "
+            "by status or label."
         ),
         input_schema=request_schema(
             {

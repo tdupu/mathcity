@@ -297,95 +297,78 @@ VERDICT_SCHEMA: Schema = {
         "field": {"type": "string", "description": "The exact field the text came from."},
         "source": {
             "type": "string",
-            "enum": ["typed_field", "close_reason", "notes", "decisions_track"],
+            "enum": [
+                "typed_field",
+                "close_reason",
+                "notes",
+                "decisions_track",
+                "brief_frontmatter",
+            ],
         },
         "text": {"type": "string", "description": "The verdict verbatim."},
     },
     "additionalProperties": False,
 }
 
-BRIEF_RECORD_SCHEMA: Schema = {
+#: One store's answer for one field: the value verbatim, plus where it was
+#: read and how much that reading can be trusted. Deliberately the same shape
+#: as VERDICT_SCHEMA -- a client that can render a verdict's provenance can
+#: render any field's.
+FIELD_VALUE_SCHEMA: Schema = {
     "type": "object",
-    "title": "BriefRecord",
-    "description": (
-        "One brief, from whichever store holds it: a decision bead with its redundant "
-        "cache artifacts, or a decisions-track manifest row that no bead and no file "
-        "represents. `source` says which, and must be read before the record is trusted "
-        "as attested."
-    ),
-    "required": [
-        "bead_id",
-        "brief_id",
-        "canonical_source",
-        "decision_state",
-        "labels",
-        "policy_references",
-        "redundant_artifacts",
-        "source",
-        "status",
-        "timestamp",
-        "timestamp_field",
-        "title",
-        "track",
-        "verdict",
-    ],
+    "title": "FieldValue",
+    "description": "One store's reading of one field, with its provenance.",
+    "required": ["confidence", "field", "source", "value"],
     "properties": {
-        "bead_id": nullable_string(
-            "The canonical decision bead. Null on a manifest-sourced record: there is no bead."
-        ),
-        "brief_id": {"type": "string"},
-        "canonical_source": {
-            "type": "string",
-            "enum": ["bead_store", "decisions_track_manifest"],
-            "description": "Which store is authoritative for this record.",
-        },
-        "created_at": nullable_string("Bead creation timestamp. Null on a manifest record."),
-        "decision_state": {
-            "type": "string",
-            "description": (
-                "adjudicated / deferred / pending / malformed for a bead; adjudicated or "
-                "`unreadable` for a manifest row. `unreadable` means the row was recorded "
-                "and what it said cannot be shown -- it is deliberately not `pending`, "
-                "because a row with no body cannot be decided."
-            ),
-        },
-        "labels": STRING_ARRAY,
-        "policy_references": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["description", "reference"],
-                "properties": {"description": {"type": "string"}, "reference": {"type": "string"}},
-                "additionalProperties": False,
-            },
-        },
-        "redundant_artifacts": {"type": "array", "items": REDUNDANT_ARTIFACT_SCHEMA},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "field": {"type": "string", "description": "The exact field the value came from."},
         "source": {
             "type": "string",
-            "enum": ["bead", "manifest"],
+            "enum": ["bead", "manifest_row", "frontmatter"],
             "description": (
-                "Which store this record came from. `manifest` means a decisions-track row "
-                "attested by nothing else -- no bead, no file."
+                "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track "
+                "row, `frontmatter` a key in the brief markdown file's own header. A surface "
+                "must be able to render which is which rather than flatten them."
             ),
         },
-        "status": nullable_string("Raw bead status, or the manifest row's status string."),
-        "timestamp": nullable_string(
-            "The one date this record can stand behind, or null. Never synthesised: 60 live "
-            "manifest rows carry no date at all, and a surface must render that as 'no "
-            "timestamp' rather than a false age."
-        ),
-        "timestamp_field": nullable_string(
-            "Which field `timestamp` came from. Null exactly when `timestamp` is null."
-        ),
-        "title": nullable_string(
-            "Bead title. Null on a manifest-sourced record, which has no title to report."
-        ),
-        "track": nullable_string(
-            "The decisions-track lane a manifest row declares. Null on a bead record."
-        ),
-        "updated_at": nullable_string("Bead update timestamp. Null on a manifest record."),
-        "verdict": VERDICT_SCHEMA,
+        "value": {"type": "string", "description": "The value verbatim, never normalised."},
     },
+    "additionalProperties": False,
+}
+
+FIELD_READING_SCHEMA: Schema = {
+    "type": "object",
+    "title": "FieldReading",
+    "description": (
+        "Every store's answer for one field, in authority order. `readings[0]` is the "
+        "record's canonical store where it holds the field, and `value`/`source` mirror it. "
+        "`conflict` is true when two stores disagree; both readings are kept, because "
+        "resolving silently would destroy the only record that they disagree."
+    ),
+    "required": ["conflict", "name", "readings", "source", "value"],
+    "properties": {
+        "conflict": {"type": "boolean"},
+        "name": {"type": "string"},
+        "readings": {"type": "array", "items": FIELD_VALUE_SCHEMA, "minItems": 1},
+        "source": {"type": "string", "enum": ["bead", "manifest_row", "frontmatter"]},
+        "value": {"type": "string"},
+    },
+    "additionalProperties": False,
+}
+
+#: Field name -> reading. A field no store holds is **absent from this object**,
+#: never present and null: `unlock_count` missing means the brief never
+#: declared one, and it is read from frontmatter, never derived from the
+#: dependency graph (which returns ~0 -- 508 of 528 live edges are `related`).
+FIELDS_SCHEMA: Schema = {
+    "type": "object",
+    "title": "BriefFields",
+    "description": (
+        "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, "
+        "verdict -- keyed by name, each naming where it was read. Absent keys mean no store "
+        "holds the field."
+    ),
+    "additionalProperties": FIELD_READING_SCHEMA,
 }
 
 BRIEF_SECTION_SCHEMA: Schema = {
@@ -434,6 +417,125 @@ BRIEF_SECTION_SCHEMA: Schema = {
     "additionalProperties": False,
 }
 
+
+BODY_SCHEMA: Schema = {
+    "type": ["string", "null"],
+    "description": (
+        "The brief body verbatim -- the canonical bead description, or a manifest row's "
+        "markdown file. Empty string when the store carries none; null on a manifest "
+        "record only when no body file exists. Always authoritative over `sections`."
+    ),
+}
+
+BODY_DIAGNOSTICS_SCHEMA: Schema = {
+    "type": "array",
+    "items": DIAGNOSTIC_SCHEMA,
+    "description": "Why the body parse produced what it did; empty on a clean parse.",
+}
+
+BRIEF_RECORD_SCHEMA: Schema = {
+    "type": "object",
+    "title": "BriefRecord",
+    "description": (
+        "One brief, from whichever store holds it: a decision bead with its redundant "
+        "cache artifacts, or a decisions-track manifest row that no bead represents. "
+        "`source` says which, and must be read before the record is trusted as attested. "
+        "A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file "
+        "sitting beside the manifest, and `body_path` names it."
+    ),
+    "required": [
+        "bead_id",
+        "body_path",
+        "brief_id",
+        "canonical_source",
+        "decision_state",
+        "fields",
+        "labels",
+        "policy_references",
+        "redundant_artifacts",
+        "source",
+        "status",
+        "timestamp",
+        "timestamp_field",
+        "title",
+        "track",
+        "verdict",
+    ],
+    "properties": {
+        "bead_id": nullable_string(
+            "The canonical decision bead. Null on a manifest-sourced record: there is no bead."
+        ),
+        "body_path": nullable_string(
+            "The markdown file behind this record. On a manifest record null is exactly the "
+            "`unreadable` lane -- no file exists. On a bead record it names the cache a "
+            "frontmatter-sourced field was read from."
+        ),
+        "brief_id": {"type": "string"},
+        "canonical_source": {
+            "type": "string",
+            "enum": ["bead_store", "decisions_track_manifest"],
+            "description": "Which store is authoritative for this record.",
+        },
+        "created_at": nullable_string("Bead creation timestamp. Null on a manifest record."),
+        "decision_state": {
+            "type": "string",
+            "description": (
+                "adjudicated / deferred / pending / malformed for a bead; adjudicated, "
+                "pending or `unreadable` for a manifest row. `unreadable` means no brief "
+                "body file exists for the row, and nothing else: a row with a body and no "
+                "verdict is an ordinary pending brief. One live row is unreadable; the "
+                "previous reading put 36 there, 35 of which had a body all along."
+            ),
+        },
+        "fields": FIELDS_SCHEMA,
+        "labels": STRING_ARRAY,
+        "policy_references": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["description", "reference"],
+                "properties": {"description": {"type": "string"}, "reference": {"type": "string"}},
+                "additionalProperties": False,
+            },
+        },
+        "redundant_artifacts": {"type": "array", "items": REDUNDANT_ARTIFACT_SCHEMA},
+        "source": {
+            "type": "string",
+            "enum": ["bead", "manifest"],
+            "description": (
+                "Which store this record came from. `manifest` means a decisions-track row "
+                "attested by nothing else -- no bead, no file."
+            ),
+        },
+        "status": nullable_string("Raw bead status, or the manifest row's status string."),
+        "timestamp": nullable_string(
+            "The one date this record can stand behind, or null. Never synthesised: 60 live "
+            "manifest rows carry no date at all, and a surface must render that as 'no "
+            "timestamp' rather than a false age."
+        ),
+        "timestamp_field": nullable_string(
+            "Which field `timestamp` came from. Null exactly when `timestamp` is null."
+        ),
+        "title": nullable_string(
+            "Bead title. Null on a manifest-sourced record, which has no title to report."
+        ),
+        "track": nullable_string(
+            "The decisions-track lane a manifest row declares. Null on a bead record."
+        ),
+        "updated_at": nullable_string("Bead update timestamp. Null on a manifest record."),
+        "verdict": VERDICT_SCHEMA,
+        # `body`, `sections` and `body_diagnostics` are optional here and
+        # required on BRIEF_DETAIL_SCHEMA. A roster read carries them only for
+        # manifest records, which reach no other surface: `show`, `options`,
+        # `doctor` and `validate` all act on a bead, and a manifest row has
+        # none. A bead-backed brief still gets its body from `briefs show`,
+        # so a city-wide roster does not also become a content read.
+        "body": BODY_SCHEMA,
+        "body_diagnostics": BODY_DIAGNOSTICS_SCHEMA,
+        "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},
+    },
+}
+
 #: `briefs show` only. The body is the brief -- the evidence a verdict is
 #: given on -- but it is a per-brief content read, so it stays off the list
 #: schema: a city-wide roster carrying ~200 bodies is a regression for every
@@ -449,18 +551,8 @@ BRIEF_DETAIL_SCHEMA: Schema = {
     ),
     "properties": {
         **BRIEF_RECORD_SCHEMA["properties"],
-        "body": {
-            "type": "string",
-            "description": (
-                "The canonical bead description, verbatim. Empty string when the bead "
-                "carries none. Always authoritative over `sections`."
-            ),
-        },
-        "body_diagnostics": {
-            "type": "array",
-            "items": DIAGNOSTIC_SCHEMA,
-            "description": "Why the body parse produced what it did; empty on a clean parse.",
-        },
+        "body": BODY_SCHEMA,
+        "body_diagnostics": BODY_DIAGNOSTICS_SCHEMA,
         "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},
     },
 }
