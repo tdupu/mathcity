@@ -168,8 +168,7 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
         "border-bottom: 2px solid var(--color-neutral-900); "
         'background: var(--color-neutral-100); flex-wrap: wrap;">'
         '<div style="font-family: var(--font-heading); font-size: 25px; font-weight: 600; '
-        'letter-spacing: 0.01em;">MathCity '
-        '<span style="color: var(--color-accent-700);">/</span> Briefs</div>'
+        'letter-spacing: 0.01em;">Brief Manager</div>'
         '<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-700);">'
         f'<span style="color: var(--color-neutral-600);">city</span> {_e(city)} '
         '<span style="color: var(--color-neutral-400);">&middot;</span> '

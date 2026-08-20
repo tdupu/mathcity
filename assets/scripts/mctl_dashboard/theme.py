@@ -9,40 +9,36 @@ Provenance is recorded per token, because two sources are not equally
 authoritative and whoever tunes this later needs to know which is which
 without re-deriving it:
 
-  [design]  quoted from the adopted design's README --
-            `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/`.
-            These are the values Taylor approved by looking at the rendered
-            page, so they win wherever they exist.
+  [template]  verbatim from the design system itself. An offline, fully
+              self-contained render of the prototype turned up on 2026-08-19
+              carrying the Classical stylesheet inlined, which is where these
+              come from. They are the real values, not an approximation.
 
-  [lmfdb]   taken from `lmfdb/utils/color.py` and `lmfdb/templates/style.css`.
-            Used only where the design states no value: its stylesheet
-            (`_ds/classical-.../styles.css`) did not ship with the handoff, so
-            thirteen of its twenty-one colour variables arrived unvalued.
+  [design]    quoted from the adopted design's README, where the template and
+              the README agree.
 
-Why LMFDB is the right filler rather than an interpolation: the design already
-borrows LMFDB's conventions (the fixed sidebar, the `.ntdata` table, the knowl
-pattern, the properties box), and LMFDB's palette is organised as a *semantic
-ramp* -- `col_main_d` (header ground) through `col_main` (links) to
-`col_main_ll` (lightest fill) -- which is the same shape as the design's
-100-900 scale. Its warm schemes are recognisably the family the Classical
-palette descends from: `Tans.col_main_l` is #cca661, sitting beside the
-design's accent #b68235, and `Tans.col_main_ll` is #ffd893 beside the design's
---color-accent-100 #fff3e4. `RuddyBrowns` supplies the dark end.
+Thirteen of these were previously reconstructed from LMFDB's semantic ramp,
+because the design's own stylesheet had not shipped with the handoff. That
+reconstruction is now replaced and the difference was not cosmetic in every
+case: the ramps here are generated in OKLCH on one shared lightness scale, so
+the same step of any role matches the others in visual value, which an
+eyeballed interpolation does not give you. The clearest error it fixes is
+`--color-accent-600`, which the reconstruction had set to #b68235 -- that is
+`--color-accent`, a different thing; the real ramp step is #a06f24.
 
-Note that LMFDB's palette is *not* in `lmfdb/templates/style.css`; that file is
-a Jinja template full of `{{color.*}}` references. `lmfdb/utils/color.py` is
-the source.
-
-If `_ds/classical-.../styles.css` ever surfaces, replace TOKENS wholesale.
-Nothing else needs to change.
+The LMFDB lineage in the docstring history was not wrong about the family, and
+LMFDB remains the source for the *conventions* this dashboard borrows: the
+fixed sidebar, the `.ntdata` table metrics, the knowl, the properties box. It
+is simply no longer the source for any colour.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-#: [design] ink at 16%, as the design README specifies for --color-divider.
-_DIVIDER = "rgba(32, 31, 29, 0.16)"
+#: [template] verbatim from the design system: ink at 16%, expressed as a
+#: color-mix rather than a baked rgba so it tracks --color-text.
+_DIVIDER = "color-mix(in srgb, #201f1d 16%, transparent)"
 
 TOKENS: dict[str, str] = {
     # --- ground and ink ---------------------------------------------------
@@ -52,31 +48,35 @@ TOKENS: dict[str, str] = {
     "--color-divider": _DIVIDER,       # [design]
     # --- accent ramp ------------------------------------------------------
     "--color-accent": "#b68235",       # [design]
-    "--color-accent-100": "#fff3e4",   # [design]
-    "--color-accent-200": "#fbe6c8",   # [lmfdb] Tans col_main_ll #ffd893, lightened
-    "--color-accent-300": "#f0d0a0",   # [lmfdb] between Tans col_main_ll and col_main_l
-    "--color-accent-400": "#dcb478",   # [lmfdb] Tans col_main_l #cca661, lightened
-    "--color-accent-500": "#c69a52",   # [lmfdb] Tans col_main_l #cca661
-    "--color-accent-600": "#b68235",   # [design] same value as --color-accent
-    "--color-accent-700": "#7d5411",   # [design]
-    "--color-accent-800": "#5c3d0e",   # [lmfdb] RuddyBrowns col_main_2 #443227, warmed
-    "--color-accent-900": "#3a270d",   # [design]
+    "--color-accent-100": "#fff3e4",  # [template]
+    "--color-accent-200": "#ffe3bf",  # [template]
+    "--color-accent-300": "#facb8d",  # [template]
+    "--color-accent-400": "#e1ad66",  # [template]
+    "--color-accent-500": "#c28d41",  # [template]
+    "--color-accent-600": "#a06f24",  # [template]
+    "--color-accent-700": "#7d5411",  # [template]
+    "--color-accent-800": "#5a3b0a",  # [template]
+    "--color-accent-900": "#3a270d",  # [template]
     # --- neutral ramp -----------------------------------------------------
-    "--color-neutral-100": "#f8f4f4",  # [design]
-    "--color-neutral-200": "#ece8e8",  # [lmfdb] light_grey_9 #e9e9e9, warmed
-    "--color-neutral-300": "#d8d3d3",  # [lmfdb] light_grey_3 #ddd, warmed
-    "--color-neutral-400": "#bbbaba",  # [lmfdb] literal #bbbaba in style.css
-    "--color-neutral-500": "#918b8b",  # [lmfdb] grey #999, warmed
-    "--color-neutral-600": "#6f6a6a",  # [lmfdb] dark_grey_1 #666, warmed
-    "--color-neutral-700": "#565151",  # [lmfdb] between dark_grey_1 and dark_grey
-    "--color-neutral-800": "#3f3b3b",  # [lmfdb] dark_grey #333, warmed
-    "--color-neutral-900": "#2d2b2b",  # [design]
+    "--color-neutral-100": "#f8f4f4",  # [template]
+    "--color-neutral-200": "#eae7e7",  # [template]
+    "--color-neutral-300": "#d7d3d3",  # [template]
+    "--color-neutral-400": "#bab6b6",  # [template]
+    "--color-neutral-500": "#9b9797",  # [template]
+    "--color-neutral-600": "#7d7979",  # [template]
+    "--color-neutral-700": "#605d5d",  # [template]
+    "--color-neutral-800": "#444141",  # [template]
+    "--color-neutral-900": "#2d2b2b",  # [template]
     # --- type -------------------------------------------------------------
     # Self-hosted; see assets/mctl/fonts/ and the @font-face rules below.
     # Georgia leads the fallback so the page is correct before the fonts load
     # and correct if they are absent entirely.
-    "--font-heading": "'Cormorant Garamond', Georgia, 'Times New Roman', serif",
-    "--font-body": "'Lora', Georgia, 'Times New Roman', serif",
+    # [template] verbatim, except that Georgia is inserted ahead of the
+    # generic fallback: the two families are not vendored here (see
+    # assets/mctl/fonts/README.md), and system-ui on a serif design is a
+    # worse approximation than a serif.
+    "--font-heading": "'Cormorant Garamond', Georgia, system-ui, sans-serif",
+    "--font-body": "'Lora', Georgia, system-ui, sans-serif",
     "--font-mono": "ui-monospace, Menlo, Monaco, 'Cascadia Mono', monospace",
     # --- spacing (design README's scale) -----------------------------------
     "--space-1": "4.6px",

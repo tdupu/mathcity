@@ -91,12 +91,13 @@ def test_the_stoplight_scale_is_defined_once():
         assert set(entry) == {"fg", "bg", "edge"}, name
 
 
-def test_every_token_records_where_its_value_came_from():
+def test_every_colour_comes_from_the_design_system_not_a_reconstruction():
     """Provenance survives contact with the next maintainer.
 
-    Design-stated values and LMFDB-derived reconstructions are not equally
-    authoritative, and someone tuning this later needs to know which is which
-    without re-deriving it.
+    Thirteen of these were once interpolated from LMFDB's ramp, because the
+    design's stylesheet had not shipped. It has since arrived, so no colour
+    should still carry the reconstruction marker -- and this test is what
+    stops one being reintroduced by hand later.
     """
     from mctl_dashboard import theme
 
@@ -108,7 +109,8 @@ def test_every_token_records_where_its_value_came_from():
     ]
     assert colour_lines, "no colour tokens found to check"
     for line in colour_lines:
-        assert "[design]" in line or "[lmfdb]" in line, f"no provenance: {line.strip()}"
+        assert "[template]" in line or "[design]" in line, f"no provenance: {line.strip()}"
+        assert "[lmfdb]" not in line, f"reconstructed value reintroduced: {line.strip()}"
 
 
 # --------------------------------------------------------------------------
