@@ -461,6 +461,12 @@ severity = "ERROR"
 meaning = "Redundant brief cache update failed after canonical bead update."
 module = "effects.py"
 
+[MCTL_BRIEF_FRONTMATTER_UNWRITABLE]
+severity = "WARN"
+meaning = "Brief document has no rewritable frontmatter block, so its own status was not updated."
+policy_ref = "B2.8a"
+module = "effects.py"
+
 [MCTL_REDUNDANT_CACHE_ROLLED_BACK]
 severity = "ERROR"
 meaning = "Redundant cache writes failed after bead creation and were rolled back; the canonical bead is intact."

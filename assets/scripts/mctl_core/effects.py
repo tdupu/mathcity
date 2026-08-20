@@ -28,6 +28,7 @@ from .beads import (
     verify_relation,
 )
 from .briefs import (
+    cached_brief_documents,
     decision_options,
     doctor_briefs,
     legacy_gate_diagnostics,
@@ -37,6 +38,7 @@ from .briefs import (
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
+from .materialize_plan import FRONTMATTER_LINE
 from .redundant_state import ArtifactLayout, artifact_layout
 from .trace import append_aborted, append_applied, append_planned, trace_path
 
@@ -160,6 +162,17 @@ class MutationError(Exception):
     def __init__(self, diagnostic: Diagnostic):
         super().__init__(diagnostic.message)
         self.diagnostic = diagnostic
+
+
+class BriefFrontmatterUnwritable(OSError):
+    """This document has no frontmatter block a writer can rewrite faithfully.
+
+    An `OSError` subclass on purpose. Every existing cache path already
+    degrades on `OSError` rather than crashing, so a caller that has not
+    learned about this case still fails per-brief instead of taking the
+    adjudication down with it. `_apply_effects` catches it first, to report
+    the WARN it deserves rather than the ERROR a real I/O failure deserves.
+    """
 
 
 @dataclass(frozen=True)
@@ -386,6 +399,13 @@ def plan_adjudication(
             if_status=observed.status,
         ),
         cache_fields=cache_fields,
+        # #77: the brief file's own `status:` was owned by nobody, so 35 of 88
+        # index rows pointed at a document still reading `present-it-pending`
+        # after its brief had been decided. Two keys, not four: the frontmatter
+        # is a line format, and a `verdict_reason` carrying a newline or a
+        # colon cannot be represented in it. Both the reason and the timestamp
+        # are already in `decisions/<id>.toml`, which can hold them.
+        frontmatter_fields={"status": "adjudicated", "verdict": normalized},
     )
 
 
@@ -523,6 +543,34 @@ def _apply_effects(
         for update in plan.cache_updates:
             try:
                 _apply_cache_update(update)
+            except BriefFrontmatterUnwritable as error:
+                # Per-brief, and a WARN rather than an ERROR: the document is
+                # shaped in a way this writer will not rewrite, which is a
+                # fact about that one brief, not a failed write. Adjudication
+                # is not sunk by it -- the canonical bead, the decision TOML
+                # and the index row all landed, and the operator is told which
+                # file still disagrees.
+                diagnostics.append(
+                    _diagnostic(
+                        ctx,
+                        Severity.WARN,
+                        "MCTL_BRIEF_FRONTMATTER_UNWRITABLE",
+                        (
+                            "The brief's own frontmatter was not updated; this "
+                            "document has no header block that can be rewritten "
+                            "without reformatting it."
+                        ),
+                        brief_id=plan.target_brief_id,
+                        data_location=str(update.path),
+                        detail=str(error),
+                        policy_ref="B2.8a",
+                        suggested_next_command=(
+                            "Add a `---` frontmatter block to the brief file, "
+                            "then re-run the adjudication to record the status."
+                        ),
+                    )
+                )
+                continue
             except OSError as error:
                 diagnostic = _diagnostic(
                     ctx,
@@ -776,8 +824,11 @@ def _plan(
     preconditions: tuple[Diagnostic, ...],
     bead_update: BeadUpdate,
     cache_fields: Mapping[str, str],
+    frontmatter_fields: Mapping[str, str] | None = None,
 ) -> EffectPlan:
-    cache_updates = _cache_updates(ctx, brief_id, cache_fields)
+    cache_updates = _cache_updates(
+        ctx, brief_id, cache_fields, frontmatter_fields=frontmatter_fields
+    )
     event_row = {
         "brief_id": brief_id,
         "operation": operation,
@@ -806,7 +857,11 @@ def _plan(
 
 
 def _cache_updates(
-    ctx: MctlContext, brief_id: str, fields: Mapping[str, str]
+    ctx: MctlContext,
+    brief_id: str,
+    fields: Mapping[str, str],
+    *,
+    frontmatter_fields: Mapping[str, str] | None = None,
 ) -> tuple[CacheUpdate, ...]:
     updates: list[CacheUpdate] = []
     decision_toml = ctx.rig_root / ".beads" / "briefs" / "decisions" / f"{brief_id}.toml"
@@ -815,6 +870,14 @@ def _cache_updates(
     stack_index = ctx.rig_root / ".beads" / "briefs" / "stack" / ".index.jsonl"
     if stack_index.exists():
         updates.append(CacheUpdate("stack_index", stack_index, brief_id, fields))
+    if frontmatter_fields:
+        # Absent stays absent: a brief with no markdown cache plans no
+        # frontmatter write, exactly as an absent decision TOML plans none.
+        # The document that *exists* and has no header is the case that warns.
+        for _lane, path in cached_brief_documents(ctx, brief_id):
+            updates.append(
+                CacheUpdate("brief_frontmatter", path, brief_id, frontmatter_fields)
+            )
     return tuple(updates)
 
 
@@ -917,7 +980,63 @@ def _apply_cache_update(update: CacheUpdate) -> None:
     if update.kind == "stack_index":
         _update_stack_index(update.path, update.target_brief_id, update.fields)
         return
+    if update.kind == "brief_frontmatter":
+        _update_brief_frontmatter(update.path, update.fields)
+        return
     raise OSError(f"unknown cache update kind: {update.kind}")
+
+
+def _update_brief_frontmatter(path: Path, fields: Mapping[str, str]) -> None:
+    """Set `fields` in a brief's frontmatter, leaving every other line alone.
+
+    The same discipline as `_update_stack_index`: only the lines this write
+    actually changes are re-emitted, and everything else -- key order,
+    spelling, spacing, values a YAML loader would reject outright -- survives
+    byte for byte. There is no second serializer here, because a brief that
+    round-tripped through one would lose the ~100 producer keys the corpus
+    carries and the unquoted `needs-revision(check-zero:partial;option-A)`
+    values that only a line matcher can hold.
+
+    The block is delimited exactly as `materialize_plan.parse_stack_file`
+    delimits it -- a `---` first line and the next line that opens `---` --
+    so the reader and the writer cannot disagree about what the header is.
+    Anything else raises `BriefFrontmatterUnwritable`: a header we cannot
+    reproduce is a header we must not rewrite.
+
+    Idempotent. A second call with the same fields rewrites nothing and does
+    not touch the file.
+    """
+    text = path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    if not lines or lines[0] != "---":
+        raise BriefFrontmatterUnwritable(f"{path}: no frontmatter block to write into")
+    closing = next(
+        (index for index in range(1, len(lines)) if lines[index].startswith("---")),
+        None,
+    )
+    if closing is None:
+        raise BriefFrontmatterUnwritable(f"{path}: frontmatter block is never closed")
+    header = list(lines[1:closing])
+    for key, value in fields.items():
+        line = f"{key}: {value}"
+        # Anchored on the whole key: `FRONTMATTER_LINE` is what the reader
+        # matches, so `status` never matches `status_note` or a body line that
+        # merely mentions the word.
+        matched = [
+            index
+            for index, existing in enumerate(header)
+            if (match := FRONTMATTER_LINE.match(existing)) and match.group(1) == key
+        ]
+        if matched:
+            # Every occurrence, not the first: the reader takes the last one,
+            # so a stale duplicate left behind would be the value it reports.
+            for index in matched:
+                header[index] = line
+        else:
+            header.append(line)
+    if header == lines[1:closing]:
+        return
+    _atomic_write(path, "\n".join([lines[0], *header, *lines[closing:]]))
 
 
 def _atomic_write(path: Path, text: str) -> None:

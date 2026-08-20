@@ -1249,30 +1249,50 @@ def _cached_brief_document(
     text lives is the defect issue #65 removed. The path is returned rather
     than recomputed by a second walk for the same reason.
 
+    The rule itself is `cached_brief_documents`; this is its first answer,
+    read.
+    """
+    for source, path in cached_brief_documents(ctx, brief_id):
+        try:
+            return source, path, path.read_text(encoding="utf-8")
+        except OSError:
+            # The file exists and cannot be read: the lane and the path are
+            # still true, and `""` here means "cached, unreadable" rather
+            # than "no cache", which the caller distinguishes by `is None`.
+            return source, path, ""
+    return None
+
+
+def cached_brief_documents(
+    ctx: MctlContext, brief_id: str
+) -> tuple[tuple[str, Path], ...]:
+    """**Every** markdown cache this brief owns, pile lane before stack lane.
+
+    The naming rule itself, in one place. `_cached_brief_document` is this
+    function's first entry, so readers keep the single answer they have always
+    had while a writer can reach all of them.
+
     The prefix form is the pipeline's own file-naming convention: the stack
     index records `source: he-a9cfa` beside `path: …/he-a9cfa-brief.md`. It is
     anchored on the whole id followed by `-`, so it cannot drift onto a
     neighbouring bead, and it is sorted so a brief with two snapshots resolves
     the same way twice.
+
+    A writer needs all of them. Leaving a second copy carrying the
+    pre-adjudication `status:` is the drift #77 is about, one directory over --
+    and the pile and stack copies of one brief are exactly the pair that
+    `brief-shuffle` is mid-move on when it is interrupted.
     """
     layout = artifact_layout(ctx)
+    documents: list[tuple[str, Path]] = []
     for source, directory in (
         (OPTION_SOURCE_PILE_FILE, layout.pile),
         (OPTION_SOURCE_STACK_FILE, layout.stack),
     ):
         exact = directory / f"{brief_id}.md"
         candidates = [exact] if exact.is_file() else sorted(directory.glob(f"{brief_id}-*.md"))
-        for path in candidates:
-            if not path.is_file():
-                continue
-            try:
-                return source, path, path.read_text(encoding="utf-8")
-            except OSError:
-                # The file exists and cannot be read: the lane and the path are
-                # still true, and `""` here means "cached, unreadable" rather
-                # than "no cache", which the caller distinguishes by `is None`.
-                return source, path, ""
-    return None
+        documents.extend((source, path) for path in candidates if path.is_file())
+    return tuple(documents)
 
 
 def _bead_for(ctx: MctlContext, brief_id: str) -> Bead | None:
