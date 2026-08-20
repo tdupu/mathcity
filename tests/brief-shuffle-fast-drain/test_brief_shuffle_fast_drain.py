@@ -89,6 +89,28 @@ feedback_sink: brief_quality_failure
         with GATES.open("rb") as handle:
             return tomllib.load(handle)
 
+    def write_pile_manifest(self, *rows):
+        """Write pile rows in the live city's convention.
+
+        Measured against <city-root>/.beads/briefs/.pile/manifest.jsonl on
+        2026-08-20: all 22 rows round-trip byte-identically under a plain
+        `json.dumps(row)` -- default separators, insertion key order, no
+        sorting. The stack index uses a different convention; this file is
+        not that file.
+        """
+        path = self.brief_root / ".pile/manifest.jsonl"
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return path
+
+    def read_pile_manifest_rows(self):
+        path = self.brief_root / ".pile/manifest.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+    def reject_brief(self, slug, **kwargs):
+        brief = self.write_brief(slug, **kwargs)
+        brief.write_text(brief.read_text().replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL"))
+        return brief
+
     def test_valid_standard_brief_promotes_to_stack(self):
         self.write_brief("standard-ok")
         report = self.json_output(self.run_drain("--apply"))
@@ -368,6 +390,141 @@ feedback_sink: brief_quality_failure
         self.assertEqual(report["recovered"], ["sidecar-recovery"])
         self.assertEqual(report["rejected"], ["sidecar-recovery"])
         self.assertTrue((self.brief_root / ".pile/.rejected/sidecar-recovery/rejection.json").is_file())
+
+    # --- pile manifest: the rejection path's fourth representation ------------
+    #
+    # reject_brief() moves the file to .pile/.rejected/<slug>/ and writes
+    # rejection.json, but left <pile>/manifest.jsonl untouched. On the live
+    # city that stranded rows n=13, 17 and 19-23 reading "status": "ready" and
+    # "requires_taylor_adjudication": true for briefs no longer in the pile.
+
+    def test_rejection_marks_the_pile_manifest_row_rejected(self):
+        self.write_pile_manifest(
+            {"n": 1, "slug": "gate-fail", "form": "full", "status": "ready",
+             "requires_taylor_adjudication": True},
+        )
+        self.reject_brief("gate-fail")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["gate-fail"])
+        self.assertEqual(report["manifest_updated"], ["gate-fail"])
+        row = self.read_pile_manifest_rows()[0]
+        self.assertEqual(row["status"], "rejected")
+        self.assertIn("G4 Critical-review: FAIL", row["rejection_reason"])
+
+    def test_manifest_rejected_at_matches_the_rejection_sidecar(self):
+        self.write_pile_manifest({"n": 1, "slug": "stamped", "status": "ready"})
+        self.reject_brief("stamped")
+        self.json_output(self.run_drain("--apply"))
+        sidecar = json.loads((self.brief_root / ".pile/.rejected/stamped/rejection.json").read_text())
+        self.assertEqual(self.read_pile_manifest_rows()[0]["rejected_at"], sidecar["rejected_at"])
+
+    def test_numbered_brief_filename_resolves_to_its_manifest_row(self):
+        # decisions-to-briefs TS-3 deposits `NN-<slug>-brief.md` while the row
+        # carries the bare slug -- the live shape for n=19-23.
+        self.write_pile_manifest(
+            {"n": 18, "slug": "unrelated", "status": "ready"},
+            {"n": 19, "slug": "mc-x6a-dead-target-router-beads", "status": "ready"},
+        )
+        self.reject_brief("19-mc-x6a-dead-target-router-beads-brief")
+        self.json_output(self.run_drain("--apply"))
+        rows = self.read_pile_manifest_rows()
+        self.assertEqual(rows[0]["status"], "ready")
+        self.assertEqual(rows[1]["status"], "rejected")
+
+    def test_a_slug_that_itself_ends_in_brief_is_not_over_stripped(self):
+        # Live rows n=14/15 carry slugs ending in `-brief`. A suffix strip on
+        # the filename would resolve `<slug>-brief` to `<slug minus -brief>`
+        # and hit the wrong row.
+        self.write_pile_manifest(
+            {"n": 14, "slug": "gt-1f2781-downstream-filter-rule-brief", "status": "ready"},
+            {"n": 15, "slug": "gt-1f2781-downstream-filter-rule", "status": "ready"},
+        )
+        self.reject_brief("14-gt-1f2781-downstream-filter-rule-brief")
+        self.json_output(self.run_drain("--apply"))
+        rows = self.read_pile_manifest_rows()
+        self.assertEqual(rows[0]["status"], "rejected")
+        self.assertEqual(rows[1]["status"], "ready")
+
+    def test_only_the_changed_row_is_reserialized(self):
+        # Pile brief 22 (index-jsonl-two-serialization-producers): a whole-file
+        # rewrite is what mangled 38 rows of .index.jsonl. Every untouched line
+        # must come back byte-identical.
+        manifest = self.write_pile_manifest(
+            {"n": 1, "slug": "keep-me", "status": "ready", "no_brainer_verdict": "candidate"},
+            {"n": 2, "slug": "reject-me", "status": "ready"},
+            {"n": 3, "slug": "keep-me-too", "status": "ready", "requires_taylor_adjudication": True},
+        )
+        before = manifest.read_text().splitlines()
+        self.reject_brief("reject-me")
+        self.json_output(self.run_drain("--apply"))
+        after = manifest.read_text().splitlines()
+        self.assertEqual(len(before), len(after))
+        self.assertEqual(before[0], after[0])
+        self.assertEqual(before[2], after[2])
+        self.assertNotEqual(before[1], after[1])
+
+    def test_rejection_with_no_matching_manifest_row_reports_rather_than_invents(self):
+        self.write_pile_manifest({"n": 1, "slug": "someone-else", "status": "ready"})
+        self.reject_brief("no-row-here")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["no-row-here"])
+        self.assertEqual(report["manifest_updated"], [])
+        self.assertIn("no manifest row", report["manifest_aborted"]["no-row-here"])
+        self.assertEqual(self.read_pile_manifest_rows(), [{"n": 1, "slug": "someone-else", "status": "ready"}])
+
+    def test_ambiguous_manifest_match_writes_nothing(self):
+        self.write_pile_manifest(
+            {"n": 1, "slug": "twin", "status": "ready"},
+            {"n": 1, "slug": "twin", "status": "ready"},
+        )
+        self.reject_brief("twin")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["twin"])
+        self.assertIn("ambiguous", report["manifest_aborted"]["twin"])
+        self.assertTrue(all(row["status"] == "ready" for row in self.read_pile_manifest_rows()))
+
+    def test_absent_pile_manifest_does_not_block_the_rejection(self):
+        self.reject_brief("no-manifest")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["no-manifest"])
+        self.assertTrue((self.brief_root / ".pile/.rejected/no-manifest/brief.md").is_file())
+        self.assertIn("no pile manifest", report["manifest_aborted"]["no-manifest"])
+
+    def test_manifest_write_failure_leaves_the_rejection_applied(self):
+        # The move is the canonical act; the manifest is a cache
+        # (assets/brief-pipeline/paths.toml). A cache failure must be reported,
+        # never allowed to unwind a completed rejection.
+        module = load_drain_module()
+        self.write_pile_manifest({"n": 1, "slug": "cache-down", "status": "ready"})
+        brief = self.reject_brief("cache-down")
+        with mock.patch.object(module, "mark_manifest_rejected", side_effect=OSError("manifest unavailable")):
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
+        self.assertEqual(outcome.action, "reject")
+        self.assertTrue((self.brief_root / ".pile/.rejected/cache-down/brief.md").is_file())
+        self.assertIn("manifest unavailable", outcome.manifest_detail)
+        self.assertEqual(self.read_pile_manifest_rows()[0]["status"], "ready")
+        self.assertEqual(list((self.brief_root / ".staging").iterdir()), [])
+
+    def test_rerunning_against_an_already_rejected_row_is_idempotent(self):
+        self.write_pile_manifest({"n": 1, "slug": "twice", "status": "ready"})
+        self.reject_brief("twice")
+        self.json_output(self.run_drain("--apply"))
+        first = (self.brief_root / ".pile/manifest.jsonl").read_text()
+        module = load_drain_module()
+        outcome, detail = module.mark_manifest_rejected(self.brief_root, "twice", "a different reason", "2099-01-01T00:00:00Z")
+        self.assertEqual(outcome, "unchanged")
+        self.assertEqual((self.brief_root / ".pile/manifest.jsonl").read_text(), first)
+
+    def test_promotion_does_not_write_the_pile_manifest(self):
+        # Scope boundary, asserted so it is visible rather than assumed: this
+        # change covers the rejection path only. The promotion path leaves the
+        # same rows stale and is a separate, unfixed defect.
+        manifest = self.write_pile_manifest({"n": 1, "slug": "promoted-ok", "status": "ready"})
+        before = manifest.read_text()
+        self.write_brief("promoted-ok")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["promoted"], ["promoted-ok"])
+        self.assertEqual(manifest.read_text(), before)
 
 
 if __name__ == "__main__":

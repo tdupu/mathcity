@@ -54,6 +54,7 @@ from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
 from .fanout import fan_out
+from .reading import attr
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
 #: Marker written into the adjudication reason when the no-brainer box is
@@ -195,6 +196,23 @@ def _scoped(
         for b in briefs
         if str(b.get("decision_state") or "") in states and not is_deferred(b)
     ]
+
+
+def _index_by_id(briefs: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    """Briefs by every id they answer to.
+
+    `briefs_list` populates `brief_id` and leaves `bead_id` unset on every
+    row, so an index keyed on `bead_id` alone collapsed to {"None": ...}
+    and every lookup missed -- the priority list reported itself empty
+    rather than reporting that it could not find what was picked.
+    """
+    index: dict[str, Mapping[str, Any]] = {}
+    for brief in briefs:
+        for key in ("bead_id", "brief_id"):
+            value = attr(brief, key)
+            if value:
+                index.setdefault(str(value), brief)
+    return index
 
 
 def _queued_from(request: "Request") -> list[str]:
@@ -393,7 +411,7 @@ class Dashboard:
         rig = self._rig_for(request) or self.rig
         context = self._scope_context(rig)
         briefs, _city, city_extra = self._read_briefs(rig)
-        by_id = {str(b.get("bead_id")): b for b in briefs}
+        by_id = _index_by_id(briefs)
 
         # `order` is the saved ordering; `pick` arrives from the stack's
         # bulk-add form. Ticked rows append to the end of the existing order

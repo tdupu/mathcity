@@ -1879,3 +1879,30 @@ def test_sorting_by_score_uses_the_view_weights():
     first_u = stack.sorted_briefs(rows, by_unlock)[0]["brief_id"]
     first_p = stack.sorted_briefs(rows, by_prio)[0]["brief_id"]
     assert first_u != first_p, "the weighting does not change the ordering"
+
+
+def test_the_priority_list_finds_a_brief_the_core_returned():
+    """247 of 247 live rows have bead_id=None; the index was all misses.
+
+    `briefs_list` populates `brief_id` and leaves `bead_id` unset, so an
+    index keyed only on `bead_id` collapses to {"None": ...} and every
+    pick silently fails -- the sidebar then reports an empty list, which
+    reads as "you have not added anything".
+    """
+    from mctl_dashboard.app import _index_by_id
+
+    rows = [
+        {"brief_id": "gt-1", "title": "one"},
+        {"fields": {"bead_id": {"name": "bead_id", "value": "gt-2"}}, "title": "two"},
+        {"bead_id": "gt-3", "title": "three"},
+    ]
+    index = _index_by_id(rows)
+    assert set(index) == {"gt-1", "gt-2", "gt-3"}
+    assert "None" not in index
+
+
+def test_the_priority_list_counts_one_brief_correctly():
+    from mctl_dashboard.screens import priority
+
+    html = priority.screen([{"brief_id": "gt-1", "title": "one"}])
+    assert "1 briefs" not in html

@@ -11,6 +11,7 @@ policy document; binding rules live in the `POLICY*.md` files.
 | Agent | A Codex, Claude Code, or Gas City managed worker session that performs a bounded role. |
 | Artifact | A file, branch, test result, plan, issue body, PR body, or other durable output that a brief asks a human to judge. |
 | Bead | A durable work record in `bd`. Beads carry task state, dependencies, ownership, and links to larger artifacts. |
+| Bead prefix | The leading token of a bead ID (`gsp-`, `mc-`, `he-`). It names the store the bead **originated in**, which is not necessarily the store it currently lives in — beads migrated from a retired store keep their origin prefix (ADR 0003). Do not infer a bead's current location from its prefix. |
 | Brief | A decision artifact that explains what happened, what evidence exists, what gates passed, and what human decision is needed. Brief beads are `type=decision`. |
 | Brief operator | The `mathcity.brief-operator` agent that runs deterministic brief-pipeline formula steps. It does not adjudicate. |
 | Check skill | A read-only auditor that reports policy drift, for example `check-documentation-policy` or `check-city-policy`. |
@@ -18,6 +19,7 @@ policy document; binding rules live in the `POLICY*.md` files.
 | Formula | A Gas City TOML workflow made of ordered steps. Mathcity formulas live in `formulas/` and are indexed in `README-formulas.md`. |
 | Gate | A policy or quality check that a brief must satisfy before promotion to the stack. Gates may be mechanical, review, stop, or manual gates. |
 | Integration example | A documented example that needs an external system such as GitHub, a registry, Dolt, network access, a model, or a live city. |
+| Legacy tree | A copy of the mathcity pack living inside `gascity-packs/` (`~/gt/gascity-packs/mathcity`, `~/repos/gascity-packs/mathcity`), retired in favour of `tdupu/mathcity`. Not a fork and not a checkout — a vendored copy in a different repository. |
 | Local example | A documented example that runs from a clean checkout with ordinary local dependencies. |
 | Mayor | The city coordination role. The Mayor supervises city progress and coordination, but should not be confused with the clerk's brief-reading duty. |
 | No-brainer | A brief classified as mechanically safe enough for compact handling under the no-brainer gates and kill-switch rules. |

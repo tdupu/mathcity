@@ -10,11 +10,12 @@ import os
 import re
 import socket
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 OWNER = "brief-shuffle-fast-drain"
@@ -46,6 +47,16 @@ CLASSIFIER_STATES = {
     "safety_blocked",
 }
 CLASSIFIER_TIMESTAMP = re.compile(r"classified_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+# The pile manifest is the fourth representation of a pile brief, beside the
+# file, the rejection sidecar and the bead. `manifest` in paths.toml names the
+# STACK index, not this file; the pile manifest has no paths.toml key and no
+# reader in mctl, so it is resolved the same way every other pile path in this
+# script is -- from --brief-root.
+PILE_MANIFEST_NAME = "manifest.jsonl"
+# flock only serializes writers holding the SAME lock file. `<dir>/.manifest.lock`
+# beside the jsonl is the convention append_index already follows for the stack
+# index, and <pile>/.manifest.lock already exists on the live city.
+MANIFEST_LOCK_NAME = ".manifest.lock"
 
 
 @dataclass(frozen=True)
@@ -53,6 +64,11 @@ class Outcome:
     action: str
     slug: str
     reason: str = ""
+    # Disposition of the pile-manifest row, reported separately from `action`:
+    # the manifest is a cache, so its outcome never changes whether the brief
+    # was rejected. "" means no manifest write was attempted.
+    manifest: str = ""
+    manifest_detail: str = ""
 
 
 def utc_now() -> str:
@@ -245,6 +261,127 @@ def append_index(stack: Path, row: dict[str, Any]) -> None:
                 pass
 
 
+def atomic_write(path: Path, text: str) -> None:
+    """Write via a same-directory temp file and os.replace.
+
+    A rewrite interrupted between truncate and write destroys the file it was
+    updating. os.replace is atomic within a filesystem, so a concurrent reader
+    sees either the whole old manifest or the whole new one. Mirrors
+    mctl_core/effects.py::_atomic_write.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def manifest_row_stems(row: Mapping[str, Any]) -> set[str]:
+    """Every pile filename stem the deposit convention could have produced for a row.
+
+    Candidates are generated FORWARD from the row; the stem is never stripped
+    to derive a slug. A strip would have to guess whether a trailing `-brief`
+    is the deposit convention or part of the slug itself, and on the live city
+    rows n=14/15 carry slugs that genuinely end in `-brief` -- so the guess is
+    wrong exactly where it matters. Generating forward keeps the row's own slug
+    untouched and makes every comparison an anchored equality.
+
+    Two deposit shapes are attested in <city-root>/.beads/briefs/.pile:
+    `NN-<slug>-brief.md` (decisions-to-briefs TS-3; rows n=13, 17, 19-23) and
+    a bare `<slug>.md` (rows n=1-12, whose slugs carry their own `q28-NN`
+    numbering). Both are matched, with and without the `-brief` suffix, and
+    with `n` both bare and zero-padded.
+    """
+    slug = row.get("slug")
+    if not isinstance(slug, str) or not slug:
+        return set()
+    stems = {slug, f"{slug}-brief"}
+    n = row.get("n")
+    if isinstance(n, int) and not isinstance(n, bool):
+        for prefix in (str(n), f"{n:02d}"):
+            stems.add(f"{prefix}-{slug}")
+            stems.add(f"{prefix}-{slug}-brief")
+    return stems
+
+
+def mark_manifest_rejected(brief_root: Path, stem: str, reason: str, rejected_at: str) -> tuple[str, str]:
+    """Splice the pile-manifest row for `stem`; leave every other line byte-identical.
+
+    Returns `(outcome, detail)` rather than raising on a miss: an unmatched or
+    ambiguous row is a fact about the manifest, and inventing a row to hold the
+    rejection would assert a pile membership nothing recorded.
+
+    Only the matched row is re-emitted. Pile brief 22
+    (`22-index-jsonl-two-serialization-producers`) is on file for why: a
+    whole-file rewrite under a second serialization convention is what mangled
+    38 rows of `stack/.index.jsonl`. The row is re-emitted with a plain
+    `json.dumps` -- default separators, insertion key order, no sorting --
+    which is the convention all 22 live rows round-trip through byte-identically
+    (measured 2026-08-20). That is NOT the stack index's compact sorted
+    convention; this is a different file with a different producer.
+
+    Read and write happen inside the lock, since a read-modify-write outside it
+    is a lost update against any concurrent depositor.
+    """
+    manifest = brief_root / ".pile" / PILE_MANIFEST_NAME
+    if not manifest.is_file():
+        return "aborted", f"no pile manifest at {manifest}"
+    lock_path = manifest.parent / MANIFEST_LOCK_NAME
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        except OSError:
+            pass
+        try:
+            text = manifest.read_text(encoding="utf-8")
+            lines = text.splitlines()
+            matches: list[tuple[int, dict[str, Any]]] = []
+            for position, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(row, dict) and stem in manifest_row_stems(row):
+                    matches.append((position, row))
+            if not matches:
+                return "aborted", f"no manifest row matches {stem}"
+            if len(matches) > 1:
+                return "aborted", f"ambiguous: {len(matches)} manifest rows match {stem}"
+            position, row = matches[0]
+            if row.get("status") == "rejected":
+                return "unchanged", str(row.get("slug", ""))
+            # `requires_taylor_adjudication` is deliberately left as it stands.
+            # A gate rejection is mechanical; whether a human still needs to
+            # look at the brief is a verdict, and the plan's "repair is not
+            # rejection" constraint reserves verdicts for the human.
+            row.update({
+                "status": "rejected",
+                # Named to match rejection.json's `reason`, prefixed because a
+                # bare `reason` sits ambiguously beside `no_brainer_verdict`.
+                "rejection_reason": reason,
+                # Not synthesized: this is the timestamp of the rejection that
+                # just happened, shared with the sidecar so the two agree.
+                "rejected_at": rejected_at,
+            })
+            lines[position] = json.dumps(row, ensure_ascii=False)
+            atomic_write(manifest, "\n".join(lines) + ("\n" if text.endswith("\n") else ""))
+            return "updated", str(row.get("slug", ""))
+        finally:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+
+
 def claim(source: Path, brief_root: Path, slug: str) -> tuple[Path, Path]:
     staging_dir = brief_root / ".staging" / f"fast-drain-{os.getpid()}-{slug}"
     staging_dir.mkdir(parents=True, exist_ok=False)
@@ -349,17 +486,18 @@ def recover_owned_staging(brief_root: Path) -> list[str]:
     return recovered
 
 
-def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, profile: str, reason: str) -> None:
+def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, profile: str, reason: str) -> tuple[str, str]:
     rejected_dir = brief_root / ".pile" / ".rejected" / slug
     rejected_dir.mkdir(parents=True, exist_ok=False)
     rejected_brief = rejected_dir / "brief.md"
     rejection_path = rejected_dir / "rejection.json"
+    rejected_at = utc_now()
     rejection = {
         "slug": slug,
         "gate_profile": profile,
         "reason": reason,
         "source_path": f".pile/{slug}.md",
-        "rejected_at": utc_now(),
+        "rejected_at": rejected_at,
     }
     try:
         rejection_path.write_text(json.dumps(rejection, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -370,7 +508,17 @@ def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, 
         rejection_path.unlink(missing_ok=True)
         rejected_dir.rmdir()
         raise
+    # Past this point the rejection has happened: the file is out of the pile
+    # and the sidecar records why. The pile manifest is a cache
+    # (assets/brief-pipeline/paths.toml), so its failure is recorded and
+    # reported -- never allowed to unwind a completed rejection, and never
+    # allowed to strand the claim in .staging.
+    try:
+        manifest, manifest_detail = mark_manifest_rejected(brief_root, slug, reason, rejected_at)
+    except OSError as error:
+        manifest, manifest_detail = "aborted", f"pile manifest update failed: {error}"
     cleanup_own_staging(staging_dir)
+    return manifest, manifest_detail
 
 
 def process_item(source: Path, brief_root: Path, gate_config: dict[str, Any], apply: bool) -> Outcome:
@@ -412,8 +560,8 @@ def process_item(source: Path, brief_root: Path, gate_config: dict[str, Any], ap
                     raise
                 cleanup_own_staging(staging_dir)
                 return Outcome("promote", slug)
-        reject_staged(staging_dir, staged, brief_root, slug, profile, reason)
-        return Outcome("reject", slug, reason)
+        manifest, manifest_detail = reject_staged(staging_dir, staged, brief_root, slug, profile, reason)
+        return Outcome("reject", slug, reason, manifest, manifest_detail)
     except OSError as error:
         return Outcome("skipped", slug, f"disposition failed; staged for recovery: {error}")
 
@@ -438,6 +586,10 @@ def main() -> int:
         "promoted": [], "rejected": [], "skipped": [], "recovered": [],
         "planned_promoted": [], "planned_rejected": [],
         "reasons": {},
+        # Pile-manifest disposition, reported apart from promoted/rejected: the
+        # manifest is a cache, so a miss here is a fact to surface, not a
+        # different outcome for the brief.
+        "manifest_updated": [], "manifest_aborted": {},
     }
     if args.apply:
         report["recovered"] = recover_owned_staging(brief_root)
@@ -453,6 +605,10 @@ def main() -> int:
             report[f"planned_{key}"].append(outcome.slug)
         if outcome.reason:
             report["reasons"][outcome.slug] = outcome.reason
+        if outcome.manifest == "updated":
+            report["manifest_updated"].append(outcome.slug)
+        elif outcome.manifest == "aborted":
+            report["manifest_aborted"][outcome.slug] = outcome.manifest_detail
     report["remaining_pile"] = len(selected_pile_items(pile, sys.maxsize))
     if args.json:
         print(json.dumps(report, sort_keys=True))
@@ -460,7 +616,9 @@ def main() -> int:
         print(
             "brief-shuffle-fast-drain: "
             f"promoted={len(report['promoted'])} rejected={len(report['rejected'])} "
-            f"skipped={len(report['skipped'])} remaining_pile={report['remaining_pile']}"
+            f"skipped={len(report['skipped'])} remaining_pile={report['remaining_pile']} "
+            f"manifest_updated={len(report['manifest_updated'])} "
+            f"manifest_aborted={len(report['manifest_aborted'])}"
         )
         if not args.apply:
             print("dry-run planned: " + ", ".join(report["planned_promoted"] + report["planned_rejected"]))
