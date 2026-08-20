@@ -53,6 +53,7 @@ from .screens import priority as priority_screen
 from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
+from .fanout import fan_out
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
 #: Marker written into the adjudication reason when the no-brainer box is
@@ -626,9 +627,15 @@ class Dashboard:
         rig = self._rig_for(request)
         if self.city_wide and not rig:
             return self._rig_required(brief_id)
-        try:
-            shown = self.client.call("briefs_show", self._args(rig, brief_id=brief_id))
-        except ToolFailure as failure:
+        # All three reads are independent -- `options` and `doctor` are keyed by
+        # brief id, not by anything `show` returns -- so they go together. Only
+        # the failure of `show` is fatal to the page, and that is handled below.
+        shown, options, doctor = self._brief_reads(brief_id, rig)
+        if isinstance(shown, ToolFailure):
+            failure = shown
+        else:
+            failure = None
+        if failure is not None:
             # "No such brief" would be the wrong headline when the *rig* is
             # the thing that does not exist -- the operator would go looking
             # for a missing bead instead of a mistyped rig. The code is shown
@@ -661,8 +668,6 @@ class Dashboard:
                 context_bar=self._city_bar() if unknown_rig and self.city_wide else None,
             )
         brief = dict(shown.payload.get("brief") or {})
-        options = self._options(brief_id, rig)
-        doctor = self._doctor(brief_id, rig)
         option_rows = (options.payload.get("options") or ()) if options else ()
         # The redesigned detail leads: it is what the operator reads to decide.
         # The existing panels stay beneath it -- `brief_detail_panel` carries
@@ -746,6 +751,30 @@ class Dashboard:
             return self._context(rig)
         except ToolFailure:
             return None
+
+    def _brief_reads(self, brief_id: str, rig: str | None):
+        """Every read the brief page needs, concurrently.
+
+        Returns `(shown, options, doctor)`. `shown` is either a response or the
+        `ToolFailure` that explains why there is no page to draw -- the caller
+        renders the 404 from it. The other two degrade to `None`, so a store
+        that cannot answer costs one panel rather than the page.
+        """
+        shown, options, doctor = fan_out(
+            self.client,
+            [
+                ("briefs_show", self._args(rig, brief_id=brief_id)),
+                ("briefs_options", self._args(rig, brief_id=brief_id)),
+                ("briefs_doctor", self._args(rig, brief_id=brief_id)),
+            ],
+        )
+        if isinstance(shown, Exception) and not isinstance(shown, ToolFailure):
+            raise shown
+        return (
+            shown,
+            None if isinstance(options, Exception) else options,
+            None if isinstance(doctor, Exception) else doctor,
+        )
 
     def _options(self, brief_id: str, rig: str | None) -> ToolResponse | None:
         try:
