@@ -166,3 +166,22 @@ read, revised `track`/`gates` figures), and narrowing my asks to two.
 - **Merge is still gated** and unrequested.
 - **cozy has an unlanded `render.py` edit** to the degraded-rig panel; my
   branch touches that file too, so one of us rebases when it lands.
+
+### 09:55 — the table has data now
+
+Finishing the two-shape read across the rest of the screen brought back a third
+column. `score()` is computed from `unlock_count` and `priority`, so it had been
+scoring all 308 rows off two `None`s — Score looked like a field the core could
+not feed when it was a field the dashboard could not read.
+
+Live queue now draws **Brief, Rig, Unlock, Score, Age, Priority, Health** with
+real values. Hidden columns: **5 → 2**, and the two left (Opts, Rec.) are
+genuinely absent.
+
+**Full path re-verified end to end on real data**, queue → brief → preview:
+nav reads `brief 1 of 115`, two verdicts enabled (revise/reject) with approve
+correctly gated, no-brainer control present, preview returns 200 with a live
+token, `verdict: revise`, the `[no-brainer]` marker inside the recorded reason,
+and the `if_status: open` staleness guard intact.
+
+**15 commits, 702 tests passing.**
