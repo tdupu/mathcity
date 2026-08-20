@@ -1,6 +1,6 @@
 # Brief Manager — overnight run, 2026-08-20
 
-Branch `feat/brief-manager-overnight`, 7 commits, **675 tests passing**.
+Branch `feat/brief-manager-overnight`, 11 commits, **683 tests passing**.
 The dashboard is running from this worktree on <http://127.0.0.1:8480>.
 
 **Not merged.** Merging is gated by `authorize-git-operation` and approval does
@@ -45,6 +45,9 @@ plan.
 | Brief page navigation | none | `brief N of M`, prev/next, back to queue |
 | After recording a verdict | terminal page | Next brief → with count remaining |
 | Disposition | "type an option letter" | the brief's own options + propose your own |
+| Adjudication forms on the page | two, both writing the verdict | one |
+| Keyboard | j/k/enter on the queue only | + n/p/q/a on the brief page |
+| Empty briefs | retype the same verdict each time | one-click standing return, still confirmed |
 
 **Performance.** Per-call timing showed three independent reads of 4–6s each,
 run one after another. They were serialized by the transport, not by any
@@ -102,6 +105,15 @@ The one thing not exercised live is a real `apply` — the write path is covered
 by fixture tests, and I did not want to mutate a real bead unattended.
 
 ---
+
+## The standing return
+
+You asked for the empty briefs to be marked revise + no-brainer and sent back
+asking for fields. There are ~90. I did not batch them (see above), so instead
+a brief with no body now offers **"Fill in the standing return →"**: the form
+arrives with revise selected, no-brainer ticked and the reason written, and you
+confirm each one. With `n` to advance, that is roughly two keystrokes per brief
+rather than a paragraph of retyping — and every verdict still passes a human.
 
 ## Still open
 
