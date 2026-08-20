@@ -119,6 +119,7 @@ CODE_WITHDRAWAL = "MBRF052"
 CODE_UNREADABLE = "MBRF053"
 CODE_NOT_A_BRIEF = "MBRF054"
 CODE_NOT_A_KILL_SWITCH_BRIEF = "MBRF055"
+CODE_DECLARED_NO_SUBJECT = "MBRF056"
 
 #: What `non_brief_code` says when it removes a bead from the population.
 NON_BRIEF_MESSAGES = {
@@ -537,6 +538,69 @@ def is_git_authorization_receipt(bead: Bead) -> bool:
 def is_kill_switch_record(bead: Bead) -> bool:
     """A record of engaging or releasing the auto-merge kill switch (N5)."""
     return bool(_KILL_SWITCH_RECORD.search(bead.title or ""))
+
+
+#: The bd label form of B2.1a's declaration. A label is the most deliberate
+#: shape available -- it cannot be typed by accident mid-sentence, and it is
+#: queryable with `bd list --label`, so the declaring population stays
+#: countable without parsing prose.
+NO_SUBJECT_LABEL = "no-subject"
+
+#: The title-tag form: `[no-subject] Should we keep the fast-drain order?`.
+#: Bracketed tags are how this pack already marks a deliberate structured
+#: claim in a title (`_GIT_AUTHORIZATION_TAG`), so it is the same rule, not a
+#: wider one.
+_NO_SUBJECT_TAG = re.compile(r"\[\s*no-subject\s*\]", re.IGNORECASE)
+
+#: The body form: a `Source: none` line, ANCHORED to a whole line. The manifest
+#: spells this field `source_bead`, and briefs are written by hand, so
+#: `Source bead:` and `source-bead:` are the same declaration.
+#:
+#: The anchors are the whole point. An unanchored search for `source.*none`
+#: matches "the source bead is none of the ones above" and "no source bead was
+#: found", turning a sentence that DESCRIBES an omission into a declaration
+#: that excuses it -- which is the loophole B2.1a exists to not open. Two
+#: shipped defects in this repo came from unanchored matching, so the value
+#: must be the entire line and nothing else.
+_NO_SUBJECT_DECLARATION = re.compile(
+    r"^\s*(?:[-*]\s*)?(?:#+\s*)?(?:\*\*)?source(?:[ _-]bead)?(?:\*\*)?\s*:\s*none\s*\.?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def declares_no_subject(bead: Bead) -> bool:
+    """Whether this brief DECLARES that it is about no bead (B2.1a).
+
+    B2.1a admits "this brief is about no bead" as a legitimate statement, so a
+    brief that makes it is compliant rather than `MBRF004`. The declaration is
+    read here, and only from a structured marker the brief's author had to
+    write on purpose: the `no-subject` label, a `[no-subject]` title tag, or a
+    whole-line `Source: none` in a body field.
+
+    **Silence is not a declaration.** A bead that merely omits its source link
+    returns False and keeps raising `MBRF004`, which is what separates B2.1a
+    from a no-op. The distinction is load-bearing: the great majority of live
+    beads with no source link are omissions rather than statements -- briefs
+    that plainly have a subject and failed to record it, most of them naming
+    that subject in their own title or body. Inferring a declaration from their
+    silence would relabel every one of them compliant and delete the signal
+    that they are recoverable.
+
+    This is the same discipline as `is_git_authorization_receipt`: only
+    structured markers count, and a bead that merely discusses having no
+    subject in prose stays in the population. Failing that way round is
+    deliberate -- an undeclared brief is visible in the `MBRF004` list, whereas
+    one wrongly read as declaring disappears into compliance and nobody finds
+    out.
+    """
+    if _NO_SUBJECT_TAG.search(bead.title or ""):
+        return True
+    if any(label.strip().lower() == NO_SUBJECT_LABEL for label in bead.labels):
+        return True
+    for value in (bead.description, bead.raw.get("notes"), bead.raw.get("design")):
+        if isinstance(value, str) and value and _NO_SUBJECT_DECLARATION.search(value):
+            return True
+    return False
 
 
 def brief_population(beads: Iterable[Bead]) -> tuple[Bead, ...]:
