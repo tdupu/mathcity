@@ -9,10 +9,11 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-from .beads import BD_LIST_ARGS, Bead, BeadReadError, read_beads
+from .beads import BD_LIST_ARGS, Bead, BeadCreate, BeadReadError, BeadRelate, read_beads
 from .briefs import BriefError, DoctorReport, doctor_briefs
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
+from .effects import EffectPlan, JsonlWrite
 from .events import append_jsonl
 from .liveness import probe_control_plane
 from .verdicts import brief_population, is_brief_bead
@@ -76,6 +77,109 @@ class WorkError(Exception):
     def __init__(self, diagnostic: Diagnostic):
         super().__init__(diagnostic.message)
         self.diagnostic = diagnostic
+
+
+#: The `dispatch-provenance.v1` classification a claim read implies. These are
+#: the exact strings `skills/work/SKILL.md` writes into a path-B provenance
+#: event, derived here so the event and the observation cannot disagree: they
+#: were previously typed out by hand next to a `bd show | grep -i assignee`
+#: that nobody could re-derive them from.
+CLAIM_HEALTHY = "healthy"
+CLAIM_IMMEDIATE_STRAND = "immediate_strand"
+FINGERPRINT_CLAIMED = "verified_sling_claimed"
+FINGERPRINT_UNCLAIMED = "empty_assignee_after_verified_sling"
+
+
+@dataclass(frozen=True)
+class ClaimState:
+    """Who holds one bead, read from the canonical store rather than grepped.
+
+    This replaces `bd show <id> | grep -i assignee`. The grep is not merely
+    ugly: it reads a human-readable rendering, so it answers "some line
+    mentioned the word assignee" and cannot tell an empty assignee from a
+    missing bead from a field bd renamed. Every consumer of that line then
+    re-derived the same four provenance strings by hand.
+
+    `window_seconds` is the verification window the caller waited, and only
+    ever names the observation: `assignee_state` reports `empty_after_60s`
+    when a caller waited 60 seconds, and plain `empty` when it waited none.
+    Nothing here sleeps or polls -- the wait belongs to the caller, and a
+    reader that slept would make a cheap read expensive.
+    """
+
+    bead_id: str
+    title: str
+    status: str
+    assignee: str | None
+    window_seconds: int | None
+    observed_at: str
+
+    @property
+    def verified_assignee(self) -> bool:
+        return bool(self.assignee and self.assignee.strip())
+
+    @property
+    def assignee_state(self) -> str:
+        if self.verified_assignee:
+            return "non_empty"
+        return "empty" if self.window_seconds is None else f"empty_after_{self.window_seconds}s"
+
+    @property
+    def classification_hint(self) -> str:
+        return CLAIM_HEALTHY if self.verified_assignee else CLAIM_IMMEDIATE_STRAND
+
+    @property
+    def fingerprint(self) -> str:
+        return FINGERPRINT_CLAIMED if self.verified_assignee else FINGERPRINT_UNCLAIMED
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "assignee": self.assignee,
+            "assignee_state": self.assignee_state,
+            "bead_id": self.bead_id,
+            "classification_hint": self.classification_hint,
+            "fingerprint": self.fingerprint,
+            "observed_at": self.observed_at,
+            "status": self.status,
+            "title": self.title,
+            "verified_assignee": self.verified_assignee,
+            "window_seconds": self.window_seconds,
+        }
+
+
+def work_claim(ctx: MctlContext, bead_id: str, *, window_seconds: int | None = None) -> ClaimState:
+    """Read one bead's claim state from the canonical store.
+
+    Takes a bead id, not a brief id: the call site this exists for is path B,
+    where a `gc sling` commissioned work that has no brief yet, so there is no
+    brief to ask about.
+    """
+    bead = _require_bead(ctx, bead_id)
+    return ClaimState(
+        bead_id=bead.id,
+        title=bead.title,
+        status=bead.status,
+        assignee=bead.assignee,
+        window_seconds=window_seconds,
+        observed_at=_now(),
+    )
+
+
+def _require_bead(ctx: MctlContext, bead_id: str) -> Bead:
+    bead = {bead.id: bead for bead in _beads(ctx)}.get(bead_id)
+    if bead is None:
+        raise WorkError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MWRK_BEAD_NOT_FOUND",
+                f"No bead named {bead_id!r} exists in this rig's canonical store.",
+                bead_id=bead_id,
+                data_location=_canonical_bead_location(ctx),
+                suggested_next_command="mctl context rigs --json",
+            )
+        )
+    return bead
 
 
 def ready_work(ctx: MctlContext) -> tuple[WorkItem, ...]:
@@ -269,6 +373,133 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         "provenance": provenance.to_dict(),
         "trace_id": plan.trace_id,
     }
+
+
+DISPATCH_EVENT_SCHEMA = "dispatch-provenance.v1"
+DISPATCH_EVENT_CATEGORY = "dispatch.provenance"
+NEW_EVENT_ID_PLACEHOLDER = "(pending-event-bead-id)"
+
+
+def plan_dispatch_event(
+    ctx: MctlContext,
+    bead_id: str,
+    *,
+    dispatch_command: str,
+    formula: str,
+    window_seconds: int | None = None,
+) -> EffectPlan:
+    """Plan the path-B dispatch provenance event: create it, and link it.
+
+    One operation, not two. The skill spelled this as a bare `bd create`
+    piped into a bare `bd dep relate`, and the pair is only meaningful
+    together -- the lost-bead filter keys on an event bead that is *attached*
+    to the source bead, so an event created and left unlinked is invisible in
+    exactly the way an unwritten one is.
+
+    The source bead's existence is a **precondition**, so a bead id this rig's
+    store cannot resolve stops the mutation before anything is created. That
+    is what keeps the cross-store hazard out: `bd dep add` writes a dangling
+    row for an unresolvable id and exits 0, and the cheapest place to refuse
+    that edge is before there is an orphan event bead to explain.
+    """
+    preconditions: tuple[Diagnostic, ...] = ()
+    claim: ClaimState | None = None
+    try:
+        claim = work_claim(ctx, bead_id, window_seconds=window_seconds)
+    except WorkError as error:
+        preconditions = (error.diagnostic,)
+
+    payload = _dispatch_event_payload(ctx, bead_id, claim, dispatch_command, formula)
+    create = BeadCreate(
+        placeholder_id=NEW_EVENT_ID_PLACEHOLDER,
+        title=f"dispatch provenance for {bead_id}",
+        body=json.dumps(payload, indent=2, sort_keys=True),
+        issue_type="event",
+        event_category=DISPATCH_EVENT_CATEGORY,
+        event_target=bead_id,
+        event_payload=json.dumps(payload, sort_keys=True),
+    )
+    relate = BeadRelate(source_id=NEW_EVENT_ID_PLACEHOLDER, target_id=bead_id)
+    today = datetime.now(timezone.utc).date().isoformat()
+    row = {
+        "bead_id": bead_id,
+        "operation": "work.dispatch_event",
+        "planned_effects": [create.to_dict(), relate.to_dict()],
+        "provenance": payload,
+        "trace_id": ctx.trace_id,
+    }
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="work.dispatch_event",
+        target_brief_id=bead_id,
+        preconditions=preconditions,
+        bead_updates=(),
+        cache_updates=(),
+        bead_creates=(create,),
+        bead_relates=(relate,),
+        event_writes=(
+            JsonlWrite(
+                "event_write",
+                ctx.rig_root / ".beads" / "mctl" / "events" / f"{today}.jsonl",
+                row,
+            ),
+        ),
+        trace_writes=(
+            JsonlWrite(
+                "trace_write",
+                ctx.rig_root / ".beads" / "mctl" / "traces" / f"{today}.jsonl",
+                {**row, "city_path": str(ctx.city_root), "rig_name": ctx.rig_id},
+            ),
+        ),
+    )
+
+
+def _dispatch_event_payload(
+    ctx: MctlContext,
+    bead_id: str,
+    claim: ClaimState | None,
+    dispatch_command: str,
+    formula: str,
+) -> dict[str, object]:
+    """The `dispatch-provenance.v1` body, derived from the claim read.
+
+    `verified_assignee`, `assignee_state`, `classification_hint` and
+    `fingerprint` are read off `ClaimState` rather than chosen by the caller:
+    an event that says `healthy` while the store says nobody holds the bead is
+    precisely the false handoff record this replaces.
+    """
+    payload: dict[str, object] = {
+        "schema": DISPATCH_EVENT_SCHEMA,
+        "source_bead": bead_id,
+        "dispatch_command": dispatch_command,
+        "formula": formula,
+        "rig": ctx.rig_id,
+        "observer": "mctl",
+        "trace_id": ctx.trace_id,
+    }
+    if claim is None:
+        # The precondition already refuses this plan; the payload still says
+        # what it does not know rather than inventing a classification.
+        payload.update(
+            {
+                "verified_assignee": False,
+                "assignee_state": "unknown",
+                "classification_hint": "unknown",
+                "fingerprint": "source_bead_not_found",
+                "observed_at": _now(),
+            }
+        )
+        return payload
+    payload.update(
+        {
+            "assignee_state": claim.assignee_state,
+            "classification_hint": claim.classification_hint,
+            "fingerprint": claim.fingerprint,
+            "observed_at": claim.observed_at,
+            "verified_assignee": claim.verified_assignee,
+        }
+    )
+    return payload
 
 
 def _work_item(

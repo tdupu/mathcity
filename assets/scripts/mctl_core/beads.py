@@ -123,6 +123,108 @@ class BeadRaceLostError(BeadWriteError):
 
 
 @dataclass(frozen=True)
+class BeadRelate:
+    """A bidirectional `relates_to` edge between two beads in ONE store.
+
+    `bd dep relate`, deliberately not `bd dep add`. Measured against bd 1.1.0
+    on 2026-08-20 with two isolated stores:
+
+    * ``bd dep add <local> <foreign-or-unknown-id>`` exits **0**, prints
+      "✓ Added dependency", and writes a row whose target nothing can resolve.
+      ``bd show`` then reports ``dependency_count = 1`` beside
+      ``dependencies = null``, and ``bd dep list`` returns ``[]``. The edge is
+      lost in every hydrating read while the count still claims it is there.
+    * ``bd dep relate <local> <foreign-or-unknown-id>`` exits **1** with
+      "failed to resolve <id>: no issue found" and writes nothing.
+
+    So `relate` does not share the silent-loss defect today. It is still not
+    trusted here, for two reasons. `relate` resolves ids **fuzzily** -- a
+    measured ``bd dep relate aa-e11 aa-c`` cheerfully linked ``aa-e11`` to
+    ``aa-cfi`` -- so an exit code of 0 does not mean the edge connects the two
+    ids that were asked for. And "the vendored binary currently fails loudly"
+    is a property of a binary this repository does not own. `verify_relation`
+    below re-reads the store and is what actually makes the guarantee.
+    """
+
+    source_id: str
+    target_id: str
+    link_type: str = "relates-to"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "kind": "bead_relate",
+            "link_type": self.link_type,
+            "source_id": self.source_id,
+            "target_id": self.target_id,
+        }
+
+
+@dataclass(frozen=True)
+class RelationVerification:
+    """What the canonical store says about an edge AFTER it was written.
+
+    Two independent failures, kept apart because only one of them is the
+    known bd defect:
+
+    * `edge_recorded` false -- the store holds no row joining these two ids at
+      all. The write did not land, whatever it exited.
+    * `unresolved_endpoints` non-empty -- a row exists but names an id this
+      store cannot resolve to a bead. That is the dangling cross-store edge:
+      present in `bd list --all --json`, invisible to `bd show` and
+      `bd dep list`, counted by `dependency_count`.
+    """
+
+    source_id: str
+    target_id: str
+    edge_recorded: bool
+    unresolved_endpoints: tuple[str, ...]
+
+    @property
+    def verified(self) -> bool:
+        return self.edge_recorded and not self.unresolved_endpoints
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "edge_recorded": self.edge_recorded,
+            "source_id": self.source_id,
+            "target_id": self.target_id,
+            "unresolved_endpoints": list(self.unresolved_endpoints),
+            "verified": self.verified,
+        }
+
+
+def verify_relation(
+    beads: Iterable[Bead], source_id: str, target_id: str
+) -> RelationVerification:
+    """Prove a relate edge exists in the canonical store and both ends resolve.
+
+    Pure: it reads a bead listing that has already been fetched, so the same
+    check runs against bd and against the fixture seam with no branch.
+
+    The edge is accepted in either direction. `bd dep relate` writes both rows,
+    but a store that recorded only one still recorded the relationship, and
+    reporting that as a failed write would be wrong.
+    """
+    by_id = {bead.id: bead for bead in beads}
+
+    def outgoing(bead_id: str) -> tuple[str, ...]:
+        bead = by_id.get(bead_id)
+        return bead.source_dependencies if bead is not None else ()
+
+    forward = target_id in outgoing(source_id)
+    reverse = source_id in outgoing(target_id)
+    unresolved = tuple(
+        bead_id for bead_id in (source_id, target_id) if bead_id not in by_id
+    )
+    return RelationVerification(
+        source_id=source_id,
+        target_id=target_id,
+        edge_recorded=forward or reverse,
+        unresolved_endpoints=unresolved,
+    )
+
+
+@dataclass(frozen=True)
 class BeadUpdate:
     id: str
     status: str | None = None
@@ -163,9 +265,15 @@ class BeadCreate:
     metadata: Mapping[str, str] | None = None
     sources: tuple[str, ...] = ()
     source_link_type: str = "related"
+    #: `issue_type="event"` only. bd rejects these three flags on every other
+    #: type, so they are emitted only when the type is `event` rather than
+    #: whenever they happen to be set.
+    event_category: str | None = None
+    event_target: str | None = None
+    event_payload: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "issue_type": self.issue_type,
             "labels": list(self.labels),
             "metadata": dict(sorted((self.metadata or {}).items())),
@@ -174,6 +282,11 @@ class BeadCreate:
             "sources": list(self.sources),
             "title": self.title,
         }
+        for key in ("event_category", "event_target", "event_payload"):
+            value = getattr(self, key)
+            if value is not None:
+                payload[key] = value
+        return payload
 
 
 def read_beads(
@@ -213,6 +326,24 @@ def apply_bead_create(
     if fixture_path is not None:
         return _apply_fixture_create(fixture_path, create)
     return _apply_bd_create(rig_root, create, timeout or bd_timeout_seconds())
+
+
+def apply_bead_relate(
+    rig_root: Path,
+    relate: BeadRelate,
+    *,
+    fixture_path: Path | None = None,
+    timeout: int | None = None,
+) -> dict[str, object]:
+    """Write one bidirectional relate edge through the fixture seam or bd.
+
+    This only *writes*. Whether the edge is really there afterwards is a
+    separate question with a separate answer -- see `verify_relation`, and the
+    measurements on `BeadRelate` for why the exit code is not that answer.
+    """
+    if fixture_path is not None:
+        return _apply_fixture_relate(fixture_path, relate)
+    return _apply_bd_relate(rig_root, relate, timeout or bd_timeout_seconds())
 
 
 def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
@@ -293,12 +424,40 @@ def _apply_bd_update(rig_root: Path, update: BeadUpdate, timeout: int) -> dict[s
     return {"id": update.id, "mode": "bd", "result": parsed}
 
 
+def _apply_bd_relate(rig_root: Path, relate: BeadRelate, timeout: int) -> dict[str, object]:
+    # `bd dep relate` answers in prose ("✓ Linked a ↔ b"), so only its exit
+    # code is read. Parsing that sentence is the habit this whole surface
+    # exists to remove.
+    args = ["bd", "dep", "relate", relate.source_id, relate.target_id]
+    _run_bd_command(
+        rig_root,
+        args,
+        timeout,
+        f"Could not relate {relate.source_id} to {relate.target_id}",
+    )
+    return {
+        "mode": "bd",
+        "source_id": relate.source_id,
+        "target_id": relate.target_id,
+    }
+
+
 def _apply_bd_create(rig_root: Path, create: BeadCreate, timeout: int) -> dict[str, object]:
     args = ["bd", "create", create.title, "--type", create.issue_type]
     if create.body:
         args.extend(("--description", create.body))
     if create.labels:
         args.extend(("--labels", ",".join(create.labels)))
+    if create.issue_type == "event":
+        # bd refuses --event-* on any other type, so these are keyed on the
+        # type rather than on "the caller happened to set them".
+        for flag, value in (
+            ("--event-category", create.event_category),
+            ("--event-target", create.event_target),
+            ("--event-payload", create.event_payload),
+        ):
+            if value is not None:
+                args.extend((flag, value))
     if create.metadata:
         args.extend(("--metadata", json.dumps(dict(sorted(create.metadata.items())), sort_keys=True)))
     args.append("--json")
@@ -362,9 +521,70 @@ def _apply_fixture_create(path: Path, create: BeadCreate) -> dict[str, object]:
     }
     if create.metadata:
         row["metadata"] = dict(sorted(create.metadata.items()))
+    if create.issue_type == "event":
+        for key in ("event_category", "event_target", "event_payload"):
+            value = getattr(create, key)
+            if value is not None:
+                row[key] = value
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, sort_keys=True) + "\n")
     return {"id": bead_id, "mode": "fixture", "result": row}
+
+
+def _apply_fixture_relate(path: Path, relate: BeadRelate) -> dict[str, object]:
+    """Write the edge into the fixture the way bd writes it into the store.
+
+    Faithful on purpose, including the ugly part: bd records an edge row whose
+    target does not exist, so this does too. A fixture that refused instead
+    would make the dangling-edge case untestable without a second Dolt store,
+    and the dangling-edge case is the one that matters.
+
+    The *source* row is a different matter -- `_apply_fixture_update` already
+    refuses to update a bead that is not there, and an edge hanging off a row
+    that does not exist could not be written by bd either.
+    """
+    rows = list(_read_jsonl(path))
+    ids = {row.get("id") for row in rows}
+    if relate.source_id not in ids:
+        raise BeadWriteError(f"No bead named {relate.source_id!r} exists in {path}")
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    pairs = [(relate.source_id, relate.target_id)]
+    if relate.target_id in ids:
+        # bd writes both directions, but only between rows it can resolve.
+        pairs.append((relate.target_id, relate.source_id))
+    rewritten: list[dict[str, object]] = []
+    for row in rows:
+        mutable = dict(row)
+        for issue_id, depends_on in pairs:
+            if mutable.get("id") != issue_id:
+                continue
+            dependencies = list(mutable.get("dependencies") or [])
+            already = any(
+                isinstance(entry, dict)
+                and entry.get("issue_id") == issue_id
+                and entry.get("depends_on_id") == depends_on
+                for entry in dependencies
+            )
+            if not already:
+                dependencies.append(
+                    {
+                        "issue_id": issue_id,
+                        "depends_on_id": depends_on,
+                        "type": relate.link_type,
+                        "created_at": now,
+                    }
+                )
+            mutable["dependencies"] = dependencies
+        rewritten.append(mutable)
+    path.write_text(
+        "".join(f"{json.dumps(row, sort_keys=True)}\n" for row in rewritten),
+        encoding="utf-8",
+    )
+    return {
+        "mode": "fixture",
+        "source_id": relate.source_id,
+        "target_id": relate.target_id,
+    }
 
 
 def _next_fixture_id(rows: list[Mapping[str, object]]) -> str:

@@ -181,9 +181,19 @@ for path in \
   fi
 done
 
+# The path-B provenance event moved from a bare `bd create --type event` in
+# the skill to `mctl work dispatch-event`, so the fingerprints this filter
+# matches on are no longer typed into the markdown -- they are derived in
+# mctl_core/work.py. Checking the old spelling would now pin the very
+# bare-command shape the skill-hygiene policy removed, so the contract is
+# checked at BOTH ends instead: the skill must still name the schema and the
+# command that writes it, and the producer must still emit both fingerprints.
+work_core="$ROOT/assets/scripts/mctl_core/work.py"
 if grep -F "dispatch-provenance.v1" "$ROOT/skills/work/SKILL.md" >/dev/null 2>&1 \
-  && grep -F "empty_assignee_after_verified_sling" "$ROOT/skills/work/SKILL.md" >/dev/null 2>&1 \
-  && grep -F "bd create" "$ROOT/skills/work/SKILL.md" | grep -F -- "--type event" >/dev/null 2>&1; then
+  && grep -F "work dispatch-event" "$ROOT/skills/work/SKILL.md" >/dev/null 2>&1 \
+  && grep -F "dispatch-provenance.v1" "$work_core" >/dev/null 2>&1 \
+  && grep -F "empty_assignee_after_verified_sling" "$work_core" >/dev/null 2>&1 \
+  && grep -F "verified_sling_claimed" "$work_core" >/dev/null 2>&1; then
   record "mathcity.work provenance and strand hooks documented" ok
 else
   record "mathcity.work provenance and strand hooks documented" fail "missing provenance hook"

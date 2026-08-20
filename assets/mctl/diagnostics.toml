@@ -267,6 +267,21 @@ meaning = "One brief is stored twice with different text -- a stack file and a d
 policy_ref = "B2.10"
 module = "documents.py"
 
+[MCTL_BEAD_RELATION_DANGLING]
+severity = "FATAL"
+meaning = "A relate edge names a bead this store cannot resolve, so it exists only as a dangling row -- counted by dependency_count, absent from `bd show` dependencies and from `bd dep list`. Measured against bd 1.1.0 on 2026-08-20: `bd dep add <local-id> <foreign-id>` exits 0 and produces exactly this."
+module = "effects.py"
+
+[MCTL_BEAD_RELATION_UNVERIFIED]
+severity = "FATAL"
+meaning = "A relate write reported success but re-reading the canonical store shows no edge between the two beads, or the store could not answer the read-back."
+module = "effects.py"
+
+[MCTL_CANONICAL_BEAD_RELATE_FAILED]
+severity = "FATAL"
+meaning = "The canonical relate write failed; the edge was not recorded."
+module = "effects.py"
+
 [MCTL_BEAD_UPDATE_RACE_LOST]
 severity = "FATAL"
 meaning = "Another actor changed the bead between plan and apply; the guarded write was skipped."
@@ -501,6 +516,11 @@ module = "work.py"
 [MWRK_ALREADY_DISPATCHED]
 severity = "FATAL"
 meaning = "Work already has dispatch provenance."
+module = "work.py"
+
+[MWRK_BEAD_NOT_FOUND]
+severity = "FATAL"
+meaning = "No bead with the requested id exists in this rig's canonical store. As a mutation precondition this is what refuses a cross-store or mistyped id before anything is written."
 module = "work.py"
 
 [MWRK_BEAD_READ_FAILED]

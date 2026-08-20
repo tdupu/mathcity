@@ -350,3 +350,151 @@ def test_a_real_created_brief_passes_validation_and_doctor(tmp_path: Path, seede
     assert "MBRF004" not in {
         str(diagnostic["code"]) for diagnostic in payload["diagnostics"]
     }
+
+
+# --- the cross-store edge hazard, against the real binary --------------------
+#
+# These pin the measurement the verified-relate design rests on. It is a claim
+# about a binary this repository does not own, so it belongs in a test that
+# runs the binary rather than in a comment that ages.
+
+
+def run_bd_unchecked(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    """`run_bd` asserts exit 0; these tests are about what the exit code says."""
+    env = os.environ.copy()
+    env["BD_NON_INTERACTIVE"] = "1"
+    return subprocess.run(
+        ["bd", *args], cwd=cwd, text=True, capture_output=True, check=False, env=env
+    )
+
+
+@requires_bd
+def test_bd_dep_relate_refuses_an_id_this_store_cannot_resolve(tmp_path: Path, seeded_store):
+    """`relate` does NOT share `dep add`'s silent-loss defect.
+
+    Measured 2026-08-20 against bd 1.1.0 with two isolated stores. A foreign
+    store's bead id behaves here exactly as an unknown id does, because
+    resolution is per-store either way -- which is why one store is enough to
+    pin the behaviour.
+    """
+    _city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+
+    result = run_bd_unchecked(
+        "dep", "relate", str(seeded_store["approved_source"]), "zz-not-in-this-store",
+        cwd=rig_root,
+    )
+
+    assert result.returncode != 0, "relate must refuse, not silently drop the edge"
+    assert "failed to resolve" in (result.stderr + result.stdout)
+
+
+@requires_bd
+def test_bd_dep_add_silently_records_an_edge_no_hydrating_read_returns(
+    tmp_path: Path, seeded_store
+):
+    """The live defect, reproduced: exit 0, counted, and invisible.
+
+    `bd show` reports it in `dependency_count` and omits it from
+    `dependencies`; `bd dep list` returns nothing. Only the raw listing
+    carries the row -- which is what makes `verify_relation` able to catch it.
+    """
+    _city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+    local = str(seeded_store["approved_source"])
+
+    added = run_bd_unchecked("dep", "add", local, "zz-not-in-this-store", "-t", "related", cwd=rig_root)
+
+    assert added.returncode == 0, "the defect is precisely that this exits 0"
+    shown = json.loads(run_bd("show", local, "--json", cwd=rig_root).stdout)
+    shown = shown[0] if isinstance(shown, list) else shown
+    hydrated = shown.get("dependencies") or []
+    assert not any(entry.get("id") == "zz-not-in-this-store" for entry in hydrated)
+    assert shown.get("dependency_count", 0) > len(hydrated), (
+        "the count must claim an edge the hydrated list does not carry"
+    )
+    listed = json.loads(run_bd("dep", "list", local, "--json", cwd=rig_root).stdout)
+    assert not any(entry.get("id") == "zz-not-in-this-store" for entry in listed)
+
+
+@requires_bd
+def test_verify_relation_catches_the_real_dangling_edge(tmp_path: Path, seeded_store):
+    """The detection, proven against a real store rather than a fixture."""
+    sys.path.insert(0, str(REPO_ROOT / "assets" / "scripts"))
+    from mctl_core.beads import read_beads, verify_relation
+
+    _city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+    local = str(seeded_store["approved_source"])
+    run_bd("dep", "add", local, "zz-not-in-this-store", "-t", "related", cwd=rig_root)
+
+    beads = read_beads(rig_root)
+    verification = verify_relation(beads, local, "zz-not-in-this-store")
+
+    assert verification.edge_recorded is True, "the dangling row IS in the raw listing"
+    assert verification.unresolved_endpoints == ("zz-not-in-this-store",)
+    assert verification.verified is False
+    # A real, resolvable edge in the same store still verifies, so the check
+    # is discriminating rather than simply refusing everything.
+    assert verify_relation(beads, str(seeded_store["approved"]), local).verified is True
+
+
+@requires_bd
+def test_dispatch_event_writes_a_verified_edge_in_a_real_store(tmp_path: Path, seeded_store):
+    city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+    source = str(seeded_store["approved_source"])
+
+    result = run_mctl(
+        "work", "dispatch-event", source,
+        "--dispatch-command", f"gc sling mathcity/gc.run-operator {source} --on work-briefed",
+        "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["applied"] is True
+    verified = [
+        effect for effect in payload["actual_effects"] if effect["kind"] == "bead_relate_verified"
+    ]
+    assert verified and verified[0]["verified"] is True
+
+    event_id = next(
+        effect["target"] for effect in payload["actual_effects"] if effect["kind"] == "bead_create"
+    )
+    row = bead_row(rig_root, str(event_id))
+    assert row["issue_type"] == "event"
+    edges = {
+        entry.get("depends_on_id")
+        for entry in (row.get("dependencies") or [])
+        if isinstance(entry, dict)
+    }
+    assert source in edges
+
+
+@requires_bd
+def test_dispatch_event_refuses_a_foreign_bead_id_against_a_real_store(
+    tmp_path: Path, seeded_store
+):
+    """The precondition, not the verification: nothing is created at all."""
+    city_root, rig_root = runtime_with_real_store(tmp_path, seeded_store)
+    before = {
+        row["id"]
+        for row in json.loads(
+            run_bd("list", "--all", "--limit", "0", "--json", "--readonly", cwd=rig_root).stdout
+        )
+    }
+
+    result = run_mctl(
+        "work", "dispatch-event", "zz-not-in-this-store",
+        "--dispatch-command", "gc sling mathcity/gc.run-operator zz --on work-briefed",
+        "--city", str(city_root), "--rig", "mathcity", "--json",
+        cwd=REPO_ROOT,
+    )
+
+    assert result.returncode == 1
+    assert "MWRK_BEAD_NOT_FOUND" in result.stderr
+    after = {
+        row["id"]
+        for row in json.loads(
+            run_bd("list", "--all", "--limit", "0", "--json", "--readonly", cwd=rig_root).stdout
+        )
+    }
+    assert after == before, "a refused precondition must leave no orphan event bead"

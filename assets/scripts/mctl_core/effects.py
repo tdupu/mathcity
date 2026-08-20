@@ -14,12 +14,18 @@ from pathlib import Path
 from typing import Mapping
 
 from .beads import (
+    BD_LIST_ARGS,
     BeadCreate,
     BeadRaceLostError,
+    BeadReadError,
+    BeadRelate,
     BeadUpdate,
     BeadWriteError,
     apply_bead_create,
+    apply_bead_relate,
     apply_bead_update,
+    read_beads,
+    verify_relation,
 )
 from .briefs import (
     decision_options,
@@ -111,11 +117,16 @@ class EffectPlan:
     bead_creates: tuple[BeadCreate, ...] = ()
     file_creates: tuple[FileCreate, ...] = ()
     advisories: tuple[Diagnostic, ...] = ()
+    # Applied after `bead_creates`, so an edge may name a bead this plan is
+    # about to mint: `BeadRelate` ids go through the same placeholder
+    # substitution derived paths do.
+    bead_relates: tuple[BeadRelate, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
             "advisories": [diagnostic.to_dict() for diagnostic in self.advisories],
             "bead_creates": [create.to_dict() for create in self.bead_creates],
+            "bead_relates": [relate.to_dict() for relate in self.bead_relates],
             "bead_updates": [update.to_dict() for update in self.bead_updates],
             "cache_updates": [update.to_dict() for update in self.cache_updates],
             "event_writes": [write.to_dict() for write in self.event_writes],
@@ -504,6 +515,8 @@ def _apply_effects(
                 )
             ) from error
         actual.append({"kind": "bead_update", "target": update.id, "result": result})
+    for relate in plan.bead_relates:
+        _apply_bead_relation(ctx, plan, relate, minted, actual, trace_file)
     if plan.bead_creates:
         _apply_created_artifacts(ctx, plan, minted, actual, diagnostics)
     else:
@@ -530,6 +543,133 @@ def _apply_effects(
     actual.append({"kind": "trace_write", "path": str(trace_file)})
     return ApplyResult(
         plan.trace_id, plan, tuple(actual), plan.advisories + tuple(diagnostics)
+    )
+
+
+def _apply_bead_relation(
+    ctx: MctlContext,
+    plan: EffectPlan,
+    relate: BeadRelate,
+    minted: Mapping[str, str],
+    actual: list[Mapping[str, object]],
+    trace_file: Path,
+) -> None:
+    """Write one relate edge, then prove from the store that it is there.
+
+    The proof is the point. `bd dep add` exits 0 on an edge whose target it
+    cannot resolve and leaves a row every hydrating read hides
+    (`BeadRelate` carries the measurement); `bd dep relate` refuses that id
+    today but resolves ids fuzzily, so a clean exit still does not say *which*
+    beads got linked. Re-reading the canonical store answers both questions
+    with the one source that is allowed to answer them.
+
+    A failure aborts loudly rather than degrading to a diagnostic. A relate
+    that did not land is not a cosmetic shortfall: the downstream lost-bead
+    filter reads this edge, and a caller told "applied" would stop looking.
+    """
+    resolved = BeadRelate(
+        source_id=minted.get(relate.source_id, relate.source_id),
+        target_id=minted.get(relate.target_id, relate.target_id),
+        link_type=relate.link_type,
+    )
+    try:
+        result = apply_bead_relate(ctx.rig_root, resolved, fixture_path=ctx.beads_fixture)
+    except BeadWriteError as error:
+        _abort_relation(
+            ctx,
+            plan,
+            trace_file,
+            "MCTL_CANONICAL_BEAD_RELATE_FAILED",
+            f"Relating {resolved.source_id!r} to {resolved.target_id!r} failed.",
+            resolved,
+            detail=str(error),
+        )
+    actual.append({"kind": "bead_relate", **result})
+
+    try:
+        beads = read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture)
+    except BeadReadError as error:
+        _abort_relation(
+            ctx,
+            plan,
+            trace_file,
+            "MCTL_BEAD_RELATION_UNVERIFIED",
+            (
+                f"The edge {resolved.source_id!r} -> {resolved.target_id!r} was "
+                "written but could not be verified: the canonical store did not "
+                "answer the read-back."
+            ),
+            resolved,
+            detail=str(error),
+        )
+    verification = verify_relation(beads, resolved.source_id, resolved.target_id)
+    if verification.unresolved_endpoints:
+        _abort_relation(
+            ctx,
+            plan,
+            trace_file,
+            "MCTL_BEAD_RELATION_DANGLING",
+            (
+                "The relate edge names a bead this rig's canonical store cannot "
+                "resolve, so the edge exists only as a dangling row: `bd show` "
+                "reports it in dependency_count and omits it from dependencies, "
+                "and `bd dep list` does not return it at all."
+            ),
+            resolved,
+            detail=f"unresolved={','.join(verification.unresolved_endpoints)}",
+            suggested_next_command="mctl context rigs --json",
+        )
+    if not verification.edge_recorded:
+        _abort_relation(
+            ctx,
+            plan,
+            trace_file,
+            "MCTL_BEAD_RELATION_UNVERIFIED",
+            (
+                f"The store records no edge between {resolved.source_id!r} and "
+                f"{resolved.target_id!r} after the write reported success."
+            ),
+            resolved,
+        )
+    actual.append({"kind": "bead_relate_verified", **verification.to_dict()})
+
+
+def _abort_relation(
+    ctx: MctlContext,
+    plan: EffectPlan,
+    trace_file: Path,
+    code: str,
+    message: str,
+    relate: BeadRelate,
+    *,
+    detail: str | None = None,
+    suggested_next_command: str | None = None,
+) -> None:
+    """Record the abort phase and raise. Never returns."""
+    append_aborted(
+        trace_file,
+        plan.trace_id,
+        [
+            {
+                "code": code,
+                "source_id": relate.source_id,
+                "target_id": relate.target_id,
+                "detail": detail or "",
+            }
+        ],
+    )
+    raise MutationError(
+        _diagnostic(
+            ctx,
+            Severity.FATAL,
+            code,
+            message,
+            brief_id=plan.target_brief_id,
+            bead_id=relate.source_id,
+            data_location=f"{' '.join(BD_LIST_ARGS)} (rig database {ctx.rig_db})",
+            detail=detail,
+            suggested_next_command=suggested_next_command,
+        )
     )
 
 
@@ -916,6 +1056,7 @@ def _diagnostic(
     message: str,
     *,
     brief_id: str,
+    bead_id: str | None = None,
     data_location: str | None = None,
     detail: str | None = None,
     policy_ref: str | None = None,
@@ -929,6 +1070,8 @@ def _diagnostic(
         "rig_name": ctx.rig_id,
         "rig_path": str(ctx.rig_root),
     }
+    if bead_id:
+        facts["bead_id"] = bead_id
     if data_location:
         facts["data_location"] = data_location
     if detail:
