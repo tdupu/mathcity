@@ -159,16 +159,22 @@ city-root HQ store has no `[[rigs]]` entry in `city.toml`, but
 `mctl_core/context.py::city_rig_entries` **synthesises** a reserved `hq` entry
 for it whenever `<city-root>/.beads/config.yaml` exists and no configured rig
 claims the name (commit `effa679`). So HQ is enumerated, it is read like any
-other rig, and **it can and does appear in `DEGRADED` rows** — it is a large
-store and the first thing observed to hit the 25s deadline:
+other rig, and **it can appear in `DEGRADED` rows**:
 
 ```
 DEGRADED  hq  ->  Rig 'hq' did not answer within 25s and is reported as degraded.
 ```
 
-Treat that as a real degraded rig, not as noise. Do NOT assume an id is missing
-from the roster just because its rig is absent from `city.toml`;
-`city_rig_entries` is the authority, not the config file.
+Treat that as a real degraded rig, not as noise — and **treat it as a signal
+about city health, not a property of HQ**. HQ is not inherently slow: measured
+directly it answers in ~2.5s, comparable to the other rigs. The one observed
+`hq` timeout (2026-08-19) coincided with a supervisor file-descriptor
+exhaustion incident that swung `gc status` latency from 3s to 92s
+(`tdupu/mathcity#70`). So `DEGRADED hq` most likely means the data plane is
+sick, which is worth escalating rather than absorbing.
+
+Do NOT assume an id is missing from the roster just because its rig is absent
+from `city.toml`; `city_rig_entries` is the authority, not the config file.
 
 `gt-*` ids are therefore covered by the STATE rows like any other rig when HQ
 answers. The direct probe below remains the fallback for when HQ is degraded,
