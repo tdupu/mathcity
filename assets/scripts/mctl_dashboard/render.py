@@ -32,6 +32,7 @@ from urllib.parse import quote
 from typing import Any, Iterable, Mapping, Sequence
 
 from .review import MALFORMED_CAVEAT, is_under_review, note_for, partition
+from .reading import attr
 
 
 #: The meta-diagnostic Slice 6 attaches when artifact readings are unusable.
@@ -284,7 +285,7 @@ def masthead(
     mapping, so a chip cannot come to disagree with its destination.
     """
     city = context.get("city_root") or context.get("city_active") or "—"
-    rig = context.get("rig_id") or "all rigs"
+    rig = context.get("rig_id") or "all rigs"  # single-shape-ok: context_resolve payload
     store = context.get("rig_db") or ".beads"
     # City-wide the rig is a choice, so it is a control; pinned to one rig it
     # is a fact, so it is text. Offering a picker on a single-rig dashboard
@@ -480,7 +481,7 @@ def context_panel(context: Mapping[str, Any], *, compact: bool = False) -> str:
     liveness = {True: "live", False: "not reachable", None: "unprobed"}.get(active, "unknown")
     rows = [
         ("City runtime", f'{_e(context.get("city_root"))} <span class="badge">{_e(liveness)}</span>'),
-        ("Rig", f'{_e(context.get("rig_id"))} <span class="mono">{_e(context.get("rig_root"))}</span>'),
+        ("Rig", f'{_e(context.get("rig_id"))} <span class="mono">{_e(context.get("rig_root"))}</span>'),  # single-shape-ok: context payload
         ("Canonical store", f'<span class="mono">{_e(context.get("rig_db"))}</span> (bead store)'),
         ("Source checkout", f'<span class="mono">{_e(context.get("source_checkout"))}</span>'),
     ]
@@ -703,16 +704,16 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -
         artifacts = ", ".join(
             sorted({str(item.get("state")) for item in brief.get("redundant_artifacts") or ()})
         )
-        rig = str(brief.get("rig_id") or "") or None
+        rig = str(attr(brief, "rig_id") or "") or None
         rig_cell = f'<td><span class="mono">{_e(rig or "-")}</span></td>' if show_rig else ""
         rows.append(
             "<tr>"
             + rig_cell
-            + f'<td><a href="{brief_href(brief.get("brief_id"), rig)}">'
-            f'<span class="mono">{_e(brief.get("bead_id"))}</span></a></td>'
-            f'<td>{_e(brief.get("title"))}</td>'
-            f'<td>{_state_badge(str(brief.get("decision_state")))}</td>'
-            f'<td><span class="mono">{_e(brief.get("status"))}</span></td>'
+            + f'<td><a href="{brief_href(attr(brief, "brief_id"), rig)}">'
+            f'<span class="mono">{_e(attr(brief, "bead_id"))}</span></a></td>'
+            f'<td>{_e(attr(brief, "title"))}</td>'
+            f'<td>{_state_badge(str(attr(brief, "decision_state")))}</td>'
+            f'<td><span class="mono">{_e(attr(brief, "status"))}</span></td>'
             f'<td><span class="mono">{_e(", ".join(brief.get("labels") or ()) or "-")}</span></td>'
             f'<td><span class="mono">{_e(artifacts or "-")}</span></td>'
             f'<td><span class="mono">{_e(brief.get("updated_at") or "-")}</span></td>'
@@ -732,7 +733,7 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -
 def state_counts(briefs: Sequence[Mapping[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for brief in briefs:
-        state = str(brief.get("decision_state"))
+        state = str(attr(brief, "decision_state"))
         counts[state] = counts.get(state, 0) + 1
     return counts
 
@@ -791,7 +792,7 @@ def brief_detail_panel(brief: Mapping[str, Any]) -> str:
     )
     artifacts = "".join(
         "<tr>"
-        f'<td><span class="mono">{_e(item.get("kind"))}</span></td>'
+        f'<td><span class="mono">{_e(item.get("kind"))}</span></td>'  # single-shape-ok: redundant-artifact entry
         f'<td><span class="badge">{_e(item.get("state"))}</span></td>'
         f'<td><span class="mono">{_e(item.get("state_reported_by_core"))}</span></td>'
         f'<td><span class="mono">{_e(item.get("path"))}</span></td>'
@@ -801,19 +802,19 @@ def brief_detail_panel(brief: Mapping[str, Any]) -> str:
     facts = "".join(
         f"<dt>{_e(label)}</dt><dd>{value}</dd>"
         for label, value in (
-            ("Bead id", f'<span class="mono">{_e(brief.get("bead_id"))}</span>'),
-            ("Brief id", f'<span class="mono">{_e(brief.get("brief_id"))}</span>'),
-            ("Canonical source", f'<span class="mono">{_e(brief.get("canonical_source"))}</span>'),
-            ("Decision state", _state_badge(str(brief.get("decision_state")))),
-            ("Bead status", f'<span class="mono">{_e(brief.get("status"))}</span>'),
+            ("Bead id", f'<span class="mono">{_e(attr(brief, "bead_id"))}</span>'),
+            ("Brief id", f'<span class="mono">{_e(attr(brief, "brief_id"))}</span>'),
+            ("Canonical source", f'<span class="mono">{_e(attr(brief, "canonical_source"))}</span>'),
+            ("Decision state", _state_badge(str(attr(brief, "decision_state")))),
+            ("Bead status", f'<span class="mono">{_e(attr(brief, "status"))}</span>'),
             ("Labels", f'<span class="mono">{_e(", ".join(brief.get("labels") or ()) or "-")}</span>'),
-            ("Created", f'<span class="mono">{_e(brief.get("created_at") or "-")}</span>'),
+            ("Created", f'<span class="mono">{_e(attr(brief, "created_at") or "-")}</span>'),
             ("Updated", f'<span class="mono">{_e(brief.get("updated_at") or "-")}</span>'),
         )
     )
     return (
         '<section class="panel" data-region="brief">'
-        f'<h2>{_e(brief.get("title"))}</h2>'
+        f'<h2>{_e(attr(brief, "title"))}</h2>'
         f'<dl class="facts">{facts}</dl>'
         + (f"<h2>Policy references</h2><ul>{policy}</ul>" if policy else "")
         + (
@@ -944,15 +945,15 @@ def effect_plan_panel(plan: Mapping[str, Any], *, title: str) -> str:
     rows = []
     for update in plan.get("bead_updates") or ():
         rows.append(
-            ("canonical bead update", f'{update.get("id")} -> status={update.get("status")} '
+            ("canonical bead update", f'{update.get("id")} -> status={update.get("status")} '  # single-shape-ok: effect-plan entry
              f'(only if it is still {update.get("if_status")!r})')
         )
     for create in plan.get("bead_creates") or ():
-        rows.append(("canonical bead create", str(create.get("title"))))
+        rows.append(("canonical bead create", str(create.get("title"))))  # single-shape-ok: effect-plan entry
     for update in plan.get("cache_updates") or ():
-        rows.append((f'redundant cache: {update.get("kind")}', str(update.get("path"))))
+        rows.append((f'redundant cache: {update.get("kind")}', str(update.get("path"))))  # single-shape-ok: effect-plan entry
     for create in plan.get("file_creates") or ():
-        rows.append((f'redundant file: {create.get("kind")}', str(create.get("path"))))
+        rows.append((f'redundant file: {create.get("kind")}', str(create.get("path"))))  # single-shape-ok: effect-plan entry
     for write in plan.get("event_writes") or ():
         rows.append(("event log", str(write.get("path"))))
     for write in plan.get("trace_writes") or ():
@@ -1002,7 +1003,7 @@ def confirm_panel(
 
 def applied_panel(payload: Mapping[str, Any], operation: str) -> str:
     effects = "".join(
-        f'<li><span class="mono">{_e(effect.get("kind"))}</span> '
+        f'<li><span class="mono">{_e(effect.get("kind"))}</span> '  # single-shape-ok: effect-plan entry
         f'<span class="mono">{_e(effect.get("path") or effect.get("id") or "")}</span></li>'
         for effect in payload.get("actual_effects") or ()
     )
@@ -1042,7 +1043,7 @@ def city_context_panel(payload: Mapping[str, Any], *, degraded: Sequence[str] = 
     rigs = list(payload.get("rigs") or ())
     unreadable = set(degraded)
     listed = ", ".join(
-        f'{_e(entry.get("rig_id"))}{" (degraded)" if entry.get("rig_id") in unreadable else ""}'
+        f'{_e(entry.get("rig_id"))}{" (degraded)" if entry.get("rig_id") in unreadable else ""}'  # single-shape-ok: rig entry
         for entry in rigs
     )
     rows = [

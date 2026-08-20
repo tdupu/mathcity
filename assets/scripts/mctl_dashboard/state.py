@@ -228,7 +228,7 @@ def parse(query: Mapping[str, str]) -> ViewState:
             pass
 
     rig = str(query.get("rig") or "").strip() or None
-    brief_id = str(query.get("brief_id") or "").strip() or None
+    brief_id = str(query.get("brief_id") or "").strip() or None  # single-shape-ok: URL query param
 
     return ViewState(
         view=_one(query.get("view"), VIEWS, "queue"),

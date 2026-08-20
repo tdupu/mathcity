@@ -54,6 +54,7 @@ from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
 from .fanout import fan_out
+from .reading import attr
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
 #: Marker written into the adjudication reason when the no-brainer box is
@@ -160,8 +161,8 @@ def is_deferred(brief: Mapping[str, Any]) -> bool:
     Both are consulted until the core reconciles them.
     """
     return (
-        str(brief.get("decision_state") or "") == "deferred"
-        or str(brief.get("status") or "") == "deferred"
+        str(attr(brief, "decision_state") or "") == "deferred"
+        or str(attr(brief, "status") or "") == "deferred"
     )
 
 
@@ -169,7 +170,7 @@ def _in_lane(brief: Mapping[str, Any], lane: str) -> bool:
     """Whether a brief belongs to one of the pipeline lanes."""
     if lane == "deferred":
         return is_deferred(brief)
-    state = str(brief.get("decision_state") or "")
+    state = str(attr(brief, "decision_state") or "")
     return state == lane.rstrip("s") or state == lane
 
 
@@ -193,8 +194,25 @@ def _scoped(
     return [
         b
         for b in briefs
-        if str(b.get("decision_state") or "") in states and not is_deferred(b)
+        if str(attr(b, "decision_state") or "") in states and not is_deferred(b)
     ]
+
+
+def _index_by_id(briefs: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    """Briefs by every id they answer to.
+
+    `briefs_list` populates `brief_id` and leaves `bead_id` unset on every
+    row, so an index keyed on `bead_id` alone collapsed to {"None": ...}
+    and every lookup missed -- the priority list reported itself empty
+    rather than reporting that it could not find what was picked.
+    """
+    index: dict[str, Mapping[str, Any]] = {}
+    for brief in briefs:
+        for key in ("bead_id", "brief_id"):
+            value = attr(brief, key)
+            if value:
+                index.setdefault(str(value), brief)
+    return index
 
 
 def _queued_from(request: "Request") -> list[str]:
@@ -250,7 +268,7 @@ class Dashboard:
     def _rig_ids(self) -> tuple[str, ...]:
         try:
             return tuple(
-                str(entry.get("rig_id")) for entry in self._city().get("rigs") or () if entry
+                str(entry.get("rig_id")) for entry in self._city().get("rigs") or () if entry  # single-shape-ok: rig registry
             )
         except ToolFailure:  # pragma: no cover - defensive
             return ()
@@ -318,7 +336,7 @@ class Dashboard:
         """
         states: dict[str, int] = {}
         for brief in briefs:
-            state = str(brief.get("decision_state") or "unknown")
+            state = str(attr(brief, "decision_state") or "unknown")
             states[state] = states.get(state, 0) + 1
         return {
             "stack": states.get("pending", 0),
@@ -393,7 +411,7 @@ class Dashboard:
         rig = self._rig_for(request) or self.rig
         context = self._scope_context(rig)
         briefs, _city, city_extra = self._read_briefs(rig)
-        by_id = {str(b.get("bead_id")): b for b in briefs}
+        by_id = _index_by_id(briefs)
 
         # `order` is the saved ordering; `pick` arrives from the stack's
         # bulk-add form. Ticked rows append to the end of the existing order
@@ -415,7 +433,7 @@ class Dashboard:
             context,
             [priority_screen.screen(ordered), *city_extra],
             counts=self._counts(briefs),
-            queued=[str(b.get("bead_id")) for b in ordered],
+            queued=[str(attr(b, "bead_id")) for b in ordered],
             context_bar="",
         )
 
@@ -525,7 +543,7 @@ class Dashboard:
             # would imply a choice the deployment already made.
             + (render.rig_picker(self._rig_ids(), selected=(rig,) if rig else ()) if self.city_wide else "")
             + (
-                f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(briefs[0].get("brief_id"))))}">'
+                f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(attr(briefs[0], "brief_id"))))}">'
                 "Open top brief &rarr;</a>"
                 if briefs
                 else ""
@@ -603,7 +621,7 @@ class Dashboard:
         )
 
     def _briefs(self, request: Request) -> Response:
-        status = request.query.get("status")
+        status = request.query.get("status")  # single-shape-ok: URL query param
         label = request.query.get("label")
         if self.city_wide:
             return self._city_briefs(request, status, label)
@@ -663,7 +681,7 @@ class Dashboard:
             '<section class="panel" data-region="filters"><h2>Filter</h2>'
             '<form class="operation" method="get" action="/briefs">'
             + rig_field
-            + f'<label>Bead or decision status<input type="text" name="status" value="{render.esc(request.query.get("status") or "")}"></label>'
+            + f'<label>Bead or decision status<input type="text" name="status" value="{render.esc(request.query.get("status") or "")}"></label>'  # single-shape-ok: URL query param
             f'<label>Label<input type="text" name="label" value="{render.esc(request.query.get("label") or "")}"></label>'
             '<div><button type="submit" class="secondary">Apply filter</button></div>'
             "</form></section>"
@@ -781,7 +799,7 @@ class Dashboard:
             ),
         ]
         return self._page(
-            str(brief.get("title") or brief_id),
+            str(attr(brief, "title") or brief_id),
             "/briefs",
             self._scope_context(rig),
             sections,
@@ -887,7 +905,7 @@ class Dashboard:
         rows = stack.sorted_briefs(
             _scoped(list(listing.payload.get("briefs") or ()), view.scope), view
         )
-        ids = [str(row.get("bead_id") or row.get("brief_id") or "") for row in rows]
+        ids = [str(attr(row, "bead_id") or attr(row, "brief_id") or "") for row in rows]
         try:
             index = ids.index(brief_id)
         except ValueError:
@@ -1033,14 +1051,14 @@ class Dashboard:
         rows = "".join(
             "<tr>"
             + (
-                f'<td><span class="mono">{render.esc(item.get("rig_id") or "-")}</span></td>'
+                f'<td><span class="mono">{render.esc(attr(item, "rig_id") or "-")}</span></td>'
                 if show_rig
                 else ""
             )
-            + f'<td><a href="{render.brief_href(item.get("brief_id"), item.get("rig_id") if show_rig else None)}">'
-            f'<span class="mono">{render.esc(item.get("brief_id"))}</span></a></td>'
-            f'<td><span class="mono">{render.esc(item.get("bead_id"))}</span></td>'
-            f'<td>{render.esc(item.get("title"))}</td>'
+            + f'<td><a href="{render.brief_href(attr(item, "brief_id"), attr(item, "rig_id") if show_rig else None)}">'
+            f'<span class="mono">{render.esc(attr(item, "brief_id"))}</span></a></td>'
+            f'<td><span class="mono">{render.esc(attr(item, "bead_id"))}</span></td>'
+            f'<td>{render.esc(attr(item, "title"))}</td>'
             f'<td><span class="badge">{render.esc(item.get("readiness"))}</span></td>'
             f'<td class="mono">{len(item.get("blockers") or ())}</td>'
             "</tr>"
@@ -1239,7 +1257,7 @@ class Dashboard:
                 ],
                 rig=None,
             )
-        brief_id = request.form.get("brief_id", "").strip() or None
+        brief_id = request.form.get("brief_id", "").strip() or None  # single-shape-ok: form field
         if operation.needs_brief and not brief_id:
             return self._mutation_notice(
                 "No target brief",
@@ -1467,7 +1485,7 @@ class Dashboard:
             rows = stack.sorted_briefs(
                 _scoped(list(listing.payload.get("briefs") or ()), view.scope), view
             )
-            ids = [str(r.get("bead_id") or r.get("brief_id") or "") for r in rows]
+            ids = [str(attr(r, "bead_id") or attr(r, "brief_id") or "") for r in rows]
             ids = [i for i in ids if i and i != brief_id]
             next_id = ids[0] if ids else None
 
@@ -1646,7 +1664,7 @@ def _arguments_for(
         return arguments
     labels = [item.strip() for item in (form.get("labels") or "").split(",") if item.strip()]
     sources = [item.strip() for item in (form.get("sources") or "").split(",") if item.strip()]
-    arguments["title"] = (form.get("title") or "").strip()
+    arguments["title"] = (form.get("title") or "").strip()  # single-shape-ok: form field
     arguments["body"] = (form.get("body") or "").strip()
     if labels:
         arguments["labels"] = labels

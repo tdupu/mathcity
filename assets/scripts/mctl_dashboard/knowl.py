@@ -106,8 +106,8 @@ def _resolve(
 
     bead = beads.get(token)
     if bead:
-        title = str(bead.get("title") or "")
-        kind = str(bead.get("kind") or bead.get("decision_state") or "")
+        title = str(attr(bead, "title") or "")
+        kind = str(attr(bead, "kind") or attr(bead, "decision_state") or "")
         link = ""
         href = bead.get("href")
         if href:

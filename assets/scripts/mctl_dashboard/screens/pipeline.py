@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from mctl_dashboard.reading import attr
 from mctl_dashboard.render import esc as _e
 
 ISSUE_66 = "https://github.com/tdupu/mathcity/issues/66"
@@ -50,9 +51,9 @@ def _gap(body: str) -> str:
 def _rows(briefs: Sequence[Mapping[str, Any]], *, extra: str = "") -> str:
     body = "".join(
         "<tr>"
-        f'<td><a href="/briefs/{_e(brief.get("brief_id") or brief.get("bead_id"))}">'
-        f'<span class="mono">{_e(brief.get("bead_id"))}</span></a></td>'
-        f'<td style="white-space: normal;">{_e(brief.get("title"))}</td>'
+        f'<td><a href="/briefs/{_e(attr(brief, "brief_id") or attr(brief, "bead_id"))}">'
+        f'<span class="mono">{_e(attr(brief, "bead_id"))}</span></a></td>'
+        f'<td style="white-space: normal;">{_e(attr(brief, "title"))}</td>'
         f'<td><span class="mono">{_e(brief.get("updated_at") or "—")}</span></td>'
         + extra
         + "</tr>"

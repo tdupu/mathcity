@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 from urllib.parse import urlencode
 
+from mctl_dashboard.reading import attr
 from mctl_dashboard.render import esc as _e
 
 
@@ -87,10 +88,10 @@ def screen(briefs: Sequence[Mapping[str, Any]]) -> str:
             "</div></section>"
         )
 
-    order = [str(brief.get("bead_id") or "") for brief in briefs]
+    order = [str(attr(brief, "bead_id") or "") for brief in briefs]
     rows = []
     for position, brief in enumerate(briefs):
-        bead = str(brief.get("bead_id") or "")
+        bead = str(attr(brief, "bead_id") or "")
         rows.append(
             '<div class="mc-row" draggable="true" data-bead="' + _e(bead) + '" '
             'style="display: flex; align-items: baseline; gap: 11px; padding: 9px 12px; '
@@ -100,9 +101,9 @@ def screen(briefs: Sequence[Mapping[str, Any]]) -> str:
             'cursor: grab;">&#10287;</span>'
             f'<span class="mono" style="font-size: 12px; color: var(--color-accent-700); '
             f'width: 20px;">{position + 1}</span>'
-            f'<a href="/briefs/{_e(brief.get("brief_id") or bead)}" '
+            f'<a href="/briefs/{_e(attr(brief, "brief_id") or bead)}" '
             'style="font-family: var(--font-heading); font-size: 15px; font-weight: 600; '
-            f'flex: 1 1 auto; color: var(--color-text);">{_e(brief.get("title"))}</a>'
+            f'flex: 1 1 auto; color: var(--color-text);">{_e(attr(brief, "title"))}</a>'
             + _move_link(order, bead, "up", "move up")
             + _move_link(order, bead, "down", "move down")
             + "</div>"
@@ -112,7 +113,7 @@ def screen(briefs: Sequence[Mapping[str, Any]]) -> str:
         '<section data-region="priority">'
         + heading
         + f'<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
-        f"{len(briefs)} briefs · your own ordering</div>"
+        f"{len(briefs)} brief{'' if len(briefs) == 1 else 's'} · your own ordering</div>"
         '<div style="height: 2px; background: var(--color-neutral-900); '
         'margin: 9px 0 16px;"></div>'
         '<p class="lede" style="max-width: 620px;">This is <strong>your own '

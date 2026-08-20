@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from mctl_dashboard.reading import attr
 from mctl_dashboard.render import esc as _e
 from mctl_dashboard.review import UNDER_REVIEW_CODES
 from mctl_dashboard.state import ViewState
@@ -196,7 +197,7 @@ def _disposition_control(brief: Mapping[str, Any]) -> str:
     can only pick from the options as filed cannot say "none of these, do
     that" -- and that is a real verdict, not an absence of one.
     """
-    options = list(brief.get("decision_options") or ())
+    options = list(attr(brief, "decision_options") or ())
     rows: list[str] = []
 
     def _chip(value: str, label: str, *, checked: bool = False) -> str:
@@ -216,7 +217,7 @@ def _disposition_control(brief: Mapping[str, Any]) -> str:
         if not isinstance(entry, Mapping):
             continue
         label = str(entry.get("label") or "").strip()
-        title = str(entry.get("title") or entry.get("summary") or "").strip()
+        title = str(entry.get("title") or entry.get("summary") or "").strip()  # single-shape-ok: decision option
         if not label:
             continue
         text = f"{_e(label)} &middot; {_e(title)}" if title else _e(label)
@@ -308,7 +309,7 @@ def prefill_offer(brief: Mapping[str, Any], *, rig: str | None = None) -> str:
     has_body = bool(str(brief.get("body") or "").strip()) or bool(brief.get("sections"))
     if has_body:
         return ""
-    brief_id = str(brief.get("brief_id") or brief.get("bead_id") or "")
+    brief_id = str(attr(brief, "brief_id") or attr(brief, "bead_id") or "")
     query = f"?prefill=incomplete" + (f"&rig={_e(rig)}" if rig else "")
     return (
         '<div data-region="prefill-offer" style="margin-bottom: 11px; padding: 8px 11px; '
@@ -335,7 +336,7 @@ def entry(
 ) -> str:
     """The adjudication form."""
     state, reason = panel_state(options)
-    brief_id = str(brief.get("brief_id") or brief.get("bead_id") or "")
+    brief_id = str(attr(brief, "brief_id") or attr(brief, "bead_id") or "")
 
     filled = prefill == "incomplete"
     controls = "".join(

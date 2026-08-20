@@ -24,6 +24,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
+from mctl_dashboard.reading import attr
 from mctl_dashboard.render import esc as _e
 from mctl_dashboard.state import COLUMN_LABEL, ViewState
 from mctl_dashboard.theme import STOP
@@ -211,28 +212,6 @@ def _artifact_text(brief: Mapping[str, Any]) -> str:
         {str(item.get("state")) for item in brief.get("redundant_artifacts") or ()}
     )
     return ", ".join(states)
-
-
-def attr(brief: Mapping[str, Any], key: str, default: Any = None) -> Any:
-    """One attribute, wherever the core chose to put it.
-
-    `briefs_list` returns most attributes inside a `fields` map that carries
-    provenance -- `{"value": ..., "source": ..., "readings": [...]}` -- rather
-    than at the top level. Reading only the top level saw `None` for
-    `unlock_count` on all 308 live rows when 185 of them carried a value, and
-    the hide-empty rule then hid a column that had data. A read that knows
-    about only one of the two shapes is a read that silently under-reports.
-
-    Top level wins where both exist: it is the already-resolved value.
-    """
-    if key in brief and brief[key] is not None:
-        return brief[key]
-    entry = (brief.get("fields") or {}).get(key)
-    if isinstance(entry, Mapping):
-        value = entry.get("value")
-        if value is not None:
-            return value
-    return default
 
 
 def cell_text(
