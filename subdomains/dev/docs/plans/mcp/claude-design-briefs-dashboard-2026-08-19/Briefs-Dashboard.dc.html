@@ -25,21 +25,57 @@
   .mc-adopt:active { background: var(--color-accent-200) !important; }
   .mc-navlink:hover { background: var(--color-accent-100); }
   ::selection { background: var(--color-accent-200); }
+  .mc-hdr { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; row-gap: 6px; }
+  .mc-hdr > * { flex: none; }
+  .mc-hdr > h1, .mc-hdr > span, .mc-hdr button, .mc-hdr label { white-space: nowrap; }
+  .mc-hdr span div { white-space: normal; }
 </style>
 </helmet>
 
 <div style="min-height: 100vh; display: flex; flex-direction: column; font-family: var(--font-body); color: var(--color-text); background: var(--color-bg); font-size: 14px; line-height: 1.45;">
 
-  <div style="display: flex; align-items: baseline; gap: 18px; padding: 12px 20px 10px; border-bottom: 2px solid var(--color-neutral-900); background: var(--color-neutral-100);">
-    <div style="font-family: var(--font-heading); font-size: 25px; font-weight: 600; letter-spacing: 0.01em;">MathCity <span style="color: var(--color-accent-700);">/</span> Briefs</div>
-    <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-700); font-feature-settings: 'tnum';">
-      <span style="color: var(--color-neutral-600);">city</span> {{ ctxCity }} <span style="color: var(--color-neutral-400);">·</span> <span style="color: var(--color-neutral-600);">rig</span> {{ ctxRig }} <span style="color: var(--color-neutral-400);">·</span> <span style="color: var(--color-neutral-600);">store</span> {{ ctxStore }}
+  <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; padding: 12px 20px 10px; border-bottom: 2px solid var(--color-neutral-900); background: var(--color-neutral-100);">
+    <div style="font-family: var(--font-heading); font-size: 25px; font-weight: 600; letter-spacing: 0.01em; flex: none; white-space: nowrap;">Brief Manager</div>
+    <span title="Every brief, bead, timestamp and test result on this page is invented sample data. Nothing is read from the city; there is no connection to mctl, bd or Dolt." style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: 0.08em; padding: 2px 6px; border: 1px solid #8f2c22; color: #8f2c22; border-radius: var(--radius-sm); align-self: center; cursor: help; flex: none; white-space: nowrap;">FIXTURES · NOT LIVE DATA</span>
+    <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-700); font-feature-settings: 'tnum'; position: relative; flex: none; white-space: nowrap;">
+      <span style="color: var(--color-neutral-600);">city</span> {{ ctxCity }} <span style="color: var(--color-neutral-400);">·</span> <span style="color: var(--color-neutral-600);">rig</span> <span class="mc-knowl" onClick="{{ toggleRigPicker2 }}" style="color: var(--color-accent-700); border-bottom: 1px dotted var(--color-accent-600); cursor: pointer;">{{ ctxRig }} ▾</span> <span style="color: var(--color-neutral-400);">·</span> <span class="mc-knowl" onClick="{{ toggleStore }}" style="color: var(--color-neutral-600); border-bottom: 1px dotted var(--color-neutral-500); cursor: pointer;">store</span> <span class="mc-knowl" onClick="{{ toggleStore }}" style="color: var(--color-accent-700); border-bottom: 1px dotted var(--color-accent-600); cursor: pointer;">{{ ctxStore }}</span>
+
+      <sc-if value="{{ rigPicker2Open }}" hint-placeholder-val="{{ false }}">
+        <div style="position: absolute; top: 22px; left: 0; z-index: 20; width: 320px; background: var(--color-bg); border: 1px solid var(--color-neutral-900); border-radius: var(--radius-md); box-shadow: var(--shadow-md); overflow: hidden;">
+          <div style="background: var(--color-neutral-900); color: var(--color-accent-200); padding: 5px 10px; font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;">Switch rig</div>
+          <div style="padding: 8px 10px; font-family: var(--font-body); font-size: 11.5px; color: var(--color-neutral-700); font-style: italic; line-height: 1.45; border-bottom: 1px solid var(--color-divider);">{{ rigHint }}</div>
+          <sc-for list="{{ rigOptions }}" as="r" hint-placeholder-count="5">
+            <div class="mc-navlink" onClick="{{ r.pick }}" style="{{ r.style }}">
+              <input type="checkbox" checked="{{ r.on }}" onChange="{{ r.pick }}" onClick="{{ r.stop }}" style="accent-color: var(--color-accent-600); margin: 0; flex: none;">
+              <span style="{{ r.nameStyle }}">{{ r.name }}</span>
+              <span style="margin-left: auto; font-size: 10px; color: var(--color-neutral-600);">{{ r.meta }}</span>
+            </div>
+          </sc-for>
+          <div style="display: flex; gap: 8px; padding: 7px 10px;">
+            <button class="btn btn-ghost" onClick="{{ selectAllRigs }}" style="font-size: 10.5px; padding: 3px 9px;">All rigs</button>
+            <button class="btn btn-ghost" onClick="{{ selectOneRig }}" style="font-size: 10.5px; padding: 3px 9px;">mathcity only</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ storeOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position: absolute; top: 22px; left: 0; z-index: 20; width: 470px; background: var(--color-bg); border: 1px solid var(--color-neutral-900); border-radius: var(--radius-md); box-shadow: var(--shadow-md); overflow: hidden;">
+          <div style="background: var(--color-neutral-900); color: var(--color-accent-200); padding: 5px 10px; font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;">Bead store — source of truth</div>
+          <div style="padding: 8px 10px; font-family: var(--font-body); font-size: 11.5px; color: var(--color-neutral-700); font-style: italic; line-height: 1.45; border-bottom: 1px solid var(--color-divider);">{{ storeHint }}</div>
+          <sc-for list="{{ storeRows }}" as="sr" hint-placeholder-count="8">
+            <div style="display: flex; gap: 10px; padding: 3px 10px; border-bottom: 1px solid var(--color-divider);">
+              <span style="width: 84px; flex: none; color: var(--color-neutral-600); font-size: 10.5px;">{{ sr.k }}</span>
+              <span style="font-size: 10.5px; color: var(--color-neutral-900);">{{ sr.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
     </div>
-    <div style="margin-left: auto; display: flex; align-items: center; gap: 14px; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-700); font-feature-settings: 'tnum';">
-      <span class="mc-knowl" onClick="{{ goPile }}" style="font-family: var(--font-body); font-size: 12px;">pile <b style="font-weight: 600; color: var(--color-text); font-family: ui-monospace, Menlo, monospace;">{{ nPile }}</b></span>
-      <span class="mc-knowl" onClick="{{ goStack }}" style="font-family: var(--font-body); font-size: 12px;">stack <b style="font-weight: 600; color: var(--color-text); font-family: ui-monospace, Menlo, monospace;">{{ nStack }}</b></span>
-      <span class="mc-knowl" onClick="{{ goDeferred }}" style="font-family: var(--font-body); font-size: 12px;">deferred <b style="font-weight: 600; color: var(--color-text); font-family: ui-monospace, Menlo, monospace;">{{ nDeferred }}</b></span>
-      <span class="mc-knowl" onClick="{{ goErrors }}" style="font-family: var(--font-body); font-size: 12px; color: var(--color-accent-800);">error briefs <b style="font-weight: 600; font-family: ui-monospace, Menlo, monospace;">{{ nErrors }}</b></span>
+    <div style="margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-700); font-feature-settings: 'tnum'; flex: none;">
+      <span class="mc-knowl" onClick="{{ goPile }}" style="font-family: var(--font-body); font-size: 12px; flex: none; white-space: nowrap;">pile <b style="font-weight: 600; color: var(--color-text); font-family: ui-monospace, Menlo, monospace;">{{ nPile }}</b></span>
+      <span class="mc-knowl" onClick="{{ goStack }}" style="font-family: var(--font-body); font-size: 12px; flex: none; white-space: nowrap;">stack <b style="font-weight: 600; color: var(--color-text); font-family: ui-monospace, Menlo, monospace;">{{ nStack }}</b></span>
+      <span class="mc-knowl" onClick="{{ goDeferred }}" style="font-family: var(--font-body); font-size: 12px; flex: none; white-space: nowrap;">deferred <b style="font-weight: 600; color: var(--color-text); font-family: ui-monospace, Menlo, monospace;">{{ nDeferred }}</b></span>
+      <span class="mc-knowl" onClick="{{ goErrors }}" style="font-family: var(--font-body); font-size: 12px; flex: none; white-space: nowrap; color: var(--color-accent-800);">error briefs <b style="font-weight: 600; font-family: ui-monospace, Menlo, monospace;">{{ nErrors }}</b></span>
       <span class="mc-knowl" title="Keyboard map" onClick="{{ toggleKeys }}" style="font-family: var(--font-body); font-size: 12px;">keys</span>
     </div>
   </div>
@@ -110,7 +146,7 @@
       <sc-if value="{{ isPile }}" hint-placeholder-val="{{ false }}">
         <div>
           <h1 style="font-family: var(--font-heading); font-size: 27px; font-weight: 600; margin: 0 0 2px;">Pile</h1>
-          <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600);">produced but not yet promoted · 6 briefs · nothing here is yours to decide</div>
+          <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600);">{{ pileSub }}</div>
           <div style="height: 2px; background: var(--color-neutral-900); margin: 9px 0 12px;"></div>
           <div style="border: 1px solid var(--color-divider); border-left: 3px solid var(--color-accent-600); background: var(--color-neutral-100); border-radius: var(--radius-sm); padding: 9px 12px; margin-bottom: 14px; font-size: 12.5px; color: var(--color-neutral-800);">
             <div style="font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--color-neutral-600); letter-spacing: 0.04em; margin-bottom: 4px;">SHUFFLER</div>
@@ -167,7 +203,7 @@
       <sc-if value="{{ isAdjudicated }}" hint-placeholder-val="{{ false }}">
         <div>
           <h1 style="font-family: var(--font-heading); font-size: 27px; font-weight: 600; margin: 0 0 2px;">Adjudicated</h1>
-          <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600);">closed decision beads · newest first · immutable</div>
+          <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600);">{{ adjSub }}</div>
           <div style="height: 2px; background: var(--color-neutral-900); margin: 9px 0 14px;"></div>
           <div style="border-bottom: 2px solid var(--color-neutral-900);">
             <table class="table" style="width: 100%; table-layout: fixed; border-collapse: collapse;">
@@ -178,33 +214,59 @@
                   <th style="width: 68px; text-align: left; padding: 6px 9px; border: 0; font-family: var(--font-heading); font-size: 12.5px; font-weight: 600;">Option</th>
                   <th style="width: 122px; text-align: left; padding: 6px 9px; border: 0; font-family: var(--font-heading); font-size: 12.5px; font-weight: 600;">Decided</th>
                   <th style="width: 92px; text-align: left; padding: 6px 9px; border: 0; font-family: var(--font-heading); font-size: 12.5px; font-weight: 600;">Follow-up</th>
+                  <th style="width: 92px; text-align: left; padding: 6px 9px; border: 0; font-family: var(--font-heading); font-size: 12.5px; font-weight: 600;">Outcome</th>
                 </tr>
               </thead>
               <tbody>
                 <sc-for list="{{ adjRows }}" as="a" hint-placeholder-count="8">
-                  <tr style="{{ a.rowStyle }}">
+                  <tr onClick="{{ a.toggle }}" style="{{ a.rowStyle }}">
                     <td style="padding: 8px 9px; vertical-align: top;">
                       <div style="font-family: var(--font-heading); font-size: 14px; font-weight: 600; line-height: 1.25;">{{ a.title }}</div>
                       <div style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--color-neutral-600); margin-top: 2px;">{{ a.slug }} · {{ a.rig }} · {{ a.producer }}</div>
-                      <div style="font-size: 12px; color: var(--color-neutral-800); margin-top: 5px; text-align: justify; hyphens: auto;">{{ a.reason }}</div>
+                      <div style="font-size: 12px; color: var(--color-neutral-800); margin-top: 5px; text-wrap: pretty;">{{ a.reason }}</div>
+                      <div class="mc-knowl" style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--color-accent-700); margin-top: 6px; display: inline-block;">{{ a.caret }}</div>
+                      <sc-if value="{{ a.open }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top: 8px; border: 1px solid var(--color-divider); border-left: 3px solid var(--color-accent-600); border-radius: var(--radius-sm); background: var(--color-neutral-100); padding: 9px 11px;">
+                          <div style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-neutral-600); margin-bottom: 6px;">What happened since</div>
+                          <sc-for list="{{ a.progress }}" as="g" hint-placeholder-count="3">
+                            <div style="display: flex; gap: 10px; padding: 2px 0;">
+                              <span style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--color-neutral-600); width: 106px; flex: none; font-feature-settings: 'tnum';">{{ g.w }}</span>
+                              <span style="font-size: 12px; color: var(--color-neutral-900); line-height: 1.45;">{{ g.t }}</span>
+                            </div>
+                          </sc-for>
+
+                          <div style="margin-top: 10px; border-top: 1px solid var(--color-divider); padding-top: 8px;">
+                            <div style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-neutral-600); margin-bottom: 5px;">{{ a.molHead }}{{ a.noMol }}</div>
+                            <sc-for list="{{ a.molSteps }}" as="ms" hint-placeholder-count="6">
+                              <div style="display: flex; gap: 8px; align-items: baseline; padding: 1px 0;">
+                                <span style="{{ ms.style }}">{{ ms.mark }}</span>
+                                <span style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--color-neutral-500); width: 14px; flex: none; font-feature-settings: 'tnum';">{{ ms.n }}</span>
+                                <span style="{{ ms.nameStyle }}">{{ ms.name }}</span>
+                                <span style="font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--color-neutral-600); font-feature-settings: 'tnum';">{{ ms.when }}</span>
+                              </div>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
                     </td>
                     <td style="{{ a.verdictStyle }}">{{ a.verdict }}</td>
                     <td style="padding: 8px 9px; vertical-align: top; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--color-neutral-700);">{{ a.option }}</td>
                     <td style="padding: 8px 9px; vertical-align: top; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--color-neutral-700); font-feature-settings: 'tnum';">{{ a.when }}</td>
                     <td style="padding: 8px 9px; vertical-align: top; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--color-neutral-700);">{{ a.follow }}</td>
+                    <td style="{{ a.stateStyle }}">{{ a.stateLabel }}</td>
                   </tr>
                 </sc-for>
               </tbody>
             </table>
           </div>
-          <div style="margin-top: 10px; font-size: 11.5px; color: var(--color-neutral-600); font-style: italic;">Decision beads are never reopened — a change of mind is a new bead, which is why the follow-up column exists. Anything you adjudicate in this session appears at the top, tinted.</div>
+          <div style="margin-top: 10px; font-size: 11.5px; color: var(--color-neutral-600); font-style: italic;">Health colours don't apply here — a closed decision has no pipeline health. The only status left is what the verdict set in motion, so Outcome reads complete (green) or in flight. Decision beads are never reopened — a change of mind is a new bead, which is why the follow-up column exists. Anything you adjudicate in this session appears at the top, tinted.</div>
         </div>
       </sc-if>
 
       <sc-if value="{{ isDeferred }}" hint-placeholder-val="{{ false }}">
         <div>
           <h1 style="font-family: var(--font-heading); font-size: 27px; font-weight: 600; margin: 0 0 2px;">Deferred</h1>
-          <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600);">3 briefs · held out of the stack until their window expires</div>
+          <div style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600);">{{ deferredSub }}</div>
           <div style="height: 2px; background: var(--color-neutral-900); margin: 9px 0 14px;"></div>
           <div style="max-width: 780px;">
             <sc-for list="{{ deferredRows }}" as="d" hint-placeholder-count="3">
@@ -224,16 +286,35 @@
 
       <sc-if value="{{ isQueue }}" hint-placeholder-val="{{ true }}">
         <div>
-          <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px;">
+          <div class="mc-hdr" style="margin-bottom: 4px;">
             <h1 style="font-family: var(--font-heading); font-size: 27px; font-weight: 600; margin: 0;">{{ queueTitle }}</h1>
-            <span style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600); font-feature-settings: 'tnum';">{{ queueSub }}</span>
+            <span style="font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--color-neutral-600); font-feature-settings: 'tnum'; position: relative;">
+              <span class="mc-knowl" onClick="{{ toggleRigPicker }}" style="color: var(--color-accent-700); border-bottom: 1px dotted var(--color-accent-600); cursor: pointer;">{{ queueSubRig }} ▾</span>{{ queueSubRest }}
+              <sc-if value="{{ rigPickerOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="position: absolute; top: 20px; left: 0; z-index: 20; width: 320px; background: var(--color-bg); border: 1px solid var(--color-neutral-900); border-radius: var(--radius-md); box-shadow: var(--shadow-md); overflow: hidden; font-family: var(--font-body);">
+                  <div style="background: var(--color-neutral-900); color: var(--color-accent-200); padding: 5px 10px; font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;">Switch rig</div>
+                  <div style="padding: 8px 10px; font-size: 11.5px; color: var(--color-neutral-700); font-style: italic; line-height: 1.45; border-bottom: 1px solid var(--color-divider);">{{ rigHint }}</div>
+                  <sc-for list="{{ rigOptions }}" as="r" hint-placeholder-count="5">
+                    <div class="mc-navlink" onClick="{{ r.pick }}" style="{{ r.style }}">
+                      <input type="checkbox" checked="{{ r.on }}" onChange="{{ r.pick }}" onClick="{{ r.stop }}" style="accent-color: var(--color-accent-600); margin: 0; flex: none;">
+                      <span style="{{ r.nameStyle }}">{{ r.name }}</span>
+                      <span style="margin-left: auto; font-size: 10px; color: var(--color-neutral-600);">{{ r.meta }}</span>
+                    </div>
+                  </sc-for>
+                  <div style="display: flex; gap: 8px; padding: 7px 10px;">
+                    <button class="btn btn-ghost" onClick="{{ selectAllRigs }}" style="font-size: 10.5px; padding: 3px 9px;">All rigs</button>
+                    <button class="btn btn-ghost" onClick="{{ selectOneRig }}" style="font-size: 10.5px; padding: 3px 9px;">mathcity only</button>
+                  </div>
+                </div>
+              </sc-if>
+            </span>
             <div style="margin-left: auto; display: flex; gap: 8px;">
               <sc-if value="{{ hasPicked }}" hint-placeholder-val="{{ false }}">
                 <button class="btn btn-primary" onClick="{{ bulkAdd }}" style="font-size: 11.5px; padding: 4px 10px;">{{ bulkLabel }}</button>
               </sc-if>
               <label style="font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--color-neutral-700);">
-                <input type="checkbox" checked="{{ allRigs }}" onChange="{{ toggleAllRigs }}" style="accent-color: var(--color-accent-600); margin: 0;">
-                <span style="font-family: ui-monospace, Menlo, monospace; font-size: 10.5px;">--all-rigs</span>
+                <input type="checkbox" checked="{{ allRigsOn }}" onChange="{{ toggleAllRigs }}" style="accent-color: var(--color-accent-600); margin: 0;">
+                <span style="font-family: ui-monospace, Menlo, monospace; font-size: 10.5px;">all rigs</span>
               </label>
               <button class="btn btn-ghost" onClick="{{ toggleColPicker }}" style="font-size: 11.5px; padding: 4px 10px;">Columns</button>
               <button class="btn btn-secondary" onClick="{{ openTop }}" style="font-size: 11.5px; padding: 4px 10px;">Open top brief →</button>
@@ -1281,14 +1362,14 @@ Object.assign(PI, {
 });
 
 const ADJUDICATED = [
-  { slug: "mc-22ab-shuffler-single-writer-lock", title: "Give brief-shuffle an exclusive promotion lock", rig: "mathcity", verdict: "approve", option: "A", when: "2026-08-18 16:40", reason: "One writer or the index keeps diverging. Option A as filed.", follow: "mc-4kf2", producer: "build-basic-briefed" },
-  { slug: "mc-18cd-bead-sweeper-age-threshold", title: "Raise the sweeper age threshold from 30 to 45 days", rig: "mathcity", verdict: "reject", option: "—", when: "2026-08-18 11:02", reason: "The threshold is not the problem; beads sit open because nobody adjudicates them. Fix the queue, not the reaper.", follow: "mc-93aa", producer: "simple-work-briefed" },
-  { slug: "gsp-88ef-molecule-step-retry", title: "Retry a failed molecule step once before surfacing", rig: "gastown", verdict: "revise", option: "B", when: "2026-08-17 09:15", reason: "Retry is right but not silently — surface the first failure as INFO so the pattern stays visible.", follow: "gsp-91bd", producer: "build-basic-briefed" },
-  { slug: "mc-11ff-hecke-eigenvector-check", title: "Accept the non-rational eigenvector computation as verified", rig: "mathcity", verdict: "approve", option: "—", when: "2026-08-16 14:33", reason: "Checked against the published table for three conductors. Recorded as verified, not conjectural.", follow: "—", producer: "simple-work-briefed" },
-  { slug: "mc-09de-retire-grill-and-present", title: "Retire grill-and-present in favour of the split skills", rig: "mathcity", verdict: "defer", option: "—", when: "2026-08-15 17:20", reason: "Held until the as-4nu PR is adjudicated upstream; retiring first would strand the gates.", follow: "—", producer: "simple-work-briefed" },
-  { slug: "lm-64ab-search-facet-cache", title: "Cache finite-group search facets for 24 hours", rig: "lmfdb", verdict: "approve", option: "B", when: "2026-08-14 10:48", reason: "Option B — 24h is fine for facets, and it keeps the invalidation story simple.", follow: "lm-70cc", producer: "pr-pipeline-briefed" },
-  { slug: "mc-e044-stale-index-entry", title: "Repair: stack index named two missing files", rig: "mathcity", verdict: "repair", option: "A", when: "2026-08-13 08:05", reason: "Rebuilt the index from bead state. Error brief, filed by detection.", follow: "mc-4kf2", producer: "brief-gate-keep" },
-  { slug: "pm-31cd-drop-python310-wheels", title: "Drop Python 3.10 wheels from the passagemath matrix", rig: "passagemath", verdict: "approve", option: "A", when: "2026-08-12 13:27", reason: "3.10 is past upstream security support and downloads are under 0.2 percent.", follow: "—", producer: "pr-pipeline-briefed" }
+  { slug: "mc-22ab-shuffler-single-writer-lock", molecule: { bead: "mc-9wq1", formula: "build-basic-briefed", steps: [{ n: "requirements", st: "done", w: "08-18 16:42" }, { n: "plan", st: "done", w: "08-18 17:10" }, { n: "decompose", st: "done", w: "08-18 18:04" }, { n: "implement", st: "done", w: "08-19 07:31" }, { n: "review", st: "done", w: "08-19 08:55" }, { n: "publish", st: "done", w: "08-19 09:12" }] }, state: "complete", progress: [{ w: "2026-08-18 16:40", t: "verdict approve (option A) written on the brief bead; brief-closed" }, { w: "2026-08-18 16:41", t: "brief.decided emitted · gc sling mc-9wq1 --formula build-basic-briefed" }, { w: "2026-08-19 09:12", t: "molecule complete, 6 of 6 steps · merged" }, { w: "2026-08-19 09:14", t: "follow-up mc-4kf2 filed — cache-writer contract, now on your stack" }], title: "Give brief-shuffle an exclusive promotion lock", rig: "mathcity", verdict: "approve", option: "A", when: "2026-08-18 16:40", reason: "One writer or the index keeps diverging. Option A as filed.", follow: "mc-4kf2", producer: "build-basic-briefed" },
+  { slug: "mc-18cd-bead-sweeper-age-threshold", state: "in-flight", progress: [{ w: "2026-08-18 11:02", t: "verdict reject written; brief-closed, no dispatch" }, { w: "2026-08-18 11:03", t: "follow-up mc-93aa created — adjudication throughput, not sweeper thresholds" }, { w: "2026-08-19 08:30", t: "mc-93aa still open, unassigned" }], title: "Raise the sweeper age threshold from 30 to 45 days", rig: "mathcity", verdict: "reject", option: "—", when: "2026-08-18 11:02", reason: "The threshold is not the problem; beads sit open because nobody adjudicates them. Fix the queue, not the reaper.", follow: "mc-93aa", producer: "simple-work-briefed" },
+  { slug: "gsp-88ef-molecule-step-retry", molecule: { bead: "gsp-91bd", formula: "build-basic-briefed", steps: [{ n: "requirements", st: "done", w: "08-17 09:20" }, { n: "plan", st: "done", w: "08-17 11:40" }, { n: "decompose", st: "done", w: "08-18 09:15" }, { n: "implement", st: "running", w: "started 08-18 14:02" }, { n: "review", st: "pending", w: "—" }, { n: "publish", st: "pending", w: "—" }] }, state: "in-flight", progress: [{ w: "2026-08-17 09:15", t: "verdict revise (option B) written; brief-closed" }, { w: "2026-08-17 09:16", t: "follow-up gsp-91bd created — surface first failure as INFO" }, { w: "2026-08-18 14:02", t: "gsp-91bd in progress, molecule step 3 of 5" }], title: "Retry a failed molecule step once before surfacing", rig: "gastown", verdict: "revise", option: "B", when: "2026-08-17 09:15", reason: "Retry is right but not silently — surface the first failure as INFO so the pattern stays visible.", follow: "gsp-91bd", producer: "build-basic-briefed" },
+  { slug: "mc-11ff-hecke-eigenvector-check", state: "complete", progress: [{ w: "2026-08-16 14:33", t: "verdict approve (as filed) written; brief-closed" }, { w: "2026-08-16 14:35", t: "source bead transitioned to research journal — [RESEARCH_JOURNAL] + defer (BP2.2)" }, { w: "2026-08-16 14:35", t: "no follow-up work: reference mathematics blocks nothing" }], title: "Accept the non-rational eigenvector computation as verified", rig: "mathcity", verdict: "approve", option: "—", when: "2026-08-16 14:33", reason: "Checked against the published table for three conductors. Recorded as verified, not conjectural.", follow: "—", producer: "simple-work-briefed" },
+  { slug: "mc-09de-retire-grill-and-present", state: "in-flight", progress: [{ w: "2026-08-15 17:20", t: "verdict defer written; defer window to 2026-09-01" }, { w: "2026-08-15 17:21", t: "no dispatch — held pending the as-4nu PR upstream" }, { w: "2026-08-19 08:00", t: "still deferred, 13 days left" }], title: "Retire grill-and-present in favour of the split skills", rig: "mathcity", verdict: "defer", option: "—", when: "2026-08-15 17:20", reason: "Held until the as-4nu PR is adjudicated upstream; retiring first would strand the gates.", follow: "—", producer: "simple-work-briefed" },
+  { slug: "lm-64ab-search-facet-cache", molecule: { bead: "lm-31bc", formula: "build-basic-briefed", steps: [{ n: "requirements", st: "done", w: "08-14 10:52" }, { n: "plan", st: "done", w: "08-14 12:30" }, { n: "decompose", st: "done", w: "08-14 15:11" }, { n: "implement", st: "done", w: "08-15 10:02" }, { n: "review", st: "done", w: "08-15 15:40" }, { n: "publish", st: "done", w: "08-15 16:20" }] }, state: "complete", progress: [{ w: "2026-08-14 10:48", t: "verdict approve (option B) written; brief-closed" }, { w: "2026-08-14 10:50", t: "gc sling lm-31bc --formula build-basic-briefed --interaction-mode checkpointed" }, { w: "2026-08-15 16:20", t: "merged · follow-up lm-70cc filed for cache invalidation" }], title: "Cache finite-group search facets for 24 hours", rig: "lmfdb", verdict: "approve", option: "B", when: "2026-08-14 10:48", reason: "Option B — 24h is fine for facets, and it keeps the invalidation story simple.", follow: "lm-70cc", producer: "pr-pipeline-briefed" },
+  { slug: "mc-e044-stale-index-entry", state: "complete", progress: [{ w: "2026-08-13 08:05", t: "verdict repair (option A) written on the error brief; brief-closed" }, { w: "2026-08-13 08:06", t: "index rebuilt from bead state · 2 stale entries removed" }, { w: "2026-08-13 08:07", t: "mc-4kf2 unblocked · doctor clean on the next sweep" }], title: "Repair: stack index named two missing files", rig: "mathcity", verdict: "repair", option: "A", when: "2026-08-13 08:05", reason: "Rebuilt the index from bead state. Error brief, filed by detection.", follow: "mc-4kf2", producer: "brief-gate-keep" },
+  { slug: "pm-31cd-drop-python310-wheels", molecule: { bead: "pm-55ab", formula: "simple-work-briefed", steps: [{ n: "execute", st: "done", w: "08-12 13:35" }, { n: "file-brief", st: "done", w: "08-12 13:39" }, { n: "workflow-finalize", st: "done", w: "08-12 18:05" }] }, state: "complete", progress: [{ w: "2026-08-12 13:27", t: "verdict approve (option A) written; brief-closed" }, { w: "2026-08-12 13:40", t: "matrix updated, support table documented" }, { w: "2026-08-12 18:05", t: "merged · CI runtime 51 → 44 min" }], title: "Drop Python 3.10 wheels from the passagemath matrix", rig: "passagemath", verdict: "approve", option: "A", when: "2026-08-12 13:27", reason: "3.10 is past upstream security support and downloads are under 0.2 percent.", follow: "—", producer: "pr-pipeline-briefed" }
 ];
 
 const DEFERRED = [
@@ -1310,6 +1391,7 @@ const PRIO_RANK = { high: 3, normal: 2, low: 1 };
 const SEV_RANK = { error: 3, warn: 2, ok: 1 };
 const MONO = "ui-monospace, Menlo, monospace";
 const RIG = "mathcity";
+const RIGS = ["mathcity", "gastown", "lmfdb", "magma", "passagemath"];
 
 const DIAG = {
   "MC-E101": { n: "No runtime rig context", f: "diagnostic · FATAL", t: "The working directory is not a registered city rig. Brief and work commands refuse to guess a rig; the error proves only that runtime context is missing." },
@@ -1432,7 +1514,10 @@ class Component extends DCLogic {
     decided: {},
     openRules: {},
     leakReason: "",
-    allRigs: false,
+    rigs: RIGS.slice(),
+    rigPickerOpen: false,
+    rigPicker2Open: false,
+    storeOpen: false,
     grill: false,
     otherText: ""
   };
@@ -1468,7 +1553,7 @@ class Component extends DCLogic {
     const w = this.state.weights;
     return Math.round(b.unlock * w.unlock + (b.convoy ? w.convoy * 2.4 : 0) + b.age * w.age * 0.35 + PRIO_RANK[b.prio] * w.prio);
   }
-  inRig(x) { return this.state.allRigs || x.rig === RIG; }
+  inRig(x) { return this.state.rigs.includes(x.rig); }
   scoped() {
     if (this.state.scope === "mine") return this.state.myQueue.map(id => BRIEFS.find(b => b.id === id)).filter(Boolean);
     const pool = BRIEFS.filter(b => this.inRig(b));
@@ -1690,7 +1775,8 @@ class Component extends DCLogic {
     const recLabel = "▸ Click to adopt — " + recVerdict + (recOption && recOption !== "REC" ? " of option " + recOption : " as filed") + ", fills the panel below";
     const savedAgo = s.savedAt ? Math.max(1, Math.round((Date.now() - s.savedAt) / 1000)) : null;
 
-    const inRig = x => s.allRigs || x.rig === RIG;
+    const inRig = x => s.rigs.includes(x.rig);
+    const scopeLabel = s.rigs.length === RIGS.length ? "all rigs" : s.rigs.length === 1 ? s.rigs[0] + " only" : s.rigs.length + " rigs";
     const nNB = BRIEFS.filter(x => x.kind === "no-brainer" && inRig(x)).length;
     const pileScoped = PILE.filter(inRig), defScoped = DEFERRED.filter(inRig), adjScoped = ADJUDICATED.filter(inRig);
     const navDef = [
@@ -1705,18 +1791,59 @@ class Component extends DCLogic {
     const tabStyle = on => "font-family: " + MONO + "; font-size: 11.5px; padding: 2px 9px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid " + (on ? "var(--color-accent-600); background: var(--color-accent-200); color: var(--color-accent-900);" : "var(--color-divider); color: var(--color-neutral-700);");
 
     return {
-      ctxCity: "~/gt", ctxRig: "mathcity", ctxStore: ".beads (dolt)", ctxTrace: "trace mc-tr-8841",
+      ctxCity: "~/gt", ctxRig: scopeLabel, ctxStore: ".beads (dolt)", ctxTrace: "trace mc-tr-8841",
       nPile: String(pileScoped.length), nStack: String(BRIEFS.filter(x => x.kind !== "no-brainer" && inRig(x)).length), nDeferred: String(defScoped.length), nErrors: String(BRIEFS.filter(x => x.kind === "error" && inRig(x)).length),
-      allRigs: s.allRigs,
-      toggleAllRigs: () => this.setState({ allRigs: !s.allRigs, cursor: 0 }),
-      rigScopeNote: s.allRigs ? "--all-rigs · cross-rig read, mutations stay single-rig" : "single rig · " + RIG,
+      allRigsOn: s.rigs.length === RIGS.length,
+      toggleAllRigs: () => this.setState({ rigs: s.rigs.length === RIGS.length ? [RIG] : RIGS.slice(), cursor: 0 }),
+      storeOpen: s.storeOpen,
+      toggleStore: () => this.setState({ storeOpen: !s.storeOpen }),
+      storeHint: "The canonical bead store for this context — every verdict is written here. Markdown, stack indexes and decisions/*.toml are caches that must reconcile to it.",
+      storeRows: [
+        { k: "engine", v: "Dolt · sql-server on 127.0.0.1:3306" },
+        { k: "path", v: "~/gt/.beads" },
+        { k: "branch", v: "main · clean, no uncommitted rows" },
+        { k: "last commit", v: "2026-08-19 17:58 · \"bd: close mc-e044, verdict repair\"" },
+        { k: "schema", v: "v14 · migrated by the city rig (BP10.2)" },
+        { k: "connection", v: "healthy · 12ms round trip · 3 open sessions" },
+        { k: "legacy", v: ".beads/decisions-track — 240 rows, migration held (issue #38)" },
+        { k: "doctor", v: "1 ERROR, 2 WARN across 8 stacked briefs" }
+      ],
+      rigPickerOpen: s.rigPickerOpen,
+      rigPicker2Open: s.rigPicker2Open,
+      toggleRigPicker: () => this.setState({ rigPickerOpen: !s.rigPickerOpen, rigPicker2Open: false, storeOpen: false }),
+      toggleRigPicker2: () => this.setState({ rigPicker2Open: !s.rigPicker2Open, rigPickerOpen: false, storeOpen: false }),
+      rigHint: "Which rigs this dashboard reads. Tick any combination — reads may span rigs, but every mutation still lands on exactly one rig, the one the brief belongs to.",
+      selectAllRigs: () => this.setState({ rigs: RIGS.slice(), cursor: 0 }),
+      selectOneRig: () => this.setState({ rigs: [RIG], cursor: 0 }),
+      rigOptions: RIGS.map(r => {
+        const on = s.rigs.includes(r);
+        const stack = BRIEFS.filter(x => x.rig === r && x.kind !== "no-brainer").length;
+        const errs = BRIEFS.filter(x => x.rig === r && x.kind === "error").length;
+        return {
+          name: r, on,
+          meta: stack + " on stack · " + PILE.filter(p => p.rig === r).length + " in pile" + (errs ? " · " + errs + " error" : ""),
+          style: "display: flex; gap: 9px; align-items: baseline; padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--color-divider); background: " + (on ? "var(--color-accent-100)" : "transparent") + ";",
+          nameStyle: "font-family: " + MONO + "; font-size: 12px; color: " + (on ? "var(--color-accent-900)" : "var(--color-neutral-700)") + (on ? "; font-weight: 600" : "") + ";",
+          stop: e => e.stopPropagation(),
+          pick: () => this.setState(st => {
+            const has = st.rigs.includes(r);
+            const next = has ? st.rigs.filter(x => x !== r) : st.rigs.concat([r]);
+            return { rigs: next.length ? next : [r], cursor: 0 };
+          })
+        };
+      }),
+      rigScopeNote: "reading " + scopeLabel + " · mutations always single-rig",
       keysOpen: s.keysOpen, toggleKeys: () => this.setState({ keysOpen: !s.keysOpen }),
 
-      nav: navDef.map(n => ({
-        label: n.label, count: n.count,
-        labelStyle: s.view === "queue" && s.scope === n.key ? "color: var(--color-accent-800); font-weight: 600;" : "color: var(--color-neutral-800);",
-        go: () => this.setState({ view: "queue", scope: n.key, cursor: 0 })
-      })),
+      nav: navDef.map(n => {
+        const ownView = n.key === "pile" || n.key === "adjudicated";
+        const active = ownView ? s.view === n.key : s.view === "queue" && s.scope === n.key;
+        return {
+          label: n.label, count: n.count,
+          labelStyle: active ? "color: var(--color-accent-800); font-weight: 600;" : "color: var(--color-neutral-800);",
+          go: () => this.setState(ownView ? { view: n.key } : { view: "queue", scope: n.key, cursor: 0 })
+        };
+      }),
       goQueue: () => this.setState({ view: "rank", scope: "mine" }),
       nextFive: s.myQueue.slice(0, 5).map((id, i) => ({ n: String(i + 1), bead: id })),
       nextFiveEmpty: s.myQueue.length === 0,
@@ -1735,7 +1862,9 @@ class Component extends DCLogic {
 
       isQueue: s.view === "queue", isBrief: s.view === "brief", isRank: s.view === "rank",
       queueTitle: s.scope === "errors" ? "Invariant errors" : s.scope === "nobrainer" ? "No-brainers" : "Brief stack",
-      queueSub: (s.allRigs ? "--all-rigs · " : RIG + " only · ") + list.length + " briefs · sorted by " + (COLS.find(c => c.key === s.sortKey) || {}).label + (s.sortDir < 0 ? " descending" : " ascending"),
+      queueSubRig: scopeLabel,
+      queueSubRest: " · " + list.length + " briefs · sorted by " + (COLS.find(c => c.key === s.sortKey) || {}).label + (s.sortDir < 0 ? " descending" : " ascending"),
+      queueSub: (scopeLabel + " · ") + list.length + " briefs · sorted by " + (COLS.find(c => c.key === s.sortKey) || {}).label + (s.sortDir < 0 ? " descending" : " ascending"),
       colPickerOpen: s.colPickerOpen, toggleColPicker: () => this.setState({ colPickerOpen: !s.colPickerOpen }),
       allCols: COLS.map(c => ({ label: c.label, on: s.cols.includes(c.key), toggle: () => this.setState(st => ({ cols: st.cols.includes(c.key) ? st.cols.filter(k => k !== c.key) : COLS.filter(x => st.cols.includes(x.key) || x.key === c.key).map(x => x.key) })) })),
       tableMinWidth: (46 + 104 + 290 + visCols.reduce((n, c) => n + (c.key === "slug" ? 0 : c.w), 0)) + "px",
@@ -1857,18 +1986,39 @@ class Component extends DCLogic {
 
       isAdjudicated: s.view === "adjudicated",
       adjRows: Object.keys(s.decided).map(id => Object.assign({ when: "just now", follow: "—", fresh: true }, s.decided[id])).reverse()
-        .concat(adjScoped.map(a => Object.assign({ fresh: false }, a)))
-        .map(a => ({
-          title: a.title, slug: a.slug, rig: a.rig, when: a.when, follow: a.follow, reason: a.reason, producer: a.producer,
-          verdict: a.verdict, option: a.option,
-          rowStyle: "border-bottom: 1px solid var(--color-divider); background: " + (a.fresh ? "var(--color-accent-100)" : "transparent") + ";",
-          verdictStyle: "padding: 8px 9px; vertical-align: top; font-family: " + MONO + "; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; color: " + (a.verdict === "reject" ? "#8f2c22" : a.verdict === "approve" || a.verdict === "repair" ? "var(--color-neutral-800)" : "var(--color-accent-800)") + ";"
-        })),
+        .concat(adjScoped.map(a => Object.assign({ fresh: false }, a)).sort((x, y) => (x.when < y.when ? 1 : x.when > y.when ? -1 : 0)))
+        .map(a => {
+          const st = a.state || (a.fresh ? "in-flight" : "in-flight");
+          const done = st === "complete";
+          return {
+            title: a.title, slug: a.slug, rig: a.rig, when: a.when, follow: a.follow, reason: a.reason, producer: a.producer,
+            verdict: a.verdict, option: a.option,
+            stateLabel: a.fresh ? "just decided" : done ? "complete" : "in flight",
+            stateStyle: "padding: 8px 9px; vertical-align: top; font-family: " + MONO + "; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; color: " + (done ? STOP.go.fg : "var(--color-neutral-600)") + ";",
+            progress: (a.progress || [{ w: "just now", t: "verdict written on the brief bead; brief-closed" }]).map(p => ({ w: p.w, t: p.t })),
+            molHead: a.molecule ? "Molecule · " + a.molecule.bead + " · " + a.molecule.formula + " · " + a.molecule.steps.filter(x => x.st === "done").length + " of " + a.molecule.steps.length + " steps" : "",
+            molSteps: a.molecule ? a.molecule.steps.map((x, k) => ({
+              n: String(k + 1), name: x.n, when: x.w,
+              mark: x.st === "done" ? "✓" : x.st === "running" ? "▸" : "·",
+              style: "font-family: " + MONO + "; font-size: 11px; color: " + (x.st === "done" ? STOP.go.fg : x.st === "running" ? "var(--color-accent-800)" : "var(--color-neutral-500)") + "; width: 14px; flex: none;",
+              nameStyle: "font-family: " + MONO + "; font-size: 11px; flex: 1 1 auto; color: " + (x.st === "pending" ? "var(--color-neutral-500)" : "var(--color-neutral-900)") + (x.st === "running" ? "; font-weight: 600" : "") + ";"
+            })) : [],
+            noMol: a.molecule ? "" : "No molecule — this verdict dispatched no work.",
+            open: !!s.openRules["adj:" + a.slug],
+            toggle: () => this.setState(st2 => ({ openRules: Object.assign({}, st2.openRules, { ["adj:" + a.slug]: !st2.openRules["adj:" + a.slug] }) })),
+            caret: s.openRules["adj:" + a.slug] ? "▾ hide progress" : "▸ progress",
+            rowStyle: "border-bottom: 1px solid var(--color-divider); cursor: pointer; background: " + (a.fresh ? "var(--color-accent-100)" : "transparent") + ";",
+            verdictStyle: "padding: 8px 9px; vertical-align: top; font-family: " + MONO + "; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; color: var(--color-neutral-800);"
+          };
+        }),
       isPile: s.view === "pile", isDeferred: s.view === "deferred", isNoBrainer: s.view === "queue" && s.scope === "nobrainer",
       goPile: () => this.setState({ view: "pile" }),
       goStack: () => this.setState({ view: "queue", scope: "stack", cursor: 0 }),
       goDeferred: () => this.setState({ view: "deferred" }),
       goErrors: () => this.setState({ view: "queue", scope: "errors", cursor: 0 }),
+      pileSub: (scopeLabel + " · ") + pileScoped.length + " briefs · produced but not yet promoted · nothing here is yours to decide",
+      deferredSub: (scopeLabel + " · ") + defScoped.length + " briefs · held out of the stack until their window expires",
+      adjSub: (scopeLabel + " · ") + (adjScoped.length + Object.keys(s.decided).length) + " closed decision beads · newest first · immutable",
       pileLock: "brief-shuffle holds the single-writer lock · last shuffle 14m ago · next window ~4m",
       pileRows: pileScoped.map(p => ({
         title: p.title, slug: p.slug, rig: p.rig, formula: p.formula, age: p.age, gate: p.gate, next: p.next, detail: p.detail,

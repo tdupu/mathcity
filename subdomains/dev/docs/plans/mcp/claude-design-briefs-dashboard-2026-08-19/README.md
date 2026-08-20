@@ -239,6 +239,50 @@ A **DRY RUN** badge (10px mono, 0.08em tracking, 1px `#8f2c22` border) marks any
 preview or classifier output only, with a legend in the footer. It appears on the no-brainer lane
 and the effect plan. Apply it to any other non-writing surface.
 
+## Open questions for the backend / policy
+
+These are design intent that the current pipeline does not yet support. They are recorded here
+because implementing the dashboard as drawn will surface them, and two of them are policy changes
+rather than UI work.
+
+### 1. No-brainers should not stay dry-run
+
+The dashboard currently shows the no-brainer lane badged **DRY RUN**, because that is what the
+implementation does today: `catch-no-brainer` is PRELIMINARY v0.2, emits one JSON verdict per
+brief, copies matches into `.beads/briefs/.pile/.no-brainer/`, and never edits beads. Compact form
+still ends in `CONFIRM: y / n / grill-me-further`.
+
+**This is not the intended end state, and the dashboard should not be built to enshrine it.**
+Dry-run classification means every no-brainer still costs the clerk a decision, which defeats the
+purpose of having the class at all. The intent is:
+
+- no-brainers process automatically, with no human input;
+- the clerk sees an **audit trail** of what was auto-approved on their behalf, not a queue of
+  things to confirm;
+- each entry has an **undo window** rather than a pre-approval gate;
+- the lane's count reads "processed today", not "awaiting confirm".
+
+Getting there is a `new-brief-policy` amendment, not a dashboard change. The blocking question is
+the **kill-switch scope**: N5 already force-routes server-touching, user-skill-touching,
+math-content (BP9.1) and architecture-class artifacts to full adjudication, and that boundary has
+to be settled — and trusted — before anything auto-executes. Until it is, the DRY RUN badge is the
+honest label; once it is, this lane changes shape and the badge comes off.
+
+Implementers: keep the lane's rendering driven by a single "auto-processing enabled" flag so the
+switch from confirm-queue to audit-trail is a policy read, not a rewrite.
+
+### 2. Dependency edges should carry a reason
+
+§7's Blocks / Blocked-by rows want to state *why* one bead blocks another. The edge currently
+carries no reason field, so the dashboard falls back to "reason not recorded on the edge". Adding
+a reason to the dependency edge would make the blocking graph self-explanatory.
+
+### 3. Policy index needs rule ID → file:line
+
+Every knowl in the design resolves a rule ID to its text and location. That mapping does not exist
+yet — it is the `PolicyIndex` / stable-policy-ID work (brief `mc-70d4` in the fixtures). Without
+it, knowls can show rule text but not a jumpable location.
+
 ## Assets
 
 None. No images or icon files — all affordances are type, rules and color. Fonts come from the

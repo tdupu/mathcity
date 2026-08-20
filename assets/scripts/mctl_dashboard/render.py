@@ -4,8 +4,17 @@ Server-rendered, standard library only, no build step and no client-side
 framework. The repository declares no Python dependencies and Slice 6 declined
 the installed `mcp` SDK for exactly that reason -- an undeclared dependency
 makes CI depend on one developer's machine. The same standard applies here, so
-this is `str.join` and a stylesheet, and it works in any browser with
-JavaScript off.
+this is `str.join` and a stylesheet.
+
+Every screen, every sort, every filter and every verdict works with JavaScript
+disabled: navigation and data state live in the query string (see `state.py`),
+sortable headings are links, column toggles are a GET form, disclosure is
+`<details>`, and mutations are ordinary form posts through `/preview` and
+`/apply`. JavaScript is layered on top for four affordances that cannot be
+expressed as a link or a form -- the j/k row cursor, drag-to-reorder on the
+priority list, live score-weight sliders, and locally saved verdict drafts --
+and each degrades to a working no-JS path. All of it lives in `assets.py`, in
+one file, so it can be read at once.
 
 Two rendering rules are not cosmetic:
 
@@ -32,111 +41,31 @@ TRUST_DIAGNOSTIC_CODES = frozenset({"MCTL_MCP_ARTIFACT_STATE_UNTRUSTED"})
 
 SEVERITY_ORDER = ("FATAL", "ERROR", "WARN", "INFO")
 
-STYLESHEET = """
-:root {
-  --bg: #f7f7f8; --panel: #ffffff; --ink: #14161a; --muted: #5b6270;
-  --line: #d9dce3; --accent: #2b5fd9; --shade: #eef0f4;
-  --info: #2b6cb0; --warn: #9a6700; --error: #b42318; --fatal: #6c1414;
-  --review: #6b4bb8;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0; background: var(--bg); color: var(--ink);
-  font: 15px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-}
-a { color: var(--accent); }
-header.masthead {
-  background: var(--ink); color: #fff; padding: 0.9rem 1.25rem;
-  display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: baseline;
-}
-header.masthead h1 { font-size: 1.05rem; margin: 0; font-weight: 650; }
-nav.tabs { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-nav.tabs a { color: #cdd4e4; text-decoration: none; }
-nav.tabs a[aria-current="page"] { color: #fff; text-decoration: underline; }
-main { padding: 1.25rem; max-width: 74rem; margin: 0 auto; }
-section.panel {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-  padding: 1rem 1.1rem; margin-bottom: 1.1rem;
-}
-section.panel > h2 { margin: 0 0 0.6rem; font-size: 0.95rem; letter-spacing: 0.02em; }
-p.lede { margin: 0.2rem 0 0.8rem; color: var(--muted); }
-dl.facts { display: grid; grid-template-columns: 12rem 1fr; gap: 0.3rem 1rem; margin: 0; }
-dl.facts dt { color: var(--muted); }
-dl.facts dd { margin: 0; overflow-wrap: anywhere; }
-.scroll-x { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
-th, td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); }
-th { color: var(--muted); font-weight: 600; white-space: nowrap; }
-code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88em; }
-.badge {
-  display: inline-block; padding: 0.05rem 0.45rem; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--shade); font-size: 0.82rem;
-}
-.state-pending { border-color: #b6cdf5; background: #e8f0fe; }
-.state-adjudicated { border-color: #b9dfc4; background: #e9f7ee; }
-.state-deferred { border-color: #e3d3a6; background: #fbf3dd; }
-.state-malformed { border-color: #d8c9f0; background: #f2ecfb; }
-.state-unreadable { border-color: #d9d2c7; background: #f3efe9; }
-ul.diagnostics { list-style: none; margin: 0; padding: 0; }
-li.diagnostic {
-  border-left: 4px solid var(--line); padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;
-  background: var(--shade); border-radius: 0 6px 6px 0;
-}
-li.diagnostic .head { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-.severity {
-  font-weight: 700; font-size: 0.76rem; letter-spacing: 0.06em;
-  padding: 0.05rem 0.4rem; border-radius: 4px; color: #fff;
-}
-.severity-INFO { background: var(--info); }
-.severity-WARN { background: var(--warn); }
-.severity-ERROR { background: var(--error); }
-.severity-FATAL { background: var(--fatal); }
-li.diagnostic.severity-row-INFO { border-left-color: var(--info); }
-li.diagnostic.severity-row-WARN { border-left-color: var(--warn); }
-li.diagnostic.severity-row-ERROR { border-left-color: var(--error); }
-li.diagnostic.severity-row-FATAL { border-left-color: var(--fatal); }
-code.diagnostic-code {
-  background: #fff; border: 1px solid var(--line); border-radius: 4px;
-  padding: 0.02rem 0.35rem; font-weight: 600;
-}
-.diagnostic-message { margin: 0.3rem 0 0; }
-.diagnostic-meta { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0 0; }
-.review-note {
-  margin: 0.4rem 0 0; padding: 0.45rem 0.6rem; border: 1px dashed var(--review);
-  border-radius: 6px; background: #faf7ff; font-size: 0.88rem;
-}
-.review-note strong { color: var(--review); }
-section.untrusted { border-color: var(--review); }
-.trust-banner { border-left: 4px solid var(--review); padding: 0.6rem 0.8rem; background: #faf7ff; }
-.trust-ok { border-left-color: #3f9e5a; background: #f3faf5; }
-form.operation { display: grid; gap: 0.5rem; margin-top: 0.6rem; }
-form.operation label { display: grid; gap: 0.15rem; font-size: 0.88rem; color: var(--muted); }
-input[type=text], textarea, select {
-  font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line);
-  border-radius: 6px; background: #fff; width: 100%;
-}
-button {
-  font: inherit; font-weight: 600; padding: 0.45rem 0.9rem; border-radius: 6px;
-  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
-}
-button.secondary { background: #fff; color: var(--accent); }
-.confirm { border: 2px solid var(--accent); border-radius: 8px; padding: 0.8rem; background: #f4f7ff; }
-pre.plan {
-  background: #0f1115; color: #e6e8ee; padding: 0.75rem; border-radius: 6px;
-  overflow-x: auto; font-size: 0.82rem; margin: 0.5rem 0 0;
-}
-.disabled-reason { color: var(--muted); font-size: 0.86rem; }
-@media (max-width: 720px) {
-  main { padding: 0.75rem; }
-  dl.facts { grid-template-columns: 1fr; gap: 0.1rem; }
-  dl.facts dd { margin-bottom: 0.45rem; }
-  header.masthead { padding: 0.75rem 0.9rem; }
-  section.panel { padding: 0.8rem 0.7rem; }
-  table { font-size: 0.86rem; }
-}
-"""
+#: The stylesheet now lives in `theme.py`, which is the single source for
+#: every colour, font and radius. Re-exported here because `page()` inlines it.
+from mctl_dashboard.theme import STYLESHEET  # noqa: E402  (kept near its use)
 
+
+#: (href, label, counts-key). The order is the pipeline's own order -- produced
+#: briefs land in the pile, gates promote them to the stack, verdicts close
+#: them. Listing these alphabetically would hide the one thing the sidebar is
+#: for, which is saying where in the pipeline a brief currently is.
 NAV = (
+    ("/queue", "Stack — ready for you", "stack"),
+    ("/pile", "Pile — awaiting gates", "pile"),
+    ("/queue?scope=errors", "Error briefs", "errors"),
+    ("/adjudicated", "Adjudicated — closed", "adjudicated"),
+    ("/queue?scope=nobrainer", "No-brainers — DRY RUN", "nobrainer"),
+    # Not in the adopted design, but 19 of 114 live briefs are in this
+    # state and with no lane they were invisible. The caveat that
+    # "malformed" means closed-without-a-verdict-field, not damaged,
+    # travels with the screen.
+    ("/malformed", "Malformed — no verdict field", "malformed"),
+)
+
+#: The older tab bar, kept so the pre-redesign routes still navigate while the
+#: remaining slices land. Removed when every screen has moved.
+LEGACY_NAV = (
     ("/", "Overview"),
     ("/briefs", "Briefs"),
     ("/diagnostics", "Diagnostics"),
@@ -157,14 +86,208 @@ _e = esc
 CURRENT_TAB = ' aria-current="page"'
 
 
-def page(title: str, current: str, sections: Sequence[str], *, context_bar: str = "") -> str:
-    # The current-tab marker is a named constant rather than an inline
-    # conditional: a backslash inside an f-string expression is a SyntaxError
-    # before Python 3.12, and this repository's floor is 3.11 (tomllib).
-    tabs = "".join(
-        f'<a href="{_e(href)}"{CURRENT_TAB if href == current else ""}>{_e(label)}</a>'
-        for href, label in NAV
+#: Lanes the typed surface cannot count at all yet (issue #66). Distinct from
+#: a lane that simply was not read on the current page: the first is a
+#: permanent gap, the second is a page that had no reason to ask.
+UNCOUNTABLE_LANES = frozenset({"pile", "errors", "nobrainer"})
+
+
+def _dash(key: str) -> str:
+    """The em dash a chip shows when it has no number, and why.
+
+    Two different absences would otherwise look identical. `pile` has no
+    source in the typed surface at all; `stack` on the diagnostics page simply
+    was not counted there, because that page reads diagnostics and not briefs.
+    Saying "not readable" on the second would be a claim about the core that
+    is not true.
+    """
+    reason = (
+        "not readable through the typed surface yet - issue #66"
+        if key in UNCOUNTABLE_LANES
+        else "not counted on this page"
     )
+    return (
+        f' <span class="mono" style="color: var(--color-neutral-500);" '
+        f'title="{_e(reason)}">&mdash;</span>'
+    )
+
+
+def _chip(
+    href: str, label: str, count: object, *, key: str = "", accent: bool = False
+) -> str:
+    """One header count, linked to the screen it counts.
+
+    `count is None` means nothing measured this number here, and the chip
+    renders without one. Showing a zero would assert an emptiness nobody
+    established.
+    """
+    colour = "var(--color-accent-800)" if accent else "var(--color-neutral-700)"
+    value = (
+        f' <b class="mono" style="font-weight: 600; color: var(--color-text);">{_e(count)}</b>'
+        if count is not None
+        else _dash(key)
+    )
+    return (
+        f'<a href="{_e(href)}" style="font-size: 12px; color: {colour}; '
+        'border-bottom: 1px dotted var(--color-accent-600);">'
+        f"{_e(label)}{value}</a>"
+    )
+
+
+#: The keyboard bindings, in one place, so the map cannot drift from the
+#: script that implements them. A key map listing a binding the code does not
+#: have teaches the wrong keys, which is worse than no map at all.
+KEY_BINDINGS: tuple[tuple[str, str], ...] = (
+    ("j", "next row"),
+    ("k", "previous row"),
+    ("enter", "open the brief under the cursor"),
+)
+
+
+def key_map() -> str:
+    """The keyboard map the header's `keys` chip opens.
+
+    A `<details>` rather than a script-toggled panel, so it opens with
+    scripting disabled -- which matters here more than elsewhere, because a
+    reader with JavaScript off should be told plainly that these three keys
+    are the part that will not work for them.
+    """
+    rows = "".join(
+        f'<span style="display: inline-flex; gap: 6px; align-items: baseline;">'
+        f'<b class="mono" style="font-size: 11px; color: var(--color-accent-800);">'
+        f"{_e(key)}</b> {_e(label)}</span>"
+        for key, label in KEY_BINDINGS
+    )
+    return (
+        '<details id="mc-keys" data-region="key-map" '
+        'style="border-bottom: 1px solid var(--color-divider); '
+        'background: var(--color-accent-100); padding: 6px 20px;">'
+        '<summary class="mono" style="font-size: 11px; cursor: pointer; '
+        'color: var(--color-accent-900);">keyboard</summary>'
+        '<div style="display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; '
+        'font-size: 11.5px; color: var(--color-accent-900);">'
+        + rows
+        + '</div><div style="font-size: 11px; font-style: italic; margin-top: 5px; '
+        'color: var(--color-neutral-700);">'
+        "These three are the only part of the dashboard that needs JavaScript, and "
+        "each one duplicates something you can click. Everything else — sorting, "
+        "filtering, opening a brief, recording a verdict — works without it."
+        "</div></details>"
+    )
+
+
+def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
+    """Brand, resolved runtime context, and the clickable counts.
+
+    The context line shows the *resolved* city, rig and store rather than what
+    was asked for: a source-checkout invocation hard-errors upstream instead of
+    resolving a plausible-but-wrong rig, and this line is where an operator
+    notices which city they are actually reading.
+
+    Each count is a link to the screen it counts, and both read the same
+    mapping, so a chip cannot come to disagree with its destination.
+    """
+    city = context.get("city_root") or context.get("city_active") or "—"
+    rig = context.get("rig_id") or "all rigs"
+    store = context.get("rig_db") or ".beads"
+    chips = "".join(
+        (
+            _chip("/pile", "pile", counts.get("pile"), key="pile"),
+            _chip("/queue", "stack", counts.get("stack"), key="stack"),
+            _chip("/deferred", "deferred", counts.get("deferred"), key="deferred"),
+            _chip(
+                "/queue?scope=errors", "error briefs", counts.get("errors"),
+                key="errors", accent=True,
+            ),
+        )
+    ) + (
+        '<a href="#mc-keys" style="font-size: 12px; color: var(--color-neutral-700); '
+        'border-bottom: 1px dotted var(--color-accent-600);">keys</a>'
+    )
+    return (
+        '<header data-region="masthead" style="display: flex; align-items: baseline; '
+        "gap: 18px; padding: 12px 20px 10px; "
+        "border-bottom: 2px solid var(--color-neutral-900); "
+        'background: var(--color-neutral-100); flex-wrap: wrap;">'
+        '<div style="font-family: var(--font-heading); font-size: 25px; font-weight: 600; '
+        'letter-spacing: 0.01em;">Brief Manager</div>'
+        '<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-700);">'
+        f'<span style="color: var(--color-neutral-600);">city</span> {_e(city)} '
+        '<span style="color: var(--color-neutral-400);">&middot;</span> '
+        f'<span style="color: var(--color-neutral-600);">rig</span> {_e(rig)} '
+        '<span style="color: var(--color-neutral-400);">&middot;</span> '
+        f'<span style="color: var(--color-neutral-600);">store</span> {_e(store)}'
+        "</div>"
+        '<div style="margin-left: auto; display: flex; align-items: center; gap: 14px;">'
+        f"{chips}</div>"
+        "</header>"
+    )
+
+
+def sidebar(current: str, counts: Mapping[str, Any]) -> str:
+    """Where the pipeline says each brief is, and the operator's own ordering."""
+    rows = "".join(
+        f'<a class="mc-navlink" href="{_e(href)}"'
+        f"{CURRENT_TAB if href == current else ''}>"
+        f"<span>{_e(label)}</span>"
+        f'<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
+        f"{_e(counts.get(key)) if counts.get(key) is not None else _dash(key)}</span></a>"
+        for href, label, key in NAV
+    )
+    return (
+        '<nav class="mc-sidebar" data-region="sidebar">'
+        '<span class="mc-section-head">Pipeline</span>'
+        '<p style="padding: 7px 12px 4px; font-size: 11px; color: var(--color-neutral-600); '
+        'font-style: italic; line-height: 1.35; margin: 0;">'
+        "Where the pipeline says each brief is. Produced briefs land in the pile; "
+        "gates promote them to the stack.</p>"
+        f"{rows}"
+        f'<a class="mc-section-head" href="/priority" style="margin-top: 14px;">'
+        "Priority list</a>"
+        '<p style="padding: 7px 12px 4px; font-size: 11px; color: var(--color-neutral-600); '
+        'font-style: italic; line-height: 1.35; margin: 0;">'
+        "Your ordering over the same stack — nothing here changes pipeline state.</p>"
+        "</nav>"
+    )
+
+
+def footer(trace_id: str = "") -> str:
+    trace = (
+        f'<span style="margin-left: auto;">trace {_e(trace_id)}</span>' if trace_id else ""
+    )
+    return (
+        '<footer data-region="footer" style="border-top: 1px solid var(--color-divider); '
+        "background: var(--color-neutral-200); padding: 7px 20px; display: flex; "
+        "gap: 16px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 10.5px; "
+        'color: var(--color-neutral-600);">'
+        "<span>mctl briefs — read paths never mutate; verdicts fail closed on ERROR</span>"
+        '<span><span class="mc-dry-run">DRY RUN</span> = preview or classifier output '
+        "only, no bead writes</span>"
+        f"{trace}"
+        "</footer>"
+    )
+
+
+def page(
+    title: str,
+    current: str,
+    sections: Sequence[str],
+    *,
+    context_bar: str = "",
+    counts: Mapping[str, Any] | None = None,
+    context: Mapping[str, Any] | None = None,
+    trace_id: str = "",
+) -> str:
+    """The document shell.
+
+    `counts` and `context` are optional so the pre-redesign routes keep
+    rendering while the remaining slices land; both default to empty, which
+    renders a masthead with zeroed chips rather than failing.
+    """
+    from .assets import SCRIPT
+
+    counts = counts or {}
+    context = context or {}
     return "\n".join(
         [
             "<!DOCTYPE html>",
@@ -176,14 +299,17 @@ def page(title: str, current: str, sections: Sequence[str], *, context_bar: str 
             f"<style>{STYLESHEET}</style>",
             "</head>",
             "<body>",
-            '<header class="masthead">',
-            "<h1>MathCity brief operations</h1>",
-            f'<nav class="tabs">{tabs}</nav>',
-            "</header>",
-            "<main>",
+            masthead(counts, context),
+            key_map(),
+            '<div class="mc-shell">',
+            sidebar(current, counts),
+            '<main class="mc-main">',
             context_bar,
             *sections,
             "</main>",
+            "</div>",
+            footer(trace_id),
+            f"<script>{SCRIPT}</script>",
             "</body>",
             "</html>",
         ]
@@ -430,23 +556,12 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -
         )
         rig = str(brief.get("rig_id") or "") or None
         rig_cell = f'<td><span class="mono">{_e(rig or "-")}</span></td>' if show_rig else ""
-        # A document-sourced record has no bead. Its slug is the only identity
-        # it has, so the identity cell shows the slug and says outright that no
-        # bead is behind it -- an empty cell would read as a lost bead id. The
-        # badge names *which* document, because a deposited stack file awaiting
-        # a verdict and a decisions-track index row are different things.
-        identity = brief.get("bead_id") or brief.get("brief_id")
-        origin = {
-            "bead": "",
-            "stack_file": ' <span class="badge">stack file</span>',
-            "manifest": ' <span class="badge">manifest-only</span>',
-        }.get(str(brief.get("source") or "bead"), ' <span class="badge">no bead</span>')
         rows.append(
             "<tr>"
             + rig_cell
             + f'<td><a href="{brief_href(brief.get("brief_id"), rig)}">'
-            f'<span class="mono">{_e(identity)}</span></a>{origin}</td>'
-            f'<td>{_e(brief.get("title") or "-")}</td>'
+            f'<span class="mono">{_e(brief.get("bead_id"))}</span></a></td>'
+            f'<td>{_e(brief.get("title"))}</td>'
             f'<td>{_state_badge(str(brief.get("decision_state")))}</td>'
             f'<td><span class="mono">{_e(brief.get("status"))}</span></td>'
             f'<td><span class="mono">{_e(", ".join(brief.get("labels") or ()) or "-")}</span></td>'
@@ -489,6 +604,8 @@ def queue_panel(briefs: Sequence[Mapping[str, Any]]) -> str:
         '<p class="lede">Canonical source: <span class="mono">bead_store</span>, plus '
         'brief stack files and decisions-track rows no bead represents (each record '
         'names its own <span class="mono">source</span>). '
+        'Read through <span class="mono">briefs_list</span>.</p>'
+        
         'Read through <span class="mono">briefs_list</span>.</p>'
         '<div class="scroll-x"><table><thead><tr><th>State</th><th>Count</th><th>Meaning</th></tr></thead>'
         f"<tbody>{cells}</tbody></table></div>"

@@ -17,14 +17,22 @@ from __future__ import annotations
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import re
 import sys
+from http import HTTPStatus
 from typing import Any
 
 from .app import Dashboard, Request
 from .client import McpClient, StdioMcpClient
+from .theme import FONT_DIR
 
 
 MAX_BODY_BYTES = 256 * 1024
+
+#: The only filenames `/fonts/` will serve. A whitelist rather than a
+#: traversal check, because this is the one path whose target is chosen by the
+#: URL.
+_FONT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,63}\.woff2")
 
 
 def make_handler(dashboard: Dashboard) -> type[BaseHTTPRequestHandler]:
@@ -33,7 +41,37 @@ def make_handler(dashboard: Dashboard) -> type[BaseHTTPRequestHandler]:
         protocol_version = "HTTP/1.1"
 
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
+            if self.path.startswith("/fonts/"):
+                self._serve_font(self.path[len("/fonts/") :])
+                return
             self._respond(Request.from_wire("GET", self.path))
+
+        def _serve_font(self, name: str) -> None:
+            """Serve one vendored woff2, or 404.
+
+            The name is matched against a strict pattern rather than joined and
+            resolved: this is the only path in the dashboard that reads a file
+            chosen by the URL, so it gets a whitelist, not a traversal check.
+            Anything with a slash, a dot-segment or an unexpected extension
+            fails the match and never reaches the filesystem.
+            """
+            if not _FONT_NAME.fullmatch(name):
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            path = FONT_DIR / name
+            try:
+                payload = path.read_bytes()
+            except OSError:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "font/woff2")
+            self.send_header("Content-Length", str(len(payload)))
+            # Fonts are content-addressed by filename and never change in place,
+            # unlike every other response this server sends.
+            self.send_header("Cache-Control", "max-age=31536000, immutable")
+            self.end_headers()
+            self.wfile.write(payload)
 
         def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
             length = min(int(self.headers.get("Content-Length") or 0), MAX_BODY_BYTES)

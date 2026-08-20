@@ -524,7 +524,17 @@ dashboard is therefore stdlib `http.server` plus server-rendered HTML, for the
 same reason Slice 6 declined the installed `mcp` SDK: this repository declares
 no Python dependencies, so anything needing `pip install` or `npm install`
 would make the suite depend on one developer's machine. No build step, no
-client-side framework, and it works with JavaScript off.
+client-side framework, and no external bundle.
+
+Every screen, every sort, every filter and every verdict works with JavaScript
+disabled: navigation and data state live in the query string, sortable headings
+are links, the column picker is a GET form, disclosure is `<details>`, and
+mutations are ordinary form posts through `/preview` and `/apply`. JavaScript
+is layered on top for four affordances that cannot be expressed as a link or a
+form — the `j`/`k` row cursor, drag-to-reorder on the priority list, live
+score-weight sliders, and locally saved verdict drafts — and each degrades to a
+working no-JS path. All of it lives in `mctl_dashboard/assets.py`, in one file,
+so a reviewer can read the whole of it at once.
 
 Start it:
 

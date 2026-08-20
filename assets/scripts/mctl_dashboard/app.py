@@ -45,6 +45,12 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote
 
 from . import render
+from . import state as view_state
+from .screens import brief as brief_screen
+from .screens import panel as panel_screen
+from .screens import pipeline as pipeline_screen
+from .screens import priority as priority_screen
+from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
@@ -117,6 +123,35 @@ def _dashboard_diagnostic(
         "hint": hint,
         "facts": {key: str(value) for key, value in facts.items()},
     }
+
+
+#: Which decision states belong to which lane of the pipeline.
+#:
+#: The stack is what is *ready for a verdict*, which is what the header chip
+#: counts. Showing every brief regardless of state under a chip that counts
+#: pending ones would make the chip disagree with its own destination -- the
+#: exact failure the design's counts rule exists to prevent.
+SCOPE_STATES: dict[str, frozenset[str]] = {
+    "stack": frozenset({"pending"}),
+}
+
+
+def _scoped(
+    briefs: Sequence[Mapping[str, Any]], scope: str
+) -> list[Mapping[str, Any]]:
+    """The briefs belonging to one lane.
+
+    `errors` and `nobrainer` have no source yet: error briefs are not filed at
+    all (CHANGELOG §G1) and the no-brainer classifier writes no bead state, so
+    both scopes are genuinely empty rather than unimplemented. Returning an
+    empty list makes the screen say so.
+    """
+    if scope in ("errors", "nobrainer"):
+        return []
+    states = SCOPE_STATES.get(scope)
+    if states is None:
+        return list(briefs)
+    return [b for b in briefs if str(b.get("decision_state") or "") in states]
 
 
 class Dashboard:
@@ -195,14 +230,218 @@ class Dashboard:
         status: int = 200,
         compact_context: bool = True,
         context_bar: str | None = None,
+        counts: Mapping[str, int] | None = None,
     ) -> Response:
         if context_bar is None:
             context_bar = (
                 self._context_bar(context, compact=compact_context) if context is not None else ""
             )
-        return Response(status, render.page(title, current, sections, context_bar=context_bar))
+        return Response(
+            status,
+            render.page(
+                title,
+                current,
+                sections,
+                context_bar=context_bar,
+                counts=counts or {},
+                context=context or {},
+            ),
+        )
+
+    @staticmethod
+    def _counts(briefs: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+        """Header and sidebar counts, derived from a listing already read.
+
+        Deliberately a pure function over briefs the caller already has rather
+        than a fetch of its own: a city-wide page costs exactly one cross-rig
+        read, and `test_dashboard_city_wide.py` asserts that. Counting by
+        issuing a second `briefs_list` would double the most expensive call on
+        the page to render five numbers.
+
+        Counts with no source yet -- the pile and the no-brainer lane are not
+        readable through the typed surface (issue #66) -- are omitted rather
+        than zeroed, and the chip renders without a number. A zero would be
+        read as "nothing there", which is a claim nobody can currently make.
+        """
+        states: dict[str, int] = {}
+        for brief in briefs:
+            state = str(brief.get("decision_state") or "unknown")
+            states[state] = states.get(state, 0) + 1
+        return {
+            "stack": states.get("pending", 0),
+            "deferred": states.get("deferred", 0),
+            "adjudicated": states.get("adjudicated", 0),
+            "malformed": states.get("malformed", 0),
+        }
+
+    def _knowls(self, brief: Mapping[str, Any]) -> dict[str, Any]:
+        """Reference data the knowls in a brief's prose can resolve against.
+
+        Only what is genuinely available: the brief's own policy references,
+        and the diagnostic registry. A full rule-id index with file, line and
+        rule text is issue #66 item 3 and does not exist yet, so a rule cited
+        in prose but absent from this brief's own references stays plain text
+        rather than opening an empty panel.
+        """
+        rules: dict[str, Any] = {}
+        for reference in brief.get("policy_references") or ():
+            raw = str(reference.get("reference") or "")
+            token = raw.split()[-1] if raw else ""
+            if token:
+                rules[token] = {
+                    "name": reference.get("description") or token,
+                    "text": reference.get("description") or "",
+                    "file": raw,
+                }
+        return {"rules": rules}
+
+    def _lane(self, lane: str, request: Request) -> Response:
+        """Pile, Deferred, Adjudicated and Malformed.
+
+        One handler because they share a shape: read the listing once, filter
+        by decision state, and let the screen say which kind of absence it is
+        looking at. The pile is the exception -- it has no source at all, so it
+        never touches the listing.
+        """
+        rig = self._rig_for(request) or self.rig
+        context = self._context(rig) if not self.city_wide else None
+
+        if lane == "pile":
+            # Nothing to read: no tool reports pile membership.
+            return self._page(
+                "Pile", "/pile", context, [pipeline_screen.pile()], context_bar=""
+            )
+
+        listing = self.client.call("briefs_list", self._args(rig))
+        briefs = list(listing.payload.get("briefs") or ())
+        selected = [
+            brief
+            for brief in briefs
+            if str(brief.get("decision_state") or "") == lane.rstrip("s")
+            or str(brief.get("decision_state") or "") == lane
+        ]
+        renderer = {
+            "deferred": pipeline_screen.deferred,
+            "adjudicated": pipeline_screen.adjudicated,
+            "malformed": pipeline_screen.malformed,
+        }[lane]
+        return self._page(
+            lane.capitalize(),
+            f"/{lane}",
+            context,
+            [renderer(selected)],
+            counts=self._counts(briefs),
+            context_bar="",
+        )
+
+    def _priority(self, request: Request) -> Response:
+        """The operator's own ordering over the stack.
+
+        The order arrives in the query string rather than from a store: it is
+        one clerk's working hypothesis about importance, and persisting it
+        server-side would present an experiment as a property of the briefs.
+        That also makes move-up and move-down ordinary links, so the list
+        reorders with scripting disabled.
+        """
+        rig = self._rig_for(request) or self.rig
+        context = self._context(rig) if not self.city_wide else None
+        listing = self.client.call("briefs_list", self._args(rig))
+        briefs = list(listing.payload.get("briefs") or ())
+        by_id = {str(b.get("bead_id")): b for b in briefs}
+
+        wanted = [
+            part
+            for part in (request.query.get("order") or "").split(",")
+            if part and part in by_id
+        ]
+        ordered = [by_id[bead] for bead in wanted]
+        return self._page(
+            "Priority list",
+            "/priority",
+            context,
+            [priority_screen.screen(ordered)],
+            counts=self._counts(briefs),
+            context_bar="",
+        )
 
     # -- read views --
+
+    def _queue(self, request: Request) -> Response:
+        """The brief stack in the adopted design.
+
+        Reads the same `briefs_list` the older `/briefs` view does; the view
+        state -- sort, columns, scope -- comes off the query string so the
+        whole screen works with scripting disabled.
+        """
+        view = view_state.parse(request.query)
+        rig = self._rig_for(request) or self.rig
+        context = self._context(rig) if not self.city_wide else None
+        listing = self.client.call("briefs_list", self._args(rig))
+        all_briefs = list(listing.payload.get("briefs") or ())
+        briefs = _scoped(all_briefs, view.scope)
+
+        titles = {
+            "stack": "Brief stack",
+            "errors": "Invariant errors",
+            "nobrainer": "No-brainers",
+        }
+        heading = titles.get(view.scope, "Brief stack")
+        scope_label = "all rigs" if self.city_wide else f"rig {rig}"
+        columns_open = request.query.get("columns_open") == "1"
+        base = view.url()
+        columns_href = base if columns_open else (
+            base + ("&" if "?" in base else "?") + "columns_open=1"
+        )
+
+        # The controls sit on the title row, as the design has them: scope,
+        # the column picker toggle, and a jump to the top brief. All three are
+        # links or forms -- nothing here needs script.
+        controls = (
+            '<div style="margin-left: auto; display: flex; gap: 10px; '
+            'align-items: center;">'
+            # The picker is a query flag, so opening it is a link and its
+            # state survives a reload -- no toggle handler, no hidden div.
+            f'<a class="btn btn-ghost" href="{render.esc(columns_href)}">Columns</a>'
+            + (
+                f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(briefs[0].get("brief_id"))))}">'
+                "Open top brief &rarr;</a>"
+                if briefs
+                else ""
+            )
+            + "</div>"
+        )
+
+        sections = [
+            '<div style="display: flex; align-items: baseline; gap: 12px;">'
+            f'<h1 style="font-family: var(--font-heading); font-size: 27px; '
+            f'font-weight: 600; margin: 0;">{render.esc(heading)}</h1>'
+            f'<span class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
+            f"{render.esc(scope_label)} &middot; {len(briefs)} briefs &middot; sorted by "
+            f"{render.esc(view_state.COLUMN_LABEL.get(view.sort_key, view.sort_key))}"
+            f"{' descending' if view.sort_dir < 0 else ' ascending'}</span>"
+            + controls
+            + "</div>"
+            '<div style="height: 2px; background: var(--color-neutral-900); '
+            'margin: 8px 0 0;"></div>',
+            stack.column_picker(view) if columns_open else "",
+            stack.table(briefs, view, queued=()),
+            stack.empty_sort_note(briefs, view),
+            stack.key_legend(),
+            stack.unfed_note(),
+            render.artifact_trust_panel(listing.artifact_trust, rig=rig),
+        ]
+        # Counts come from the whole listing, not the scoped slice: the
+        # sidebar has to report every lane, not just the one being viewed.
+        return self._page(
+            heading,
+            "/queue",
+            context,
+            sections,
+            counts=self._counts(all_briefs),
+            # The masthead already states the resolved city, rig and store.
+            # A second Context panel here pushed the table below the fold.
+            context_bar="",
+        )
 
     def _overview(self, request: Request) -> Response:
         if self.city_wide:
@@ -348,9 +587,15 @@ class Dashboard:
         options = self._options(brief_id, rig)
         doctor = self._doctor(brief_id, rig)
         option_rows = (options.payload.get("options") or ()) if options else ()
+        # The redesigned detail leads: it is what the operator reads to decide.
+        # The existing panels stay beneath it -- `brief_detail_panel` carries
+        # canonical fields the new screen deliberately does not duplicate, and
+        # the option forms are still the only mutation path until Slice 3.
         sections = [
-            render.brief_detail_panel(brief),
+            brief_screen.detail(brief, view_state.parse(request.query), knowls=self._knowls(brief)),
+            panel_screen.entry(brief, option_rows, view_state.parse(request.query), rig=rig),
             render.artifact_trust_panel(shown.artifact_trust, rig=rig),
+            render.brief_detail_panel(brief),
             render.options_panel(option_rows) if options else "",
             render.operation_forms(brief_id, option_rows, rig=rig),
             render.diagnostics_sections(
@@ -667,6 +912,12 @@ class Dashboard:
             return self._not_found(request)
         if request.path == "/":
             return self._overview(request)
+        if request.path == "/queue":
+            return self._queue(request)
+        if request.path in ("/pile", "/deferred", "/adjudicated", "/malformed"):
+            return self._lane(request.path[1:], request)
+        if request.path == "/priority":
+            return self._priority(request)
         if request.path == "/briefs":
             return self._briefs(request)
         if request.path.startswith("/briefs/"):
