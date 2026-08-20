@@ -25,6 +25,19 @@ frontmatter key         stack (89)  decisions (204)     total
 holds: 41 files carry no `track` key, and 140 is the decisions-track count
 alone -- the stack contributes 34 more. Every other figure it quoted matches.)
 
+## The set of fields is open
+
+Those eight are what the surfaces render today; they are **not** what is read.
+Every key a store holds is exposed, whatever it is -- the 89 stack files carry
+roughly a hundred distinct keys between them (`shape`, `review_gate`,
+`no_brainer_confidence`, `server_touching`, `capability_blocker`,
+`deposited_by`, …), and an enumerated reader showed eight of them. A producer
+inventing `blast_radius` tomorrow arrives with no change here and none in the
+core. `EXPOSED_FIELDS` remains as a hint about rendering and gates nothing.
+
+Absent still means absent: a key no store holds produces no entry at all,
+rather than an entry whose value is null.
+
 ## Why a value is not just a value
 
 The consumer's requirement, verbatim: *"I want to render which is which
@@ -80,10 +93,16 @@ SOURCE_MANIFEST_ROW = "manifest_row"
 SOURCE_FRONTMATTER = "frontmatter"
 FIELD_SOURCES = (SOURCE_BEAD, SOURCE_MANIFEST_ROW, SOURCE_FRONTMATTER)
 
-#: The fields exposed with provenance on every record that can carry them.
-#: `verdict` is here as well as on `BriefRecord.verdict`: the record-level
-#: verdict is the resolved one, and this is every reading that resolution saw.
-EXPOSED_FIELDS = ("form", "gates", "priority", "track", "unlock_count", "verdict")
+#: Fields the surfaces are currently known to render. **This is a hint, not a
+#: filter.** Nothing gates on it: a record carries *every* key its stores hold,
+#: so a producer inventing `blast_radius` tomorrow arrives with no change here
+#: and no change in the core. The live corpus already carries ~100 distinct
+#: frontmatter keys, and an enumerated reader showed 8 of them.
+#:
+#: `verdict` is in this list as well as on `BriefRecord.verdict`: the
+#: record-level verdict is the resolved one, and the reading is every answer
+#: that resolution saw.
+EXPOSED_FIELDS = ("form", "gates", "priority", "status", "track", "unlock_count", "verdict")
 
 
 @dataclass(frozen=True)
@@ -202,6 +221,63 @@ def reading(name: str, *candidates: FieldValue | None) -> FieldReading | None:
     """
     present = tuple(candidate for candidate in candidates if candidate is not None)
     return FieldReading(name, present) if present else None
+
+
+def frontmatter_store(
+    frontmatter: Mapping[str, str], *, prefix: str = ""
+) -> dict[str, FieldValue]:
+    """**Every** key a brief's frontmatter holds, as `FieldValue`s.
+
+    Open by construction. The enumerated alternative -- read these six keys,
+    ignore the rest -- was what this replaced: the live corpus carries ~100
+    distinct frontmatter keys (`shape`, `no_brainer_confidence`,
+    `server_touching`, `review_gate`, `deposited_by`, …) and a fixed reader
+    showed 8 of them, so a producer adding a key had to change the core before
+    anyone could see it.
+
+    A key whose value is empty yields nothing: absent stays absent, and an
+    entry present-and-blank would render as "asked and found nothing".
+
+    `prefix` names the document, so a record holding two frontmatter blocks --
+    a stack file and a decisions-track snapshot of the same brief -- reports
+    which is which rather than two identical `frontmatter.form` labels.
+    """
+    store: dict[str, FieldValue] = {}
+    for name in frontmatter:
+        value = frontmatter_value(frontmatter, name, field=f"{prefix}frontmatter.{name}")
+        if value is not None:
+            store[name] = value
+    return store
+
+
+def row_store(row: Mapping[str, object], *, prefix: str) -> dict[str, FieldValue]:
+    """**Every** key a manifest row holds, as `FieldValue`s.
+
+    Open for the same reason `frontmatter_store` is. Keys whose value is not a
+    scalar this module can report -- `null`, a bool, a nested object -- yield
+    nothing rather than a stringified shape nobody can render.
+    """
+    store: dict[str, FieldValue] = {}
+    for name in row:
+        value = row_value(row, name, field=f"{prefix}{name}")
+        if value is not None:
+            store[name] = value
+    return store
+
+
+def readings(*stores: Mapping[str, FieldValue]) -> tuple[FieldReading, ...]:
+    """Every field any store holds, each carrying every store's answer.
+
+    `stores` is given in **authority order**: the first store that holds a
+    field supplies `FieldReading.value`, and the rest are kept beside it with
+    `conflict` set where they disagree. A field no store holds produces no
+    reading, so absent is absent rather than present-and-null.
+    """
+    names = sorted({name for store in stores for name in store})
+    return tuple(
+        FieldReading(name, tuple(store[name] for store in stores if name in store))
+        for name in names
+    )
 
 
 def readings_map(readings: tuple[FieldReading, ...]) -> dict[str, object]:

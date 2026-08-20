@@ -196,10 +196,11 @@ VERDICT_FIELD = "decisions-track/manifest.jsonl:verdict"
 #: Where a verdict read out of the body file's own frontmatter came from.
 FRONTMATTER_VERDICT_FIELD = "frontmatter.verdict"
 
-#: Row keys carrying a field the body file's frontmatter also declares, and the
-#: name each is exposed under. Read from both, kept as two readings when they
-#: disagree -- see `fields`.
-ROW_FIELD_KEYS = ("form", "gates", "priority", "track", "unlock_count", "verdict")
+#: How a row key names itself in a `FieldValue`. Which keys are read is not
+#: enumerated: **every** key the row holds is exposed, and so is every key the
+#: body file's frontmatter holds. Both are kept, and a disagreement is
+#: reported rather than resolved -- see `fields`.
+ROW_FIELD_PREFIX = "decisions-track/manifest.jsonl:"
 
 #: Timestamp keys, in the order a row's own history would have written them.
 #: `adjudicated_at` covers 97 of the 98 timestamped rows; `rescinded_at`
@@ -579,25 +580,22 @@ def _record(
 def _fields(
     row: Mapping[str, object], frontmatter: Mapping[str, str]
 ) -> tuple[FieldReading, ...]:
-    """Every exposed field, read from the row first and the file second.
+    """Every field either store holds, read from the row first and the file second.
 
     Row first because the manifest is this record's `canonical_source`; the
     file is the same brief's other account of itself. Both are kept, and a
     disagreement is reported rather than resolved -- 17 live rows disagree
     with their own body file, and that is a finding about the corpus.
+
+    The set of fields is **not enumerated**. An earlier reading took six named
+    keys off the row and six off the file, which meant a brief declaring
+    anything else declared it to nobody. Whatever a row or a header holds is
+    what comes back.
     """
-    readings = []
-    for name in ROW_FIELD_KEYS:
-        reading = field_provenance.reading(
-            name,
-            field_provenance.row_value(
-                row, name, field=f"decisions-track/manifest.jsonl:{name}"
-            ),
-            field_provenance.frontmatter_value(frontmatter, name),
-        )
-        if reading is not None:
-            readings.append(reading)
-    return tuple(readings)
+    return field_provenance.readings(
+        field_provenance.row_store(row, prefix=ROW_FIELD_PREFIX),
+        field_provenance.frontmatter_store(frontmatter),
+    )
 
 
 def _verdict(row: Mapping[str, object], frontmatter: Mapping[str, str]) -> Verdict | None:

@@ -622,7 +622,12 @@ def test_a_body_with_no_frontmatter_degrades_that_row_only(tmp_path: Path):
     # evidence, and losing it because a header was malformed is the failure
     # this whole slice is about.
     assert headerless.body == "# just a body\n"
-    assert headerless.fields == ()
+    # The header contributed nothing, and the row's own keys still came
+    # through: the two stores degrade independently. Which keys those are is
+    # not enumerated anywhere -- every key a row or a header holds is exposed
+    # -- so this asserts the sources, not a fixed list.
+    assert {reading.source for reading in headerless.fields} == {"manifest_row"}
+    assert {reading.name for reading in headerless.fields} == {"slug", "status"}
     assert dict(fine.frontmatter)["form"] == "full"
 
 

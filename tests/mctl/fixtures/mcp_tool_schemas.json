@@ -2555,7 +2555,7 @@
                   "title": "FieldReading",
                   "type": "object"
                 },
-                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
+                "description": "EVERY field this brief's stores declare, keyed by name, each naming where it was read. The key set is open, not a fixed list: whatever a bead column, a manifest row or a markdown header holds arrives here, so a producer adding a new frontmatter key needs no schema change. Absent keys mean no store holds the field -- never an entry whose value is null. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
                 "title": "BriefFields",
                 "type": "object"
               },
@@ -2635,7 +2635,7 @@
               "sections": {
                 "items": {
                   "additionalProperties": false,
-                  "description": "One markdown section of a brief body, already parsed.",
+                  "description": "One markdown section of a brief body, already parsed. Identity is the heading text: every heading in the body appears, nothing is padded to a fixed seven and nothing is dropped for failing to match a canonical name -- an `ACTION-BLOCK` heading arrives under that name. `section_index` is an optional attribute, null where the heading names no present-it slot.",
                   "properties": {
                     "body": {
                       "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
@@ -3110,7 +3110,7 @@
     "title": "Report brief invariant violations"
   },
   "briefs_list": {
-    "description": "List briefs from all three stores: canonical decision brief beads, markdown briefs in `.beads/briefs/stack/`, and decisions-track manifest rows that neither represents. Every record names its `source` (`bead`, `stack_file` or `manifest`); only a bead is an attested decision record. A stack file and a manifest row describing one brief produce ONE record and the row is named in `also_recorded_in` -- no document is suppressed without an emitted record that names it. `unreadable` means no body file exists, and nothing else; a brief with a body and no verdict is an ordinary `pending` one. `fields` carries unlock_count, priority, track, form, gates, verdict and (on a stack record) status, each naming the store it was read from, with `conflict` set where two stores disagree. Bodies are off by default -- pass `bodies=true`, or read one brief through `briefs_show`, which always carries it; a record whose body was left out says so in `body_elided` and is never truncated. Optionally filtered by status or label.",
+    "description": "List briefs from all three stores: canonical decision brief beads, markdown briefs in `.beads/briefs/stack/`, and decisions-track manifest rows that neither represents. Every record names its `source` (`bead`, `stack_file` or `manifest`); only a bead is an attested decision record. A stack file and a manifest row describing one brief produce ONE record and the row is named in `also_recorded_in` -- no document is suppressed without an emitted record that names it. `unreadable` means no body file exists, and nothing else; a brief with a body and no verdict is an ordinary `pending` one. `fields` carries EVERY key the record's stores declare -- an open set, not a fixed list, so a producer adding a frontmatter key needs no core change -- each naming the store it was read from, with `conflict` set where two stores disagree. Bodies are off by default -- pass `bodies=true`, or read one brief through `briefs_show`, which always carries it; a record whose body was left out says so in `body_elided` and is never truncated. Optionally filtered by status or label.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -3478,7 +3478,7 @@
                   "title": "FieldReading",
                   "type": "object"
                 },
-                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
+                "description": "EVERY field this brief's stores declare, keyed by name, each naming where it was read. The key set is open, not a fixed list: whatever a bead column, a manifest row or a markdown header holds arrives here, so a producer adding a new frontmatter key needs no schema change. Absent keys mean no store holds the field -- never an entry whose value is null. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
                 "title": "BriefFields",
                 "type": "object"
               },
@@ -3558,7 +3558,7 @@
               "sections": {
                 "items": {
                   "additionalProperties": false,
-                  "description": "One markdown section of a brief body, already parsed.",
+                  "description": "One markdown section of a brief body, already parsed. Identity is the heading text: every heading in the body appears, nothing is padded to a fixed seven and nothing is dropped for failing to match a canonical name -- an `ACTION-BLOCK` heading arrives under that name. `section_index` is an optional attribute, null where the heading names no present-it slot.",
                   "properties": {
                     "body": {
                       "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
@@ -4566,7 +4566,7 @@
                 "title": "FieldReading",
                 "type": "object"
               },
-              "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
+              "description": "EVERY field this brief's stores declare, keyed by name, each naming where it was read. The key set is open, not a fixed list: whatever a bead column, a manifest row or a markdown header holds arrives here, so a producer adding a new frontmatter key needs no schema change. Absent keys mean no store holds the field -- never an entry whose value is null. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
               "title": "BriefFields",
               "type": "object"
             },
@@ -4646,7 +4646,7 @@
             "sections": {
               "items": {
                 "additionalProperties": false,
-                "description": "One markdown section of a brief body, already parsed.",
+                "description": "One markdown section of a brief body, already parsed. Identity is the heading text: every heading in the body appears, nothing is padded to a fixed seven and nothing is dropped for failing to match a canonical name -- an `ACTION-BLOCK` heading arrives under that name. `section_index` is an optional attribute, null where the heading names no present-it slot.",
                 "properties": {
                   "body": {
                     "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
@@ -5596,7 +5596,7 @@
                   "title": "FieldReading",
                   "type": "object"
                 },
-                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
+                "description": "EVERY field this brief's stores declare, keyed by name, each naming where it was read. The key set is open, not a fixed list: whatever a bead column, a manifest row or a markdown header holds arrives here, so a producer adding a new frontmatter key needs no schema change. Absent keys mean no store holds the field -- never an entry whose value is null. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
                 "title": "BriefFields",
                 "type": "object"
               },
@@ -5676,7 +5676,7 @@
               "sections": {
                 "items": {
                   "additionalProperties": false,
-                  "description": "One markdown section of a brief body, already parsed.",
+                  "description": "One markdown section of a brief body, already parsed. Identity is the heading text: every heading in the body appears, nothing is padded to a fixed seven and nothing is dropped for failing to match a canonical name -- an `ACTION-BLOCK` heading arrives under that name. `section_index` is an optional attribute, null where the heading names no present-it slot.",
                   "properties": {
                     "body": {
                       "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",

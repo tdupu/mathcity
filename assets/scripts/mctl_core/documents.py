@@ -64,16 +64,15 @@ uses for row-vs-body disagreement, extended to a third reading rather than
 duplicated. Live, the row and the stack file disagree on `status` 28 times,
 `form` 4 times and `gates` once; those 33 facts exist nowhere else.
 
-`status` is exposed as a `FieldReading` on stack-sourced records and not on
-manifest-only ones. That is not an oversight: a manifest-only row has exactly
-one status and it is already on `record.status`, so a reading would add
-provenance nobody disputes, whereas the stack population has a second store
-for it in 46 of 89 cases.
+Which fields those are is not enumerated. Every key a stack file's header
+holds and every key a row holds is exposed, so `status` -- which disagrees 28
+times and which an enumerated reader did not carry at all -- arrives with no
+special case, and so does anything a producer invents tomorrow.
 
 ## What a stack record is not allowed to invent
 
-`unlock_count`, `priority`, `track`, `form`, `gates`, `verdict` and `status`
-are **read from frontmatter or absent**. A timestamp comes from one of the
+Every frontmatter key is **read or absent**; none is computed. A timestamp
+comes from one of the
 keys in `STACK_TIMESTAMP_KEYS` or is `None`; 43 live files carry
 `deposited_at`, 21 carry `adjudicated_at`, and a file with neither reports no
 date rather than its mtime. A file that cannot be decoded reports
@@ -133,11 +132,6 @@ CANONICAL_SOURCE_STACK_FILE = "brief_stack_file"
 CODE_STACK_DIR_UNREADABLE = "MBRF067"
 CODE_STORED_BODIES_DIFFER = "MBRF068"
 
-#: Frontmatter keys exposed with provenance on a stack-sourced record. The six
-#: `fields.EXPOSED_FIELDS` plus `status` -- see the module docstring for why
-#: `status` is here and not on a manifest-only record.
-STACK_FIELD_KEYS = tuple(sorted(field_provenance.EXPOSED_FIELDS + ("status",)))
-
 #: Date keys a stack file may carry, in the order its own history writes them:
 #: the last thing that happened to the brief is the date to show. Measured
 #: across the 89 live files -- `deposited_at` 43, `adjudicated_at` 21,
@@ -157,12 +151,9 @@ STACK_TIMESTAMP_KEYS = (
 
 #: How a stack file's frontmatter reading names itself, so a merged record's
 #: two frontmatter readings are distinguishable. The decisions-track body keeps
-#: the bare `frontmatter.<name>` spelling `manifest.py` already emits.
+#: the bare `frontmatter.<name>` spelling `manifest.py` already emits. Applied
+#: to whatever keys the file holds -- there is no key list.
 STACK_FIELD_PREFIX = "briefs/stack:"
-
-#: How a merged record names the row's `status`, in the spelling `manifest.py`
-#: already uses for every other row key.
-ROW_STATUS_FIELD = "decisions-track/manifest.jsonl:status"
 
 _EMPTY_FRONTMATTER: Mapping[str, str] = MappingProxyType({})
 
@@ -349,20 +340,6 @@ class BriefDocument:
         }
         for item in self.row.fields:
             by_name.setdefault(item.name, []).extend(item.readings)
-        # `status` is the one field the manifest reader does not carry as a
-        # reading -- a manifest-only row has exactly one status and it is
-        # already on `record.status`. On a merged pair there are two, and they
-        # disagree 28 times live, so the row's is added here rather than being
-        # dropped in favour of the file's.
-        if self.row.status:
-            by_name.setdefault("status", []).append(
-                field_provenance.FieldValue(
-                    self.row.status,
-                    field_provenance.SOURCE_MANIFEST_ROW,
-                    CONFIDENCE_HIGH,
-                    ROW_STATUS_FIELD,
-                )
-            )
         return tuple(
             FieldReading(name, tuple(values)) for name, values in sorted(by_name.items())
         )
@@ -581,15 +558,16 @@ def _stack_record(slug: str, path: Path) -> tuple[StackRecord, tuple[ManifestIss
 
 
 def _stack_fields(frontmatter: Mapping[str, str]) -> tuple[FieldReading, ...]:
-    readings = []
-    for name in STACK_FIELD_KEYS:
-        value = field_provenance.frontmatter_value(
-            frontmatter, name, field=f"{STACK_FIELD_PREFIX}frontmatter.{name}"
-        )
-        reading = field_provenance.reading(name, value)
-        if reading is not None:
-            readings.append(reading)
-    return tuple(readings)
+    """Every key the file's header holds, whatever it is.
+
+    Not an enumeration. The 89 live stack files carry ~100 distinct keys
+    between them -- `shape`, `no_brainer_confidence`, `server_touching`,
+    `review_gate`, `capability_blocker`, `deposited_by` -- and a reader that
+    named six of them in advance made the rest undeclarable.
+    """
+    return field_provenance.readings(
+        field_provenance.frontmatter_store(frontmatter, prefix=STACK_FIELD_PREFIX)
+    )
 
 
 def _stack_verdict(frontmatter: Mapping[str, str]) -> Verdict | None:

@@ -386,6 +386,101 @@ def test_a_file_with_no_date_key_reports_no_timestamp(tmp_path: Path):
     assert record.timestamp_field is None
 
 
+# --- the key set is open, not enumerated -------------------------------------
+
+
+def test_every_frontmatter_key_is_exposed_not_a_named_six(tmp_path: Path):
+    """A producer inventing a key must arrive with no change to the core.
+
+    The 89 live stack files carry ~100 distinct frontmatter keys between them;
+    an enumerated reader showed 8. `blast_radius` below stands for the key
+    nobody has written yet.
+    """
+    stack = stack_with(
+        tmp_path / "stack",
+        {
+            "01-open-brief.md": (
+                "---\n"
+                "status: present-it-pending\n"
+                "shape: compact-yn\n"
+                "no_brainer_confidence: 0.95\n"
+                "blast_radius: three-rigs\n"
+                "---\n\n# body\n"
+            )
+        },
+    )
+
+    (record,), _, _, _ = read_stack(stack)
+
+    by_name = {item.name: item for item in record.fields}
+    assert set(by_name) == {"status", "shape", "no_brainer_confidence", "blast_radius"}
+    # Provenance survives the generalisation: with an open set the reader
+    # cannot infer where a key came from, so every entry still names it.
+    assert by_name["blast_radius"].value == "three-rigs"
+    assert by_name["blast_radius"].source == "frontmatter"
+    assert by_name["blast_radius"].readings[0].field == "briefs/stack:frontmatter.blast_radius"
+    # And absent is still absent -- not an entry whose value is null.
+    assert "unlock_count" not in by_name
+    assert "verdict" not in by_name
+
+
+def test_an_open_key_set_still_reports_a_disagreement_between_stores(tmp_path: Path):
+    """The row's keys are open too, so a novel key is comparable on both sides."""
+    stack = stack_with(
+        tmp_path / "stack",
+        {"07-paired-brief.md": "---\nstatus: adjudicated\nshape: compact-yn\n---\n\n# body\n"},
+    )
+    manifest = manifest_with(
+        tmp_path / "decisions-track" / "manifest.jsonl",
+        [{"slug": "paired", "status": "briefed", "shape": "full-form"}],
+    )
+
+    (record,) = read_documents(manifest, stack).records
+
+    shape = next(item for item in record.fields if item.name == "shape")
+    assert shape.conflict is True
+    assert [(item.value, item.source) for item in shape.readings] == [
+        ("compact-yn", "frontmatter"),
+        ("full-form", "manifest_row"),
+    ]
+
+
+def test_sections_keep_their_heading_text_and_are_never_padded(tmp_path: Path):
+    """Identity is the heading, and the §-number is an optional attribute.
+
+    124 live files carry an `ACTION-BLOCK` heading. Forcing it into a §7 slot,
+    or dropping it for not matching a canonical name, would lose the name the
+    brief actually used. A three-heading brief returns three entries.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    stack_with(
+        rig_root / ".beads" / "briefs" / "stack",
+        {
+            GH_38: (
+                "---\nstatus: present-it-pending\n---\n\n"
+                "## §1 What is being decided\n\ntext\n\n"
+                "## ACTION-BLOCK\n\ndo the thing\n\n"
+                "## Something nobody named\n\nmore\n"
+            )
+        },
+    )
+    slug = normalize_stem(Path(GH_38).stem)
+
+    payload = run_mctl(city_root, rig_root, "briefs", "show", slug, "--json")
+
+    sections = payload["brief"]["sections"]
+    assert [section["heading"] for section in sections] == [
+        "§1 What is being decided",
+        "ACTION-BLOCK",
+        "Something nobody named",
+    ]
+    assert [section["section_index"] for section in sections] == [1, None, None]
+    assert [section["match"] for section in sections] == ["explicit", "unmapped", "unmapped"]
+    # Three headings, three entries: nothing padded up to seven, and the
+    # unmatched headings are present rather than discarded.
+    assert len(sections) == 3
+
+
 # --- the payload: elided, never truncated ------------------------------------
 
 

@@ -1335,16 +1335,10 @@ def _bead_fields(bead: Bead, frontmatter: Mapping[str, str]) -> tuple[FieldReadi
             else None
         ),
     }
-    readings = []
-    for name in field_provenance.EXPOSED_FIELDS:
-        reading = field_provenance.reading(
-            name,
-            from_bead.get(name),
-            field_provenance.frontmatter_value(frontmatter, name),
-        )
-        if reading is not None:
-            readings.append(reading)
-    return tuple(readings)
+    return field_provenance.readings(
+        {name: value for name, value in from_bead.items() if value is not None},
+        field_provenance.frontmatter_store(frontmatter),
+    )
 
 
 def _claimed_stack_files(

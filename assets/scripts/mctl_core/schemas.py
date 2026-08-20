@@ -364,11 +364,13 @@ FIELDS_SCHEMA: Schema = {
     "type": "object",
     "title": "BriefFields",
     "description": (
-        "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, "
-        "verdict, and on a stack-sourced record status -- keyed by name, each naming where "
-        "it was read. Absent keys mean no store holds the field. A merged stack/row pair "
-        "carries up to three readings per field, in authority order: the stack file's "
-        "frontmatter, the manifest row, then the row's own markdown snapshot."
+        "EVERY field this brief's stores declare, keyed by name, each naming where it was "
+        "read. The key set is open, not a fixed list: whatever a bead column, a manifest "
+        "row or a markdown header holds arrives here, so a producer adding a new "
+        "frontmatter key needs no schema change. Absent keys mean no store holds the "
+        "field -- never an entry whose value is null. A merged stack/row pair carries up "
+        "to three readings per field, in authority order: the stack file's frontmatter, "
+        "the manifest row, then the row's own markdown snapshot."
     ),
     "additionalProperties": FIELD_READING_SCHEMA,
 }
@@ -376,7 +378,13 @@ FIELDS_SCHEMA: Schema = {
 BRIEF_SECTION_SCHEMA: Schema = {
     "type": "object",
     "title": "BriefSection",
-    "description": "One markdown section of a brief body, already parsed.",
+    "description": (
+        "One markdown section of a brief body, already parsed. Identity is the heading "
+        "text: every heading in the body appears, nothing is padded to a fixed seven and "
+        "nothing is dropped for failing to match a canonical name -- an `ACTION-BLOCK` "
+        "heading arrives under that name. `section_index` is an optional attribute, null "
+        "where the heading names no present-it slot."
+    ),
     "required": [
         "body",
         "end_line",
