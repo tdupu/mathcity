@@ -122,3 +122,47 @@ rather than a paragraph of retyping — and every verdict still passes a human.
 - Page load is ~5s, floor is core-side.
 - The 41-file `artifact:` hand-repair worklist (unstarted, delivered earlier).
 - Superseding the 18 vintage stuck beads.
+
+---
+
+## 09:25 — hourly check
+
+**Tests green: 702 passing.** Dashboard healthy, `/queue` 200 in 4.6s.
+Branch rebased onto `main` at `e6fe8a0` (cozy's pile-drain + index-rebuild
+work); zero file overlap, clean rebase. **13 commits.**
+
+### Landed since the last section
+
+**The data emptiness was my bug, not a missing field.** cozy replied that
+`unlock_count` is a read that exists on most files — and they were right.
+`briefs_list` returns most attributes inside a `fields` provenance map, and the
+table read only the top level. So `unlock_count` read as `None` on all 308 hq
+rows while **185 carried a value**, and `priority` read as `None` while every
+row had one.
+
+My hide-empty-columns rule then compounded it: it measured a populated column
+as empty, hid it, and printed a note claiming no brief carried a value for
+fields the core had been serving all along. A read that knows one of two shapes
+does not fail — it under-reports, confidently.
+
+Fixed: `attr()` looks in both. **Unlock and Priority now render on the live
+city; hidden columns dropped from five to three**, and the three remaining are
+genuinely absent. The sort key had the same defect, so ordering by Unlock had
+been ordering 308 identical `None`s.
+
+Also landed: one adjudication form per page (the legacy form was a second,
+weaker verdict control writing the same field).
+
+### In flight
+
+Nothing blocking. Replied to cozy retracting my "columns are empty" report,
+accepting their three corrections (DRY RUN badge stays, `unlock_count` is a
+read, revised `track`/`gates` figures), and narrowing my asks to two.
+
+### Blocked / needs you
+
+- **`title` and `bead_id` are absent from `briefs_list` rows** — only
+  `brief_id` is populated. Now my top ask of cozy, above `unlock_count`.
+- **Merge is still gated** and unrequested.
+- **cozy has an unlanded `render.py` edit** to the degraded-rig panel; my
+  branch touches that file too, so one of us rebases when it lands.
