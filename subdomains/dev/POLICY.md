@@ -503,12 +503,108 @@ inside gascity core); this is the pack-level, plan-time analogue.*
   only a passive `gc doctor` flag; the one loud signal — the dolt-health
   firehose `gt-5xh` — was noise. Observability was inverted.)
 
+- **P6.2 "A check must be able to fail."** Every check, gate, validator, or test
+  must be **falsifiable against the condition it claims to detect**: there must
+  exist a state of the world in which it reports failure, and its author must
+  have observed it do so. A check that passes because it could not look is
+  **worse than an absent one** — an absent check is a known gap, while a check
+  that cannot fail is a false assurance that stops anyone looking again. This is
+  the inverse of P6.1: P6.1 forbids failing silently, P6.2 forbids **passing
+  blindly**.
+  Three recurring shapes, all prohibited: (a) a **scan whose operand may not
+  resolve**, where an empty result is read as "no violations" — a cwd-relative
+  `find`/`grep`/`ls` in a script whose working directory is not guaranteed;
+  (b) a **guard satisfied by prose**, where the check greps for a string that
+  documentation keeps true forever regardless of behaviour; (c) a **validator
+  that claims coverage it does not have**, whose name or description asserts
+  agreement across N representations while it compares fewer.
+  Pass: the check's own test suite contains a case that **fails before the fix
+  and passes after**, or the author records an observed failing run
+  (fixture, injection, or reproduction) against the condition; a validator
+  enumerates exactly the artifacts it compares, and its description claims no
+  more. Fail: a check whose passing state is indistinguishable from "could not
+  evaluate"; a guard whose condition is satisfied by a comment or by prose; a
+  validator whose stated scope exceeds its compared set; any check shipped
+  without an observed failing case → **fail**.
+  (Origin: 2026-08-20, four instances in one file-family in one day —
+  `brief-check.sh` running `find formulas` cwd-relative, matching nothing off
+  the pack root and reporting PASS; `brief-manifest-current` unable to detect a
+  stale index; the shim suite's legacy exemption guard, satisfied permanently by
+  the twelve prose mentions of `decisions-track` that survive removing every
+  write; and `mctl briefs validate`, whose help text promises to "prove
+  canonical and redundant state agree" while comparing two of four
+  representations and possessing no diagnostic code for legacy-manifest
+  divergence at all.)
+
+## Pillar 7 — Interface discipline
+
+The city has one interface. `mctl` is where repeated work lives, and it is the
+**single point of failure by design**: work scattered across open bash in many
+skills fails in many ways, quietly and differently each time, while the same
+work behind one interface fails in one place, loudly, with an error code. A
+central failure point is a thing that can be debugged once and fixed once.
+
+- **P7.1 "Repeated work goes behind the interface."** Any operation `mctl`
+  exposes must be performed **through** `mctl`. A skill, formula, order, gate,
+  or check that shells out to `bd`, `git`, `dolt`, or the filesystem to do
+  something `mctl` already does is a **violation, not a shortcut** — including
+  when it is faster, when the caller "only reads", and when it runs *after* the
+  canonical write to patch an artifact `mctl` did not update.
+  Pass: every write to a canonical or redundant brief artifact — bead,
+  decisions cache, pile file, stack index, decisions-track row or body — is made
+  by `mctl`; a non-`mctl` writer exists only under a **declared, named
+  exemption** that states which artifact and why `mctl` cannot own it. Fail: a
+  wired skill or formula that writes such an artifact directly (`sed -i`, a
+  shell redirect, a Python `.write()`/`open(...,"w")`, a bare `bd`/`dolt`
+  mutation) without a declared exemption → **fail**; an exemption whose
+  justification no longer holds → **fail**.
+  (Origin: 2026-08-20 — `adjudicate-brief` declared `mctl` the canonical writer
+  and then performed a second write of its own to the brief frontmatter and the
+  decisions-track manifest. The consequence is that a verdict entered anywhere
+  other than that skill leaves two representations stale; the same divergence
+  was measured on 2026-08-04 across 17 briefs, whose manifest read `adjudicated`
+  while their files read `ready-for-adjudication`, causing decided decisions to
+  be re-presented.)
+
+- **P7.2 "Consumers are siblings, never chains."** Every consumer of the city —
+  the dashboard, the MCP surface, a skill, a human at a terminal — talks to
+  `mctl` **directly**. A consumer must not reach the interface *through* another
+  consumer's transport.
+  Pass: each consumer's call path terminates in `mctl`; removing any one
+  consumer leaves the others functioning unchanged. Fail: a consumer whose only
+  path to `mctl` runs through a second consumer's protocol or process → **fail**.
+  (Origin: 2026-08-20 — the dashboard reached `mctl` exclusively over the MCP
+  stdio transport, with no direct path in existence: both of its clients,
+  including the "in-process" one, construct `MctlMcpServer` and speak the full
+  JSON-RPC protocol. A dashboard defect and an MCP defect were therefore
+  indistinguishable from the outside.)
+
+- **P7.3 "An interface gap is filed, never routed around."** When `mctl` cannot
+  do what a caller needs, the deficiency is **the finding**. File it against
+  `mctl`; do not implement the capability somewhere else.
+  Pass: a capability `mctl` lacks is recorded as a tracked `mctl` gap, and the
+  caller waits or is unblocked through `mctl`. Fail: any new direct store,
+  filesystem, or `bd`/`dolt` access added because `mctl` did not expose it,
+  without a filed gap it cites → **fail**; a "temporary" bypass with no tracked
+  removal → **fail**.
+  (Origin: 2026-08-20 — front-end requirements that `mctl` did not expose were
+  initially carried as a dashboard wishlist rather than as interface
+  incompleteness, which is what they were.)
+
+
 ## Non-negotiables (quick checklist)
 
 - No hand-edited `city.toml`, and no hand-edited `pack.toml` outside the
   owned set (P1.2).
 - No silent failures — every error / timeout / degradation path surfaces
   loudly at the point of failure, never only via a passive diagnostic (P6.1).
+- No check that cannot fail — every gate/validator ships with an observed
+  failing case, and claims no coverage beyond the artifacts it compares (P6.2).
+- No writer but `mctl` for a canonical or redundant brief artifact, absent a
+  declared and still-valid exemption (P7.1).
+- No consumer reaching `mctl` through another consumer's transport — the
+  dashboard and the MCP surface are siblings, not a chain (P7.2).
+- No bypass for a missing `mctl` capability — file the interface gap (P7.3).
 - No edits under any `vendor/**` tree, ever (P2.2).
 - No edits inside a materialized `.claude/skills/**` / `.codex/skills/**`
   sink (P1.3).
