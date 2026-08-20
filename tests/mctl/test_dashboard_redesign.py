@@ -1652,3 +1652,59 @@ def test_omitting_nothing_keeps_the_legacy_form():
 
     html = render.operation_forms("he-1", [{"id": "adjudicate", "enabled": True}], rig="hq")
     assert "Preview adjudication" in html
+
+
+# --------------------------------------------------------------------------
+# reading values the core supplies with provenance
+# --------------------------------------------------------------------------
+
+
+def _fielded(**pairs):
+    """A row shaped the way `briefs_list` actually returns one."""
+    return {
+        "brief_id": "gt-1",
+        "title": "t",
+        "fields": {k: {"name": k, "value": v, "readings": []} for k, v in pairs.items()},
+    }
+
+
+def test_a_value_under_fields_is_read():
+    """`briefs_list` returns most attributes with provenance, not at top level.
+
+    unlock_count is on 185 of 308 live rows -- all of them inside `fields`.
+    Reading only the top level saw None everywhere, which then made the
+    hide-empty rule hide a column that had data.
+    """
+    from mctl_dashboard.screens import stack
+
+    assert stack.cell_text(_fielded(unlock_count=7), "unlock") == "7"
+    assert stack.cell_text(_fielded(priority=1), "prio") == "1"
+
+
+def test_a_top_level_value_still_wins():
+    from mctl_dashboard.screens import stack
+
+    row = _fielded(unlock_count=7)
+    row["unlock_count"] = 9
+    assert stack.cell_text(row, "unlock") == "9"
+
+
+def test_a_genuinely_absent_value_is_still_a_dash():
+    from mctl_dashboard.screens import stack
+
+    assert stack.cell_text(_fielded(track="x"), "unlock") == "—"
+
+
+def test_a_zero_under_fields_is_a_value_not_an_absence():
+    from mctl_dashboard.screens import stack
+
+    assert stack.cell_text(_fielded(unlock_count=0), "unlock") == "0"
+
+
+def test_a_column_with_fielded_data_is_not_hidden():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    rows = [_fielded(unlock_count=3), _fielded(unlock_count=5)]
+    html = stack.table(rows, state.parse({}))
+    assert ">Unlock<" in html

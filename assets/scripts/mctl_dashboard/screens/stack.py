@@ -136,7 +136,7 @@ def sort_value(brief: Mapping[str, Any], key: str) -> Any:
         raw = brief.get("priority")
         return (raw is None, PRIO_RANK.get(str(raw).lower(), 0))
     if key == "unlock":
-        raw = brief.get("unlock_count")
+        raw = attr(brief, "unlock_count")
         return (raw is None, float(raw) if raw is not None else 0.0)
     if key == "slug":
         return (False, str(brief.get("title") or "").lower())
@@ -210,16 +210,38 @@ def _artifact_text(brief: Mapping[str, Any]) -> str:
     return ", ".join(states)
 
 
+def attr(brief: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    """One attribute, wherever the core chose to put it.
+
+    `briefs_list` returns most attributes inside a `fields` map that carries
+    provenance -- `{"value": ..., "source": ..., "readings": [...]}` -- rather
+    than at the top level. Reading only the top level saw `None` for
+    `unlock_count` on all 308 live rows when 185 of them carried a value, and
+    the hide-empty rule then hid a column that had data. A read that knows
+    about only one of the two shapes is a read that silently under-reports.
+
+    Top level wins where both exist: it is the already-resolved value.
+    """
+    if key in brief and brief[key] is not None:
+        return brief[key]
+    entry = (brief.get("fields") or {}).get(key)
+    if isinstance(entry, Mapping):
+        value = entry.get("value")
+        if value is not None:
+            return value
+    return default
+
+
 def cell_text(brief: Mapping[str, Any], key: str) -> str:
     """The visible text for one cell, em dash where the core has no value."""
     if key == "slug":
-        return str(brief.get("title") or brief.get("bead_id") or _DASH)
+        return str(attr(brief, "title") or attr(brief, "bead_id") or _DASH)
     if key == "rig":
-        return str(brief.get("rig_id") or _DASH)
+        return str(attr(brief, "rig_id") or _DASH)
     if key == "artifact":
         return _artifact_text(brief) or _DASH
     if key == "source":
-        return str(brief.get("canonical_source") or _DASH)
+        return str(attr(brief, "canonical_source") or _DASH)
     if key == "age":
         days = age_days(brief)
         return f"{days}d" if days is not None else _DASH
@@ -227,22 +249,22 @@ def cell_text(brief: Mapping[str, Any], key: str) -> str:
         value = score(brief)
         return str(value) if value is not None else _DASH
     if key == "sev":
-        if brief.get("kind") == "error":
+        if attr(brief, "kind") == "error":
             return "ERROR"
-        level = brief.get("sev") or severity(brief)
+        level = attr(brief, "sev") or severity(brief)
         return "HELD" if level == "error" else str(level).upper()
     if key == "unlock":
-        raw = brief.get("unlock_count")
+        raw = attr(brief, "unlock_count")
         return str(raw) if raw is not None else _DASH
     if key == "prio":
-        return str(brief.get("priority") or _DASH)
+        return str(attr(brief, "priority") if attr(brief, "priority") is not None else _DASH)
     if key == "kind":
-        return str(brief.get("kind") or brief.get("decision_state") or _DASH)
+        return str(attr(brief, "kind") or attr(brief, "decision_state") or _DASH)
     if key == "nopts":
-        options = brief.get("decision_options")
+        options = attr(brief, "decision_options")
         return str(len(options)) if options else _DASH
     if key == "rec":
-        return str(brief.get("recommendation") or _DASH)
+        return str(attr(brief, "recommendation") or _DASH)
     return _DASH
 
 
