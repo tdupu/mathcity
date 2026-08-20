@@ -994,3 +994,91 @@ def test_a_degraded_rig_is_named_on_the_redesigned_screens(tmp_path):
     assert 'data-region="degraded-rigs"' in html, (
         "city-wide screens must account for unreadable rigs"
     )
+
+
+# --------------------------------------------------------------------------
+# the remaining design features
+# --------------------------------------------------------------------------
+
+
+def test_rows_can_be_ticked_and_added_together():
+    """Bulk add: tick several, add them in one go.
+
+    A GET form, so it works with scripting off -- the ticks are checkboxes
+    carrying bead ids and the button submits them to the priority list.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    html = stack.table(
+        [{"bead_id": "he-1", "title": "a"}, {"bead_id": "he-2", "title": "b"}],
+        state.ViewState(),
+        queued=(),
+    )
+    assert 'name="pick"' in html and 'value="he-1"' in html
+    assert 'action="/priority"' in html
+    assert "onclick" not in html.lower()
+
+
+def test_the_rig_picker_is_multi_select_and_defaults_to_all():
+    """CHANGELOG §E28: rig became a multi-select picker, default all rigs."""
+    from mctl_dashboard import render
+
+    html = render.rig_picker(("hecke", "gascity", "mathcity"), selected=())
+    assert "multiple" in html
+    assert html.count("<option") >= 3
+    assert "all rigs" in html.lower()
+
+
+def test_the_importance_sliders_exist_and_submit_without_javascript():
+    """Four weights, 0-10, in a GET form with an Apply button."""
+    from mctl_dashboard import render
+    from mctl_dashboard.screens import stack
+
+    html = render.importance(stack.DEFAULT_WEIGHTS)
+    assert html.count('type="range"') == 4
+    assert 'method="get"' in html.lower()
+    for key in stack.DEFAULT_WEIGHTS:
+        assert f'name="w_{key}"' in html
+    assert "onchange" not in html.lower()
+
+
+def test_the_sliders_say_what_they_currently_affect():
+    """Score is empty until unlock_count lands, so the sliders move nothing.
+
+    Rendering four live-looking controls that change no visible output would
+    be the same failure as a sort over an empty column.
+    """
+    from mctl_dashboard import render
+    from mctl_dashboard.screens import stack
+
+    html = render.importance(stack.DEFAULT_WEIGHTS)
+    assert "score" in html.lower()
+
+
+def test_the_sidebar_lists_the_next_few_queued_briefs():
+    from mctl_dashboard import render
+
+    empty = render.sidebar("/queue", {}, queued=())
+    assert "nothing queued" in empty.lower()
+
+    filled = render.sidebar("/queue", {}, queued=("he-1", "he-2"))
+    assert "he-1" in filled and "he-2" in filled
+
+
+def test_weights_round_trip_through_the_query_string():
+    from mctl_dashboard import state
+
+    view = state.parse({"w_unlock": "3", "w_age": "9", "w_prio": "0"})
+    assert view.weights["unlock"] == 3
+    assert view.weights["age"] == 9
+    assert view.weights["prio"] == 0
+    assert "w_unlock=3" in view.url()
+
+
+def test_hostile_weight_values_fall_back():
+    from mctl_dashboard import state
+
+    view = state.parse({"w_unlock": "banana", "w_age": "-5", "w_prio": "999"})
+    for value in view.weights.values():
+        assert 0 <= value <= 10

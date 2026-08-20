@@ -154,6 +154,12 @@ def _scoped(
     return [b for b in briefs if str(b.get("decision_state") or "") in states]
 
 
+def _queued_from(request: "Request") -> list[str]:
+    """The operator's ordering, as carried in the URL."""
+    raw = request.query.get("order") or ""
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
 class Dashboard:
     """The operator surface. A client of the typed MCP tools, nothing more."""
 
@@ -231,6 +237,8 @@ class Dashboard:
         compact_context: bool = True,
         context_bar: str | None = None,
         counts: Mapping[str, int] | None = None,
+        queued: Sequence[str] = (),
+        weights: Mapping[str, int] | None = None,
     ) -> Response:
         if context_bar is None:
             context_bar = (
@@ -245,6 +253,8 @@ class Dashboard:
                 context_bar=context_bar,
                 counts=counts or {},
                 context=context or {},
+                queued=queued,
+                weights=weights,
             ),
         )
 
@@ -347,11 +357,19 @@ class Dashboard:
         briefs, _city, city_extra = self._read_briefs(rig)
         by_id = {str(b.get("bead_id")): b for b in briefs}
 
+        # `order` is the saved ordering; `pick` arrives from the stack's
+        # bulk-add form. Ticked rows append to the end of the existing order
+        # rather than replacing it, so adding never silently discards an
+        # ordering the operator built.
         wanted = [
             part
             for part in (request.query.get("order") or "").split(",")
             if part and part in by_id
         ]
+        for picked in request.query.get("pick", "").split(","):
+            picked = picked.strip()
+            if picked and picked in by_id and picked not in wanted:
+                wanted.append(picked)
         ordered = [by_id[bead] for bead in wanted]
         return self._page(
             "Priority list",
@@ -359,6 +377,7 @@ class Dashboard:
             context,
             [priority_screen.screen(ordered), *city_extra],
             counts=self._counts(briefs),
+            queued=[str(b.get("bead_id")) for b in ordered],
             context_bar="",
         )
 
@@ -428,6 +447,9 @@ class Dashboard:
             # The picker is a query flag, so opening it is a link and its
             # state survives a reload -- no toggle handler, no hidden div.
             f'<a class="btn btn-ghost" href="{render.esc(columns_href)}">Columns</a>'
+            # Only in city scope: a rig picker on a dashboard pinned to one rig
+            # would imply a choice the deployment already made.
+            + (render.rig_picker(self._rig_ids(), selected=(rig,) if rig else ()) if self.city_wide else "")
             + (
                 f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(briefs[0].get("brief_id"))))}">'
                 "Open top brief &rarr;</a>"
@@ -464,6 +486,8 @@ class Dashboard:
             context,
             sections,
             counts=self._counts(all_briefs),
+            queued=_queued_from(request),
+            weights=view.weights,
             # The masthead already states the resolved city, rig and store.
             # A second Context panel here pushed the table below the fold.
             context_bar="",

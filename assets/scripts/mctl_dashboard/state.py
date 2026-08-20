@@ -14,7 +14,7 @@ whose whole job is to be readable under failure.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 from urllib.parse import quote, urlencode
 
@@ -63,6 +63,12 @@ COLUMN_LABEL: dict[str, str] = {key: label for key, label, _, _, _ in COLUMNS}
 #: present, so it orders something real until issue #66 lands.
 DEFAULT_SORT_KEY = "age"
 
+#: Score weights, and their defaults. Deliberately part of the URL rather than
+#: client state: the design calls the score "a working hypothesis", and a
+#: hypothesis you can put in a link is one you can show someone else.
+WEIGHT_KEYS: tuple[str, ...] = ("unlock", "convoy", "age", "prio")
+DEFAULT_WEIGHT_VALUES: dict[str, int] = {"unlock": 8, "convoy": 5, "age": 3, "prio": 4}
+
 LEADING_WIDTH = 46
 TRAILING_WIDTH = 104
 TITLE_FLOOR = 290
@@ -96,6 +102,7 @@ class ViewState:
     columns: tuple[str, ...] = DEFAULT_COLUMNS
     brief_id: str | None = None
     cursor: int = 0
+    weights: Mapping[str, int] = field(default_factory=lambda: dict(DEFAULT_WEIGHT_VALUES))
 
     # -- serialisation -----------------------------------------------------
 
@@ -115,6 +122,10 @@ class ViewState:
             out["columns"] = ",".join(self.columns)
         if self.cursor:
             out["cursor"] = str(self.cursor)
+        for key in WEIGHT_KEYS:
+            value = int(self.weights.get(key, DEFAULT_WEIGHT_VALUES[key]))
+            if value != DEFAULT_WEIGHT_VALUES[key]:
+                out[f"w_{key}"] = str(value)
         return out
 
     def url(self, **overrides: Any) -> str:
@@ -198,6 +209,18 @@ def parse(query: Mapping[str, str]) -> ViewState:
 
     sort_dir = 1 if str(query.get("sort_dir") or "-1").strip() == "1" else -1
 
+    weights = dict(DEFAULT_WEIGHT_VALUES)
+    for key in WEIGHT_KEYS:
+        raw = query.get(f"w_{key}")
+        if raw is None:
+            continue
+        try:
+            # Clamped rather than rejected: a slider is a preference, and a
+            # hand-edited 999 should behave like the maximum, not 500 the page.
+            weights[key] = max(0, min(10, int(str(raw).strip())))
+        except (TypeError, ValueError):
+            pass
+
     rig = str(query.get("rig") or "").strip() or None
     brief_id = str(query.get("brief_id") or "").strip() or None
 
@@ -211,4 +234,5 @@ def parse(query: Mapping[str, str]) -> ViewState:
         columns=columns,
         brief_id=brief_id,
         cursor=cursor,
+        weights=weights,
     )

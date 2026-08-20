@@ -353,8 +353,10 @@ def _row(
         f'<tr class="mc-row" data-row-index="{index}" data-href="{_e(href)}" '
         f'style="background: {background}; box-shadow: inset 3px 0 0 {edge};">'
         '<td style="padding: 5px 4px 5px 8px; vertical-align: top; white-space: nowrap;">'
-        f'<span class="mono" style="font-size: 10px; color: var(--color-neutral-500);">'
-        f"{index + 1}</span></td>"
+        f'<input type="checkbox" name="pick" value="{_e(bead)}" '
+        'style="accent-color: var(--color-accent-600); margin: 0; vertical-align: middle;">'
+        f'<span class="mono" style="font-size: 10px; color: var(--color-neutral-500); '
+        f'margin-left: 4px;">{index + 1}</span></td>'
         + "".join(cells)
         + '<td style="padding: 5px 8px 5px 4px; text-align: center; vertical-align: top;">'
         + queue_cell
@@ -380,12 +382,22 @@ def table(
         for index, brief in enumerate(ordered)
     )
     return (
+        # A GET form so ticking rows and adding them together needs no script:
+        # the checkboxes carry bead ids and the button submits them to the
+        # priority list, which reads its order straight from the query string.
+        '<form method="get" action="/priority">'
         '<div class="scroll-x" style="border-bottom: 2px solid var(--color-neutral-900);">'
         f'<table class="ntdata" data-region="brief-stack" '
         f'style="min-width: {view.table_min_width}px; table-layout: fixed; '
         'border-collapse: collapse; font-size: 12.5px;">'
         f"<thead><tr>{_headers(view)}</tr></thead>"
         f"<tbody>{rows}</tbody></table></div>"
+        '<div style="margin-top: 9px; display: flex; gap: 9px; align-items: center;">'
+        '<button class="btn btn-secondary" type="submit" '
+        'style="font-size: 11.5px; padding: 4px 10px;">Add ticked to priority list</button>'
+        '<span class="lede" style="font-size: 11px;">Ticking changes nothing until you '
+        "add them; the priority list is your ordering, not pipeline state.</span></div>"
+        "</form>"
     )
 
 

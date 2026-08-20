@@ -176,6 +176,92 @@ def key_map() -> str:
     )
 
 
+def rig_picker(rig_ids: Sequence[str], selected: Sequence[str] = ()) -> str:
+    """Which rigs to read, as a multi-select defaulting to all.
+
+    The design made this a picker rather than an `--all-rigs` checkbox
+    (CHANGELOG §E28), and the default is every rig: a dashboard that silently
+    showed one rig would answer "how much is waiting" with a number that is
+    true of a fraction.
+
+    Reads may span rigs; mutations never do. Selecting rigs here filters what
+    was read and does not widen what a verdict can touch -- the write path
+    pins its rig at preview time regardless.
+    """
+    if not rig_ids:
+        return ""
+    chosen = set(selected)
+    options = "".join(
+        f'<option value="{_e(rig)}"{" selected" if rig in chosen else ""}>{_e(rig)}</option>'
+        for rig in rig_ids
+    )
+    note = "all rigs" if not chosen else f"{len(chosen)} of {len(rig_ids)} rigs"
+    return (
+        '<form method="get" data-region="rig-picker" '
+        'style="display: inline-flex; gap: 6px; align-items: center;">'
+        f'<label class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
+        f"rig <span title=\"reads may span rigs; mutations stay single-rig\">{_e(note)}</span></label>"
+        f'<select name="rig" multiple size="1" '
+        'style="font-family: var(--font-mono); font-size: 11px; max-width: 150px;">'
+        f"{options}</select>"
+        '<button class="btn btn-ghost" type="submit" '
+        'style="font-size: 11px; padding: 2px 8px;">Apply</button>'
+        "</form>"
+    )
+
+
+def importance(weights: Mapping[str, int]) -> str:
+    """The four score weights, as sliders in a GET form.
+
+    Sliders plus an Apply button rather than live oninput: the weights live in
+    the query string, so applying them produces a URL that carries the
+    ordering with it. With JavaScript the values update as you drag; without
+    it, Apply is the whole interaction and nothing is lost.
+
+    The caveat is not decoration. Score folds `unlock_count` and priority, the
+    core exposes neither yet, so on today's data these four controls change an
+    ordering that is empty for every brief. Four live-looking knobs that move
+    nothing visible is the same deception as a sort over an empty column, so
+    the panel says so.
+    """
+    labels = {
+        "unlock": "unlock_count",
+        "convoy": "convoy / epic",
+        "age": "age",
+        "prio": "priority",
+    }
+    rows = []
+    for key, label in labels.items():
+        value = int(weights.get(key, 0))
+        rows.append(
+            '<div style="margin-bottom: 9px;">'
+            '<div class="mono" style="display: flex; justify-content: space-between; '
+            'font-size: 10.5px; margin-bottom: 2px;">'
+            f"<span>{_e(label)}</span>"
+            f'<span style="color: var(--color-accent-700);">{value}</span></div>'
+            f'<input type="range" name="w_{_e(key)}" min="0" max="10" step="1" '
+            f'value="{value}" style="width: 100%; accent-color: var(--color-accent-600); '
+            'height: 14px;"></div>'
+        )
+    return (
+        '<form method="get" action="/queue" data-region="importance">'
+        '<span class="mc-section-head" style="margin-top: 14px;">Importance</span>'
+        '<div style="padding: 8px 12px; font-size: 11.5px; color: var(--color-neutral-700);">'
+        '<p style="margin: 0 0 8px; font-style: italic;">Score weights — experiment '
+        "freely. No policy defines importance, so this ordering is a working "
+        "hypothesis rather than a fact about briefs.</p>"
+        + "".join(rows)
+        + '<button class="btn btn-secondary" type="submit" '
+        'style="font-size: 11px; padding: 3px 10px; width: 100%;">Apply</button>'
+        '<p class="review-note" style="margin: 9px 0 0; font-size: 11px;">'
+        "These change the <strong>Score</strong> column, which has no value for any "
+        "brief yet — <span class=\"mono\">unlock_count</span> and priority are not "
+        "exposed by the core. The sliders work; there is currently nothing for them "
+        "to reorder.</p>"
+        "</div></form>"
+    )
+
+
 def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     """Brand, resolved runtime context, and the clickable counts.
 
@@ -224,7 +310,13 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     )
 
 
-def sidebar(current: str, counts: Mapping[str, Any]) -> str:
+def sidebar(
+    current: str,
+    counts: Mapping[str, Any],
+    *,
+    queued: Sequence[str] = (),
+    weights: Mapping[str, int] | None = None,
+) -> str:
     """Where the pipeline says each brief is, and the operator's own ordering."""
     rows = "".join(
         f'<a class="mc-navlink" href="{_e(href)}"'
@@ -247,8 +339,31 @@ def sidebar(current: str, counts: Mapping[str, Any]) -> str:
         '<p style="padding: 7px 12px 4px; font-size: 11px; color: var(--color-neutral-600); '
         'font-style: italic; line-height: 1.35; margin: 0;">'
         "Your ordering over the same stack — nothing here changes pipeline state.</p>"
-        "</nav>"
+        + _next_up(queued)
+        + (importance(weights) if weights else "")
+        + "</nav>"
     )
+
+
+def _next_up(queued: Sequence[str]) -> str:
+    """The next few briefs in the operator's own order.
+
+    Empty is a real state and says so: "nothing queued" is different from a
+    list that failed to load.
+    """
+    if not queued:
+        return (
+            '<p class="mono" style="padding: 2px 12px 6px; font-size: 10.5px; '
+            'color: var(--color-neutral-500); margin: 0;">next up — nothing queued</p>'
+        )
+    rows = "".join(
+        f'<div class="mono" style="display: flex; gap: 7px; padding: 2px 12px; '
+        f'font-size: 10.5px; color: var(--color-neutral-700);">'
+        f'<span style="color: var(--color-neutral-500);">{position}</span>'
+        f"<span>{_e(bead)}</span></div>"
+        for position, bead in enumerate(queued[:5], 1)
+    )
+    return rows
 
 
 def footer(trace_id: str = "") -> str:
@@ -277,6 +392,8 @@ def page(
     counts: Mapping[str, Any] | None = None,
     context: Mapping[str, Any] | None = None,
     trace_id: str = "",
+    queued: Sequence[str] = (),
+    weights: Mapping[str, int] | None = None,
 ) -> str:
     """The document shell.
 
@@ -302,7 +419,7 @@ def page(
             masthead(counts, context),
             key_map(),
             '<div class="mc-shell">',
-            sidebar(current, counts),
+            sidebar(current, counts, queued=queued, weights=weights),
             '<main class="mc-main">',
             context_bar,
             *sections,
