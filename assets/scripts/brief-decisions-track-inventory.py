@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, os, re, shutil, tempfile
+import argparse, json, os, re, shutil, sys, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,13 +31,19 @@ def slug_from_file(path: Path) -> tuple[int | None, str]:
 # "adjudicated:approve-b(...)" are correctly terminal. Everything else — including
 # unrecognised free-text and near-misses like "ready-for-adjudication" — is treated
 # as non-terminal and MIGRATED (visible), never preserved-invisible (#38, fix A).
-TERMINAL_PREFIXES = ("adjudicated", "rescinded", "auto-dispatched", "moot", "superseded")
 MIGRATABLE_ACTIONS = {"copy_to_pile", "copy_to_pile_deferred", "copy_to_pile_review"}
 
-
-def is_terminal_status(status: str) -> bool:
-    s = status.strip().lower()
-    return any(s.startswith(prefix) for prefix in TERMINAL_PREFIXES)
+# ONE definition of settled, shared with the gate that reads the same manifest.
+# Two independently-correct copies is how 43 rows became unreachable: this file
+# PRESERVED them as terminal while mctl_core/redundant_state.py BLOCKED them as
+# non-terminal, so no migration run could ever reach them. Import, never restate.
+_MCTL_CORE = Path(__file__).resolve().parent / "mctl_core"
+if str(_MCTL_CORE.parent) not in sys.path:
+    sys.path.insert(0, str(_MCTL_CORE.parent))
+from mctl_core.redundant_state import (  # noqa: E402
+    TERMINAL_STATUS_PREFIXES as TERMINAL_PREFIXES,
+    _is_terminal_status as is_terminal_status,
+)
 
 
 def action_for(status: str, defer_until: str | None, has_file: bool) -> str:

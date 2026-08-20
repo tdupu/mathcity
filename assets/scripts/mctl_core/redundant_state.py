@@ -54,12 +54,51 @@ class LegacyManifestState:
 
     @property
     def nonterminal_rows(self) -> tuple[dict[str, object], ...]:
-        terminal = {"closed", "done", "terminal", "adjudicated", "rejected", "moot"}
+        """Rows whose status is not a settled outcome.
+
+        PREFIX-matched, deliberately, and it must stay that way. A settled
+        status carries its disposition inline -- `adjudicated:defer-c(7d)`,
+        `adjudicated:approve-b(push=false)`, `adjudicated:close(...)` -- so an
+        exact-equality test reads every one of them as unsettled.
+
+        This was exact-equality until 2026-08-20 and the mismatch was not
+        cosmetic. `brief-decisions-track-inventory.py::is_terminal_status`
+        prefix-matches the same concept, so the migrator PRESERVED 43 rows as
+        terminal while this gate BLOCKED the same 43 as non-terminal --
+        structurally unreachable by any migration run, because the tool
+        excluded them before the plan was built. One brief-system concept,
+        two predicates, and on compound statuses they could never agree.
+
+        `rescinded`, `auto-dispatched` and `superseded` were absent here and
+        present there; they are settled outcomes and belong in both.
+
+        Keep this list and TERMINAL_PREFIXES in the migrator identical. If they
+        drift again the symptom is silent: rows that no migration can reach and
+        a gate that will not clear.
+        """
         return tuple(
-            row
-            for row in self.rows
-            if str(row.get("status", "")).lower() not in terminal
+            row for row in self.rows if not _is_terminal_status(str(row.get("status", "")))
         )
+
+
+#: Settled-outcome prefixes. MUST match TERMINAL_PREFIXES in
+#: assets/scripts/brief-decisions-track-inventory.py -- see nonterminal_rows.
+TERMINAL_STATUS_PREFIXES = (
+    "adjudicated",
+    "rescinded",
+    "auto-dispatched",
+    "moot",
+    "superseded",
+    "closed",
+    "done",
+    "terminal",
+    "rejected",
+)
+
+
+def _is_terminal_status(status: str) -> bool:
+    s = status.strip().lower()
+    return any(s.startswith(prefix) for prefix in TERMINAL_STATUS_PREFIXES)
 
 
 def artifact_layout(ctx: MctlContext) -> ArtifactLayout:
