@@ -276,12 +276,32 @@ regularised. `paths.toml`, `gates.toml` G12, the formula, the skill,
 Under a dry-run default, one caveat was minor. Under an armed default it is
 the whole safety story, and it should be tracked as its own work:
 
-**The gate scripts are installed in one rig.** Formulas exec their checks at
-`<rig_root>/.gc/scripts/checks/…`. That directory exists in **hecke and
-gascity-packs only** — and only hecke actually carries
-`brief-no-brainer-execute-safety.sh`. It is **absent from every
-`mathcity.brief-operator*` rig**, which is the pool the `no-brainer-process`
-order actually runs in. Flagged as D9 in the 2026-08-19 drift audit and
+**RESOLVED 2026-08-19 — this paragraph described a real problem and got two
+things wrong about it.** Kept for the record, struck rather than deleted.
+
+> ~~**The gate scripts are installed in one rig.** Formulas exec their checks at
+> `<rig_root>/.gc/scripts/checks/…`. That directory exists in **hecke and
+> gascity-packs only** — and only hecke actually carries
+> `brief-no-brainer-execute-safety.sh`. It is **absent from every
+> `mathcity.brief-operator*` rig**, which is the pool the `no-brainer-process`
+> order actually runs in.~~
+
+Two corrections. First, `mathcity.brief-operator*` are **not rigs** — `gc rig
+list` knows `gt (HQ)` and `agent_skills`; those directories are agent session
+homes. The counts above were real but counted the wrong things. Second, there
+is **no install mechanism to be behind on**: nothing in gascity materializes
+pack checks into any `.gc/scripts/checks/`. Hecke's copies were placed by hand
+on 2026-07-11 and had drifted five weeks stale — `brief-check.sh` was 9,093
+bytes against 38,801 shipped, so it would have reported PASS under superseded
+rules. An installed-but-stale enforcer is worse than an absent one.
+
+The supported form is pack-relative (`../assets/scripts/checks/<name>.sh`),
+resolved at cook time against the formula layers; under the v2 graph compiler a
+path no layer ships is a **compile error**. 28 declarations were migrated, and
+hecke's 27 orphaned scripts deleted (backed up; none were unique to that tree).
+Fail-closed is now verified by execution rather than by reading: with the script
+absent the runner errors, `GateResult` is empty, and control never reaches
+`GatePass`. Flagged as D9 in the 2026-08-19 drift audit and
 originally in `DOGFOOD.md` on 2026-07-11.
 
 **Reading of the runner says this fails closed** (gascity
