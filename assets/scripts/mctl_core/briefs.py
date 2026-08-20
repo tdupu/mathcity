@@ -23,14 +23,20 @@ from .redundant_state import (
     scan_artifacts,
 )
 from . import fields as field_provenance
+from .documents import (
+    CANONICAL_SOURCE_STACK_FILE,
+    SOURCE_STACK_FILE,
+    BriefDocument,
+    DocumentReading,
+    read_documents,
+)
 from .fields import FieldReading
 from .manifest import (
     CANONICAL_SOURCE_BEAD,
     CANONICAL_SOURCE_MANIFEST,
     SOURCE_BEAD,
     SOURCE_MANIFEST,
-    ManifestRecord,
-    manifest_records,
+    ManifestIssue,
 )
 from .verdicts import (
     NON_BRIEF_MESSAGES,
@@ -90,24 +96,36 @@ class BriefSection:
 class BriefRecord:
     """One brief, from whichever store holds it.
 
-    Two populations reach this type. Most records come from a decision bead.
-    The rest come from a decisions-track manifest row that no bead and no
-    *stack* file represents -- 158 of the live city's 204 rows, previously
-    reachable by no reader at all (see `manifest.py`). 157 of those 158 do have
-    a markdown body, in the manifest's own directory, and now carry it.
+    Three populations reach this type, named by `source`:
 
-    `source` is what separates them, and it is not decoration: a manifest row
-    is a record that a brief existed with no bead attesting it. Rendering one
-    exactly like a bead-backed brief would assert an attestation that does not
-    exist.
+    ``bead``
+        a canonical decision bead, with its redundant cache artifacts.
 
-    What a manifest row is *not* is bodiless. Slice 6 said 36 of them had
-    "nothing readable in it"; 35 of those 36 have a markdown body in the same
-    directory as the manifest, and now carry it. Exactly one live row has no
-    body file, and that -- not the absence of a verdict -- is what `unreadable`
-    now means.
+    ``stack_file``
+        a markdown brief in `.beads/briefs/stack/`. 89 live files; before this
+        slice **2** were reachable, and only as some bead's cached body.
 
-    Which is also why `bead_id` and `title` are nullable. A manifest row has
+    ``manifest``
+        a decisions-track row that neither of the other two represents.
+
+    `source` is not decoration: only a bead is an attested decision record.
+    Rendering a deposited markdown file exactly like a bead-backed brief would
+    assert an attestation that does not exist -- and rendering a manifest row
+    that way would assert one twice over, since a row is an index entry about
+    a brief rather than the brief.
+
+    Where a stack file and a manifest row describe the same brief (46 live
+    pairs) they produce **one** record, sourced `stack_file`, with the row's
+    readings kept beside the file's and the row named in `also_recorded_in`.
+    The dedup this replaces removed those 46 rows in favour of files nothing
+    read, so it subtracted 46 briefs and added none -- see `documents.py`.
+
+    What a document record is *not* is bodiless. Slice 6 said 36 manifest rows
+    had "nothing readable in it"; 35 have a markdown body beside the manifest.
+    Exactly one live row has no body file, and that -- not the absence of a
+    verdict -- is what `unreadable` means.
+
+    Which is also why `bead_id` and `title` are nullable. A document record has
     neither. `""` would read as "this brief has no title"; `None` reads as
     "there is no bead here to have one", which is the true statement.
     """
@@ -122,7 +140,7 @@ class BriefRecord:
     updated_at: str | None
     redundant_artifacts: tuple[RedundantArtifact, ...]
     policy_references: tuple[PolicyReference, ...]
-    #: Which store this record came from: `bead` or `manifest`.
+    #: Which store this record came from: `bead`, `stack_file` or `manifest`.
     source: str = SOURCE_BEAD
     #: The verdict this brief carries, with the field and confidence it was
     #: read at. Populated for both populations -- a bead record that omitted
@@ -164,20 +182,39 @@ class BriefRecord:
     #: reports the reason here instead of returning an empty array that
     #: reads like "this brief has no sections".
     body_diagnostics: tuple[Diagnostic, ...] = ()
+    #: Why this record's body is not in this payload, when a body exists and
+    #: was deliberately left out. `None` means nothing was elided: either the
+    #: body is here, or there is none to carry (which `body_path` tells apart).
+    #: A body is never *shortened* -- an elided body is absent and labelled,
+    #: because a silently truncated brief is a brief that reads as complete.
+    body_elided: str | None = None
+    #: Other documents describing this same brief, folded into this record --
+    #: `<manifest>:<line>` for a merged decisions-track row, and that row's own
+    #: markdown snapshot. Empty when this record has only one document. This is
+    #: what makes deduplication auditable: a suppressed document is always
+    #: named by the record that represents it, never merely absent.
+    also_recorded_in: tuple[str, ...] = ()
 
     @property
     def canonical_source(self) -> str:
         """Which store is authoritative for this record.
 
         The bead store is canonical for a brief that has a bead. For a
-        manifest-only row it is not merely unavailable -- there is no bead --
-        so claiming `bead_store` would name a store that does not hold it.
+        document record it is not merely unavailable -- there is no bead -- so
+        claiming `bead_store` would name a store that does not hold it. A
+        merged stack/row pair is canonical to the **stack file**: the file is
+        the brief, and the row is an index entry about it.
         """
-        return CANONICAL_SOURCE_BEAD if self.source == SOURCE_BEAD else CANONICAL_SOURCE_MANIFEST
+        return {
+            SOURCE_BEAD: CANONICAL_SOURCE_BEAD,
+            SOURCE_STACK_FILE: CANONICAL_SOURCE_STACK_FILE,
+        }.get(self.source, CANONICAL_SOURCE_MANIFEST)
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
+            "also_recorded_in": list(self.also_recorded_in),
             "bead_id": self.bead_id,
+            "body_elided": self.body_elided,
             "body_path": self.body_path,
             "brief_id": self.brief_id,
             "canonical_source": self.canonical_source,
@@ -315,14 +352,25 @@ class ValidationReport:
         }
 
 
+#: Why a roster read leaves bodies out by default, and how to get one.
+#: Carried on the record rather than documented only here, so a consumer
+#: holding a single record can tell "no body" from "body not requested".
+BODY_ELIDED_ON_ROSTER = (
+    "roster read: pass --bodies (or bodies=true) to briefs list, "
+    "or read this brief through briefs show"
+)
+
+
 class BriefError(Exception):
     def __init__(self, diagnostic: Diagnostic):
         super().__init__(diagnostic.message)
         self.diagnostic = diagnostic
 
 
-def list_briefs(ctx: MctlContext, filters: BriefFilters) -> tuple[BriefRecord, ...]:
-    """Every brief this rig can show, from both stores.
+def list_briefs(
+    ctx: MctlContext, filters: BriefFilters, *, bodies: bool = False
+) -> tuple[BriefRecord, ...]:
+    """Every brief this rig can show, from all three stores.
 
     The bead population first, then the decisions-track rows nothing else
     represents. They are concatenated rather than merged: no manifest row
@@ -330,13 +378,33 @@ def list_briefs(ctx: MctlContext, filters: BriefFilters) -> tuple[BriefRecord, .
     key), so there is nothing to merge, and a merge that never fires is a
     per-call cost plus a false suggestion that the two lanes overlap.
 
-    Only this roster read carries manifest records. `show`, `options`,
+    Only this roster read carries document records. `show`, `options`,
     `doctor`, `validate`, and dispatch all act on a bead -- adjudicating,
     deferring, or cross-checking a cache against canonical state -- and a
-    manifest row has no bead to act on. Listing it as decidable in those
-    surfaces would be the `pending`-lane error one level up.
+    stack file or manifest row has no bead to act on. Listing one as decidable
+    in those surfaces would be the `pending`-lane error one level up.
+
+    The bead population is computed first because it is what tells the
+    document read which stack files are already spoken for: a bead whose
+    cached document is `stack/<bead-id>-…-brief.md` already carries that file,
+    and emitting it again would be the mirror image of the defect this slice
+    fixes. Two live files are in that lane.
+
+    ## `bodies` defaults to off, and that is a payload decision
+
+    Slice 7 put every manifest row's body and its parsed sections on the
+    roster, taking `briefs list --all-rigs --json` from ~0.4 MB to 2.7 MB.
+    Adding the stack population -- whose files are far larger, median 8,771
+    bytes against the decisions-track median of ~3,000 -- measured **5.17 MB**,
+    past the point where a roster read is a content read for every caller that
+    wanted titles.
+
+    So bodies are opt-in here and always present on `show_brief`. A record
+    whose body was left out says so in `body_elided`; nothing is truncated,
+    because a shortened brief still reads as a whole one.
     """
-    records = _records(ctx) + _manifest_records(ctx)
+    beads = _records(ctx)
+    records = beads + _document_records(ctx, beads, bodies=bodies)
     return tuple(record for record in records if _matches(record, filters))
 
 
@@ -349,9 +417,22 @@ def show_brief(ctx: MctlContext, brief_id: str) -> BriefRecord:
 
     The bead snapshot this already reads carries the description, so
     attaching the body costs no extra `bd` subprocess.
+
+    Document records are served here too, and that is what makes the roster's
+    body elision safe: a stack file or a manifest row reaches no other detail
+    surface -- `options`, `doctor`, `validate` and dispatch all act on a bead
+    -- so if `show` did not carry their bodies, leaving bodies off the roster
+    would put 247 briefs back in the state Slice 7 found them in.
     """
     beads = _beads(ctx)
-    record = _find_record(ctx, _records(ctx, beads), brief_id)
+    bead_records = _records(ctx, beads)
+    documents = _document_records(ctx, bead_records, bodies=True)
+    record = _find_record(ctx, bead_records + documents, brief_id)
+    if record.source != SOURCE_BEAD:
+        # Already whole: `_document_record` read the file, parsed its sections
+        # and reported why a parse yielded nothing. Re-deriving the body from
+        # a bead here would look up a bead that does not exist.
+        return record
     bead = next((item for item in beads if item.id == record.bead_id), None)
     body = brief_body(ctx, brief_id, bead)
     sections, diagnostics = brief_body_report(ctx, brief_id, body)
@@ -363,9 +444,9 @@ def brief_command_diagnostics(ctx: MctlContext, records: Iterable[BriefRecord]) 
     legacy_state = legacy_manifest_state(layout)
     records = tuple(records)
     brief_ids = {record.brief_id for record in records}
-    return _legacy_gate_diagnostics(ctx, layout, legacy_state, brief_ids) + _manifest_diagnostics(
-        ctx, layout
-    )
+    return _legacy_gate_diagnostics(
+        ctx, layout, legacy_state, brief_ids
+    ) + _document_diagnostics(ctx, layout, records)
 
 
 def legacy_gate_diagnostics(ctx: MctlContext) -> tuple[Diagnostic, ...]:
@@ -1266,68 +1347,140 @@ def _bead_fields(bead: Bead, frontmatter: Mapping[str, str]) -> tuple[FieldReadi
     return tuple(readings)
 
 
-def _manifest_records(
-    ctx: MctlContext, layout: ArtifactLayout | None = None
+def _claimed_stack_files(
+    layout: ArtifactLayout, records: Iterable[BriefRecord]
+) -> dict[Path, str]:
+    """Stack files a bead already owns, keyed by path, valued by that bead's id.
+
+    Ownership is the naming rule `_cached_brief_document` uses -- `<id>.md` or
+    `<id>-*.md`, anchored on the whole id followed by `-` -- applied to every
+    bead in the population, and **not** merely to the cache each bead happens
+    to be showing. `_cached_brief_document` searches the pile first, so a bead
+    with copies in both lanes reports the pile path; claiming only that would
+    leave the stack copy to be emitted as an independent brief under the
+    bead's own id, which is the duplicate this whole slice is about avoiding.
+
+    Matching is by path rather than by slug because these filenames carry a
+    bead id, not a slug: `gt-1f2781-downstream-filter-…-brief` normalises to
+    something no manifest row holds, so a slug comparison would never see it.
+    """
+    bead_ids = sorted(
+        (record.brief_id for record in records if record.source == SOURCE_BEAD),
+        key=len,
+        reverse=True,
+    )
+    claimed: dict[Path, str] = {}
+    for record in records:
+        if record.source == SOURCE_BEAD and record.body_path:
+            claimed[Path(record.body_path)] = record.brief_id
+    try:
+        entries = sorted(layout.stack.glob("*.md"))
+    except OSError:
+        return claimed
+    for path in entries:
+        if path in claimed:
+            continue
+        # Longest id first, so `mc-open-2` claims its own file rather than
+        # `mc-open` claiming it through the prefix rule.
+        owner = next(
+            (
+                bead_id
+                for bead_id in bead_ids
+                if path.stem == bead_id or path.stem.startswith(f"{bead_id}-")
+            ),
+            None,
+        )
+        if owner is not None:
+            claimed[path] = owner
+    return claimed
+
+
+def _document_reading(
+    ctx: MctlContext,
+    layout: ArtifactLayout | None = None,
+    records: Iterable[BriefRecord] = (),
+) -> DocumentReading:
+    layout = artifact_layout(ctx) if layout is None else layout
+    return read_documents(
+        layout.legacy_manifest, layout.stack, claimed=_claimed_stack_files(layout, records)
+    )
+
+
+def _document_records(
+    ctx: MctlContext,
+    beads: Iterable[BriefRecord] = (),
+    layout: ArtifactLayout | None = None,
+    *,
+    bodies: bool = True,
 ) -> tuple[BriefRecord, ...]:
-    """The decisions-track rows no bead and no stack file represents.
+    """Every stack file and decisions-track row no bead already carries.
 
     Read per rig, from that rig's own manifest and its own stack directory, so
     a city-wide listing is still exactly the per-rig answers assembled. Most
-    rigs have no manifest at all and contribute nothing.
+    rigs have neither and contribute nothing.
     """
-    layout = artifact_layout(ctx) if layout is None else layout
-    reading = manifest_records(layout.legacy_manifest, layout.stack)
-    return tuple(_manifest_record(ctx, record) for record in reading.records)
+    reading = _document_reading(ctx, layout, beads)
+    return tuple(
+        _document_record(ctx, document, bodies=bodies) for document in reading.records
+    )
 
 
-def _manifest_record(ctx: MctlContext, record: ManifestRecord) -> BriefRecord:
-    """One manifest row as a brief record, body included.
+def _document_record(
+    ctx: MctlContext, document: BriefDocument, *, bodies: bool = True
+) -> BriefRecord:
+    """One brief document -- stack file, manifest row, or the two merged.
 
-    Everything a manifest row does not have stays empty rather than being
-    filled in: no bead id, no title, no labels, no created/updated stamps, and
-    no redundant artifacts -- an artifact scan would report four `missing`
-    caches for a brief that never had any, which reads as damage rather than
-    as absence.
+    Everything a document does not have stays empty rather than being filled
+    in: no bead id, no title, no labels, no created/updated stamps, and no
+    redundant artifacts -- an artifact scan would report four `missing` caches
+    for a brief that never had any, which reads as damage rather than absence.
 
     The body is the exception, and it is not an inconsistency with
     `list_briefs` withholding bead bodies. A bead-backed brief has `show`,
-    `options`, `doctor` and `validate`; a manifest row has none of them,
-    because every one of those acts on a bead. The roster is the only surface
-    this record ever reaches, so a body withheld there is a body withheld
-    everywhere -- which is precisely the state Slice 6 left 157 briefs in.
+    `options`, `doctor` and `validate`; a document has none of them, because
+    every one of those acts on a bead. The roster is the only surface this
+    record ever reaches, so a body withheld there is a body withheld
+    everywhere -- which is precisely the state 87 stack files were left in.
 
     The policy references stay, because they are the rules a reader needs to
     judge what they are looking at, and they do not depend on the store.
     """
-    sections, diagnostics = _manifest_body_report(ctx, record)
+    sections, diagnostics = (
+        _document_body_report(ctx, document) if bodies else ((), ())
+    )
+    elided = (
+        None if bodies or document.body is None else BODY_ELIDED_ON_ROSTER
+    )
     return BriefRecord(
-        brief_id=record.slug,
+        brief_id=document.brief_id,
         bead_id=None,
         title=None,
-        status=record.status,
-        decision_state=record.decision_state,
+        status=document.status,
+        decision_state=document.decision_state,
         labels=(),
         created_at=None,
         updated_at=None,
         redundant_artifacts=(),
         policy_references=BRIEF_POLICY_REFERENCES,
-        source=SOURCE_MANIFEST,
-        verdict=record.verdict,
-        track=record.track,
-        timestamp=record.timestamp,
-        timestamp_field=record.timestamp_field,
-        fields=record.fields,
-        body_path=str(record.body_path) if record.body_path is not None else None,
-        body=record.body,
+        source=document.source,
+        verdict=document.verdict,
+        track=document.track,
+        timestamp=document.timestamp,
+        timestamp_field=document.timestamp_field,
+        fields=document.fields,
+        body_path=str(document.body_path) if document.body_path is not None else None,
+        body=document.body if bodies else None,
         sections=sections,
         body_diagnostics=diagnostics,
+        body_elided=elided,
+        also_recorded_in=document.also_recorded_in,
     )
 
 
-def _manifest_body_report(
-    ctx: MctlContext, record: ManifestRecord
+def _document_body_report(
+    ctx: MctlContext, document: BriefDocument
 ) -> tuple[tuple[BriefSection, ...], tuple[Diagnostic, ...]]:
-    """Sections for a manifest row's body, via the one section parser.
+    """Sections for a document's body, via the one section parser.
 
     `brief_body_report` is not reused wholesale because its MBRF040 says the
     *bead* carries no description, and there is no bead here -- a diagnostic
@@ -1335,22 +1488,23 @@ def _manifest_body_report(
     place. The parse itself is `parse_brief_sections`, the same call, so there
     is still exactly one section parser.
     """
-    if record.body is None:
+    body = document.body
+    if body is None:
         return (), ()
-    location = str(record.body_path)
-    if not record.body.strip():
+    location = str(document.body_path)
+    if not body.strip():
         return (), (
             _diagnostic(
                 ctx,
                 Severity.WARN,
                 "MBRF064",
-                "Brief body file is empty, so the row has no body to show.",
-                brief_id=record.slug,
+                "Brief body file is empty, so this record has no body to show.",
+                brief_id=document.brief_id,
                 data_location=location,
                 policy_ref="B2.10",
             ),
         )
-    sections = parse_brief_sections(record.body)
+    sections = parse_brief_sections(body)
     if not sections:
         return sections, (
             _diagnostic(
@@ -1358,9 +1512,9 @@ def _manifest_body_report(
                 Severity.WARN,
                 "MBRF041",
                 "Brief body has no markdown headings; only its raw text is available.",
-                brief_id=record.slug,
+                brief_id=document.brief_id,
                 data_location=location,
-                detail=f"body_characters={len(record.body)}",
+                detail=f"body_characters={len(body)}",
             ),
         )
     if not any(section.section_index is not None for section in sections):
@@ -1370,7 +1524,7 @@ def _manifest_body_report(
                 Severity.WARN,
                 "MBRF042",
                 "No brief body heading maps to a present-it section (§1-§7).",
-                brief_id=record.slug,
+                brief_id=document.brief_id,
                 data_location=location,
                 detail="headings=" + ", ".join(section.heading for section in sections),
             ),
@@ -1378,32 +1532,45 @@ def _manifest_body_report(
     return sections, ()
 
 
-def _manifest_diagnostics(
-    ctx: MctlContext, layout: ArtifactLayout | None = None
+def _document_diagnostics(
+    ctx: MctlContext,
+    layout: ArtifactLayout | None = None,
+    records: Iterable[BriefRecord] = (),
 ) -> tuple[Diagnostic, ...]:
-    """Rows the manifest reader had to skip.
+    """Documents the reader could not use, and pairs stored twice differently.
 
-    WARN, not ERROR: the manifest is a supplementary read-side source, and a
-    row it cannot use costs that row's visibility and nothing else. The
-    fail-closed reading of the same file -- `MBRF013` plus the B2.10 migration
-    blocker -- is a separate, stricter pass that still runs.
+    WARN, not ERROR: the stack and the manifest are supplementary read-side
+    sources, and a document either of them cannot use costs that brief's
+    visibility and nothing else. The fail-closed reading of the manifest --
+    `MBRF013` plus the B2.10 migration blocker -- is a separate, stricter pass
+    that still runs.
     """
     layout = artifact_layout(ctx) if layout is None else layout
-    reading = manifest_records(layout.legacy_manifest, layout.stack)
+    reading = _document_reading(ctx, layout, records)
+    manifest_path = layout.legacy_manifest
     return tuple(
         _diagnostic(
             ctx,
             Severity.WARN,
             issue.code,
             issue.message,
-            data_location=(
-                f"{reading.path}:{issue.line}" if issue.line is not None else str(reading.path)
-            ),
+            data_location=_issue_location(issue, manifest_path),
             detail=issue.detail,
             policy_ref="B2.10",
         )
         for issue in reading.issues
     )
+
+
+def _issue_location(issue: ManifestIssue, manifest_path: Path) -> str:
+    """Where an operator should look for the document an issue is about.
+
+    A stack-file issue names its own file; a manifest-row issue names the
+    manifest and the line, because a row has no other address.
+    """
+    if issue.location is not None:
+        return issue.location
+    return f"{manifest_path}:{issue.line}" if issue.line is not None else str(manifest_path)
 
 
 def _beads(ctx: MctlContext) -> tuple[Bead, ...]:

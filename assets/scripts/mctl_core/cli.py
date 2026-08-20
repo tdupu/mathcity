@@ -120,7 +120,9 @@ def _all_rigs_command(args: argparse.Namespace) -> int:
 
     def run(context: MctlContext) -> dict[str, object]:
         if key == ("briefs", "list"):
-            records = list_briefs(context, BriefFilters(args.status, args.label))
+            records = list_briefs(
+                context, BriefFilters(args.status, args.label), bodies=args.bodies
+            )
             return _brief_payload(
                 context,
                 briefs=[brief.to_dict() for brief in records],
@@ -298,6 +300,16 @@ def _add_brief_list_parser(commands: argparse._SubParsersAction[argparse.Argumen
     parser = commands.add_parser("list", help="list canonical decision brief beads")
     parser.add_argument("--status", help="filter by raw bead or decision status")
     parser.add_argument("--label", help="filter by brief label")
+    # Off by default: with every document body attached this read measures
+    # 5.17 MB city-wide, which makes a roster read a content read for every
+    # caller that wanted titles. A record whose body is left out says so in
+    # `body_elided`; nothing is ever truncated. `briefs show` always carries
+    # the body, for bead-backed and document briefs alike.
+    parser.add_argument(
+        "--bodies",
+        action="store_true",
+        help="attach each document brief's body and parsed sections (large)",
+    )
     _add_all_rigs_argument(parser)
     _add_runtime_arguments(parser)
 
@@ -391,7 +403,9 @@ def _add_work_dispatch_parser(commands: argparse._SubParsersAction[argparse.Argu
 def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     try:
         if args.brief_command == "list":
-            records = list_briefs(context, BriefFilters(args.status, args.label))
+            records = list_briefs(
+                context, BriefFilters(args.status, args.label), bodies=args.bodies
+            )
             payload = _brief_payload(
                 context,
                 briefs=[brief.to_dict() for brief in records],
@@ -676,7 +690,11 @@ def _brief_line(brief: dict[str, object]) -> str:
     decision bead carried it.
     """
     state = brief.get("decision_state") or brief.get("status") or "?"
-    origin = "" if brief.get("source", "bead") == "bead" else "  (manifest-only)"
+    # A record's origin is one of three, and "manifest-only" said for all of
+    # them would call a deposited stack file a manifest row.
+    origin = {"bead": "", "stack_file": "  (stack file)", "manifest": "  (manifest-only)"}.get(
+        str(brief.get("source", "bead")), "  (no bead)"
+    )
     title = str(brief.get("title") or "")[:70]
     return f"{brief.get('brief_id', '?')}  [{state}]{origin}  {title}"
 

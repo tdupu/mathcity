@@ -365,8 +365,10 @@ FIELDS_SCHEMA: Schema = {
     "title": "BriefFields",
     "description": (
         "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, "
-        "verdict -- keyed by name, each naming where it was read. Absent keys mean no store "
-        "holds the field."
+        "verdict, and on a stack-sourced record status -- keyed by name, each naming where "
+        "it was read. Absent keys mean no store holds the field. A merged stack/row pair "
+        "carries up to three readings per field, in authority order: the stack file's "
+        "frontmatter, the manifest row, then the row's own markdown snapshot."
     ),
     "additionalProperties": FIELD_READING_SCHEMA,
 }
@@ -438,13 +440,18 @@ BRIEF_RECORD_SCHEMA: Schema = {
     "title": "BriefRecord",
     "description": (
         "One brief, from whichever store holds it: a decision bead with its redundant "
-        "cache artifacts, or a decisions-track manifest row that no bead represents. "
-        "`source` says which, and must be read before the record is trusted as attested. "
-        "A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file "
-        "sitting beside the manifest, and `body_path` names it."
+        "cache artifacts, a markdown brief file in `.beads/briefs/stack/`, or a "
+        "decisions-track manifest row that neither of those represents. `source` says "
+        "which, and must be read before the record is trusted as attested -- only a bead "
+        "is an attested decision record. A stack file and a manifest row describing one "
+        "brief produce ONE record, sourced `stack_file`, with the row's readings kept in "
+        "`fields` and the row named in `also_recorded_in`. No document is ever suppressed "
+        "without an emitted record that names it."
     ),
     "required": [
+        "also_recorded_in",
         "bead_id",
+        "body_elided",
         "body_path",
         "brief_id",
         "canonical_source",
@@ -462,8 +469,24 @@ BRIEF_RECORD_SCHEMA: Schema = {
         "verdict",
     ],
     "properties": {
+        "also_recorded_in": {
+            **STRING_ARRAY,
+            "description": (
+                "Other documents describing this same brief, folded into this record: "
+                "`<manifest>:<line>` for a merged decisions-track row, and that row's own "
+                "markdown snapshot. Empty when this record has only one document. This is "
+                "what makes deduplication auditable rather than a claim."
+            ),
+        },
         "bead_id": nullable_string(
-            "The canonical decision bead. Null on a manifest-sourced record: there is no bead."
+            "The canonical decision bead. Null on a document-sourced record: there is no bead."
+        ),
+        "body_elided": nullable_string(
+            "Why this record's body is not in this payload, when a body exists and was "
+            "deliberately left out -- a roster read leaves bodies off by default. Null "
+            "means nothing was elided: either the body is here, or there is none to carry, "
+            "which `body_path` tells apart. A body is never shortened, only absent and "
+            "labelled."
         ),
         "body_path": nullable_string(
             "The markdown file behind this record. On a manifest record null is exactly the "
@@ -473,10 +496,14 @@ BRIEF_RECORD_SCHEMA: Schema = {
         "brief_id": {"type": "string"},
         "canonical_source": {
             "type": "string",
-            "enum": ["bead_store", "decisions_track_manifest"],
-            "description": "Which store is authoritative for this record.",
+            "enum": ["bead_store", "brief_stack_file", "decisions_track_manifest"],
+            "description": (
+                "Which store is authoritative for this record. A merged stack/row pair is "
+                "canonical to the stack file: the file is the brief, and the row is an "
+                "index entry about it."
+            ),
         },
-        "created_at": nullable_string("Bead creation timestamp. Null on a manifest record."),
+        "created_at": nullable_string("Bead creation timestamp. Null on a document record."),
         "decision_state": {
             "type": "string",
             "description": (
@@ -501,13 +528,18 @@ BRIEF_RECORD_SCHEMA: Schema = {
         "redundant_artifacts": {"type": "array", "items": REDUNDANT_ARTIFACT_SCHEMA},
         "source": {
             "type": "string",
-            "enum": ["bead", "manifest"],
+            "enum": ["bead", "manifest", "stack_file"],
             "description": (
-                "Which store this record came from. `manifest` means a decisions-track row "
-                "attested by nothing else -- no bead, no file."
+                "Which store this record came from. `stack_file` means a markdown brief in "
+                "`.beads/briefs/stack/`, attested by no bead; `manifest` means a "
+                "decisions-track row attested by nothing else -- no bead, no file."
             ),
         },
-        "status": nullable_string("Raw bead status, or the manifest row's status string."),
+        "status": nullable_string(
+            "Raw bead status, the stack file's frontmatter status, or the manifest row's "
+            "status string. On a merged pair the file leads and the row's status is kept "
+            "in `fields.status`, where the two disagree 28 times live."
+        ),
         "timestamp": nullable_string(
             "The one date this record can stand behind, or null. Never synthesised: 60 live "
             "manifest rows carry no date at all, and a surface must render that as 'no "
@@ -520,16 +552,17 @@ BRIEF_RECORD_SCHEMA: Schema = {
             "Bead title. Null on a manifest-sourced record, which has no title to report."
         ),
         "track": nullable_string(
-            "The decisions-track lane a manifest row declares. Null on a bead record."
+            "The decisions-track lane a document declares. Null on a bead record."
         ),
-        "updated_at": nullable_string("Bead update timestamp. Null on a manifest record."),
+        "updated_at": nullable_string("Bead update timestamp. Null on a document record."),
         "verdict": VERDICT_SCHEMA,
         # `body`, `sections` and `body_diagnostics` are optional here and
-        # required on BRIEF_DETAIL_SCHEMA. A roster read carries them only for
-        # manifest records, which reach no other surface: `show`, `options`,
-        # `doctor` and `validate` all act on a bead, and a manifest row has
-        # none. A bead-backed brief still gets its body from `briefs show`,
-        # so a city-wide roster does not also become a content read.
+        # required on BRIEF_DETAIL_SCHEMA. A roster read carries them only when
+        # the caller asks (`bodies=true`): with every document body attached the
+        # city-wide read measures 5.17 MB. `briefs show` always carries the
+        # body, for document briefs as well as bead-backed ones, so a body left
+        # off the roster is still one call away -- and `body_elided` says so
+        # on the record rather than leaving its absence to be guessed at.
         "body": BODY_SCHEMA,
         "body_diagnostics": BODY_DIAGNOSTICS_SCHEMA,
         "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},

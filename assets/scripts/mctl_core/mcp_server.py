@@ -446,7 +446,7 @@ def _handle_context_rigs(scope: CityScope, arguments: Mapping[str, Any]) -> dict
 
 
 def _handle_briefs_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
-    records = list_briefs(ctx, _filters(arguments))
+    records = list_briefs(ctx, _filters(arguments), bodies=bool(arguments.get("bodies")))
     return {
         "briefs": [record.to_dict() for record in records],
         "diagnostics": _diagnostics(ctx, brief_command_diagnostics(ctx, records)),
@@ -717,21 +717,34 @@ TOOLS: tuple[ToolSpec, ...] = (
         name="briefs_list",
         title="List briefs",
         description=(
-            "List briefs from both stores: canonical decision brief beads, plus "
-            "decisions-track manifest rows that no bead and no stack file represents. "
-            "Every record names its `source` (`bead` or `manifest`); a manifest row is "
-            "attested by no bead, and carries the markdown body sitting beside the "
-            "manifest -- 157 of 158 live rows have one. `unreadable` means that file "
-            "does not exist, and nothing else; a row with a body and no verdict is an "
-            "ordinary `pending` brief. `fields` carries unlock_count, priority, track, "
-            "form, gates and verdict, each naming the store it was read from, with "
-            "`conflict` set where a bead and a document disagree. Optionally filtered "
-            "by status or label."
+            "List briefs from all three stores: canonical decision brief beads, markdown "
+            "briefs in `.beads/briefs/stack/`, and decisions-track manifest rows that "
+            "neither represents. Every record names its `source` (`bead`, `stack_file` or "
+            "`manifest`); only a bead is an attested decision record. A stack file and a "
+            "manifest row describing one brief produce ONE record and the row is named in "
+            "`also_recorded_in` -- no document is suppressed without an emitted record "
+            "that names it. `unreadable` means no body file exists, and nothing else; a "
+            "brief with a body and no verdict is an ordinary `pending` one. `fields` "
+            "carries unlock_count, priority, track, form, gates, verdict and (on a stack "
+            "record) status, each naming the store it was read from, with `conflict` set "
+            "where two stores disagree. Bodies are off by default -- pass `bodies=true`, "
+            "or read one brief through `briefs_show`, which always carries it; a record "
+            "whose body was left out says so in `body_elided` and is never truncated. "
+            "Optionally filtered by status or label."
         ),
         input_schema=request_schema(
             {
                 "status": nullable_string("Filter by raw bead or decision status."),
                 "label": nullable_string("Filter by brief label."),
+                "bodies": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Attach each document brief's body and parsed sections. Off by "
+                        "default: with every body attached this read measures 5.17 MB "
+                        "city-wide, which makes a roster read a content read."
+                    ),
+                },
                 "all_rigs": ALL_RIGS_PROPERTY,
             }
         ),
@@ -749,7 +762,10 @@ TOOLS: tuple[ToolSpec, ...] = (
         description=(
             "Show one brief's canonical bead state, its body, that body's parsed sections, "
             "redundant artifacts, and policy refs. `body` is the verbatim canonical text and "
-            "stays authoritative: `sections` is a convenience over it, never a replacement."
+            "stays authoritative: `sections` is a convenience over it, never a replacement. "
+            "Document briefs -- `source` `stack_file` or `manifest` -- are served here too, "
+            "which is what makes the roster's body elision safe: they reach no other detail "
+            "surface, because `options`, `doctor` and `validate` all act on a bead."
         ),
         input_schema=request_schema({"brief_id": _BRIEF_ID}, ["brief_id"]),
         output_schema=response_schema({"brief": BRIEF_DETAIL_SCHEMA}, ["brief"], artifact_state=True),

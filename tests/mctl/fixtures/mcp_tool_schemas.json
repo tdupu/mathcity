@@ -2294,10 +2294,17 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, a markdown brief file in `.beads/briefs/stack/`, or a decisions-track manifest row that neither of those represents. `source` says which, and must be read before the record is trusted as attested -- only a bead is an attested decision record. A stack file and a manifest row describing one brief produce ONE record, sourced `stack_file`, with the row's readings kept in `fields` and the row named in `also_recorded_in`. No document is ever suppressed without an emitted record that names it.",
             "properties": {
+              "also_recorded_in": {
+                "description": "Other documents describing this same brief, folded into this record: `<manifest>:<line>` for a merged decisions-track row, and that row's own markdown snapshot. Empty when this record has only one document. This is what makes deduplication auditable rather than a claim.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "bead_id": {
-                "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
+                "description": "The canonical decision bead. Null on a document-sourced record: there is no bead.",
                 "type": [
                   "string",
                   "null"
@@ -2435,6 +2442,13 @@
                 },
                 "type": "array"
               },
+              "body_elided": {
+                "description": "Why this record's body is not in this payload, when a body exists and was deliberately left out -- a roster read leaves bodies off by default. Null means nothing was elided: either the body is here, or there is none to carry, which `body_path` tells apart. A body is never shortened, only absent and labelled.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "body_path": {
                 "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
@@ -2446,15 +2460,16 @@
                 "type": "string"
               },
               "canonical_source": {
-                "description": "Which store is authoritative for this record.",
+                "description": "Which store is authoritative for this record. A merged stack/row pair is canonical to the stack file: the file is the brief, and the row is an index entry about it.",
                 "enum": [
                   "bead_store",
+                  "brief_stack_file",
                   "decisions_track_manifest"
                 ],
                 "type": "string"
               },
               "created_at": {
-                "description": "Bead creation timestamp. Null on a manifest record.",
+                "description": "Bead creation timestamp. Null on a document record.",
                 "type": [
                   "string",
                   "null"
@@ -2540,7 +2555,7 @@
                   "title": "FieldReading",
                   "type": "object"
                 },
-                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
                 "title": "BriefFields",
                 "type": "object"
               },
@@ -2682,15 +2697,16 @@
                 "type": "array"
               },
               "source": {
-                "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+                "description": "Which store this record came from. `stack_file` means a markdown brief in `.beads/briefs/stack/`, attested by no bead; `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
                 "enum": [
                   "bead",
-                  "manifest"
+                  "manifest",
+                  "stack_file"
                 ],
                 "type": "string"
               },
               "status": {
-                "description": "Raw bead status, or the manifest row's status string.",
+                "description": "Raw bead status, the stack file's frontmatter status, or the manifest row's status string. On a merged pair the file leads and the row's status is kept in `fields.status`, where the two disagree 28 times live.",
                 "type": [
                   "string",
                   "null"
@@ -2718,14 +2734,14 @@
                 ]
               },
               "track": {
-                "description": "The decisions-track lane a manifest row declares. Null on a bead record.",
+                "description": "The decisions-track lane a document declares. Null on a bead record.",
                 "type": [
                   "string",
                   "null"
                 ]
               },
               "updated_at": {
-                "description": "Bead update timestamp. Null on a manifest record.",
+                "description": "Bead update timestamp. Null on a document record.",
                 "type": [
                   "string",
                   "null"
@@ -2776,7 +2792,9 @@
               }
             },
             "required": [
+              "also_recorded_in",
               "bead_id",
+              "body_elided",
               "body_path",
               "brief_id",
               "canonical_source",
@@ -3092,7 +3110,7 @@
     "title": "Report brief invariant violations"
   },
   "briefs_list": {
-    "description": "List briefs from both stores: canonical decision brief beads, plus decisions-track manifest rows that no bead and no stack file represents. Every record names its `source` (`bead` or `manifest`); a manifest row is attested by no bead, and carries the markdown body sitting beside the manifest -- 157 of 158 live rows have one. `unreadable` means that file does not exist, and nothing else; a row with a body and no verdict is an ordinary `pending` brief. `fields` carries unlock_count, priority, track, form, gates and verdict, each naming the store it was read from, with `conflict` set where a bead and a document disagree. Optionally filtered by status or label.",
+    "description": "List briefs from all three stores: canonical decision brief beads, markdown briefs in `.beads/briefs/stack/`, and decisions-track manifest rows that neither represents. Every record names its `source` (`bead`, `stack_file` or `manifest`); only a bead is an attested decision record. A stack file and a manifest row describing one brief produce ONE record and the row is named in `also_recorded_in` -- no document is suppressed without an emitted record that names it. `unreadable` means no body file exists, and nothing else; a brief with a body and no verdict is an ordinary `pending` one. `fields` carries unlock_count, priority, track, form, gates, verdict and (on a stack record) status, each naming the store it was read from, with `conflict` set where two stores disagree. Bodies are off by default -- pass `bodies=true`, or read one brief through `briefs_show`, which always carries it; a record whose body was left out says so in `body_elided` and is never truncated. Optionally filtered by status or label.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -3100,6 +3118,11 @@
         "all_rigs": {
           "default": false,
           "description": "Read every registered rig instead of one. Rows carry `rig_id`, and `rigs` reports each rig's outcome -- a rig that cannot be read is a degraded entry, not a failure of the call.",
+          "type": "boolean"
+        },
+        "bodies": {
+          "default": false,
+          "description": "Attach each document brief's body and parsed sections. Off by default: with every body attached this read measures 5.17 MB city-wide, which makes a roster read a content read.",
           "type": "boolean"
         },
         "city": {
@@ -3194,10 +3217,17 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, a markdown brief file in `.beads/briefs/stack/`, or a decisions-track manifest row that neither of those represents. `source` says which, and must be read before the record is trusted as attested -- only a bead is an attested decision record. A stack file and a manifest row describing one brief produce ONE record, sourced `stack_file`, with the row's readings kept in `fields` and the row named in `also_recorded_in`. No document is ever suppressed without an emitted record that names it.",
             "properties": {
+              "also_recorded_in": {
+                "description": "Other documents describing this same brief, folded into this record: `<manifest>:<line>` for a merged decisions-track row, and that row's own markdown snapshot. Empty when this record has only one document. This is what makes deduplication auditable rather than a claim.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "bead_id": {
-                "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
+                "description": "The canonical decision bead. Null on a document-sourced record: there is no bead.",
                 "type": [
                   "string",
                   "null"
@@ -3335,6 +3365,13 @@
                 },
                 "type": "array"
               },
+              "body_elided": {
+                "description": "Why this record's body is not in this payload, when a body exists and was deliberately left out -- a roster read leaves bodies off by default. Null means nothing was elided: either the body is here, or there is none to carry, which `body_path` tells apart. A body is never shortened, only absent and labelled.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "body_path": {
                 "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
@@ -3346,15 +3383,16 @@
                 "type": "string"
               },
               "canonical_source": {
-                "description": "Which store is authoritative for this record.",
+                "description": "Which store is authoritative for this record. A merged stack/row pair is canonical to the stack file: the file is the brief, and the row is an index entry about it.",
                 "enum": [
                   "bead_store",
+                  "brief_stack_file",
                   "decisions_track_manifest"
                 ],
                 "type": "string"
               },
               "created_at": {
-                "description": "Bead creation timestamp. Null on a manifest record.",
+                "description": "Bead creation timestamp. Null on a document record.",
                 "type": [
                   "string",
                   "null"
@@ -3440,7 +3478,7 @@
                   "title": "FieldReading",
                   "type": "object"
                 },
-                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
                 "title": "BriefFields",
                 "type": "object"
               },
@@ -3582,15 +3620,16 @@
                 "type": "array"
               },
               "source": {
-                "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+                "description": "Which store this record came from. `stack_file` means a markdown brief in `.beads/briefs/stack/`, attested by no bead; `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
                 "enum": [
                   "bead",
-                  "manifest"
+                  "manifest",
+                  "stack_file"
                 ],
                 "type": "string"
               },
               "status": {
-                "description": "Raw bead status, or the manifest row's status string.",
+                "description": "Raw bead status, the stack file's frontmatter status, or the manifest row's status string. On a merged pair the file leads and the row's status is kept in `fields.status`, where the two disagree 28 times live.",
                 "type": [
                   "string",
                   "null"
@@ -3618,14 +3657,14 @@
                 ]
               },
               "track": {
-                "description": "The decisions-track lane a manifest row declares. Null on a bead record.",
+                "description": "The decisions-track lane a document declares. Null on a bead record.",
                 "type": [
                   "string",
                   "null"
                 ]
               },
               "updated_at": {
-                "description": "Bead update timestamp. Null on a manifest record.",
+                "description": "Bead update timestamp. Null on a document record.",
                 "type": [
                   "string",
                   "null"
@@ -3676,7 +3715,9 @@
               }
             },
             "required": [
+              "also_recorded_in",
               "bead_id",
+              "body_elided",
               "body_path",
               "brief_id",
               "canonical_source",
@@ -4176,7 +4217,7 @@
     "title": "Show available brief actions"
   },
   "briefs_show": {
-    "description": "Show one brief's canonical bead state, its body, that body's parsed sections, redundant artifacts, and policy refs. `body` is the verbatim canonical text and stays authoritative: `sections` is a convenience over it, never a replacement.",
+    "description": "Show one brief's canonical bead state, its body, that body's parsed sections, redundant artifacts, and policy refs. `body` is the verbatim canonical text and stays authoritative: `sections` is a convenience over it, never a replacement. Document briefs -- `source` `stack_file` or `manifest` -- are served here too, which is what makes the roster's body elision safe: they reach no other detail surface, because `options`, `doctor` and `validate` all act on a bead.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -4266,8 +4307,15 @@
         "brief": {
           "description": "A brief record plus its canonical body and that body's parsed sections.",
           "properties": {
+            "also_recorded_in": {
+              "description": "Other documents describing this same brief, folded into this record: `<manifest>:<line>` for a merged decisions-track row, and that row's own markdown snapshot. Empty when this record has only one document. This is what makes deduplication auditable rather than a claim.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
             "bead_id": {
-              "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
+              "description": "The canonical decision bead. Null on a document-sourced record: there is no bead.",
               "type": [
                 "string",
                 "null"
@@ -4405,6 +4453,13 @@
               },
               "type": "array"
             },
+            "body_elided": {
+              "description": "Why this record's body is not in this payload, when a body exists and was deliberately left out -- a roster read leaves bodies off by default. Null means nothing was elided: either the body is here, or there is none to carry, which `body_path` tells apart. A body is never shortened, only absent and labelled.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "body_path": {
               "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
               "type": [
@@ -4416,15 +4471,16 @@
               "type": "string"
             },
             "canonical_source": {
-              "description": "Which store is authoritative for this record.",
+              "description": "Which store is authoritative for this record. A merged stack/row pair is canonical to the stack file: the file is the brief, and the row is an index entry about it.",
               "enum": [
                 "bead_store",
+                "brief_stack_file",
                 "decisions_track_manifest"
               ],
               "type": "string"
             },
             "created_at": {
-              "description": "Bead creation timestamp. Null on a manifest record.",
+              "description": "Bead creation timestamp. Null on a document record.",
               "type": [
                 "string",
                 "null"
@@ -4510,7 +4566,7 @@
                 "title": "FieldReading",
                 "type": "object"
               },
-              "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+              "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
               "title": "BriefFields",
               "type": "object"
             },
@@ -4652,15 +4708,16 @@
               "type": "array"
             },
             "source": {
-              "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+              "description": "Which store this record came from. `stack_file` means a markdown brief in `.beads/briefs/stack/`, attested by no bead; `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
               "enum": [
                 "bead",
-                "manifest"
+                "manifest",
+                "stack_file"
               ],
               "type": "string"
             },
             "status": {
-              "description": "Raw bead status, or the manifest row's status string.",
+              "description": "Raw bead status, the stack file's frontmatter status, or the manifest row's status string. On a merged pair the file leads and the row's status is kept in `fields.status`, where the two disagree 28 times live.",
               "type": [
                 "string",
                 "null"
@@ -4688,14 +4745,14 @@
               ]
             },
             "track": {
-              "description": "The decisions-track lane a manifest row declares. Null on a bead record.",
+              "description": "The decisions-track lane a document declares. Null on a bead record.",
               "type": [
                 "string",
                 "null"
               ]
             },
             "updated_at": {
-              "description": "Bead update timestamp. Null on a manifest record.",
+              "description": "Bead update timestamp. Null on a document record.",
               "type": [
                 "string",
                 "null"
@@ -4746,9 +4803,11 @@
             }
           },
           "required": [
+            "also_recorded_in",
             "bead_id",
             "body",
             "body_diagnostics",
+            "body_elided",
             "body_path",
             "brief_id",
             "canonical_source",
@@ -5276,10 +5335,17 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, a markdown brief file in `.beads/briefs/stack/`, or a decisions-track manifest row that neither of those represents. `source` says which, and must be read before the record is trusted as attested -- only a bead is an attested decision record. A stack file and a manifest row describing one brief produce ONE record, sourced `stack_file`, with the row's readings kept in `fields` and the row named in `also_recorded_in`. No document is ever suppressed without an emitted record that names it.",
             "properties": {
+              "also_recorded_in": {
+                "description": "Other documents describing this same brief, folded into this record: `<manifest>:<line>` for a merged decisions-track row, and that row's own markdown snapshot. Empty when this record has only one document. This is what makes deduplication auditable rather than a claim.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "bead_id": {
-                "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
+                "description": "The canonical decision bead. Null on a document-sourced record: there is no bead.",
                 "type": [
                   "string",
                   "null"
@@ -5417,6 +5483,13 @@
                 },
                 "type": "array"
               },
+              "body_elided": {
+                "description": "Why this record's body is not in this payload, when a body exists and was deliberately left out -- a roster read leaves bodies off by default. Null means nothing was elided: either the body is here, or there is none to carry, which `body_path` tells apart. A body is never shortened, only absent and labelled.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "body_path": {
                 "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
@@ -5428,15 +5501,16 @@
                 "type": "string"
               },
               "canonical_source": {
-                "description": "Which store is authoritative for this record.",
+                "description": "Which store is authoritative for this record. A merged stack/row pair is canonical to the stack file: the file is the brief, and the row is an index entry about it.",
                 "enum": [
                   "bead_store",
+                  "brief_stack_file",
                   "decisions_track_manifest"
                 ],
                 "type": "string"
               },
               "created_at": {
-                "description": "Bead creation timestamp. Null on a manifest record.",
+                "description": "Bead creation timestamp. Null on a document record.",
                 "type": [
                   "string",
                   "null"
@@ -5522,7 +5596,7 @@
                   "title": "FieldReading",
                   "type": "object"
                 },
-                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict -- keyed by name, each naming where it was read. Absent keys mean no store holds the field.",
+                "description": "Fields this brief's stores declare -- unlock_count, priority, track, form, gates, verdict, and on a stack-sourced record status -- keyed by name, each naming where it was read. Absent keys mean no store holds the field. A merged stack/row pair carries up to three readings per field, in authority order: the stack file's frontmatter, the manifest row, then the row's own markdown snapshot.",
                 "title": "BriefFields",
                 "type": "object"
               },
@@ -5664,15 +5738,16 @@
                 "type": "array"
               },
               "source": {
-                "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+                "description": "Which store this record came from. `stack_file` means a markdown brief in `.beads/briefs/stack/`, attested by no bead; `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
                 "enum": [
                   "bead",
-                  "manifest"
+                  "manifest",
+                  "stack_file"
                 ],
                 "type": "string"
               },
               "status": {
-                "description": "Raw bead status, or the manifest row's status string.",
+                "description": "Raw bead status, the stack file's frontmatter status, or the manifest row's status string. On a merged pair the file leads and the row's status is kept in `fields.status`, where the two disagree 28 times live.",
                 "type": [
                   "string",
                   "null"
@@ -5700,14 +5775,14 @@
                 ]
               },
               "track": {
-                "description": "The decisions-track lane a manifest row declares. Null on a bead record.",
+                "description": "The decisions-track lane a document declares. Null on a bead record.",
                 "type": [
                   "string",
                   "null"
                 ]
               },
               "updated_at": {
-                "description": "Bead update timestamp. Null on a manifest record.",
+                "description": "Bead update timestamp. Null on a document record.",
                 "type": [
                   "string",
                   "null"
@@ -5758,7 +5833,9 @@
               }
             },
             "required": [
+              "also_recorded_in",
               "bead_id",
+              "body_elided",
               "body_path",
               "brief_id",
               "canonical_source",

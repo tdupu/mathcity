@@ -247,6 +247,26 @@ meaning = "More than one brief body file normalises to the same slug; the sorted
 policy_ref = "B2.10"
 module = "manifest.py"
 
+# MBRF067-MBRF068 belong to the stack directory read as a fourth read-side
+# source (documents.py). Slices 6 and 7 suppressed 46 manifest rows because a
+# stack file "already represented" them, while nothing read stack files at all
+# -- so the dedup subtracted 46 briefs and added none. The stack is now read,
+# the join merges rather than drops, and these two say what the join found.
+# WARN for the same reason as MBRF060-066: a document either source cannot use
+# costs that brief's visibility and nothing else.
+
+[MBRF067]
+severity = "WARN"
+meaning = "Brief stack directory could not be listed, so its files are unreachable."
+policy_ref = "B2.10"
+module = "documents.py"
+
+[MBRF068]
+severity = "WARN"
+meaning = "One brief is stored twice with different text -- a stack file and a decisions-track snapshot; the stack file is shown and the other copy is named in `also_recorded_in`."
+policy_ref = "B2.10"
+module = "documents.py"
+
 [MCTL_BEAD_UPDATE_RACE_LOST]
 severity = "FATAL"
 meaning = "Another actor changed the bead between plan and apply; the guarded write was skipped."

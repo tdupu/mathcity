@@ -430,13 +430,17 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -
         )
         rig = str(brief.get("rig_id") or "") or None
         rig_cell = f'<td><span class="mono">{_e(rig or "-")}</span></td>' if show_rig else ""
-        # A manifest-sourced row has no bead. Its slug is the only identity it
-        # has, so the identity cell shows the slug and says outright that no
-        # bead is behind it -- an empty cell would read as a lost bead id.
+        # A document-sourced record has no bead. Its slug is the only identity
+        # it has, so the identity cell shows the slug and says outright that no
+        # bead is behind it -- an empty cell would read as a lost bead id. The
+        # badge names *which* document, because a deposited stack file awaiting
+        # a verdict and a decisions-track index row are different things.
         identity = brief.get("bead_id") or brief.get("brief_id")
-        origin = (
-            "" if str(brief.get("source") or "bead") == "bead" else ' <span class="badge">manifest-only</span>'
-        )
+        origin = {
+            "bead": "",
+            "stack_file": ' <span class="badge">stack file</span>',
+            "manifest": ' <span class="badge">manifest-only</span>',
+        }.get(str(brief.get("source") or "bead"), ' <span class="badge">no bead</span>')
         rows.append(
             "<tr>"
             + rig_cell
@@ -483,8 +487,8 @@ def queue_panel(briefs: Sequence[Mapping[str, Any]]) -> str:
         '<section class="panel" data-region="queue">'
         f"<h2>Decision queue ({len(briefs)} briefs)</h2>"
         '<p class="lede">Canonical source: <span class="mono">bead_store</span>, plus '
-        'decisions-track rows no bead represents (each record names its own '
-        '<span class="mono">source</span>). '
+        'brief stack files and decisions-track rows no bead represents (each record '
+        'names its own <span class="mono">source</span>). '
         'Read through <span class="mono">briefs_list</span>.</p>'
         '<div class="scroll-x"><table><thead><tr><th>State</th><th>Count</th><th>Meaning</th></tr></thead>'
         f"<tbody>{cells}</tbody></table></div>"

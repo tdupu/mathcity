@@ -237,7 +237,9 @@ def test_briefs_list_carries_no_bead_body(tmp_path: Path):
     assert "body" not in listed
     assert "sections" not in listed
     assert set(listed) == {
+        "also_recorded_in",
         "bead_id",
+        "body_elided",
         "body_path",
         "brief_id",
         "canonical_source",

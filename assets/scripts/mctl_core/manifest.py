@@ -246,6 +246,11 @@ class ManifestIssue:
     message: str
     line: int | None = None
     detail: str | None = None
+    #: The file the issue is about, when that is not the manifest itself.
+    #: `documents.py` reads stack files through this same shape, and an issue
+    #: about `briefs/stack/x-brief.md` reported at the manifest's path would
+    #: send an operator to the wrong file.
+    location: str | None = None
 
 
 @dataclass(frozen=True)
@@ -525,6 +530,14 @@ def manifest_records(manifest_path: Path, stack_dir: Path) -> ManifestReading:
     Bodies come from the manifest's own directory, because that is where they
     are: 204 `.md` files sit beside `manifest.jsonl`, and Slice 6 read the one
     without ever listing the other.
+
+    **This is half of an answer, and must not be used to build a roster on its
+    own.** It drops every row a stack file's slug matches -- 46 live -- on the
+    assumption that the caller emits the stack side. Slices 6 and 7 made that
+    assumption and no reader kept it, so the 46 reached nothing at all. The
+    roster reads `documents.read_documents`, which merges the two instead and
+    can prove nothing was subtracted. What remains here is the manifest half,
+    for callers that want exactly that and know what it excludes.
     """
     return read_manifest(manifest_path, represented=represented_slugs(stack_dir))
 
@@ -616,12 +629,26 @@ def _verdict(row: Mapping[str, object], frontmatter: Mapping[str, str]) -> Verdi
     )
 
 
-def _timestamp(row: Mapping[str, object]) -> tuple[str | None, str | None]:
-    for key in TIMESTAMP_KEYS:
+def first_timestamp(
+    row: Mapping[str, object], keys: Iterable[str] = TIMESTAMP_KEYS
+) -> tuple[str | None, str | None]:
+    """The first date `row` actually carries, and which key it came from.
+
+    `keys` is a parameter because a stack file's frontmatter spells its dates
+    differently from a manifest row (`deposited_at` on 43 live files, against
+    the row's `briefed_at`), and the rule -- take the first key present,
+    verbatim, or report None -- is the same one either way. Nothing is
+    derived: no mtime, no today.
+    """
+    for key in keys:
         value = row.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip(), key
     return None, None
+
+
+def _timestamp(row: Mapping[str, object]) -> tuple[str | None, str | None]:
+    return first_timestamp(row, TIMESTAMP_KEYS)
 
 
 def _slug(row: Mapping[str, object]) -> str | None:

@@ -157,13 +157,26 @@ def read_frontmatter(text: str) -> Mapping[str, str]:
 
 
 def frontmatter_value(
-    frontmatter: Mapping[str, str], name: str, *, key: str | None = None
+    frontmatter: Mapping[str, str],
+    name: str,
+    *,
+    key: str | None = None,
+    field: str | None = None,
 ) -> FieldValue | None:
-    """One frontmatter key as a `FieldValue`, or None when it is absent."""
+    """One frontmatter key as a `FieldValue`, or None when it is absent.
+
+    `field` overrides the reported location. One brief can be stored as two
+    markdown files -- a stack file and a decisions-track snapshot beside the
+    manifest -- and a merged record holding both readings under an identical
+    `frontmatter.form` would say which *kind* of document each came from
+    while hiding which one.
+    """
     value = _unquote(frontmatter.get(key or name, ""))
     if not value:
         return None
-    return FieldValue(value, SOURCE_FRONTMATTER, CONFIDENCE_HIGH, f"frontmatter.{key or name}")
+    return FieldValue(
+        value, SOURCE_FRONTMATTER, CONFIDENCE_HIGH, field or f"frontmatter.{key or name}"
+    )
 
 
 def row_value(row: Mapping[str, object], name: str, *, field: str) -> FieldValue | None:
