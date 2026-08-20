@@ -183,22 +183,16 @@ do not assume the cause.
 Do NOT assume an id is missing from the roster just because its rig is absent
 from `city.toml`; `city_rig_entries` is the authority, not the config file.
 
-`gt-*` ids are therefore covered by the STATE rows like any other rig when HQ
-answers. The direct probe below remains the fallback for when HQ is degraded,
-and for any id whose prefix is in no registered rig at all:
+`gt-*` ids are therefore covered by the STATE rows like any other rig.
 
-```bash
-bead_status=$(cd "$CITY_ROOT" && bd show "$TARGET" 2>/dev/null \
-  | grep -m1 "^Status:" | awk '{print $2}')
-```
-
-> **Known-dead probe (verified 2026-08-18, bd 1.1.0).** `bd show` no longer
-> emits a `^Status:` line — status is rendered inline in the header
-> (`○ gsp-nq3ut1 · … [● P2 · OPEN]`). This grep has therefore been returning
-> empty for every brief, making this fallback a silent no-op. Routing decision
-> beads through `mctl` fixes the registered rigs; `gt-*` stays unfiltered until
-> the parse is repaired. Do not "fix" it by guessing the format — confirm
-> against the installed `bd` first.
+**There is deliberately no `bd` fallback here.** One used to live at this point —
+`bd show "$TARGET" | grep -m1 "^Status:"` — and it was doubly wrong: `bd show`
+stopped emitting a `^Status:` line (status is inline in the header), so it
+returned empty for every brief and the filter it fed was a silent no-op; and it
+was a direct store read, which `mctl` is supposed to answer. Deleted once `hq`
+joined the roster left it nothing to fall back for. **Do not reintroduce a
+direct `bd` read here** — if `mctl` cannot answer something this skill needs,
+that is an interface gap to report, not a probe to hand-roll.
 
 ### 4. Compute age
 
@@ -257,10 +251,15 @@ the name.
 Steps 2, 4, and 5 stay hand-rolled because `mctl` has no command that produces
 their data. Do **not** invent an mctl subcommand to close these:
 
-- **`unlock_count`, `deposited_at`, `epic`** — brief-file frontmatter. `mctl
-  briefs list` exposes only `brief_id` / `title` / `status` / `decision_state` /
-  `labels` / `created_at` / `updated_at` (plus `rig_id` under `--all-rigs`); the
-  ranking key this skill sorts on is not modelled anywhere in `mctl_core`.
+- **`epic`** — genuinely absent: 0 of 415 records, top level or field map.
+  **`unlock_count` and `deposited_at` are NOT gaps** — corrected 2026-08-20.
+  `2da256d` made the field map open, so a document's own keys arrive with it.
+  Measured on the live city: `unlock_count` 0 top-level but **159 of 415 in
+  `fields`**, `deposited_at` 18 of 415. So the ranking key IS on the wire; it is
+  simply not top-level, which is where a consumer looks first. Read it out of
+  `fields[key]["value"]` rather than parsing frontmatter. (Coverage is under
+  investigation by the mctl owner — 159 records against 192 files carrying the
+  key — so treat absence as "not on this record", not "not available".)
 - **`status: approved` frontmatter** — the brief-quality gate flag. `mctl`
   models the adjudication verdict, not the gate flag.
 - **Stack residency** — `mctl` reports it (`redundant_artifacts[kind=
