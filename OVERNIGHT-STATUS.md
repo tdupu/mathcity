@@ -307,3 +307,42 @@ of mine.
 Nothing. Outstanding from cozy unchanged: `title`/`bead_id` on `briefs_list`
 rows, first-class `no_brainer`, `defer_until` on the read path. Merge still
 gated and unrequested.
+
+---
+
+## 12:20 — hourly check
+
+**Tests green: 713 passing. 22 commits.** `/queue?rig=hq` 200 (slow, 30s under
+load). No reply from cozy since 06:20; `main` unchanged.
+
+### The importance sliders were decorative
+
+Found while compiling the "what's left" list for Taylor: `score()` has always
+taken a `weights` argument and **neither call site passed one**. Moving a
+slider rewrote the query string and changed nothing — the fourth control this
+run that was written and wired to nothing, and the same shape as a
+disabled-looking radio that submits: the page asserting something about itself
+that is not true.
+
+Fixed. Weights now reach the rendered Score cell and the sort comparator.
+Verified live: sorting by score with unlock weighted heavily versus priority
+weighted heavily returns **different top briefs**.
+
+The sidebar note claimed the sliders had nothing to reorder because
+`unlock_count` and priority "are not exposed by the core". They are, and were —
+that was the two-shape read bug. Corrected.
+
+**One of my tests was a false pass before it was a real one.** It diffed whole
+pages, which differ regardless because the weights ride in the query string. It
+asserts on the rendered cell now. Worth noting because a false-passing test is
+the same defect class as everything else this run: something reporting success
+without having looked.
+
+### Blocked / needs Taylor
+
+- Merge still gated and unrequested.
+- Awaiting a call on what to take next: bulk action bar vs the remaining
+  template features. Full "what's left" list delivered in conversation.
+- Unchanged asks of cozy: `title`/`bead_id` on `briefs_list` rows, first-class
+  `no_brainer`, `defer_until` on the read path, `decision_state`/`status`
+  reconciliation.
