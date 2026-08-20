@@ -70,7 +70,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/stale-claim-check.sh"
+path = "../assets/scripts/checks/stale-claim-check.sh"
 timeout = "1m"
 
 [[steps]]

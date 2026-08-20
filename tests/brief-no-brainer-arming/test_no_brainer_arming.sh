@@ -483,19 +483,25 @@ fi
 cleanup
 
 echo "=== 31. the pack never ships a formula pointing at a check it does not provide ==="
-# Under an ARMED default the gate script's PRESENCE is load-bearing: the
-# formula names it by rig-relative path, so a pack that referenced a check it
-# does not ship would be relying entirely on the runner failing closed.
+# Under an ARMED default the gate script's PRESENCE is load-bearing. Check
+# paths are declared in the "../assets/scripts/checks/<name>.sh" form, which gc
+# resolves at cook time to the absolute path of the highest-priority formula
+# layer that ships the script (see drift-audit D9). Two things are asserted:
+# every referenced check really ships, and no formula has regressed to the
+# legacy rig-relative ".gc/scripts/checks/..." form, which requires a per-rig
+# install that nothing in gascity performs.
 missing_checks=""
-for ref in $(grep -ho '\.gc/scripts/checks/[a-z0-9-]*\.sh' "$RIG_ROOT"/formulas/*.toml | sort -u); do
+legacy_refs="$(grep -ho '"\.gc/scripts/checks/[a-z0-9-]*\.sh' "$RIG_ROOT"/formulas/*.toml "$RIG_ROOT"/gates/*.toml 2>/dev/null | sort -u)"
+asset_refs="$(grep -ho '\.\./assets/scripts/checks/[a-z0-9-]*\.sh' "$RIG_ROOT"/formulas/*.toml | sort -u)"
+for ref in $asset_refs; do
   base="$(basename "$ref")"
   [ -f "$RIG_ROOT/assets/scripts/checks/$base" ] || missing_checks="$missing_checks $base"
 done
 gate_sh="$RIG_ROOT/assets/scripts/checks/brief-no-brainer-execute-safety.sh"
-if [ -z "$missing_checks" ] && [ -x "$gate_sh" ]; then
-  ok "every formula-referenced check ships in the pack and the gate is executable"
+if [ -z "$missing_checks" ] && [ -n "$asset_refs" ] && [ -z "$legacy_refs" ] && [ -x "$gate_sh" ]; then
+  ok "every formula-referenced check ships in the pack, none use the legacy rig-relative form, and the gate is executable"
 else
-  no "formula-referenced checks missing from the pack:$missing_checks (gate executable: $([ -x "$gate_sh" ] && echo yes || echo NO))"
+  no "check-path references are wrong (missing from pack:$missing_checks; legacy rig-relative refs:$(printf '%s' "$legacy_refs" | tr '\n' ' '); asset refs found: $(printf '%s' "$asset_refs" | grep -c . || true); gate executable: $([ -x "$gate_sh" ] && echo yes || echo NO))"
 fi
 
 echo "=== 32. the guarded-execute step is gated by the EXECUTE check, not the weaker one ==="

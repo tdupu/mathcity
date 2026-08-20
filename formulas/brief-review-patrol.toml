@@ -143,5 +143,5 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-review-patrol-record-required.sh"
+path = "../assets/scripts/checks/brief-review-patrol-record-required.sh"
 timeout = "1m"

@@ -162,7 +162,7 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-decision-record-required.sh"
+path = "../assets/scripts/checks/brief-decision-record-required.sh"
 timeout = "1m"
 
 [[steps]]
@@ -235,5 +235,5 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-manifest-current.sh"
+path = "../assets/scripts/checks/brief-manifest-current.sh"
 timeout = "1m"

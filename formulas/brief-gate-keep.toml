@@ -61,7 +61,7 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-mechanical-gates-required.sh"
+path = "../assets/scripts/checks/brief-mechanical-gates-required.sh"
 timeout = "2m"
 
 [[steps]]
@@ -86,7 +86,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-no-brainer-classification-evidence.sh"
+path = "../assets/scripts/checks/brief-no-brainer-classification-evidence.sh"
 timeout = "1m"
 
 [[steps]]
@@ -112,5 +112,5 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-disposition-required.sh"
+path = "../assets/scripts/checks/brief-disposition-required.sh"
 timeout = "2m"

@@ -71,7 +71,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-no-brainer-safety.sh"
+path = "../assets/scripts/checks/brief-no-brainer-safety.sh"
 timeout = "1m"
 
 [[steps]]
@@ -146,7 +146,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-no-brainer-execute-safety.sh"
+path = "../assets/scripts/checks/brief-no-brainer-execute-safety.sh"
 timeout = "1m"
 
 [[steps]]

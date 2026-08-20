@@ -56,7 +56,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-drain-manifest.sh"
+path = "../assets/scripts/checks/brief-drain-manifest.sh"
 timeout = "1m"
 
 [[steps]]
