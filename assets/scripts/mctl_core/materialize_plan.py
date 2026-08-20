@@ -141,7 +141,7 @@ _EXISTING_BEAD_KEYS = ("brief_bead", "decision_bead", "brief_record_bead", "repa
 #: therefore not ids, which is the correct reading -- none of them is a bead.
 _BEAD_ID = re.compile(r"\b([a-z][a-z0-9_]{1,6})-([a-z0-9]{3,8}(?:\.\d+)?)\b")
 
-_FRONTMATTER_LINE = re.compile(r"^([A-Za-z0-9_.-]+):\s*(.*)$")
+FRONTMATTER_LINE = re.compile(r"^([A-Za-z0-9_.-]+):\s*(.*)$")
 
 
 @dataclass(frozen=True)
@@ -228,7 +228,7 @@ def parse_stack_file(name: str, text: str) -> StackFile:
         end = text.find("\n---", 3)
         if end > 0:
             for line in text[4:end].splitlines():
-                match = _FRONTMATTER_LINE.match(line)
+                match = FRONTMATTER_LINE.match(line)
                 if match:
                     frontmatter[match.group(1)] = match.group(2).strip()
     return StackFile(name=name, frontmatter=frontmatter)
