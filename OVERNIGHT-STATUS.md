@@ -185,3 +185,42 @@ token, `verdict: revise`, the `[no-brainer]` marker inside the recorded reason,
 and the `if_status: open` staleness guard intact.
 
 **15 commits, 702 tests passing.**
+
+---
+
+## 10:20 — hourly check
+
+**Tests green: 705 passing. 17 commits.** Dashboard healthy. No reply from cozy
+since 06:20; `main` unchanged since the last rebase.
+
+### The city got busy, and it exposed two defects
+
+`/queue?rig=hq` went from 4.6s to 23s between checks. Diagnosed rather than
+guessed: Dolt is healthy (229ms, `SHOW FULL PROCESSLIST` clean), but the fleet
+is running wisp queries and the store is contended. **Not a regression I
+introduced** — but the contention surfaced two real bugs.
+
+**1. A rig-filtered page was reading all seventeen rigs.** Per-call timing
+showed `briefs_list {all_rigs: True}` at 22.5s on a page showing one rig, then
+discarding sixteen. It was also claiming something untrue: the degraded-rig
+panel reports whether totals cover the whole city — a city-wide claim on a
+rig-scoped page. A named rig is now read on its own.
+
+**2. The brief page called a live brief missing.** Under load it returned
+"No such brief" for `gt-2kxxsq`, which had rendered a minute earlier and
+rendered again a minute later. Every `ToolFailure` was being rendered as a 404,
+so a store that timed out was reported as a bead that does not exist — the same
+defect as a silently short city-wide total, and it sends the operator hunting
+for something that was never missing. `MBRF010` is now the only code that
+claims absence; everything else renders as a failure to read, at 503.
+
+That is the fourth instance tonight of the same shape: **a failure to look
+reported as a finding.** It is the defect this project keeps producing.
+
+### In flight / blocked
+
+Nothing blocking. Absolute page times are inflated while the fleet is busy —
+the rig-scoped fix helps but the floor is core-side and contended.
+
+Still needed from cozy, unchanged: `title` and `bead_id` on `briefs_list` rows;
+first-class `no_brainer`. Merge still gated and unrequested.
