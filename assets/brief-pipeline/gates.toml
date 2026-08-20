@@ -5,6 +5,24 @@
 # `rules` join keys, evidence keys) and MUST match the policy table. Any
 # mismatch is PP1.7 drift: repair THIS file to match the table (never the
 # reverse). check-brief-policy audits the diff mechanically.
+#
+# REPAIR ROUTING (repair_kind / repair_skill). The owner's gate-keep ruling
+# (2026-06-23) is a trinity per gate: X-policy + X-gate + improve-X. Only G14
+# ever got it, and nothing read it. These keys make the repair half declarable
+# on every gate and readable by the drain, which now attaches the routing to
+# each failed gate so a repair pass knows what to do.
+#   repair_kind = "skill"      -> repair_skill names a skill that MUST exist.
+#   repair_kind = "discard"    -> a failure ends the work; never auto-repaired.
+#                                 Derived from kind = "stop" (G5, G5b, G12:
+#                                 server-touching, user-skill-touching, kill
+#                                 switch). The "reject and close" disposition,
+#                                 not a repair.
+#   repair_kind = "unassigned" -> no repair exists yet. Said out loud on
+#                                 purpose: naming a plausible-but-absent skill
+#                                 is the #69/#73 defect class, a reference to
+#                                 something nothing installs. 13 gates are here
+#                                 today; the count is a burn-down asserted by
+#                                 tests/brief-gate-repair-routing.
 [registry]
 name = "brief-pipeline-gates"
 version = 1
@@ -20,6 +38,7 @@ kind = "mechanical"
 required = true
 rules = ["T1", "T3"]
 evidence_key = "G1 Test-evidence"
+repair_kind = "unassigned"
 policy = "test-evidence-required.md"
 description = "Any claim about tests must include the exact command, scope, result, and date, or an explicit N/A with surface-check evidence."
 
@@ -30,6 +49,7 @@ kind = "review"
 required = true
 rules = ["T6"]
 evidence_key = "G2 Good-test"
+repair_kind = "unassigned"
 policy = "is-good-test/SKILL.md"
 description = "A named reviewer judges that the test meaningfully tests the claimed behavior."
 
@@ -41,6 +61,7 @@ required = true
 # rules per the POLICY.md gate-inventory table (G3 -> T1, B1.4)
 rules = ["T1", "B1.4"]
 evidence_key = "G3 Shell-scripts-testable"
+repair_kind = "unassigned"
 description = "Shell-script changes name runnable validation, or explicitly state that no script surface is touched."
 
 [[gates]]
@@ -50,6 +71,7 @@ kind = "review"
 required = true
 rules = ["B1.6"]
 evidence_key = "G4 Critical-review"
+repair_kind = "unassigned"
 policy = "critical-review/SKILL.md"
 description = "An external critical-review pass hunting correctness risks, policy misses, missing evidence, and forced follow-up questions."
 
@@ -60,6 +82,7 @@ kind = "stop"
 required = true
 rules = ["S7", "N3", "B1.3"]
 evidence_key = "G5 Server-touching"
+repair_kind = "discard"
 description = "Server-touching work cannot pass through the shortcut path without explicit the human adjudicator authorization."
 
 [[gates]]
@@ -69,6 +92,7 @@ kind = "stop"
 required = true
 rules = ["N3", "B1.3"]
 evidence_key = "G5b User-skill-touching"
+repair_kind = "discard"
 description = "User skill changes cannot pass through shortcut automation without explicit the human adjudicator authorization."
 
 [[gates]]
@@ -78,6 +102,7 @@ kind = "manual"
 required = true
 rules = ["L1", "L2", "L3", "L4"]
 evidence_key = "G6 LaTeX-gate"
+repair_kind = "unassigned"
 policy = "latex-gate-policy.md"
 description = "LaTeX-bearing work needs the LaTeX gate outcome or an explicit no-LaTeX surface check."
 
@@ -88,6 +113,7 @@ kind = "mechanical"
 required = true
 rules = ["E6"]
 evidence_key = "G7 Artifacts-staging"
+repair_kind = "unassigned"
 description = "Artifacts must be staged under the brief run directory and referenced from the brief."
 
 [[gates]]
@@ -97,6 +123,7 @@ kind = "mechanical"
 required = true
 rules = ["B1.7", "B2.9", "B2.10", "B3.3", "N7"]
 evidence_key = "G8 Brief-record"
+repair_kind = "unassigned"
 description = "Bead records (brief bead type=decision), source links, pile membership, and recorded-verdict/archive records all consistent (one-bead model)."
 
 [[gates]]
@@ -107,6 +134,7 @@ required = true
 # rules per the POLICY.md gate-inventory table (G9 -> N1-N4, N6, N9)
 rules = ["N1", "N2", "N3", "N4", "N6", "N9"]
 evidence_key = "G9 No-brainer-filter"
+repair_kind = "unassigned"
 policy = "no-brainer-brief-filter.md"
 description = "No-brainer classifier evidence must record exactly one state: known_no_brainer, known_non_no_brainer, candidate, capability_blocker, or safety_blocked. Missing, malformed, or stale classification evidence blocks shortcut handling and stack promotion."
 
@@ -117,6 +145,7 @@ kind = "mechanical"
 required = true
 rules = ["D1", "B4.3"]
 evidence_key = "G10 Improve-README"
+repair_kind = "unassigned"
 policy = "improve-readme-every-iteration.md"
 description = "Each qualifying iteration must show the README improvement or explain why no README surface exists."
 
@@ -127,6 +156,7 @@ kind = "mechanical"
 required = true
 rules = ["D4", "E6"]
 evidence_key = "G11 Breadcrumb"
+repair_kind = "unassigned"
 policy = "experiment-breadcrumbs.md"
 description = "Experiment or deferred work must leave a durable breadcrumb to the source, artifacts, and next owner."
 
@@ -137,6 +167,7 @@ kind = "stop"
 required = true
 rules = ["N5"]
 evidence_key = "G12 Auto-merge-kill-switch"
+repair_kind = "discard"
 # N5 (Adopted 2026-07-12): auto-execute is the DEFAULT and the switches are
 # brakes, not enablers. Reaffirmed by the owner 2026-08-19. The enforcing gate
 # (brief-check.sh `no-brainer-execute-safety`) applies that default and adds
@@ -154,6 +185,7 @@ required = true
 # rules per the POLICY.md gate-inventory table (G13 -> B1.5)
 rules = ["B1.5"]
 evidence_key = "G13 Stale-claim"
+repair_kind = "unassigned"
 description = "Briefs must not rely on stale claims; claim freshness or revalidation must be recorded."
 
 [[gates]]
@@ -163,6 +195,8 @@ kind = "mechanical"
 required = true
 rules = ["T7"]
 evidence_key = "G14 Test-execution-silent"
+repair_kind = "skill"
+repair_skill = "improve-test-execution-silent"
 policy = "test-execution-request-brief-type.md"
 gate_skill = "gate-test-execution-silent"
 improve_skill = "improve-test-execution-silent"
@@ -175,6 +209,7 @@ kind = "mechanical"
 required = true
 rules = ["D2", "B4.3"]
 evidence_key = "G15 Improve-README-silent"
+repair_kind = "unassigned"
 description = "A missing README improvement cannot be silent; the brief must record applied or N/A evidence."
 
 [[gates]]
@@ -184,6 +219,7 @@ kind = "mechanical"
 required = true
 rules = ["T2"]
 evidence_key = "G16 Master-current"
+repair_kind = "unassigned"
 description = "Test evidence that depends on main/master state must record the base ref used."
 
 [profiles.standard]

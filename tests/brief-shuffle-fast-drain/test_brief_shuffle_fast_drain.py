@@ -89,6 +89,27 @@ feedback_sink: brief_quality_failure
         with GATES.open("rb") as handle:
             return tomllib.load(handle)
 
+    def write_pile_manifest(self, *rows):
+        """Write pile rows in the live city's convention.
+
+        Measured against <city-root>/.beads/briefs/.pile/manifest.jsonl on
+        2026-08-20: all 22 rows round-trip byte-identically under a plain
+        `json.dumps(row)` -- default separators, insertion key order, no
+        sorting. The stack index uses a different convention.
+        """
+        path = self.brief_root / ".pile/manifest.jsonl"
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return path
+
+    def read_pile_manifest_rows(self):
+        path = self.brief_root / ".pile/manifest.jsonl"
+        return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+
+    def reject_brief(self, slug, **kwargs):
+        brief = self.write_brief(slug, **kwargs)
+        brief.write_text(brief.read_text().replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL"))
+        return brief
+
     def test_valid_standard_brief_promotes_to_stack(self):
         self.write_brief("standard-ok")
         report = self.json_output(self.run_drain("--apply"))
@@ -368,6 +389,217 @@ feedback_sink: brief_quality_failure
         self.assertEqual(report["recovered"], ["sidecar-recovery"])
         self.assertEqual(report["rejected"], ["sidecar-recovery"])
         self.assertTrue((self.brief_root / ".pile/.rejected/sidecar-recovery/rejection.json").is_file())
+
+    # --- all failing gates, not just the first ------------------------------
+    #
+    # evaluate() returned on the FIRST failing gate, so rejection.json recorded
+    # exactly one reason. A repair track built on that data gets one repair item
+    # per round trip: fix G4, resubmit, fail G3, resubmit. The drain must report
+    # every quality gate that failed so one repair pass can clear them all.
+    #
+    # Stop gates (G5 server-touching, G5b user-skill-touching, G12 kill-switch)
+    # are the deliberate exception: they are `kind = "stop"` in gates.toml and a
+    # brief that trips one must NOT be auto-repaired. A stop failure short-
+    # circuits, is reported alone, and is marked non-repairable.
+
+    def test_every_failing_quality_gate_is_reported_not_just_the_first(self):
+        brief = self.write_brief("many-failures")
+        brief.write_text(brief.read_text()
+                         .replace("G3 Shell-scripts-testable: PASS", "G3 Shell-scripts-testable: FAIL")
+                         .replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL")
+                         .replace("G10 Improve-README: PASS", "G10 Improve-README: FAIL"))
+        self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/many-failures/rejection.json").read_text())
+        failed = [f["gate"] for f in rejection["failures"]]
+        self.assertEqual(failed, ["G3", "G4", "G10"])
+        self.assertTrue(all(f["repairable"] for f in rejection["failures"]))
+
+    def test_reason_still_names_the_first_failure_so_fingerprints_are_stable(self):
+        # brief-quality-failure-record.py:109 reads `reason` to build
+        # failed_gate and failure_fingerprint. Track 1 groups on that
+        # fingerprint, so `reason` must keep its exact meaning.
+        brief = self.write_brief("stable-fingerprint")
+        brief.write_text(brief.read_text()
+                         .replace("G3 Shell-scripts-testable: PASS", "G3 Shell-scripts-testable: FAIL")
+                         .replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL"))
+        report = self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/stable-fingerprint/rejection.json").read_text())
+        self.assertEqual(rejection["reason"], "G3 Shell-scripts-testable: FAIL")
+        self.assertEqual(report["reasons"]["stable-fingerprint"], "G3 Shell-scripts-testable: FAIL")
+
+    def test_a_stop_gate_short_circuits_and_is_marked_non_repairable(self):
+        brief = self.write_brief("stop-gate")
+        brief.write_text(brief.read_text()
+                         .replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL")
+                         .replace("G5 Server-touching: PASS", "G5 Server-touching: FAIL"))
+        self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/stop-gate/rejection.json").read_text())
+        self.assertEqual([f["gate"] for f in rejection["failures"]], ["G5"])
+        self.assertFalse(rejection["failures"][0]["repairable"])
+        self.assertEqual(rejection["reason"], "G5 Server-touching: FAIL")
+
+    def test_a_passing_brief_records_no_failures(self):
+        self.write_brief("clean")
+        self.json_output(self.run_drain("--apply"))
+        self.assertTrue((self.brief_root / "stack/clean.md").is_file())
+
+    def test_a_frontmatter_error_is_not_reported_as_a_gate_failure(self):
+        # Absent means absent: a malformed profile is not a gate that failed.
+        self.write_brief("bad-profile", profile="unknown")
+        self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/bad-profile/rejection.json").read_text())
+        self.assertEqual(rejection["failures"], [])
+        self.assertIn("unknown gate profile", rejection["reason"])
+
+    def test_missing_and_failed_gates_both_appear_in_the_failure_list(self):
+        brief = self.write_brief("mixed-failures")
+        brief.write_text(brief.read_text()
+                         .replace("G3 Shell-scripts-testable: PASS\n", "")
+                         .replace("G4 Critical-review: PASS", "G4 Critical-review: BLOCKED"))
+        self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/mixed-failures/rejection.json").read_text())
+        by_gate = {f["gate"]: f for f in rejection["failures"]}
+        self.assertEqual(by_gate["G3"]["status"], "missing")
+        self.assertEqual(by_gate["G4"]["status"], "BLOCKED")
+
+    # --- pile manifest: the fourth representation of a pile brief -------------
+    #
+    # The disposition moved the file to .pile/.rejected/<slug>/ and wrote
+    # rejection.json but left <pile>/manifest.jsonl untouched. On the live city
+    # that stranded 22 of 22 rows reading "status": "ready".
+
+    def test_gate_failure_marks_the_pile_manifest_row_rejected(self):
+        self.write_pile_manifest(
+            {"n": 1, "slug": "gate-fail", "form": "full", "status": "ready",
+             "requires_taylor_adjudication": True})
+        self.reject_brief("gate-fail")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["manifest_updated"], ["gate-fail"])
+        row = self.read_pile_manifest_rows()[0]
+        self.assertEqual(row["status"], "rejected")
+        self.assertIn("G4 Critical-review: FAIL", row["rejection_reason"])
+
+    def test_manifest_rejected_at_matches_the_sidecar(self):
+        self.write_pile_manifest({"n": 1, "slug": "stamped", "status": "ready"})
+        self.reject_brief("stamped")
+        self.json_output(self.run_drain("--apply"))
+        sidecar = json.loads((self.brief_root / ".pile/.rejected/stamped/rejection.json").read_text())
+        self.assertEqual(self.read_pile_manifest_rows()[0]["rejected_at"], sidecar["rejected_at"])
+
+    def test_numbered_brief_filename_resolves_to_its_manifest_row(self):
+        self.write_pile_manifest(
+            {"n": 18, "slug": "unrelated", "status": "ready"},
+            {"n": 19, "slug": "mc-x6a-dead-target-router-beads", "status": "ready"})
+        self.reject_brief("19-mc-x6a-dead-target-router-beads-brief")
+        self.json_output(self.run_drain("--apply"))
+        rows = self.read_pile_manifest_rows()
+        self.assertEqual(rows[0]["status"], "ready")
+        self.assertEqual(rows[1]["status"], "rejected")
+
+    def test_a_slug_that_itself_ends_in_brief_is_not_over_stripped(self):
+        self.write_pile_manifest(
+            {"n": 14, "slug": "gt-1f2781-downstream-filter-rule-brief", "status": "ready"},
+            {"n": 15, "slug": "gt-1f2781-downstream-filter-rule", "status": "ready"})
+        self.reject_brief("14-gt-1f2781-downstream-filter-rule-brief")
+        self.json_output(self.run_drain("--apply"))
+        rows = self.read_pile_manifest_rows()
+        self.assertEqual(rows[0]["status"], "rejected")
+        self.assertEqual(rows[1]["status"], "ready")
+
+    def test_only_the_changed_row_is_reserialized(self):
+        manifest = self.write_pile_manifest(
+            {"n": 1, "slug": "keep-me", "status": "ready", "no_brainer_verdict": "candidate"},
+            {"n": 2, "slug": "reject-me", "status": "ready"},
+            {"n": 3, "slug": "keep-me-too", "status": "ready", "requires_taylor_adjudication": True})
+        before = manifest.read_text().splitlines()
+        self.reject_brief("reject-me")
+        self.json_output(self.run_drain("--apply"))
+        after = manifest.read_text().splitlines()
+        self.assertEqual(len(before), len(after))
+        self.assertEqual(before[0], after[0])
+        self.assertEqual(before[2], after[2])
+        self.assertNotEqual(before[1], after[1])
+
+    def test_no_matching_manifest_row_reports_rather_than_invents(self):
+        self.write_pile_manifest({"n": 1, "slug": "someone-else", "status": "ready"})
+        self.reject_brief("no-row-here")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["manifest_updated"], [])
+        self.assertIn("no manifest row", report["manifest_aborted"]["no-row-here"])
+        self.assertEqual(self.read_pile_manifest_rows(),
+                         [{"n": 1, "slug": "someone-else", "status": "ready"}])
+
+    def test_ambiguous_manifest_match_writes_nothing(self):
+        self.write_pile_manifest({"n": 1, "slug": "twin", "status": "ready"},
+                                 {"n": 1, "slug": "twin", "status": "ready"})
+        self.reject_brief("twin")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertIn("ambiguous", report["manifest_aborted"]["twin"])
+        self.assertTrue(all(r["status"] == "ready" for r in self.read_pile_manifest_rows()))
+
+    def test_absent_pile_manifest_does_not_block_the_disposition(self):
+        self.reject_brief("no-manifest")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], ["no-manifest"])
+        self.assertTrue((self.brief_root / ".pile/.rejected/no-manifest/brief.md").is_file())
+        self.assertIn("no pile manifest", report["manifest_aborted"]["no-manifest"])
+
+    def test_manifest_write_failure_leaves_the_disposition_applied(self):
+        module = load_drain_module()
+        self.write_pile_manifest({"n": 1, "slug": "cache-down", "status": "ready"})
+        brief = self.reject_brief("cache-down")
+        with mock.patch.object(module, "mark_manifest_rejected", side_effect=OSError("manifest unavailable")):
+            outcome = module.process_item(brief, self.brief_root, self.gate_config(), True)
+        self.assertEqual(outcome.action, "reject")
+        self.assertTrue((self.brief_root / ".pile/.rejected/cache-down/brief.md").is_file())
+        self.assertIn("manifest unavailable", outcome.manifest_detail)
+        self.assertEqual(self.read_pile_manifest_rows()[0]["status"], "ready")
+        self.assertEqual(list((self.brief_root / ".staging").iterdir()), [])
+
+    def test_rerunning_against_an_already_rejected_row_is_idempotent(self):
+        self.write_pile_manifest({"n": 1, "slug": "twice", "status": "ready"})
+        self.reject_brief("twice")
+        self.json_output(self.run_drain("--apply"))
+        first = (self.brief_root / ".pile/manifest.jsonl").read_text()
+        module = load_drain_module()
+        outcome, _ = module.mark_manifest_rejected(self.brief_root, "twice", "other", "2099-01-01T00:00:00Z")
+        self.assertEqual(outcome, "unchanged")
+        self.assertEqual((self.brief_root / ".pile/manifest.jsonl").read_text(), first)
+
+    def test_promotion_does_not_write_the_pile_manifest(self):
+        # Scope boundary, asserted so it is visible rather than assumed: the
+        # promotion path leaves the same rows stale and is a separate defect.
+        manifest = self.write_pile_manifest({"n": 1, "slug": "promoted-ok", "status": "ready"})
+        before = manifest.read_text()
+        self.write_brief("promoted-ok")
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["promoted"], ["promoted-ok"])
+        self.assertEqual(manifest.read_text(), before)
+
+    def test_failures_carry_the_gates_repair_routing(self):
+        # The trinity keys were dead metadata: nothing in the pack read
+        # improve_skill or gate_skill. A failure now carries its gate's routing
+        # so a repair pass knows what each failure needs.
+        brief = self.write_brief("routing")
+        brief.write_text(brief.read_text()
+                         .replace("G4 Critical-review: PASS", "G4 Critical-review: FAIL")
+                         .replace("G14 Test-execution-silent: PASS", "G14 Test-execution-silent: FAIL"))
+        self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/routing/rejection.json").read_text())
+        by_gate = {f["gate"]: f for f in rejection["failures"]}
+        self.assertEqual(by_gate["G14"]["repair_kind"], "skill")
+        self.assertEqual(by_gate["G14"]["repair_skill"], "improve-test-execution-silent")
+        # G4 has no repair yet; absent means absent, not a guessed skill name.
+        self.assertEqual(by_gate["G4"]["repair_kind"], "unassigned")
+        self.assertNotIn("repair_skill", by_gate["G4"])
+
+    def test_a_stop_gate_failure_routes_to_discard(self):
+        brief = self.write_brief("discard-route")
+        brief.write_text(brief.read_text().replace("G5 Server-touching: PASS", "G5 Server-touching: FAIL"))
+        self.json_output(self.run_drain("--apply"))
+        rejection = json.loads((self.brief_root / ".pile/.rejected/discard-route/rejection.json").read_text())
+        self.assertEqual(rejection["failures"][0]["repair_kind"], "discard")
+        self.assertFalse(rejection["failures"][0]["repairable"])
 
 
 if __name__ == "__main__":
