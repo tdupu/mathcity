@@ -701,3 +701,31 @@ def test_mutating_tools_also_declare_artifact_trust(tmp_path: Path):
     )["result"]["structuredContent"]
 
     assert structured["artifact_trust"]["trusted"] is False
+
+
+def test_frontmatter_artifact_id_matches_the_canonical_parser_on_a_leading_whitespace_key(
+    tmp_path: Path,
+):
+    """The hand-rolled parser this replaced stripped the key before comparing
+    it; the canonical `read_frontmatter()` key regex is column-anchored and
+    never matches a line with leading whitespace, so that key is absent from
+    the canonical result. `_frontmatter_artifact_id` must agree with
+    canonical, not with the parser it replaced.
+    """
+    path = tmp_path / "leading-whitespace.md"
+    path.write_text("---\n  artifact: gh-issue-99\nstatus: ready\n---\nbody\n", encoding="utf-8")
+
+    assert mcp_server._frontmatter_artifact_id(path) is None
+
+
+def test_frontmatter_artifact_id_finds_a_key_past_the_old_64_line_cap(tmp_path: Path):
+    """The parser this replaced stopped scanning after 64 lines and returned
+    None even when a real `artifact:` key existed further down. The canonical
+    parser locates the closing fence rather than counting lines, so it always
+    finds it.
+    """
+    lines = ["---"] + [f"filler{i}: x" for i in range(70)] + ["artifact: gh-issue-77", "---", "body"]
+    path = tmp_path / "long-frontmatter.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+    assert mcp_server._frontmatter_artifact_id(path) == "gh-issue-77"
