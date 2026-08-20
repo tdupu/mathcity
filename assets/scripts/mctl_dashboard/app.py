@@ -314,7 +314,7 @@ class Dashboard:
         never touches the listing.
         """
         rig = self._rig_for(request) or self.rig
-        context = self._context(rig) if not self.city_wide else None
+        context = self._scope_context(rig)
 
         if lane == "pile":
             # Nothing to read: no tool reports pile membership.
@@ -353,7 +353,7 @@ class Dashboard:
         reorders with scripting disabled.
         """
         rig = self._rig_for(request) or self.rig
-        context = self._context(rig) if not self.city_wide else None
+        context = self._scope_context(rig)
         briefs, _city, city_extra = self._read_briefs(rig)
         by_id = {str(b.get("bead_id")): b for b in briefs}
 
@@ -410,6 +410,28 @@ class Dashboard:
         ]
         return list(view.rows_for(rig)), view, extra
 
+    def _scope_context(self, rig: str | None) -> Mapping[str, Any] | None:
+        """The context line's facts, in whichever scope is being served.
+
+        `context_resolve` requires a rig and hard-errors without one, which is
+        why the redesigned screens passed nothing at all city-wide and the
+        header rendered `city —`. City-wide is precisely when "which city am I
+        reading" matters most, so the city registry answers it instead: it
+        carries `city_root` and needs no rig.
+        """
+        if not self.city_wide:
+            return self._context(rig)
+        try:
+            registry = self._city()
+        except ToolFailure:  # pragma: no cover - the page still has to render
+            return None
+        rigs = registry.get("rigs") or []
+        return {
+            "city_root": registry.get("city_root"),
+            "rig_id": rig or f"all rigs ({len(rigs)})",
+            "rig_db": ".beads",
+        }
+
     # -- read views --
 
     def _queue(self, request: Request) -> Response:
@@ -421,7 +443,7 @@ class Dashboard:
         """
         view = view_state.parse(request.query)
         rig = self._rig_for(request) or self.rig
-        context = self._context(rig) if not self.city_wide else None
+        context = self._scope_context(rig)
         all_briefs, _city, city_extra = self._read_briefs(rig)
         briefs = _scoped(all_briefs, view.scope)
 
@@ -443,7 +465,7 @@ class Dashboard:
         # links or forms -- nothing here needs script.
         controls = (
             '<div style="margin-left: auto; display: flex; gap: 10px; '
-            'align-items: center;">'
+            'align-items: center; flex-wrap: wrap;">'
             # The picker is a query flag, so opening it is a link and its
             # state survives a reload -- no toggle handler, no hidden div.
             f'<a class="btn btn-ghost" href="{render.esc(columns_href)}">Columns</a>'
@@ -460,7 +482,7 @@ class Dashboard:
         )
 
         sections = [
-            '<div style="display: flex; align-items: baseline; gap: 12px;">'
+            '<div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">'
             f'<h1 style="font-family: var(--font-heading); font-size: 27px; '
             f'font-weight: 600; margin: 0;">{render.esc(heading)}</h1>'
             f'<span class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'

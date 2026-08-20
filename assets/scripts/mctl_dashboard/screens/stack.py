@@ -314,7 +314,14 @@ def _row(
 ) -> str:
     bead = str(brief.get("bead_id") or "")
     brief_id = str(brief.get("brief_id") or bead)
-    href = view.url(view="brief", brief_id=brief_id)
+    # The rig travels with the link. A brief lives in exactly one rig's store,
+    # so a city-wide detail page cannot resolve it without being told which --
+    # without this every click city-wide returns 400 rig-required.
+    href = view.url(
+        view="brief",
+        brief_id=brief_id,
+        rig=str(brief.get("rig_id") or "") or view.rig,
+    )
     background = row_background(brief, index=index, cursor=view.cursor)
     edge = row_edge(brief, index=index, cursor=view.cursor)
 

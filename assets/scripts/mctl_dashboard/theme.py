@@ -172,6 +172,13 @@ def font_faces() -> str:
 _RULES = """
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; background: var(--color-bg); }
+/* The design is explicit: wide content scrolls inside its own container and
+   the page body never scrolls horizontally. Enforced here rather than trusted
+   to every future caller remembering it -- a control row that does not wrap
+   pushed the body to 547px at a 390px viewport, and no unit test noticed
+   because none of them lay the page out. */
+html, body { max-width: 100%; overflow-x: hidden; }
+.scroll-x { overflow-x: auto; max-width: 100%; }
 body {
   font-family: var(--font-body);
   color: var(--color-text);

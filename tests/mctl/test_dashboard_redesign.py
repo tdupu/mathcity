@@ -1082,3 +1082,65 @@ def test_hostile_weight_values_fall_back():
     view = state.parse({"w_unlock": "banana", "w_age": "-5", "w_prio": "999"})
     for value in view.weights.values():
         assert 0 <= value <= 10
+
+
+def test_the_masthead_names_the_city_even_city_wide(tmp_path):
+    """City-wide is exactly when 'which city am I reading' matters most.
+
+    `context_resolve` needs a rig and hard-errors without one, so the
+    redesigned handlers passed no context at all in city scope and the header
+    rendered `city —`. Spanning 17 rigs with no statement of which city they
+    belong to is the masthead failing at its only job.
+    """
+    from mctl_dashboard.app import Request
+
+    dashboard = _city_dashboard(tmp_path)
+    html = dashboard.handle(Request.get("/queue")).body
+    marker = html.split(">city</span>")[1][:40]
+    assert "—" not in marker, f"city not named city-wide: {marker!r}"
+
+
+def test_the_page_body_can_never_scroll_horizontally():
+    """The design's rule: wide content scrolls in its own container.
+
+    A control row that did not wrap pushed the body to 547px at a 390px
+    viewport. No unit test caught it because none of them lay the page out,
+    so the rule is asserted in the stylesheet instead.
+    """
+    from mctl_dashboard import theme
+
+    assert "overflow-x: hidden" in theme.STYLESHEET
+    assert ".scroll-x { overflow-x: auto" in theme.STYLESHEET
+
+
+def test_a_brief_link_carries_its_rig_city_wide(tmp_path):
+    """City-wide, clicking a brief must reach the brief.
+
+    A brief lives in exactly one rig's store, so a city-wide detail page
+    cannot resolve one without being told which. The stack's links dropped
+    the rig, so every click returned HTTP 400 rig-required -- the primary
+    navigation path, broken in the scope where the dashboard spans 17 rigs.
+    """
+    from mctl_dashboard.app import Request
+
+    dashboard = _city_dashboard(tmp_path)
+    html = dashboard.handle(Request.get("/queue")).body
+    import re
+
+    hrefs = re.findall(r'data-href="([^"]+)"', html)
+    assert hrefs, "no brief rows rendered"
+    for href in hrefs:
+        assert "rig=" in href, f"brief link has no rig: {href}"
+
+    # And following it must not land on rig-required. The href is HTML-escaped
+    # (`&amp;`), as an href attribute must be, so unescape before parsing --
+    # the browser does the same.
+    import html as html_mod
+
+    first = html_mod.unescape(hrefs[0])
+    path, _, query = first.partition("?")
+    params = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
+    response = dashboard.handle(Request.get(path, **params))
+    assert 'data-region="rig-required"' not in response.body, (
+        f"{first} still resolves to rig-required"
+    )

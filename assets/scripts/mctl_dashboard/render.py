@@ -413,6 +413,15 @@ def page(
             '<meta charset="utf-8">',
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
             f"<title>{_e(title)} - mctl dashboard</title>",
+            # Inline, so the browser's automatic /favicon.ico request never
+            # fires. A 404 on every page load trains an operator to ignore
+            # 404s in the log of a tool built to report failure honestly --
+            # the same argument that made the absent fonts emit no @font-face.
+            '<link rel="icon" href="data:image/svg+xml,'
+            "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E"
+            "%3Crect width='16' height='16' fill='%232d2b2b'/%3E"
+            "%3Ctext x='8' y='12' font-size='11' font-family='Georgia,serif' "
+            "text-anchor='middle' fill='%23b68235'%3EB%3C/text%3E%3C/svg%3E\">",
             f"<style>{STYLESHEET}</style>",
             "</head>",
             "<body>",
