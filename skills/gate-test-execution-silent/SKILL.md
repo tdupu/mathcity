@@ -35,6 +35,7 @@ Brief markdown file path. Accepts any of:
 ## Check procedure (two steps)
 
 Both check scripts ship in the pack at `<mathcity-pack-root>/assets/scripts/checks/`.
+<!-- deadpath-ok: names .gc/scripts/checks/ in order to deny it exists; deleting this sentence would delete the documentation of the hazard -->
 No rig carries a `.gc/scripts/checks/` — nothing in gascity installs one — so resolve
 `<mathcity-pack-root>` at runtime from the `Source:` line of
 `gc order show brief-review-patrol`. It is the city.toml import source, which is not
