@@ -51,6 +51,15 @@ for art in reg.get("artifact", []):
     for r in art.get("referencer", []):
         if r["role"] == "violation" and not r.get("since"):
             print(f"UNDATED {art['path']} {r['file']}")
+    # Cross-check the literal against paths.toml, the config artifact_layout reads.
+    declared = {}
+    ptoml = root / "assets/brief-pipeline/paths.toml"
+    if ptoml.is_file():
+        declared = tomllib.load(ptoml.open("rb")).get("paths", {})
+    tail = art["path"]
+    match = [k for k, v in declared.items() if isinstance(v, str) and v.endswith(tail)]
+    if not match:
+        print(f"UNDECLARED {tail}")
 print(f"ARTIFACTS {total_arts}")
 PY
 probe_rc=$?
@@ -74,7 +83,23 @@ if [ "$probe_rc" -ne 0 ] || ! [ "${arts:-0}" -ge 1 ] 2>/dev/null; then
 fi
 ok "register probe read $arts governed artifact(s)"
 
-# --- 1. No unregistered referencer -------------------------------------------
+# --- 1. Register paths agree with paths.toml ---------------------------------
+# check-zero found that mctl_core/redundant_state.py::artifact_layout already
+# models WHERE these artifacts live, resolved from assets/brief-pipeline/paths.toml.
+# The register adds who may WRITE them -- which exists nowhere else -- but it
+# restates two path literals, and a literal that repeats a config can drift from
+# it silently. So the literals are cross-checked against paths.toml here, and an
+# artifact paths.toml does NOT declare must say so out loud rather than pass
+# unnoticed.
+if grep -q '^PATHDRIFT ' "$REPORT"; then
+  no "a register path disagrees with assets/brief-pipeline/paths.toml"
+  grep '^PATHDRIFT ' "$REPORT" | sed 's/^/    /'
+else
+  ok "register paths agree with paths.toml where paths.toml declares them"
+fi
+grep '^UNDECLARED ' "$REPORT" | sed 's/^UNDECLARED /NOTE: not declared in paths.toml: /'
+
+# --- 2. No unregistered referencer -------------------------------------------
 if grep -q '^UNREGISTERED ' "$REPORT"; then
   no "a file touches a governed brief artifact without being registered (B2.11)"
   grep '^UNREGISTERED ' "$REPORT" | sed 's/^/    /'
@@ -82,7 +107,7 @@ else
   ok "every file touching a governed artifact is registered"
 fi
 
-# --- 2. No stale registration ------------------------------------------------
+# --- 3. No stale registration ------------------------------------------------
 # A register that names files which no longer reference the artifact rots into
 # a list nobody trusts.
 if grep -q '^STALE ' "$REPORT"; then
@@ -92,7 +117,7 @@ else
   ok "no stale entries in the register"
 fi
 
-# --- 3. Every violation is dated ---------------------------------------------
+# --- 4. Every violation is dated ---------------------------------------------
 # B2.12: the burn-down may only shrink, which requires knowing when each was
 # admitted.
 if grep -q '^UNDATED ' "$REPORT"; then

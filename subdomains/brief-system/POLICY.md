@@ -384,17 +384,36 @@ by what adjudication unlocks, not by arrival time.*
   `since` date, and the count is printed on every run so it is visible rather
   than assumed.
 
-- **B2.13 A write path may not report a state it did not verify.** If a tool's
-  output asserts a precondition — an archive exists, a gate passed, a
-  representation agrees — that assertion must come from a check that can
-  return false. `remove-archived-row` is the worked example: it computed
-  `archive_hit`, never tested it, removed the row unconditionally, and still
-  reported `reason: "explicit_slug_archived_row"` with `archived_at: ""`,
+- **B2.13 (JUDGEMENT RULE) A write path may not report a state it did not
+  verify.** If a tool's output asserts a precondition — an archive exists, a
+  gate passed, a representation agrees — that assertion must come from a check
+  that can return false. `remove-archived-row` is the worked example: it
+  computed `archive_hit`, never tested it, removed the row unconditionally, and
+  still reported `reason: "explicit_slug_archived_row"` with `archived_at: ""`,
   asserting an archive nothing had looked for. **A check that cannot fail is
-  indistinguishable from a check that passed.** Mechanical check: every write
-  path asserting a precondition has a test that drives the precondition FALSE
-  and asserts refusal — a negative test, not only a happy path.
+  indistinguishable from a check that passed.**
 
+  **This is deliberately a judgement rule, not a mechanical one.** Whether a
+  given assertion is genuinely backed cannot be decided by grep: the check may
+  live in a helper, be inherited from a caller, or be legitimately unnecessary.
+  A mechanical proxy here would pass confidently on the cases it cannot see,
+  which is the failure this rule exists to prevent. Per [[check-zero]], the
+  established shape for a judgement-deferring check is to name what is being
+  weighed and what evidence a verdict must cite.
+
+  **What the reviewing agent weighs:** for each precondition the output names,
+  can that precondition be false at that point, and does the code branch on it?
+
+  **Evidence a reasoned verdict must cite**, in the artifact or the review:
+  1. the specific output field asserting the precondition (name it);
+  2. the line where the precondition is computed **and** the line where it is
+     tested — or an explicit statement that no test exists;
+  3. a negative case: an input that makes the precondition false, and the
+     observed behaviour on it. A verdict citing only a passing run has not
+     established the check can fail.
+
+  A verdict of "verified" without item 3 is not a verdict; it is the vacuous
+  pass restated one level up.
 
 ## Pillar 3 — Work closure discipline (B3.x)
 
@@ -898,5 +917,6 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
+| 2026-08-20 | Amend B2.13 to an explicit JUDGEMENT rule (naming what is weighed and the three items a reasoned verdict must cite, per `check-zero`) rather than a mechanical clause; add a paths.toml cross-check to `tests/brief-writer-authority` after `check-zero` found `mctl_core/redundant_state.py::artifact_layout` already models artifact locations | the human adjudicator: "Sometimes we need to defer to agent judgement. That is the power of agents." A bad mechanical proxy for a judgement call passes confidently on cases it cannot see |
 | 2026-08-20 | Add B2.11/B2.12/B2.13: `mctl` is the sole writer of every brief artifact; non-`mctl` writers are violations recorded in a dated register (`assets/brief-pipeline/brief-writers.toml`) that may only shrink; and no write path may report a state it did not verify. Enforced by `tests/brief-writer-authority`, which compares references rather than attempting write-detection (a proximity heuristic was prototyped and rejected for classifying `brief-shuffle-fast-drain.py` as read-only when `append_index()` writes the index) | the human adjudicator, verbatim: "We want to factor repeated work through a single point of failure" and "There is a central failure point which is the mctl commands. Debugging those will fix the whole thing." Five violations registered at adoption rather than fixed, so the burn-down is visible |
 | 2026-08-20 | Add B2.1a: a brief may declare it has no bead subject (`MBRF056`), scoping B2.1 rather than rewriting it; declaration is explicit-only, so an omitting brief still raises `MBRF004` | the human adjudicator ruled YES on the principle (bead `mc-csr`, workflow `mc-sxz`); the explicit-only shape follows the measurement — 30 of a 40-brief sample of the 135 `MBRF004` population are omissions, 27 of them with a still-recoverable subject, so an inferred declaration would be a loophole three times larger than the category it serves |
