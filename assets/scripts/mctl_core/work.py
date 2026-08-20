@@ -15,6 +15,7 @@ from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
 from .liveness import probe_control_plane
+from .verdicts import brief_population, is_brief_bead
 from .trace import append_applied, append_planned
 from .provenance import (
     DispatchProvenance,
@@ -84,8 +85,7 @@ def ready_work(ctx: MctlContext) -> tuple[WorkItem, ...]:
         item
         for item in (
             _work_item(ctx, bead.id, beads=beads, doctor=doctor)
-            for bead in beads
-            if bead.is_brief
+            for bead in brief_population(beads)
         )
         if item.readiness == "ready"
     )
@@ -282,7 +282,11 @@ def _work_item(
     beads = _beads(ctx) if beads is None else beads
     bead_by_id = {bead.id: bead for bead in beads}
     brief = bead_by_id.get(brief_id)
-    if brief is None or not brief.is_brief:
+    # B2.1's brief population, not merely `type=decision`: a push-authorization
+    # receipt or a kill-switch record is a standalone decision bead, so
+    # dispatching work "from" one is a category error and says so plainly here
+    # rather than surfacing as a missing-brief error from the doctor.
+    if brief is None or not is_brief_bead(brief):
         raise WorkError(
             _diagnostic(
                 ctx,
@@ -419,7 +423,7 @@ def _doctor_report(
 
 
 def _decision_beads(ctx: MctlContext) -> tuple[Bead, ...]:
-    return tuple(bead for bead in _beads(ctx) if bead.is_brief)
+    return brief_population(_beads(ctx))
 
 
 def _beads(ctx: MctlContext) -> tuple[Bead, ...]:

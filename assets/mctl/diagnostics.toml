@@ -173,9 +173,22 @@ meaning = "Closed brief carries no readable verdict in any known field."
 policy_ref = "B2.2"
 module = "verdicts.py"
 
+# MBRF054/MBRF055 name a decision bead that B2.1's Definitions paragraph
+# already put outside the brief population -- "decision beads created for OTHER
+# purposes (push authorizations, kill-switch engagement/release, non-brief
+# adjudications) remain their own standalone beads". They are INFO because
+# nothing is wrong with these beads; they are reported so that leaving the
+# population is visible rather than looking like a bead that went missing.
+
 [MBRF054]
 severity = "INFO"
-meaning = "Decision bead is an authorize-git-operation receipt, not a brief; it belongs outside the brief population."
+meaning = "Decision bead is a git-operation authorization receipt, not a brief; it belongs outside the brief population."
+policy_ref = "B2.1"
+module = "verdicts.py"
+
+[MBRF055]
+severity = "INFO"
+meaning = "Decision bead records a kill-switch engagement or release, not a brief; it belongs outside the brief population."
 policy_ref = "B2.1"
 module = "verdicts.py"
 
