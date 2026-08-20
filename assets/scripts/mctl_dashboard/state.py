@@ -103,6 +103,10 @@ class ViewState:
     brief_id: str | None = None
     cursor: int = 0
     weights: Mapping[str, int] = field(default_factory=lambda: dict(DEFAULT_WEIGHT_VALUES))
+    #: True when the operator picked columns themselves. An unfed column is
+    #: hidden from the default set -- a column of em dashes is noise, not
+    #: information -- but never hidden from someone who asked for it.
+    columns_chosen: bool = False
 
     # -- serialisation -----------------------------------------------------
 
@@ -199,8 +203,10 @@ def parse(query: Mapping[str, str]) -> ViewState:
     if raw_columns:
         wanted = {part for part in raw_columns.split(",") if part in COLUMN_KEYS}
         columns = tuple(key for key in COLUMN_KEYS if key in wanted) or DEFAULT_COLUMNS
+        columns_chosen = bool(wanted)
     else:
         columns = DEFAULT_COLUMNS
+        columns_chosen = False
 
     try:
         cursor = max(0, int(str(query.get("cursor") or "0")))
@@ -235,4 +241,5 @@ def parse(query: Mapping[str, str]) -> ViewState:
         brief_id=brief_id,
         cursor=cursor,
         weights=weights,
+        columns_chosen=columns_chosen,
     )

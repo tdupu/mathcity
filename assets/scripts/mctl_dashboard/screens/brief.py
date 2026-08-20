@@ -188,13 +188,17 @@ def status_banner(
         message = str(reason.get("message") or "")
         held = state_name == "held"
         lead = (
-            "<strong>Adjudication is held.</strong>"
+            "<strong>Approving is held.</strong>"
             if held
-            else "<strong>This brief cannot be adjudicated yet.</strong>"
+            else "<strong>Approving is unavailable.</strong>"
         )
+        # An empty brief used to be described as a dead end -- "nothing you can
+        # record". That was wrong twice over: it is not true (it can be sent
+        # back) and the emptiness is itself the reason to send it back. Say
+        # what the reader can do, because on these briefs there is something.
         empty = (
-            " It also carries no body, so there is <strong>nothing to read</strong> "
-            "here and nothing you can record."
+            " It carries no body either, which is <strong>itself grounds to "
+            "return it</strong>."
             if not has_body
             else ""
         )
@@ -202,7 +206,8 @@ def status_banner(
             f"{lead} "
             f'<code class="diagnostic-code">{_e(code)}</code> — {_e(message)}'
             f"{empty} "
-            '<a href="#mc-adjudicate">See the panel &darr;</a>'
+            "You can still send it back &mdash; "
+            '<a href="#mc-adjudicate">revise or reject in the panel &darr;</a>'
         )
         tone = (
             f"border-left: 3px solid {STOP['error']['edge']};"

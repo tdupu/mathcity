@@ -146,9 +146,9 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
             f'<code class="diagnostic-code">{_e(code)}</code></div>'
             f'<div style="font-size: 13px;">{_e(message)}</div>'
             '<div style="font-size: 12.5px; margin-top: 7px; color: var(--color-neutral-800);">'
-            "A gate failed before this reached the stack. Approving or revising it "
-            "would ratify the violation, so reject is the only verdict available. "
-            "Decide the repair first.</div>"
+            "A gate failed before this reached the stack. Approving would ratify "
+            "the violation, so approve is unavailable. Sending it back is not: "
+            "revise it once you know the repair, or reject it.</div>"
             "</div>"
         )
 
@@ -159,14 +159,16 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
         "background: var(--color-neutral-100); padding: 11px 13px; "
         'margin-bottom: 12px; border-radius: var(--radius-sm);">'
         '<div class="mono" style="font-size: 11px; color: var(--color-neutral-700); '
-        'letter-spacing: 0.04em; margin-bottom: 4px;">NOT YET ADJUDICABLE &middot; '
+        'letter-spacing: 0.04em; margin-bottom: 4px;">APPROVE UNAVAILABLE &middot; '
         f'<code class="diagnostic-code">{_e(code)}</code>'
         f'{f" &middot; {_e(policy)}" if policy else ""}</div>'
         f'<div style="font-size: 13px;">{_e(message)}</div>'
         '<div style="font-size: 12.5px; margin-top: 7px; color: var(--color-neutral-800);">'
-        "This brief is <strong>not linked to what it decides</strong>, so a verdict "
+        "This brief is <strong>not linked to what it decides</strong>, so an approval "
         "would land on a bead that points at nothing. Nothing here says the brief is "
-        "wrong — what is missing is the edge, not the reasoning."
+        "wrong — what is missing is the edge, not the reasoning. "
+        "<strong>Revise and reject remain available</strong>: a brief you cannot "
+        "ratify is still a brief you can send back."
         "</div>"
         '<div style="font-size: 12px; margin-top: 7px; color: var(--color-neutral-600); '
         'font-style: italic;">'

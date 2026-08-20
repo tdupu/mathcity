@@ -20,6 +20,7 @@ brief unblocks nothing", which is a claim nobody made.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -46,6 +47,11 @@ UNFED_COLUMNS: dict[str, str] = {
 }
 
 _DASH = "—"
+
+#: Never hidden, however empty. The title is the row's identity, and Health is
+#: the column an operator scans for trouble -- an all-OK Health column is a
+#: real answer ("nothing is wrong here"), not an absence.
+KEEP_ALWAYS: frozenset[str] = frozenset({"slug", "rig", "sev"})
 
 
 # --------------------------------------------------------------------------
@@ -371,6 +377,61 @@ def _row(
     )
 
 
+def _fed_columns(
+    briefs: Sequence[Mapping[str, Any]], view: ViewState
+) -> tuple[ViewState, tuple[str, ...]]:
+    """Drop columns no brief in this result can feed.
+
+    A column whose every cell is an em dash is not information -- it is a
+    claim that something was measured and came back empty, which is a
+    different and false statement. The stack table was drawing five of them,
+    so the operator's first impression of the queue was a wall of dashes.
+
+    Two properties make this safe to do automatically. It is computed from the
+    rows in hand, so the column **reappears on its own** the moment the core
+    starts feeding it -- no release, no flag. And it never overrides an
+    explicit choice: a column you ticked yourself is a column you get, dashes
+    and all, because you asked a question and empty is the answer.
+
+    Returns the view to render with, and the keys that were dropped so the
+    caller can name them.
+    """
+    if view.columns_chosen:
+        return view, ()
+
+    droppable = tuple(
+        key
+        for key in view.columns
+        if key not in KEEP_ALWAYS
+        and all(cell_text(brief, key) == _DASH for brief in briefs)
+    )
+    if not droppable:
+        return view, ()
+    kept = tuple(key for key in view.columns if key not in droppable)
+    return replace(view, columns=kept), droppable
+
+
+def _hidden_note(dropped: Sequence[str]) -> str:
+    """Name what was hidden. A column that vanishes silently reads as absent."""
+    if not dropped:
+        return ""
+    names = ", ".join(
+        f"{COLUMN_LABEL.get(key, key)} ({UNFED_COLUMNS[key]})"
+        if key in UNFED_COLUMNS
+        else COLUMN_LABEL.get(key, key)
+        for key in dropped
+    )
+    return (
+        '<p class="lede" data-region="stack-hidden-columns" '
+        'style="margin-top: 8px; font-style: italic;">'
+        f"{len(dropped)} column{'s' if len(dropped) != 1 else ''} hidden because no "
+        f"brief here carries a value for {'them' if len(dropped) != 1 else 'it'}: "
+        f"{_e(names)}. They return on their own once the core feeds them, and "
+        "the column picker shows them either way."
+        "</p>"
+    )
+
+
 def table(
     briefs: Sequence[Mapping[str, Any]],
     view: ViewState,
@@ -384,6 +445,7 @@ def table(
             "No briefs on this stack. Produced briefs land in the "
             '<a href="/pile">pile</a> and are promoted by the gates.</p>'
         )
+    view, dropped = _fed_columns(ordered, view)
     rows = "".join(
         _row(brief, view, index=index, queued=queued)
         for index, brief in enumerate(ordered)
@@ -405,6 +467,7 @@ def table(
         '<span class="lede" style="font-size: 11px;">Ticking changes nothing until you '
         "add them; the priority list is your ordering, not pipeline state.</span></div>"
         "</form>"
+        + _hidden_note(dropped)
     )
 
 

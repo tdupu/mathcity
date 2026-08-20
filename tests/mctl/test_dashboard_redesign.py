@@ -1244,8 +1244,12 @@ def test_an_empty_brief_that_is_also_refused_says_both():
         options=[{"id": "adjudicate", "enabled": False,
                   "disabled_reason": {"code": "MBRF004", "message": "no source"}}],
     )
-    status = html.split('data-region="brief-status"')[1][:600]
-    assert "nothing to read" in status.lower()
+    status = html.split('data-region="brief-status"')[1][:700]
+    # Was "nothing to read here and nothing you can record". The second half
+    # became false when revise stopped being gated, and the first half framed
+    # an empty brief as a dead end rather than as the reason to return it.
+    assert "grounds to return" in status.lower()
+    assert "send it back" in status.lower()
 
 
 def test_an_adjudicable_brief_says_so_too():
@@ -1347,3 +1351,92 @@ def test_an_unticked_no_brainer_box_changes_nothing():
     )
     assert args["reason"] == "needs fields"
     assert NO_BRAINER_MARKER not in args["reason"]
+
+
+def test_the_banner_does_not_claim_a_dead_end():
+    """It used to say "nothing you can record" -- which is now false."""
+    from mctl_dashboard import state  # noqa: F401
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.status_banner({"bead_id": "he-1"}, _option(False, "MBRF004"))
+    assert "cannot be adjudicated" not in html
+    assert "nothing you can record" not in html
+    assert "send it back" in html
+    assert "revise or reject" in html
+
+
+def test_an_empty_brief_is_told_that_emptiness_is_grounds_to_return():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.status_banner({"bead_id": "he-1", "body": ""}, _option(False, "MBRF004"))
+    assert "grounds to return" in html
+
+
+def test_an_open_brief_banner_is_unchanged():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.status_banner({"bead_id": "he-1", "body": "x"}, _option(True))
+    assert "Ready to adjudicate" in html
+
+
+def test_the_panel_notice_says_what_is_still_possible():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
+    assert "NOT YET ADJUDICABLE" not in html
+    assert "APPROVE UNAVAILABLE" in html
+    assert "Revise and reject remain available" in html
+
+
+# --------------------------------------------------------------------------
+# empty columns
+# --------------------------------------------------------------------------
+
+
+def _bare_brief(n: int) -> dict:
+    """A brief carrying only what the core actually feeds today."""
+    return {"bead_id": f"gt-{n}", "title": f"brief {n}", "rig_id": "hq",
+            "canonical_source": "bead_store"}
+
+
+def test_a_column_no_brief_can_feed_is_not_drawn():
+    """Five columns of em dashes is noise presented as a table."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    html = stack.table([_bare_brief(i) for i in range(4)], state.parse({}))
+    for label in ("Unlock", "Priority", "Opts", "Rec."):
+        assert f">{label}<" not in html, f"{label} drew with no data behind it"
+
+
+def test_a_column_with_even_one_value_is_kept():
+    """Sparse is not empty -- one real value is a reason to show the column."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    briefs = [_bare_brief(i) for i in range(4)]
+    briefs[2]["unlock_count"] = 7
+    html = stack.table(briefs, state.parse({}))
+    assert ">Unlock<" in html
+    assert ">7<" in html
+
+
+def test_asking_for_a_column_overrides_the_hiding():
+    """Hidden by default is not hidden from someone who asked."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    html = stack.table(
+        [_bare_brief(i) for i in range(3)], state.parse({"columns": "slug,unlock"})
+    )
+    assert ">Unlock<" in html
+
+
+def test_the_hidden_columns_are_named_not_silently_dropped():
+    """A quietly missing column reads as a column that does not exist."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    html = stack.table([_bare_brief(i) for i in range(4)], state.parse({}))
+    assert "unlock_count" in html
