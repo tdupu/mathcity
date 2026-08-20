@@ -39,7 +39,10 @@ description = """
 Run `<mathcity-pack-root>/assets/scripts/checks/brief-drain-manifest.sh`
 against `{{artifact_root}}/stack/.index.jsonl`. The script ships in the
 mathcity pack, not in any rig; resolve `<mathcity-pack-root>` from the
-`Source:` line of `gc order show brief-review-patrol`.
+`Source:` line of `gc order show brief-review-patrol`. The script itself resolves
+pack assets differently — by anchoring on its own on-disk location — and that
+difference is deliberate, not drift: a script may run with no `gc` on PATH, while
+an agent reading this does have it.
 
 The script reads all manifest entries, filters out entries with
 `status: decided` or `status: archived`, sorts the remaining entries by

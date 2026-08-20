@@ -40,6 +40,12 @@ No rig carries a `.gc/scripts/checks/` — nothing in gascity installs one — s
 `gc order show brief-review-patrol`. It is the city.toml import source, which is not
 necessarily `<city-root>/mathcity`.
 
+The check scripts themselves do **not** use this recipe — they resolve pack assets by
+anchoring on their own on-disk location (`dirname $0/../..`). The difference is
+deliberate, not drift: a check script may run with no `gc` on PATH, so it cannot shell
+out to resolve itself, while an agent reading this prose does have `gc` and cannot
+usefully be handed a `$0`.
+
 ### Step 1 — declaration check
 
 If the check script exists, run it:
