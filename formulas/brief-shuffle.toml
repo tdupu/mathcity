@@ -165,9 +165,13 @@ For `Disposition: reject` or `Disposition: blocked`:
    `failure_fingerprint`.
 3. A rejection MUST NOT dead-end there — perform BOTH send-back actions
    (unchanged from before):
-   - File a remediation bead: `.gc/scripts/escalate.sh --title
+   - File a remediation bead:
+     `<mathcity-pack-root>/assets/scripts/escalate.sh --title
      "[brief-shuffle] gate-rejected: <slug>" --body "<failed gates +
-     remediation guidance>" --priority 2`.
+     remediation guidance>" --priority 2`. Resolve `<mathcity-pack-root>` as
+     the parent of the `orders/` directory on the `Source:` line of
+     `gc order show brief-shuffle`; your cwd is a per-bead work dir, never the
+     pack root, and `$PACK_DIR` is not injected into a formula step.
    - Emit `gc event emit brief.gate_rejected --subject <slug>`.
 
 (Full auto re-prep routing is judgment-bearing and tracked as a separate

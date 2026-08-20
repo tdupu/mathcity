@@ -97,10 +97,17 @@ Then close this step bead and call `gc runtime drain-ack`.
 If blocked without a path forward, file an escalation before stopping:
 
 ```bash
-.gc/scripts/escalate.sh \
+"<mathcity-pack-root>/assets/scripts/escalate.sh" \
   --title "simple-work-briefed stalled on {{source_bead}}" \
   --priority 2
 ```
+
+The helper ships in the mathcity pack, not in any rig; resolve
+`<mathcity-pack-root>` as the parent of the `orders/` directory on the
+`Source:` line of `gc order show simple-work-briefed`. Your cwd is a per-bead work dir,
+never the pack root, so a bare `assets/...` resolves to nothing, and
+`$PACK_DIR` is not a substitute — gascity injects it for order dispatch and
+`gc` custom commands only, never into a formula step's agent session.
 """
 
 [[steps]]

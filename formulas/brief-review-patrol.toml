@@ -116,9 +116,13 @@ pull-eligible.
 **On failure, non-convergence within cap=4, or timeout** — patch:
 - `review_gate: pending` → `review_gate: review-failed`
 and surface to the Mayor: file an escalation bead via
-`.gc/scripts/escalate.sh
+`<mathcity-pack-root>/assets/scripts/escalate.sh
 --title "[brief-review-patrol] Phase 5 failed: <brief-slug>"
 --body "<verdict summary + last reviewer objections>" --priority 2`.
+Resolve `<mathcity-pack-root>` as the parent of the `orders/` directory on the
+`Source:` line of `gc order show brief-review-patrol`; your cwd is a per-bead
+work dir, never the pack root, and `$PACK_DIR` is not injected into a formula
+step.
 Do not delete, archive, or retry the brief; `review-failed` removes it from
 the patrol candidate set and a human or Mayor decides its fate.
 """
