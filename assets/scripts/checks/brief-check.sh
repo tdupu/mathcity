@@ -498,27 +498,314 @@ check_no_brainer_classification_evidence() {
   esac
 }
 
-check_no_brainer_execute_safety() {
-  check_no_brainer_safety
-  # N5 kill-switch hierarchy (POLICY.md N5, Adopted 2026-07-12): auto-execute
-  # is the DEFAULT. A kill switch halts automation only when its flag file
-  # EXISTS and reads `false`; absent or `true` proceeds. Check order:
-  # city-wide first, then rig-level (paths.toml: kill_switch_city,
-  # kill_switch_rig). Supersedes the opt-in ALLOW_NO_BRAINER_AUTO_EXECUTE
-  # existence check.
-  city_flag="${GC_CITY:-$HOME/gt}/.beads/auto_merge_enabled"
-  rig_root="${GC_RIG_ROOT:-}"
-  if [ -z "$rig_root" ]; then
-    # BRIEF_ROOT is <rig_root>/.beads/briefs, so the rig root is two up.
-    rig_root="$(cd "$ROOT/../.." 2>/dev/null && pwd || true)"
+# ---------------------------------------------------------------------------
+# no-brainer auto-execution gate
+#
+# This subcommand is the LAST thing that runs before a classified no-brainer
+# is auto-executed, so it is the only place a safety property can actually be
+# enforced.  It used to be an advisory audit: it passed when the brief could
+# not be resolved, it never looked at classifier evidence, it never saw
+# `server_touching: true` in frontmatter, and it permitted execution whenever
+# the N5 brake file was merely absent.
+#
+# Decision order (each step is terminal; every terminal decision is audited):
+#
+#   1. brief unresolvable                -> REFUSE  brief_unresolvable
+#   2. stop gates (category E, G5b, L4)  -> REFUSE  stop_gate_*
+#   3. classifier evidence               -> REFUSE  classifier_not_no_brainer
+#                                                 / classifier_evidence_invalid
+#   4. N5 kill switch reads `false`      -> REFUSE  kill_switch_engaged
+#   5. not explicitly armed              -> REFUSE  not_armed / arming_expired
+#   6. otherwise                         -> PERMIT
+#
+# Steps 1-3 are evaluated BEFORE any switch or arming state is consulted, so a
+# server-touching brief is refused regardless of how the city is configured.
+#
+# Step 5 inverts the historic absent-means-go default.  Auto-execution is an
+# irreversible act driven by a classifier whose own header still reads
+# PRELIMINARY; it now requires a positive, revocable, expiring token at BOTH
+# the city and the rig level.  This mirrors mctl's already-adopted
+# MCTL_ENABLE_LIVE_DISPATCH doctrine ("not armed: behave exactly like a dry
+# run") rather than N5's brakes-only model.  The N5 brakes are retained and
+# still halt, so an engaged kill switch keeps working exactly as before.
+#
+# POLICY.md N5 as Adopted (2026-07-12) still states absent-or-true = proceed.
+# The divergence here is deliberate and strictly conservative -- this gate
+# refuses in cases policy would permit, never the reverse.  The corresponding
+# N5 amendment is DRAFTED, not adopted:
+#   subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md
+# ---------------------------------------------------------------------------
+
+NB_CLASSIFIER_VERSION="mathcity.catch-no-brainer v0.4 (PRELIMINARY)"
+
+nb_json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n'
+}
+
+# absent | true | false | other
+nb_flag_state() {
+  if [ ! -f "$1" ]; then
+    printf 'absent\n'
+    return 0
   fi
-  rig_flag="$rig_root/.beads/auto_merge_enabled"
-  for flag in "$city_flag" "$rig_flag"; do
-    [ -f "$flag" ] || continue
-    if [ "$(head -n 1 "$flag" | tr -d '[:space:]')" = "false" ]; then
-      fail "kill switch ENGAGED ($flag reads false) — auto-execution halted (N5); route brief to the pile in compact form"
+  case "$(head -n 1 "$1" | tr -d '[:space:]')" in
+    true) printf 'true\n' ;;
+    false) printf 'false\n' ;;
+    *) printf 'other\n' ;;
+  esac
+}
+
+# absent | disarmed | invalid | expired | armed
+#
+# `disarmed` is an EXPLICIT pin back to dry-run (the token reads `false`), and
+# is deliberately distinct from `absent` (never armed). Both mean dry-run;
+# only the audit trail and the mode report can tell you which, and that
+# difference is what lets an operator confirm a rollback actually landed
+# rather than inferring it from silence.
+nb_arm_state() {
+  path="$1"
+  if [ ! -f "$path" ]; then
+    printf 'absent\n'
+    return 0
+  fi
+  case "$(head -n 1 "$path" | tr -d '[:space:]')" in
+    true) : ;;
+    false) printf 'disarmed\n'; return 0 ;;
+    *) printf 'invalid\n'; return 0 ;;
+  esac
+  expires="$(grep -Eo '^expires=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "$path" | head -n 1 | cut -d= -f2)"
+  if [ -n "$expires" ]; then
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    # ISO-8601 UTC sorts lexicographically, so no date arithmetic is needed.
+    if [ "$(printf '%s\n%s\n' "$expires" "$now" | sort | tail -n 1)" = "$now" ] &&
+       [ "$now" != "$expires" ]; then
+      printf 'expired\n'
+      return 0
+    fi
+  fi
+  printf 'armed\n'
+}
+
+# Durable audit record.  N7 requires that an auto-execution be reconstructable
+# afterwards; an unwritable sink therefore REFUSES rather than executing
+# silently.
+nb_audit() {
+  nb_decision="$1"
+  nb_reason="$2"
+  nb_dir="$ROOT/decisions"
+  nb_log="$nb_dir/no-brainer-execution.jsonl"
+  if ! mkdir -p "$nb_dir" 2>/dev/null; then
+    echo "brief-check: cannot create the no-brainer audit sink ($nb_dir) — refusing auto-execution; an unreconstructable execution is worse than a dry run" >&2
+    exit 1
+  fi
+  if ! printf '{"recorded_at":"%s","gate":"no-brainer-execute-safety","mode":"%s","decision":"%s","reason":"%s","brief_path":"%s","classifier_version":"%s","classifier_state":"%s","category":"%s","confidence":"%s","classified_at":"%s","armed_city":"%s","armed_rig":"%s","kill_switch_city":"%s","kill_switch_rig":"%s","city_root":"%s","rig_root":"%s","agent":"%s"}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      "$(nb_json_escape "$NB_MODE")" \
+      "$(nb_json_escape "$nb_decision")" \
+      "$(nb_json_escape "$nb_reason")" \
+      "$(nb_json_escape "$NB_BRIEF")" \
+      "$(nb_json_escape "$NB_CLASSIFIER_VERSION")" \
+      "$(nb_json_escape "$NB_STATE")" \
+      "$(nb_json_escape "$NB_CATEGORY")" \
+      "$(nb_json_escape "$NB_CONFIDENCE")" \
+      "$(nb_json_escape "$NB_CLASSIFIED_AT")" \
+      "$(nb_json_escape "$NB_ARM_CITY")" \
+      "$(nb_json_escape "$NB_ARM_RIG")" \
+      "$(nb_json_escape "$NB_KS_CITY")" \
+      "$(nb_json_escape "$NB_KS_RIG")" \
+      "$(nb_json_escape "$NB_CITY_ROOT")" \
+      "$(nb_json_escape "$NB_RIG_ROOT")" \
+      "$(nb_json_escape "${GC_AGENT:-unknown}")" \
+      >> "$nb_log" 2>/dev/null; then
+    echo "brief-check: cannot append to the no-brainer audit log ($nb_log) — refusing auto-execution" >&2
+    exit 1
+  fi
+}
+
+nb_refuse() {
+  nb_audit "REFUSED" "$1"
+  fail "$2"
+}
+
+# Resolve the city/rig roots and every switch and token into NB_* variables.
+# Shared by the gate, the mode report, and the disarm command so all three
+# answer from exactly the same state.
+nb_resolve_mode() {
+  NB_CITY_ROOT="${GC_CITY:-$HOME/gt}"
+  NB_RIG_ROOT="${GC_RIG_ROOT:-}"
+  if [ -z "$NB_RIG_ROOT" ]; then
+    # BRIEF_ROOT is <rig_root>/.beads/briefs, so the rig root is two up.
+    NB_RIG_ROOT="$(cd "$ROOT/../.." 2>/dev/null && pwd || true)"
+  fi
+  NB_ARM_CITY_PATH="$NB_CITY_ROOT/.beads/no_brainer_auto_execute_armed"
+  NB_ARM_RIG_PATH="$NB_RIG_ROOT/.beads/no_brainer_auto_execute_armed"
+  NB_KS_CITY="$(nb_flag_state "$NB_CITY_ROOT/.beads/auto_merge_enabled")"
+  NB_KS_RIG="$(nb_flag_state "$NB_RIG_ROOT/.beads/auto_merge_enabled")"
+  NB_ARM_CITY="$(nb_arm_state "$NB_ARM_CITY_PATH")"
+  NB_ARM_RIG="$(nb_arm_state "$NB_ARM_RIG_PATH")"
+  if [ "$NB_ARM_CITY" = "armed" ] && [ "$NB_ARM_RIG" = "armed" ] &&
+     [ "$NB_KS_CITY" != "false" ] && [ "$NB_KS_RIG" != "false" ]; then
+    NB_MODE="armed"
+  else
+    NB_MODE="dry-run"
+  fi
+}
+
+# `brief-check.sh no-brainer-mode` — the straight answer to "which mode is
+# this city in right now, and how do I change it?".  Read-only: it writes
+# nothing, audits nothing, and always exits 0, so it is safe to run anywhere.
+report_no_brainer_mode() {
+  nb_resolve_mode
+  if [ "$NB_MODE" = "armed" ]; then
+    echo "no-brainer auto-execution mode: ARMED"
+    echo "  a classified no-brainer WILL be executed without being surfaced."
+    echo "  the classifier making that call is $NB_CLASSIFIER_VERSION."
+  else
+    echo "no-brainer auto-execution mode: DRY-RUN"
+    echo "  no-brainers are classified and recorded; nothing is executed."
+  fi
+  echo ""
+  echo "  city arming token  $NB_ARM_CITY_PATH  [$NB_ARM_CITY]"
+  echo "  rig arming token   $NB_ARM_RIG_PATH  [$NB_ARM_RIG]"
+  echo "  city kill switch   $NB_CITY_ROOT/.beads/auto_merge_enabled  [$NB_KS_CITY]"
+  echo "  rig kill switch    $NB_RIG_ROOT/.beads/auto_merge_enabled  [$NB_KS_RIG]"
+  case "$NB_ARM_CITY$NB_ARM_RIG" in
+    *disarmed*) echo "  (dry-run is explicitly pinned — someone put it back, it did not lapse)" ;;
+    *expired*) echo "  (an arming token has expired — dry-run resumed on its own)" ;;
+  esac
+  echo ""
+  echo "  to ARM (deliberate; record a standalone decision bead first):"
+  # printf '%s\n', not echo: these lines contain literal \n that must survive.
+  printf '%s\n' "    printf 'true\\nexpires=<ISO-8601-utc>\\n' > $NB_ARM_CITY_PATH"
+  printf '%s\n' "    printf 'true\\nexpires=<ISO-8601-utc>\\n' > $NB_ARM_RIG_PATH"
+  echo "  to return to DRY-RUN (always allowed, takes effect immediately):"
+  echo "    brief-check.sh no-brainer-disarm"
+  echo ""
+  printf '{"mode":"%s","armed_city":"%s","armed_rig":"%s","kill_switch_city":"%s","kill_switch_rig":"%s","classifier_version":"%s"}\n' \
+    "$NB_MODE" "$NB_ARM_CITY" "$NB_ARM_RIG" "$NB_KS_CITY" "$NB_KS_RIG" \
+    "$(nb_json_escape "$NB_CLASSIFIER_VERSION")"
+}
+
+# `brief-check.sh no-brainer-disarm` — the recovery path, deliberately a
+# single command.  Arming has no matching one-shot helper: going back to
+# dry-run should always be easier than leaving it, so the asymmetry is the
+# point, not an oversight.
+disarm_no_brainer() {
+  nb_resolve_mode
+  for nb_token in "$NB_ARM_CITY_PATH" "$NB_ARM_RIG_PATH"; do
+    nb_token_dir="$(dirname "$nb_token")"
+    if ! mkdir -p "$nb_token_dir" 2>/dev/null; then
+      fail "cannot create $nb_token_dir to pin dry-run"
+    fi
+    if ! printf 'false\n' > "$nb_token" 2>/dev/null; then
+      fail "cannot write $nb_token to pin dry-run"
     fi
   done
+  echo "no-brainer auto-execution pinned to DRY-RUN (both tokens now read false)."
+  echo "  $NB_ARM_CITY_PATH"
+  echo "  $NB_ARM_RIG_PATH"
+  echo "verify with: brief-check.sh no-brainer-mode"
+}
+
+check_no_brainer_execute_safety() {
+  NB_MODE="dry-run"
+  NB_STATE=""
+  NB_CATEGORY=""
+  NB_CONFIDENCE=""
+  NB_CLASSIFIED_AT=""
+
+  nb_resolve_mode
+  if [ "$NB_MODE" = "armed" ]; then
+    echo "brief-check: no-brainer auto-execution is ARMED for $NB_RIG_ROOT. The classifier deciding this is $NB_CLASSIFIER_VERSION — PRELIMINARY. Return to dry-run at any time with: brief-check.sh no-brainer-disarm" >&2
+  fi
+
+  # --- 1. the artifact itself -------------------------------------------
+  NB_BRIEF="$(brief_path)"
+  if [ -z "$NB_BRIEF" ] || [ ! -f "$NB_BRIEF" ]; then
+    nb_refuse "brief_unresolvable" \
+      "cannot resolve the brief under evaluation (${NB_BRIEF:-<empty>}) — refusing auto-execution; safety cannot be asserted about an artifact that was never read"
+  fi
+
+  # --- 2. stop gates, before any switch or arming state ------------------
+  # N3/S7: category E (server-touching) and G5b (user-skill-touching) are
+  # stop-gates, not preferences.  Frontmatter is checked as well as the gate
+  # token: brief-prep's Override 1 is expressed as `server_touching: true`,
+  # and the token-only check let that shape through.
+  if grep -Eq '^server_touching:[[:space:]]*true\b' "$NB_BRIEF" ||
+     grep -Eq 'G5 Server-touching:[[:space:]]*(FAIL|BLOCKED)' "$NB_BRIEF"; then
+    nb_refuse "stop_gate_server_touching" \
+      "category E / server-touching brief — auto-execution is forbidden regardless of kill-switch or arming state (N3, S7); route to explicit adjudication"
+  fi
+  if grep -Eq '^user_skill_touching_override:[[:space:]]*true\b' "$NB_BRIEF" ||
+     grep -Eq 'G5b User-skill-touching:[[:space:]]*(FAIL|BLOCKED)' "$NB_BRIEF"; then
+    nb_refuse "stop_gate_user_skill_touching" \
+      "user-skill-touching brief — auto-execution is forbidden regardless of kill-switch or arming state (N3, G5b); route to explicit adjudication"
+  fi
+
+  # --- 3. classifier evidence -------------------------------------------
+  nb_g9="$(grep -E 'G9 No-brainer-filter:' "$NB_BRIEF" || true)"
+  if [ -z "$nb_g9" ] || [ "$(printf '%s\n' "$nb_g9" | grep -c .)" != "1" ]; then
+    nb_refuse "classifier_evidence_invalid" \
+      "auto-execution requires exactly one G9 No-brainer-filter evidence line in $NB_BRIEF"
+  fi
+  NB_STATE="$(printf '%s\n' "$nb_g9" | grep -Eo 'classifier_state=[a-z_]+' | head -n 1 | cut -d= -f2)"
+  NB_CATEGORY="$(printf '%s\n' "$nb_g9" | grep -Eo 'category=[A-Za-z0-9._-]+' | head -n 1 | cut -d= -f2)"
+  NB_CONFIDENCE="$(printf '%s\n' "$nb_g9" | grep -Eo 'confidence=[0-9]+([.][0-9]+)?' | head -n 1 | cut -d= -f2)"
+  NB_CLASSIFIED_AT="$(printf '%s\n' "$nb_g9" | grep -Eo 'classified_at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' | head -n 1 | cut -d= -f2)"
+
+  if [ "$NB_STATE" = "safety_blocked" ]; then
+    nb_refuse "stop_gate_classifier_safety_blocked" \
+      "classifier recorded classifier_state=safety_blocked — auto-execution is forbidden (N3)"
+  fi
+  if [ -n "$NB_STATE" ] && [ "$NB_STATE" != "known_no_brainer" ]; then
+    nb_refuse "classifier_not_no_brainer" \
+      "classifier_state=$NB_STATE is not an auto-executable classification; only known_no_brainer executes"
+  fi
+  if [ -z "$NB_STATE" ] || [ -z "$NB_CLASSIFIED_AT" ]; then
+    nb_refuse "classifier_evidence_invalid" \
+      "G9 evidence must record classifier_state and classified_at=<ISO-8601-utc> in $NB_BRIEF"
+  fi
+  if ! printf '%s\n' "$nb_g9" | grep -Eq 'G9 No-brainer-filter:[[:space:]]*PASS'; then
+    nb_refuse "classifier_evidence_invalid" "G9 No-brainer-filter evidence does not read PASS in $NB_BRIEF"
+  fi
+  if ! printf '%s\n' "$nb_g9" | grep -Eq 'stop_gates_clear=true'; then
+    nb_refuse "classifier_evidence_invalid" "known_no_brainer G9 evidence requires stop_gates_clear=true in $NB_BRIEF"
+  fi
+  nb_registry="assets/brief-pipeline/no-brainer-categories.toml"
+  if [ -z "$NB_CATEGORY" ] || [ "$NB_CATEGORY" = "none" ] || [ ! -f "$nb_registry" ] ||
+     ! grep -Eq '^id[[:space:]]*=[[:space:]]*"'"$NB_CATEGORY"'"' "$nb_registry"; then
+    nb_refuse "classifier_evidence_invalid" \
+      "known_no_brainer category '${NB_CATEGORY:-<unset>}' is not present in $nb_registry"
+  fi
+  if [ -z "$NB_CONFIDENCE" ] || ! awk -v c="$NB_CONFIDENCE" 'BEGIN { exit (c >= 0.85 ? 0 : 1) }'; then
+    nb_refuse "classifier_evidence_invalid" \
+      "known_no_brainer confidence '${NB_CONFIDENCE:-<unset>}' is below the N8 auto-execution threshold of 0.85"
+  fi
+
+  # --- 4. N5 kill-switch hierarchy (retained brakes) ---------------------
+  if [ "$NB_KS_CITY" = "false" ] || [ "$NB_KS_RIG" = "false" ]; then
+    nb_refuse "kill_switch_engaged" \
+      "kill switch ENGAGED (city=$NB_KS_CITY rig=$NB_KS_RIG) — auto-execution halted (N5); route brief to the pile in compact form"
+  fi
+
+  # --- 5. mode: dry-run or armed (inverts absent-means-go) ---------------
+  # An explicit pin back to dry-run is reported as such, so a rollback is
+  # confirmable rather than inferred.
+  if [ "$NB_ARM_CITY" = "disarmed" ] || [ "$NB_ARM_RIG" = "disarmed" ]; then
+    nb_refuse "dry_run_pinned" \
+      "no-brainer auto-execution is pinned to DRY-RUN (city=$NB_ARM_CITY rig=$NB_ARM_RIG) — classification recorded, nothing executed"
+  fi
+  if [ "$NB_ARM_CITY" = "expired" ] || [ "$NB_ARM_RIG" = "expired" ]; then
+    nb_refuse "arming_expired" \
+      "no-brainer auto-execution arming has EXPIRED (city=$NB_ARM_CITY rig=$NB_ARM_RIG) — re-arm deliberately or leave it in dry-run"
+  fi
+  if [ "$NB_MODE" != "armed" ]; then
+    nb_refuse "not_armed" \
+      "no-brainer auto-execution is in DRY-RUN (city=$NB_ARM_CITY rig=$NB_ARM_RIG) — arming requires a deliberate token at BOTH $NB_CITY_ROOT/.beads/no_brainer_auto_execute_armed and $NB_RIG_ROOT/.beads/no_brainer_auto_execute_armed"
+  fi
+
+  # --- 6. permitted ------------------------------------------------------
+  nb_audit "PERMITTED" "armed_and_gates_clear"
 }
 
 check_archive_sweep_record() {
@@ -601,6 +888,8 @@ case "$COMMAND" in
   no-brainer-safety) check_no_brainer_safety ;;
   no-brainer-classification-evidence) check_no_brainer_classification_evidence ;;
   no-brainer-execute-safety) check_no_brainer_execute_safety ;;
+  no-brainer-mode) report_no_brainer_mode ;;
+  no-brainer-disarm) disarm_no_brainer ;;
   server-touching-safety) check_server_touching_safety ;;
   archive-sweep-record) check_archive_sweep_record ;;
   file-or-sendback-log) check_file_or_sendback_log ;;

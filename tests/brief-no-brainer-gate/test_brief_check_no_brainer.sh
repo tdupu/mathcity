@@ -93,16 +93,23 @@ run_case "clean gates pass no-brainer-safety" 0 \
 G9 No-brainer-filter: PASS classifier_state=known_no_brainer category=stale-branch stop_gates_clear=true confidence=0.9 classified_at=2026-07-28T00:00:00Z' \
   no-brainer-safety
 
+# The two execute-safety cases below set BRIEF_ROOT into a sandbox: the gate
+# now appends a durable audit line under $BRIEF_ROOT/decisions/, and without
+# the override that record would be written into the pack checkout itself.
+# Full arming/stop-gate/audit coverage lives in
+# tests/brief-no-brainer-arming/test_no_brainer_arming.sh.
+
 echo "=== no-brainer-execute-safety: kill switch ENGAGED (flag=false) blocks execution ==="
 KS_CITY="$(mktemp -d)"
 mkdir -p "$KS_CITY/.beads"
 printf 'false\n' > "$KS_CITY/.beads/auto_merge_enabled"
 tmp="$(mktemp -d)"
+mkdir -p "$tmp/rig/.beads/briefs"
 brief_path="$tmp/brief.md"
 printf '%s\n' 'G5 Server-touching: PASS
 G9 No-brainer-filter: PASS classifier_state=known_no_brainer category=stale-branch stop_gates_clear=true confidence=0.9 classified_at=2026-07-28T00:00:00Z' > "$brief_path"
 status=0
-(cd "$RIG_ROOT" && GC_CITY="$KS_CITY" GC_BRIEF_PATH="$brief_path" "$CHECK" no-brainer-execute-safety) >"$tmp/out" 2>"$tmp/err" || status=$?
+(cd "$RIG_ROOT" && GC_CITY="$KS_CITY" GC_RIG_ROOT="$tmp/rig" BRIEF_ROOT="$tmp/rig/.beads/briefs" GC_BRIEF_PATH="$brief_path" "$CHECK" no-brainer-execute-safety) >"$tmp/out" 2>"$tmp/err" || status=$?
 if [ "$status" = "1" ]; then
   echo "PASS: kill switch engaged blocks execute-safety (exit=$status, expected=1)"
   PASS_COUNT=$((PASS_COUNT + 1))
@@ -113,20 +120,25 @@ else
 fi
 rm -rf "$tmp" "$KS_CITY"
 
-echo "=== no-brainer-execute-safety: kill switch flag ABSENT allows execution (default auto-execute) ==="
+echo "=== no-brainer-execute-safety: kill switch flag ABSENT no longer allows execution (arming required) ==="
+# Was: "absent kill switch allows execute-safety (expected=0)".  Absent-means-go
+# put the brake in the go position by default; auto-execution now requires a
+# positive arming token at both the city and rig level, so an absent brake and
+# an absent arm token both mean DO NOT EXECUTE.
 KS_CITY2="$(mktemp -d)"
 mkdir -p "$KS_CITY2/.beads"
 tmp="$(mktemp -d)"
+mkdir -p "$tmp/rig/.beads/briefs"
 brief_path="$tmp/brief.md"
 printf '%s\n' 'G5 Server-touching: PASS
 G9 No-brainer-filter: PASS classifier_state=known_no_brainer category=stale-branch stop_gates_clear=true confidence=0.9 classified_at=2026-07-28T00:00:00Z' > "$brief_path"
 status=0
-(cd "$RIG_ROOT" && GC_CITY="$KS_CITY2" GC_BRIEF_PATH="$brief_path" "$CHECK" no-brainer-execute-safety) >"$tmp/out" 2>"$tmp/err" || status=$?
-if [ "$status" = "0" ]; then
-  echo "PASS: absent kill switch allows execute-safety (exit=$status, expected=0)"
+(cd "$RIG_ROOT" && GC_CITY="$KS_CITY2" GC_RIG_ROOT="$tmp/rig" BRIEF_ROOT="$tmp/rig/.beads/briefs" GC_BRIEF_PATH="$brief_path" "$CHECK" no-brainer-execute-safety) >"$tmp/out" 2>"$tmp/err" || status=$?
+if [ "$status" = "1" ] && grep -q '"reason":"not_armed"' "$tmp/rig/.beads/briefs/decisions/no-brainer-execution.jsonl"; then
+  echo "PASS: absent kill switch alone does not arm execute-safety (exit=$status, expected=1, reason=not_armed)"
   PASS_COUNT=$((PASS_COUNT + 1))
 else
-  echo "FAIL: absent kill switch allows execute-safety (exit=$status, expected=0)"
+  echo "FAIL: absent kill switch alone does not arm execute-safety (exit=$status, expected=1)"
   echo "  --- stderr ---"; sed 's/^/  /' "$tmp/err"
   FAIL_COUNT=$((FAIL_COUNT + 1))
 fi

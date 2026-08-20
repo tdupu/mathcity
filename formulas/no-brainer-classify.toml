@@ -3,9 +3,10 @@ Classify and optionally process no-brainer briefs.
 
 This formula classifies candidates and records the result. Shortcut execution
 is allowed only for a known registry category with confidence at or above the
-threshold, all stop gates clear, and no N5 kill switch engaged. Auto-execute is
-the default when those checks pass; a city or rig switch file that exists and
-reads `false` halts execution.
+threshold, all stop gates clear, no N5 kill switch engaged, AND explicit
+arming at both the city and rig level. Unarmed is the default and is
+indistinguishable from a dry run: nothing executes and the brief stays on the
+human presentation path.
 """
 formula = "no-brainer-classify"
 version = 1
@@ -54,11 +55,15 @@ title = "Enforce no-brainer safety exclusions"
 needs = ["load-candidate"]
 metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
 description = """
-Apply server-touching, user-skill-touching, test-execution, LaTeX, and N5
-kill-switch exclusions. Stop gates force `safety_blocked`; a city-wide or
-rig-level `auto_merge_enabled` file that exists and reads `false` halts
-guarded execution and routes the brief to the human adjudicator. Absent or `true` switches do
-not block classification.
+Apply server-touching, user-skill-touching, test-execution, and LaTeX
+exclusions. Stop gates force `safety_blocked`.
+
+This step runs the STOP-GATE check only. The kill-switch and arming checks
+live on `guarded-execute`, where the mutation actually happens — they were
+previously attached here instead, which meant (a) the execution gate was
+evaluated before the classifier evidence it needs even existed, and (b) the
+step that mutates carried no switch check at all. Switch and arming state can
+change between steps, so the gate must sit on the mutating step.
 """
 
 [steps.check]
@@ -66,7 +71,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-no-brainer-execute-safety.sh"
+path = ".gc/scripts/checks/brief-no-brainer-safety.sh"
 timeout = "1m"
 
 [[steps]]
@@ -108,13 +113,31 @@ needs = ["classify"]
 condition = "{{mode}} == guarded-execute"
 metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.path" = "{{brief_path}}", "gc.brief.root" = "{{artifact_root}}" }
 description = """
-Execute only if classification is `no-brainer`, all stop gates are clear, and
-no N5 kill switch is engaged. Kill-switch hierarchy (POLICY.md N5, Adopted
-2026-07-12; auto-execute is the DEFAULT): check `<city-root>/.beads/auto_merge_enabled`
-(city-wide), then `<rig_root>/.beads/auto_merge_enabled` (rig-level) — a flag
-file that exists and reads `false` halts execution and routes the brief to the
-pile in compact form for the human adjudicator; absent or `true` proceeds. Stop gates and
-non-no-brainer classifications route the brief to the human adjudicator as before.
+Execute ONLY if this step's own check exits 0. The check is
+`brief-no-brainer-execute-safety.sh`, the single component that runs
+immediately before the mutation; it is deliberately re-run here rather than
+trusting the earlier `enforce-safety-exclusions` result, because the state it
+reads (kill switches, arming tokens, the brief itself) can change between
+steps.
+
+The check refuses, in this order: an unresolvable brief; a stop gate
+(server-touching / category E, user-skill-touching, `classifier_state=safety_blocked`);
+classifier evidence that is not a registry-backed `known_no_brainer` with
+`stop_gates_clear=true` and `confidence >= 0.85`; an ENGAGED N5 kill switch
+(`<city-root>/.beads/auto_merge_enabled` then `<rig_root>/.beads/auto_merge_enabled`,
+a file that exists and reads `false`); and — the arming requirement — the
+absence of a valid, unexpired positive token at BOTH
+`<city-root>/.beads/no_brainer_auto_execute_armed` and
+`<rig_root>/.beads/no_brainer_auto_execute_armed`.
+
+DRY-RUN is the default mode and behaves exactly like the old dry-run
+designation: classification is recorded, nothing executes, and the brief stays
+on the normal human presentation path. The mode toggles both ways at runtime
+without editing this formula — `brief-check.sh no-brainer-mode` reports it,
+`brief-check.sh no-brainer-disarm` returns to DRY-RUN in one command. Every
+evaluation appends a durable audit line to
+`{{artifact_root}}/decisions/no-brainer-execution.jsonl`; if that record
+cannot be written the check refuses rather than executing unreconstructably.
 """
 
 [steps.check]
@@ -122,7 +145,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-no-brainer-safety.sh"
+path = ".gc/scripts/checks/brief-no-brainer-execute-safety.sh"
 timeout = "1m"
 
 [[steps]]
