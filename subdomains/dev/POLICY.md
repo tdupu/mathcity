@@ -558,9 +558,16 @@ a grep would produce a proxy that passes confidently on the cases it cannot see
   something `mctl` already does is a **violation, not a shortcut** — including
   when it is faster, when the caller "only reads", and when it runs *after* the
   canonical write to patch an artifact `mctl` did not update.
-  Pass: every write to a canonical or redundant brief artifact — bead,
-  decisions cache, pile file, stack index, decisions-track row or body — is made
-  by `mctl`; a non-`mctl` writer exists only under a **declared, named
+  Pass: every write to a canonical or redundant brief artifact is made by
+  `mctl`. **There are five representations of a verdict, and a spec built on four
+  is short one** (measured 2026-08-20): (1) the **bead**; (2) `decisions/<id>.toml`
+  on the stack track; (3) `stack/.index.jsonl`; (4) the **brief file
+  frontmatter**; (5) the **decisions-track manifest row** — which `mctl` does not
+  write at all today, so it is the one that cannot agree by construction. (2) and
+  (5) are the same decision record split across two tracks; count them separately,
+  because checking one has never implied the other. The pile `.md` is `mctl`'s
+  too, exemption or not.
+  A non-`mctl` writer exists only under a **declared, named
   exemption**. *Granting one is a judgement call, not a checkbox*: a reasoned
   verdict must name the artifact, state why `mctl` cannot own it **today**, cite
   what would have to change for the exemption to lapse, and name who removes it
