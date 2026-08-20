@@ -22,7 +22,7 @@ from .redundant_state import (
     orphan_markdown_cache_ids,
     scan_artifacts,
 )
-from .verdicts import read_verdict
+from .verdicts import NON_BRIEF_MESSAGES, brief_population, non_brief_code, read_verdict
 
 
 @dataclass(frozen=True)
@@ -979,11 +979,43 @@ def _doctor_briefs(ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ..
     if brief_id is not None:
         records = tuple(record for record in records if record.brief_id == brief_id)
         if not records:
-            raise BriefError(
-                _diagnostic(ctx, Severity.FATAL, "MBRF010", f"No canonical brief bead named {brief_id!r} was found.", brief_id=brief_id)
+            # An operator who names a bead B2.1 exempted deserves to be told
+            # that, not "no such brief" -- the bead is right there, it is
+            # simply a standalone decision bead. `MBRF010` still fires for an
+            # id that names nothing at all.
+            exempt = next(
+                (bead for bead in beads if bead.id == brief_id and bead.is_brief and non_brief_code(bead)),
+                None,
             )
+            if exempt is None:
+                raise BriefError(
+                    _diagnostic(ctx, Severity.FATAL, "MBRF010", f"No canonical brief bead named {brief_id!r} was found.", brief_id=brief_id)
+                )
     bead_by_id = {bead.id: bead for bead in beads}
     diagnostics: list[Diagnostic] = []
+    # A bead that left the population under B2.1 must still be accounted for.
+    # Silently dropping it from every listing is indistinguishable, to an
+    # operator, from losing it -- and the whole point of the exemption is that
+    # these beads are fine, not that they are gone.
+    for bead in beads:
+        if not bead.is_brief:
+            continue
+        if brief_id is not None and bead.id != brief_id:
+            continue
+        code = non_brief_code(bead)
+        if code is None:
+            continue
+        diagnostics.append(
+            _diagnostic(
+                ctx,
+                Severity.INFO,
+                code,
+                NON_BRIEF_MESSAGES[code],
+                brief_id=bead.id,
+                data_location=_canonical_bead_location(ctx),
+                policy_ref="B2.1",
+            )
+        )
     for record in records:
         bead = bead_by_id[record.bead_id]
         if not bead.source_dependencies:
@@ -1029,6 +1061,18 @@ def _records(
     layout: ArtifactLayout | None = None,
     legacy_state: LegacyManifestState | None = None,
 ) -> tuple[BriefRecord, ...]:
+    """The brief population: `type=decision`, minus B2.1's standalone beads.
+
+    This filtered on `bead.is_brief` -- `issue_type == "decision"` and nothing
+    else -- which counted every push-authorization receipt and kill-switch
+    record as a brief, and then `MBRF004` flagged each of them for having no
+    source dependency. They cannot have one: they are not deciding about
+    another bead. That was 49 of the 120 open beads MBRF004 refused city-wide.
+
+    B2.1's Definitions paragraph already exempted them; `verdicts.is_brief_bead`
+    is that sentence, and this is where it applies. The beads it removes are
+    reported by `_doctor_briefs` as `MBRF054`/`MBRF055` rather than vanishing.
+    """
     layout = artifact_layout(ctx) if layout is None else layout
     legacy_state = legacy_manifest_state(layout) if legacy_state is None else legacy_state
     beads = _beads(ctx) if beads is None else beads
@@ -1045,8 +1089,7 @@ def _records(
             redundant_artifacts=scan_artifacts(layout, bead.id, _decision_state(bead), legacy_state),
             policy_references=BRIEF_POLICY_REFERENCES,
         )
-        for bead in beads
-        if bead.is_brief
+        for bead in brief_population(beads)
     )
 
 

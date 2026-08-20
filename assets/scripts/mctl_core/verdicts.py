@@ -107,6 +107,19 @@ CODE_EXECUTION_RECORD = "MBRF051"
 CODE_WITHDRAWAL = "MBRF052"
 CODE_UNREADABLE = "MBRF053"
 CODE_NOT_A_BRIEF = "MBRF054"
+CODE_NOT_A_KILL_SWITCH_BRIEF = "MBRF055"
+
+#: What `non_brief_code` says when it removes a bead from the population.
+NON_BRIEF_MESSAGES = {
+    CODE_NOT_A_BRIEF: (
+        "Decision bead is a git-operation authorization receipt, not a brief (B2.1); "
+        "it is a standalone decision bead and has no source to link."
+    ),
+    CODE_NOT_A_KILL_SWITCH_BRIEF: (
+        "Decision bead records a kill-switch engagement or release, not a brief "
+        "(B2.1/N5); it is a standalone decision bead and has no source to link."
+    ),
+}
 
 #: How `close_reason` was classified, independent of whether it resolved.
 KIND_VERDICT = "verdict"
@@ -240,7 +253,70 @@ _NOTES_CANONICAL = re.compile(
 #: creates. It is the only structured marker these receipts carry -- they have
 #: no distinguishing label or metadata key -- and it is far safer than matching
 #: their titles, which real briefs about authorisation also match.
-_GIT_AUTHORIZATION_MARKER = re.compile(r"authorize-git-operation", re.IGNORECASE)
+#: Anchored to the start of the field the skill writes it into, NOT a substring
+#: search. Slice 2 matched the bare name anywhere in the body, and measured
+#: across all 280 live decision beads that exempted **5 real briefs** which
+#: merely mention the skill in prose -- `gt-s4r3a1` ("the human approval gate
+#: wherever one applies (e.g. `authorize-git-operation` for pushes/PRs)"),
+#: `gt-5fxchl`, `gt-8lba37`, `gt-gr755h`, `gsp-qtadi`. A brief that drops out of
+#: the population is invisible afterwards, which is precisely the failure a
+#: false exemption must not have, so the marker is the skill's own sentence.
+_GIT_AUTHORIZATION_MARKER = re.compile(
+    r"^\s*(?:#+\s*)?Authoriz(?:ation|ed)\b[^\n]{0,60}?\bauthorize-git-operation\b",
+    re.IGNORECASE,
+)
+
+#: The tag agents put in a receipt's title when they write one by hand:
+#: `[decision][git-auth] AUTHORIZED: …`, `[authorize-git] …`. A bracketed tag is
+#: a deliberate structured marker, unlike the free prose the bare name matched.
+_GIT_AUTHORIZATION_TAG = re.compile(
+    r"\[\s*(?:git-auth|authorize-git(?:-operation)?)\s*\]", re.IGNORECASE
+)
+
+#: The receipt template from the same skill's Step 3:
+#: `--notes "Operation: <type>. Target: <ref>. Verdict: <AUTHORIZED|DENIED>."`
+#: 3 of the 120 live `MBRF004`-blocked beads (`he-0g69g`, `gsp-l5vi`,
+#: `gt-d8ztsx`) were written to this template by hand, without the description
+#: sentence the marker looks for. Reading the skill's own two output shapes is
+#: the same rule, not a wider one.
+#:
+#: BOTH keys are required, in the skill's order. Neither is distinctive alone --
+#: real briefs describe operations and real briefs record verdicts -- and the
+#: verdict word must be the skill's `AUTHORIZED`/`DENIED` enum rather than
+#: B2.2's `approve`/`reject`/`revise`/`defer`, which is what a brief carries.
+#: Measured across all 280 live decision beads this pair matches 49 beads, 47
+#: of which also carry the marker, and the other 2 are push receipts by title.
+#: Zero false positives.
+_RECEIPT_OPERATION = re.compile(r"(?:^|\n)[ \t]*Operation\s*:\s*\S", re.IGNORECASE)
+_RECEIPT_VERDICT = re.compile(
+    r"\bVerdict\s*:\s*(?:AUTHORIZED|DENIED|DEFERRED|MODIFIED)\b"
+)
+
+#: N5 records engaging or releasing the auto-merge kill switch "as a STANDALONE
+#: decision bead (a kill-switch authorization record -- its own bead, not a
+#: brief verdict; unaffected by the one-bead model)". B2.1 names the same class.
+#:
+#: Matched on the title, because the title is where the record states what it
+#: records, and the act must *govern* the switch: the verb, then at most two
+#: words, then the switch. `gsp-pxcu` is a policy-amendment bead whose body
+#: discusses the switch hierarchy; `Should the rig-level kill-switch default to
+#: engaged?` is a brief asking a question about it. Both contain the switch and
+#: an act word, and neither is a record.
+#:
+#: This is deliberately narrower than the class B2.1 names. There is exactly
+#: **one** such bead in the live 280 (`gt-0i99e`, and it is closed, so it is
+#: not among the 120 this slice measures), which is far too little evidence to
+#: generalise a phrasing from. A record written some other way stays in the
+#: population and keeps raising `MBRF004` -- a human then looks at it. That is
+#: the safe direction to fail: a missing exemption is visible, a wrong one is
+#: not.
+_KILL_SWITCH_RECORD = re.compile(
+    r"\b(?:engag(?:e|ed|es|ing|ement)|releas(?:e|ed|es|ing)|disengag\w*|"
+    r"re-?arm\w*|trip(?:s|ped|ping)?|flips?|flipped|flipping)\b"
+    r"(?:\s+[\w./>-]+){0,2}\s+"
+    r"(?:kill[-\s]?switch|auto_merge_enabled)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -381,20 +457,75 @@ def is_brief_bead(bead: Bead) -> bool:
     `issue_type == "decision"`, which is why 36 closed `authorize-git-operation`
     receipts are currently counted as malformed briefs.
 
-    This implements the push-authorization half, which is the measurable one:
-    those receipts carry the skill's own marker in their body. The remaining
-    B2.1 exemptions are Slice 5's, which owns the population filter itself.
+    Slice 2 implemented the push-authorization half by the skill's body marker.
+    Slice 5 completes it: the same skill's receipt template (which 3 live
+    receipts use instead of the marker), and the kill-switch records N5
+    likewise requires to be standalone beads.
+
+    **B2.1's third exempt class, "non-brief adjudications", is deliberately NOT
+    implemented.** Many of the 71 live `MBRF004`-blocked beads that remain are
+    plausibly in it -- session handoffs, memory-migrated policy rules,
+    server-run authorizations -- and no rule separates them from a real brief
+    without also catching real briefs. Widening this function until the number
+    looked better would manufacture exactly the false exemptions B2.1 exists
+    to prevent, so the residue stays in the population and is reported to a
+    human instead:
+    `subdomains/dev/docs/MBRF004-TRIAGE-2026-08-19.md`.
     """
     if not bead.is_brief:
         return False
-    return not is_git_authorization_receipt(bead)
+    return non_brief_code(bead) is None
+
+
+def non_brief_code(bead: Bead) -> str | None:
+    """Which B2.1 exemption removes this decision bead, or None if none does.
+
+    Returned rather than a bool so `_doctor_briefs` can say *why* a bead left
+    the population. A bead that is quietly dropped from a listing looks
+    identical to a bead that was lost.
+    """
+    if is_git_authorization_receipt(bead):
+        return CODE_NOT_A_BRIEF
+    if is_kill_switch_record(bead):
+        return CODE_NOT_A_KILL_SWITCH_BRIEF
+    return None
 
 
 def is_git_authorization_receipt(bead: Bead) -> bool:
+    """A receipt written by the `authorize-git-operation` skill.
+
+    Only structured markers count -- the skill's receipt sentence at the head of
+    a field, its `Operation:`/`Verdict:` notes template, or an explicit
+    `[git-auth]` title tag. A bead that merely *mentions* the skill in prose
+    stays in the population and keeps raising `MBRF004`.
+
+    That leaves 16 live receipts unexempted, written loosely enough that
+    nothing structured identifies them ("Taylor authorized git PUSH: master ->
+    tdupu/hecke (7 commits)", whose body says only "authorize-git-operation
+    gate."). They are listed in the triage doc for a human to confirm. Failing
+    that way round is the point: an unexempted receipt is visible in the
+    MBRF004 list, whereas a real brief wrongly exempted disappears from every
+    surface and nobody finds out.
+    """
+    if _GIT_AUTHORIZATION_TAG.search(bead.title or ""):
+        return True
     for value in (bead.description, bead.raw.get("notes"), bead.raw.get("design")):
-        if isinstance(value, str) and _GIT_AUTHORIZATION_MARKER.search(value):
+        if not isinstance(value, str) or not value:
+            continue
+        if _GIT_AUTHORIZATION_MARKER.search(value):
+            return True
+        operation = _RECEIPT_OPERATION.search(value)
+        if operation is None:
+            continue
+        verdict = _RECEIPT_VERDICT.search(value)
+        if verdict is not None and verdict.start() > operation.start():
             return True
     return False
+
+
+def is_kill_switch_record(bead: Bead) -> bool:
+    """A record of engaging or releasing the auto-merge kill switch (N5)."""
+    return bool(_KILL_SWITCH_RECORD.search(bead.title or ""))
 
 
 def brief_population(beads: Iterable[Bead]) -> tuple[Bead, ...]:
@@ -434,14 +565,9 @@ def read_verdict_reading(bead: Bead, *, track: DecisionsTrack | None = None) -> 
     Precedence is bead-first: a field on the bead outranks the legacy manifest,
     and an explicitly typed field outranks text that had to be parsed.
     """
-    if is_git_authorization_receipt(bead):
-        return VerdictReading(
-            None,
-            CODE_NOT_A_BRIEF,
-            "Decision bead is an authorize-git-operation receipt, not a brief (B2.1); "
-            "it belongs outside the brief population rather than gaining a verdict.",
-            KIND_EMPTY,
-        )
+    non_brief = non_brief_code(bead)
+    if non_brief is not None:
+        return VerdictReading(None, non_brief, NON_BRIEF_MESSAGES[non_brief], KIND_EMPTY)
 
     close_reason = bead.raw.get("close_reason")
     close_reason = close_reason if isinstance(close_reason, str) else None
