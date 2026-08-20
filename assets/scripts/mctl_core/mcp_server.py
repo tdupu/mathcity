@@ -64,6 +64,13 @@ from .city import (
 )
 from .context import CityScope, ContextError, MctlContext, resolve_city, resolve_context
 from .diagnostics import Diagnostic, Severity
+from .payloads import (
+    brief_filters as _filters,
+    briefs_list_payload as _briefs_list_payload,
+    diagnostics_payload as _diagnostics,
+    replay_blocked as _replay_blocked,
+    require_trace as _require_trace,
+)
 from .effects import (
     BriefCreateInput,
     MutationError,
@@ -436,10 +443,6 @@ class ToolSpec:
         }
 
 
-def _filters(arguments: Mapping[str, Any]) -> BriefFilters:
-    return BriefFilters(arguments.get("status"), arguments.get("label"))
-
-
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     payload = dict(ctx.to_dict())
     payload["diagnostics"] = [warning.to_dict() for warning in ctx.warnings]
@@ -484,24 +487,6 @@ def _handle_briefs_list(
         ),
     )
     return _briefs_list_payload(ctx, listing)
-
-
-def _briefs_list_payload(ctx: MctlContext, listing: BriefListing) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "briefs": [record.to_dict() for record in listing.records],
-        "diagnostics": _diagnostics(
-            ctx,
-            brief_command_diagnostics(ctx, listing.records)
-            + tuple(
-                diagnostic
-                for outcome in listing.degraded_sources
-                for diagnostic in outcome.diagnostics
-            ),
-        ),
-    }
-    if not listing.complete:
-        payload[DEGRADED_SOURCES] = listing.degraded_payload()
-    return payload
 
 
 def _handle_briefs_show(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -665,30 +650,6 @@ def _handle_trace_replay_preview(
     }
 
 
-def _replay_blocked(ctx: MctlContext, source_trace_id: str, message: str) -> Diagnostic:
-    return Diagnostic(
-        severity=Severity.WARN,
-        code="MCTL_TRACE_REPLAY_BLOCKED",
-        message=message,
-        hint="Preview only. Re-run the originating mutation if the effect is still wanted.",
-        facts={
-            "city_path": str(ctx.city_root),
-            "implementation_provenance": "mctl MCP trace_replay_preview",
-            "rig_name": ctx.rig_id,
-            "rig_path": str(ctx.rig_root),
-            "source_trace_id": source_trace_id,
-        },
-        trace_id=ctx.trace_id,
-    )
-
-
-def _require_trace(ctx: MctlContext, trace_id: str) -> dict[str, object]:
-    record = fold(read_rows(ctx.rig_root), trace_id)
-    if record is None:
-        raise BriefError(trace_not_found_diagnostic(ctx, trace_id))
-    return record
-
-
 def _dry_run(arguments: Mapping[str, Any]) -> bool:
     """Absent means dry run. Mutation is opt-in, never opt-out."""
     return bool(arguments.get("dry_run", True))
@@ -698,12 +659,6 @@ def _effect_payload(ctx: MctlContext, plan, dry_run: bool) -> dict[str, object]:
     payload = dry_run_payload(plan) if dry_run else apply_effect_plan(ctx, plan).to_dict()
     payload["diagnostics"] = _diagnostics(ctx, ()) + list(payload.get("diagnostics", []))
     return payload
-
-
-def _diagnostics(ctx: MctlContext, diagnostics: Sequence[Diagnostic]) -> list[dict[str, object]]:
-    return [warning.to_dict() for warning in ctx.warnings] + [
-        diagnostic.to_dict() for diagnostic in diagnostics
-    ]
 
 
 _BRIEF_ID = {"type": "string", "description": "Canonical brief bead id."}
