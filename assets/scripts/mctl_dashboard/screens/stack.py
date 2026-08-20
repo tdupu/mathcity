@@ -61,7 +61,7 @@ KEEP_ALWAYS: frozenset[str] = frozenset({"slug", "rig", "sev"})
 
 def age_days(brief: Mapping[str, Any], *, now: datetime | None = None) -> int | None:
     """Whole days since the brief bead was created, or None if unknown."""
-    raw = str(brief.get("created_at") or "").strip()
+    raw = str(attr(brief, "created_at") or "").strip()
     if not raw:
         return None
     text = raw.replace("Z", "+00:00")
@@ -82,7 +82,7 @@ def severity(brief: Mapping[str, Any]) -> str:
     as far as anything has looked, and saying so is different from claiming it
     was checked.
     """
-    codes = brief.get("diagnostics") or ()
+    codes = attr(brief, "diagnostics") or ()
     worst = "ok"
     for item in codes:
         level = str((item or {}).get("severity") or "").upper()
@@ -104,8 +104,8 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
     if weights:
         settings.update(weights)
 
-    unlock = brief.get("unlock_count")
-    priority = brief.get("priority")
+    unlock = attr(brief, "unlock_count")
+    priority = attr(brief, "priority")
     days = age_days(brief)
     if unlock is None and priority is None:
         return None
@@ -113,7 +113,7 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
     total = 0.0
     if unlock is not None:
         total += float(unlock) * settings["unlock"]
-    if brief.get("convoy"):
+    if attr(brief, "convoy"):
         total += settings["convoy"] * 2.4
     if days is not None:
         total += days * settings["age"] * 0.35
@@ -133,17 +133,17 @@ def sort_value(brief: Mapping[str, Any], key: str) -> Any:
     if key == "sev":
         return (False, SEV_RANK.get(severity(brief), 1))
     if key == "prio":
-        raw = brief.get("priority")
+        raw = attr(brief, "priority")
         return (raw is None, PRIO_RANK.get(str(raw).lower(), 0))
     if key == "unlock":
         raw = attr(brief, "unlock_count")
         return (raw is None, float(raw) if raw is not None else 0.0)
     if key == "slug":
-        return (False, str(brief.get("title") or "").lower())
+        return (False, str(attr(brief, "title") or "").lower())
     if key == "rig":
-        return (False, str(brief.get("rig_id") or "").lower())
+        return (False, str(attr(brief, "rig_id") or "").lower())
     if key == "source":
-        return (False, str(brief.get("canonical_source") or "").lower())
+        return (False, str(attr(brief, "canonical_source") or "").lower())
     if key == "artifact":
         return (False, _artifact_text(brief).lower())
     return (True, "")
@@ -173,9 +173,9 @@ def row_background(brief: Mapping[str, Any], *, index: int, cursor: int) -> str:
     ordinary selected row for exactly as long as the cursor rested on it --
     which is the moment the operator is most likely to act on it.
     """
-    if brief.get("kind") == "error":
+    if attr(brief, "kind") == "error":
         return STOP["error"]["bg"]
-    level = brief.get("sev") or severity(brief)
+    level = attr(brief, "sev") or severity(brief)
     if level == "error":
         return STOP["held"]["bg"]
     if level == "warn":
@@ -186,9 +186,9 @@ def row_background(brief: Mapping[str, Any], *, index: int, cursor: int) -> str:
 
 
 def row_edge(brief: Mapping[str, Any], *, index: int, cursor: int) -> str:
-    if brief.get("kind") == "error":
+    if attr(brief, "kind") == "error":
         return STOP["error"]["edge"]
-    level = brief.get("sev") or severity(brief)
+    level = attr(brief, "sev") or severity(brief)
     if level == "error":
         return STOP["held"]["edge"]
     if level == "warn":
@@ -292,9 +292,9 @@ def _cell_style(key: str, numeric: bool) -> str:
 
 
 def _severity_colour(brief: Mapping[str, Any]) -> str:
-    if brief.get("kind") == "error":
+    if attr(brief, "kind") == "error":
         return STOP["error"]["fg"]
-    level = brief.get("sev") or severity(brief)
+    level = attr(brief, "sev") or severity(brief)
     if level == "error":
         return STOP["held"]["fg"]
     if level == "warn":
@@ -340,15 +340,15 @@ def _row(
     index: int,
     queued: Sequence[str],
 ) -> str:
-    bead = str(brief.get("bead_id") or "")
-    brief_id = str(brief.get("brief_id") or bead)
+    bead = str(attr(brief, "bead_id") or "")
+    brief_id = str(attr(brief, "brief_id") or bead)
     # The rig travels with the link. A brief lives in exactly one rig's store,
     # so a city-wide detail page cannot resolve it without being told which --
     # without this every click city-wide returns 400 rig-required.
     href = view.url(
         view="brief",
         brief_id=brief_id,
-        rig=str(brief.get("rig_id") or "") or view.rig,
+        rig=str(attr(brief, "rig_id") or "") or view.rig,
     )
     background = row_background(brief, index=index, cursor=view.cursor)
     edge = row_edge(brief, index=index, cursor=view.cursor)
@@ -358,7 +358,7 @@ def _row(
         style = _cell_style(key, numeric)
         if key == "sev":
             style += f" color: {_severity_colour(brief)};"
-            if brief.get("kind") == "error":
+            if attr(brief, "kind") == "error":
                 style += " font-weight: 600;"
         text = cell_text(brief, key)
         # One line per row, ellipsised. The design's density is the point:
