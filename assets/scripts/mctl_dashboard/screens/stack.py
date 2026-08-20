@@ -559,14 +559,49 @@ def key_legend() -> str:
     )
 
 
-def unfed_note() -> str:
+_COUNT_WORD = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five"}
+
+
+def unfed_columns(
+    briefs: Sequence[Mapping[str, Any]], weights: Mapping[str, int] | None = None
+) -> list[str]:
+    """Which assumed-but-unfed columns *this* data actually cannot fill.
+
+    Derived from the rendered rows rather than declared, because a fixed list
+    goes stale the moment the core starts supplying one of them. It did: the
+    note claimed six columns while the dict named five, and by then `priority`
+    had a source, so a live city-wide queue carried a footnote naming a column
+    the table was visibly filling.
+
+    That is the same defect the footnote exists to prevent, one level up. An
+    empty cell is honest about having no value; a footnote that misreports
+    which cells those are teaches the reader to distrust cells that are right.
+
+    All-or-nothing per column: the claim is "the core cannot fill this", and a
+    single filled cell disproves it.
+    """
+    missing: list[str] = []
+    for key, name in sorted(UNFED_COLUMNS.items(), key=lambda kv: kv[1]):
+        if briefs and all(cell_text(brief, key, weights) == _DASH for brief in briefs):
+            missing.append(name)
+    return missing
+
+
+def unfed_note(
+    briefs: Sequence[Mapping[str, Any]], weights: Mapping[str, int] | None = None
+) -> str:
     """Name the columns the core cannot fill yet, rather than showing zeros."""
-    names = ", ".join(sorted(UNFED_COLUMNS.values()))
+    names = unfed_columns(briefs, weights)
+    if not names:
+        return ""
+    count = _COUNT_WORD.get(len(names), str(len(names)))
+    plural = "" if len(names) == 1 else "s"
     return (
         '<p class="lede" data-region="unfed-columns" style="margin-top: 10px; '
         'font-style: italic;">'
-        f"Six columns show — because the core does not expose them yet: {_e(names)}. "
-        "They are tracked on "
+        f"{count} column{plural} show — because the core does not expose "
+        f"{'it' if len(names) == 1 else 'them'} yet: {_e(', '.join(names))}. "
+        f"{'It is' if len(names) == 1 else 'They are'} tracked on "
         '<a href="https://github.com/tdupu/mathcity/issues/66">issue #66</a>. '
         "An empty cell here means no value was read, not a value of zero.</p>"
     )

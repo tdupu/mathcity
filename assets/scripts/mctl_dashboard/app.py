@@ -567,7 +567,7 @@ class Dashboard:
             stack.table(briefs, view, queued=()),
             stack.empty_sort_note(briefs, view),
             stack.key_legend(),
-            stack.unfed_note(),
+            stack.unfed_note(briefs),
             *city_extra,
         ]
         # Counts come from the whole listing, not the scoped slice: the
