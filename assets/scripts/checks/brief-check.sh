@@ -384,7 +384,7 @@ check_staging_clear() {
 }
 
 check_stack_index_path() {
-  configured="assets/brief-pipeline/paths.toml"
+  configured="$(pack_asset brief-pipeline/paths.toml)"
   [ -f "$configured" ] || fail "missing paths.toml: $configured"
   grep -Eq '^manifest[[:space:]]*=[[:space:]]*"\.beads/briefs/stack/\.index\.jsonl"' "$configured" ||
     fail "paths.toml manifest must point at stack/.index.jsonl"
@@ -492,7 +492,7 @@ check_no_brainer_classification_evidence() {
         fail "known_no_brainer G9 evidence must set category in $path"
       category="$(printf '%s\n' "$g9_line" | grep -Eo 'category=[A-Za-z0-9._-]+' | head -n 1 | cut -d= -f2)"
       [ "$category" != "none" ] || fail "known_no_brainer G9 evidence must set a registry category, not category=none"
-      registry="assets/brief-pipeline/no-brainer-categories.toml"
+      registry="$(pack_asset brief-pipeline/no-brainer-categories.toml)"
       [ -f "$registry" ] || fail "missing no-brainer category registry: $registry"
       grep -Eq '^id[[:space:]]*=[[:space:]]*"'"$category"'"' "$registry" ||
         fail "known_no_brainer category is not in $registry: $category"

@@ -561,6 +561,18 @@ else
 fi
 cleanup
 
+echo "=== 36. every pack asset the check reads resolves from a foreign cwd ==="
+# Regression for the class 94596ee2 fixed at one call site and flagged at two
+# more: a cwd-relative "assets/..." literal is absent when the ralph runner
+# invokes the check from an agent work dir, so the check fails for a reason
+# that misdescribes the cause. All three sites must use pack_asset.
+leftover="$(grep -c '="assets/' "$RIG_ROOT/assets/scripts/checks/brief-check.sh" || true)"
+if [ "$leftover" = "0" ]; then
+  ok "no cwd-relative pack-asset literals remain in brief-check.sh"
+else
+  no "brief-check.sh still has $leftover cwd-relative assets/ literal(s); use pack_asset"
+fi
+
 echo ""
 echo "=== SUMMARY: $PASS_COUNT passed, $FAIL_COUNT failed ==="
 [ "$FAIL_COUNT" -eq 0 ]
