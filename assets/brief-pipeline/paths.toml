@@ -43,6 +43,50 @@ lock = ".beads/briefs/.shuffle.lock"
 kill_switch_city = "<city-root>/.beads/auto_merge_enabled"
 kill_switch_rig = ".beads/auto_merge_enabled"
 
+# Mode tokens — brief-check.sh `no-brainer-execute-safety`.
+#
+# No-brainer auto-execution is a two-position RUNTIME MODE, DRY-RUN or ARMED,
+# selected by the tokens below. It toggles in both directions at runtime with
+# no edit to any skill or formula file:
+#
+#   observe   brief-check.sh no-brainer-mode        (read-only, always safe)
+#   -> ARMED  write `true` to BOTH tokens           (deliberate; decision bead)
+#   -> DRY-RUN brief-check.sh no-brainer-disarm     (one command, always allowed)
+#              or delete either token, or let an `expires=` line lapse
+#
+# The brakes above are necessary but not sufficient. Absent-means-go is the
+# wrong default for an irreversible act decided by a classifier whose own
+# header still reads PRELIMINARY: it puts the brake in the "go" position on a
+# fresh install, and a released brake reads identically to a deliberate
+# decision to automate. Reaching ARMED therefore requires a POSITIVE token at
+# BOTH levels below.
+#
+# Token format: first line exactly `true` selects ARMED; an optional second
+# line `expires=<ISO-8601-utc>` makes it lapse back to DRY-RUN on its own so
+# it cannot be left on by forgetting. A token reading `false` PINS dry-run.
+# Absent / malformed / expired / pinned at either level = DRY-RUN, which
+# behaves exactly as the old dry-run designation did. Mirrors mctl's adopted
+# MCTL_ENABLE_LIVE_DISPATCH doctrine (mctl_core/work.py).
+#
+# Reaching ARMED takes two deliberate acts and explicit human authorization
+# recorded as a STANDALONE decision bead. Returning to DRY-RUN takes one act,
+# needs no authorization, and is always permitted — the recovery path is
+# deliberately the easier one.
+#
+# NOTE: POLICY.md N5 as Adopted (2026-07-12) still says absent-or-true =
+# proceed. This requirement is strictly MORE conservative than the adopted
+# rule (it refuses where policy would permit, never the reverse). The N5
+# amendment is DRAFTED, not adopted:
+#   subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md
+arm_token_city = "<city-root>/.beads/no_brainer_auto_execute_armed"
+arm_token_rig = ".beads/no_brainer_auto_execute_armed"
+
+# Durable N7 audit trail. Every no-brainer execution gate evaluation appends
+# one JSON line here — PERMITTED and REFUSED alike, with the classifier state,
+# category, confidence, and the full switch/arming state that produced the
+# decision. An unwritable sink REFUSES rather than executing unreconstructably.
+no_brainer_execution_log = ".beads/briefs/decisions/no-brainer-execution.jsonl"
+
 [filenames]
 brief = "brief.md"
 evidence = "evidence.toml"

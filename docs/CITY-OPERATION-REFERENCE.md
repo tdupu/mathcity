@@ -216,15 +216,23 @@ Triggered immediately by `brief.archive_requested` via `brief-archive-on-request
 ## No-Brainer System
 
 The goal of the no-brainer system is to keep work flowing by auto-processing briefs that
-are too easy to require the human adjudicator's input. **Current state (2026-07-14): auto-execution is designed,
-policy-adopted (N5, 2026-07-12), and wired — `no-brainer-process.toml` now has
-`[vars] mode = "guarded-execute"` (gt-d3h6e, applied 2026-07-14). However, auto-execution
-is NOT triggered by `gc start` — it is manual-trigger only (see below). Additionally, the
-kill-switch is now set: `<city-root>/.beads/auto_merge_enabled` reads `false` → auto-exec HALTED.**
+are too easy to require the human adjudicator's input. **Current state (2026-08-19): auto-execution is
+designed, policy-adopted (N5, 2026-07-12), wired, and now gated by a real,
+tested execution check. It is manual-trigger only (see below) and it is NOT
+ARMED anywhere.**
+
+**Correction to this document (2026-08-19).** The paragraph here previously
+stated that the kill switch was set to `false` and auto-execution was HALTED.
+That was wrong, and wrong in the dangerous direction: measured this session,
+`<city-root>/.beads/auto_merge_enabled` **exists and reads `true`**
+(mtime 2026-07-15), and **no rig-level flag exists in any of the 23 rig
+`.beads/` directories**. Under the semantics documented below, that is
+"permitted at every level". Do not trust a remembered switch state — read the
+file.
 
 ### Classification (works now)
 
-1. `catch-no-brainer` skill (PRELIMINARY v0.2 DRY-RUN) classifies briefs against 5 criteria
+1. `catch-no-brainer` skill (PRELIMINARY v0.4) classifies briefs against 5 criteria
    (cat-A stale-branch / cat-B test-exec / cat-C verification / cat-D consolidate-mini).
    Confidence threshold for auto-execute eligibility: ≥ 0.85.
 2. `no-brainer-classify` formula — manual trigger via `no-brainer-process` order — classifies
@@ -259,33 +267,84 @@ To trigger no-brainer auto-execution explicitly:
 gc order run no-brainer-process
 ```
 
-**Kill-switch (now set — doubly gated):**
+**The execution gate (rewritten 2026-08-19):**
 
-Auto-execution is doubly gated: (a) it can only run via the manual order at all (trigger=manual),
-and (b) even then the kill-switch halts it until set to `true` or removed.
+Everything that could permit a mutation now runs in one place —
+`brief-check.sh no-brainer-execute-safety`, attached to the `guarded-execute`
+step of `no-brainer-classify.toml`, i.e. to the step that mutates. (It was
+previously attached to the *classification* step, while the mutating step ran
+a check that never read the switches at all.)
 
-Kill-switch hierarchy (both levels checked; first `false` wins):
+Decision order — each step is terminal, and every decision is audited:
 
-- City: `<city-root>/.beads/auto_merge_enabled` — **absent or `true` = auto-execute permitted**; present and reads `false` = HALTED
-  - **Current state (2026-07-14, Mayor restart session): file EXISTS and reads `false` → HALTED**
-- Rig: `<rig_root>/.beads/auto_merge_enabled` — same semantics; also being set to `false` on the `<repos-root>` side (repo-side landing agent) for defense-in-depth
+| # | check | refuses when |
+|---|---|---|
+| 1 | brief resolution | the brief path is empty or missing — no silent pass |
+| 2 | stop gates | `server_touching: true` in frontmatter **or** `G5 …: FAIL/BLOCKED`; `user_skill_touching_override: true` or `G5b …: FAIL/BLOCKED`; `classifier_state=safety_blocked` |
+| 3 | classifier evidence | not exactly one `G9 …: PASS` line; state ≠ `known_no_brainer`; category absent from `no-brainer-categories.toml`; `stop_gates_clear` ≠ true; `confidence < 0.85` |
+| 4 | N5 kill switches | city then rig `auto_merge_enabled` exists and reads `false` |
+| 5 | mode | the city/rig mode is DRY-RUN — token absent, pinned `false`, malformed, or expired |
 
-The gate (`brief-check.sh` `check_no_brainer_execute_safety`) checks, in order: city-level
-path first (`${GC_CITY:-$HOME/gt}/.beads/auto_merge_enabled`), then rig-level
-(`<rig_root>/.beads/auto_merge_enabled`). Both must be absent or `true` for auto-exec to proceed.
-Document and maintain the kill-switch on **both** `<city-root>` and `<repos-root>` sides.
+Steps 1–3 run **before** any switch or arming state is read, so a category-E /
+server-touching brief is refused no matter how the city is configured. This is
+a stop-gate, not a preference.
 
-To re-enable auto-execution when ready:
+**Kill switches (brakes, unchanged):** `<city-root>/.beads/auto_merge_enabled`,
+then `<rig_root>/.beads/auto_merge_enabled`. A file that exists and reads
+`false` halts. Absent or `true` does **not** by itself permit anything.
+
+**Mode tokens (DRY-RUN / ARMED):**
+`<city-root>/.beads/no_brainer_auto_execute_armed` **and**
+`<rig_root>/.beads/no_brainer_auto_execute_armed`. First line exactly `true`
+selects ARMED; optional second line `expires=<ISO-8601-utc>` lapses back to
+DRY-RUN on its own. A token reading `false` **pins** DRY-RUN. Absent /
+malformed / expired / pinned at either level = DRY-RUN, which behaves exactly
+as the old dry-run designation did. **Nothing is armed anywhere today, and
+nothing in this change armed anything.**
+
+Dry-run is a runtime mode, not a designation — it toggles both ways with no
+edit to any skill or formula file:
+
 ```bash
-echo "true" > <city-root>/.beads/auto_merge_enabled
-# and on repos side:
-echo "true" > <repos-root>/<rig>/.beads/auto_merge_enabled
-# or remove both files entirely (absent = auto-execute permitted)
+# which mode am I in?  (read-only, writes nothing, safe anywhere)
+brief-check.sh no-brainer-mode
+
+# -> ARMED: deliberate, both levels, record a standalone decision bead first
+printf 'true\nexpires=2026-08-26T00:00:00Z\n' > <city-root>/.beads/no_brainer_auto_execute_armed
+printf 'true\nexpires=2026-08-26T00:00:00Z\n' > <rig_root>/.beads/no_brainer_auto_execute_armed
+
+# -> DRY-RUN: one command, no authorization needed, effective immediately
+brief-check.sh no-brainer-disarm
 ```
 
-Stop gates G5 (server-touching) and G5b (user-skill-touching) prevent auto-execution
-regardless of kill-switch state. Also blocked: confidence < 0.85, any non-no-brainer
-category, and `user_skill_touching_override: true` in the brief record.
+Reaching ARMED takes two deliberate acts; returning to DRY-RUN takes one and
+is always permitted. The asymmetry is intentional — the recovery path is the
+one that has to work under pressure. A pinned dry-run is recorded
+distinguishably from a never-armed one (`dry_run_pinned` vs `not_armed` in the
+audit log, and called out in the mode report), so a rollback is confirmable
+rather than inferred from silence.
+
+> N5 as adopted still says absent-or-`true` = proceed. The arming requirement
+> is strictly more conservative (it refuses where policy would permit, never
+> the reverse). The amendment is **drafted, not adopted**:
+> `subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md`.
+
+**Audit trail (N7).** Every gate evaluation — PERMITTED and REFUSED alike —
+appends one JSON line to
+`<artifact_root>/decisions/no-brainer-execution.jsonl`, carrying the decision,
+the reason code, the brief path, the classifier version/state/category/
+confidence, and the full switch and arming state that produced it. If that
+record cannot be written the gate **refuses**: an auto-execution nobody can
+reconstruct afterwards is worse than a dry run.
+
+Unarmed, the refusal lines are a zero-risk shadow-mode ledger — they record
+what *would* have executed, which is the substrate N8's α measurement has
+always needed and never had.
+
+To inspect what the classifier would have done:
+```bash
+tail -n 50 <rig_root>/.beads/briefs/decisions/no-brainer-execution.jsonl
+```
 
 ---
 

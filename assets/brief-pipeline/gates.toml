@@ -137,11 +137,15 @@ kind = "stop"
 required = true
 rules = ["N5"]
 evidence_key = "G12 Auto-merge-kill-switch"
-# N5 (Adopted 2026-07-12): auto-execute is the DEFAULT; kill switches are
-# safety brakes. This supersedes the earlier fail-closed/opt-in semantics
-# (ALLOW_NO_BRAINER_AUTO_EXECUTE existence-enables). Switch locations are
-# declared in paths.toml (kill_switch_city, kill_switch_rig).
-description = "Automation must check the two-level kill-switch hierarchy before executing: city-wide <city-root>/.beads/auto_merge_enabled, then <rig_root>/.beads/auto_merge_enabled. A switch that exists and reads `false` halts auto-execution (halted no-brainers route to the pile in compact form); absent or `true` proceeds — auto-execute is the default (N5)."
+# N5 (Adopted 2026-07-12) states that auto-execute is the DEFAULT and the kill
+# switches are brakes. The enforcing gate (brief-check.sh
+# `no-brainer-execute-safety`) keeps those brakes and adds a positive arming
+# requirement on top, because a released brake is not a decision to automate.
+# Switch and token locations are declared in paths.toml (kill_switch_city,
+# kill_switch_rig, arm_token_city, arm_token_rig). The corresponding N5
+# amendment is DRAFTED, not adopted:
+# subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md
+description = "Automation must clear the execution gate before mutating anything: stop gates (server-touching/category E, user-skill-touching, safety_blocked) refuse regardless of switch state; classifier evidence must be a registry-backed known_no_brainer with stop_gates_clear=true and confidence >= 0.85; the two-level kill-switch hierarchy (city-wide <city-root>/.beads/auto_merge_enabled, then <rig_root>/.beads/auto_merge_enabled) halts when a file exists and reads `false`; and the runtime mode must be ARMED, which requires a valid unexpired token at BOTH <city-root>/.beads/no_brainer_auto_execute_armed and <rig_root>/.beads/no_brainer_auto_execute_armed. DRY-RUN is the default mode and behaves exactly like the old dry-run designation; the mode is reported by `brief-check.sh no-brainer-mode` and returned to DRY-RUN in one command by `brief-check.sh no-brainer-disarm`. Every evaluation appends a durable audit line to <artifact_root>/decisions/no-brainer-execution.jsonl; an unwritable sink refuses."
 
 [[gates]]
 id = "G13"
