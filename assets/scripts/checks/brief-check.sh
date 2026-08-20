@@ -83,6 +83,25 @@ pack_asset() {
   printf '%s\n' "assets/$pa_rel"
 }
 
+# pack_dir <path-under-pack-root> -- the pack_asset counterpart for things that
+# live at the pack ROOT rather than under assets/ (formulas/, gates/).
+# assets/scripts/checks/../../.. -> the pack itself.
+#
+# Same contract as pack_asset: always exits 0, always prints a path, falls back
+# to the cwd-relative form when the target cannot be found. The caller decides
+# what an unresolvable path means -- and for a SCAN the caller must decide
+# explicitly, because an unresolvable scan root yields no matches, which is
+# indistinguishable from a clean result.
+pack_dir() {
+  pd_rel="$1"
+  pd_root="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." 2>/dev/null && pwd || true)"
+  if [ -n "$pd_root" ] && [ -e "$pd_root/$pd_rel" ]; then
+    printf '%s\n' "$pd_root/$pd_rel"
+    return 0
+  fi
+  printf '%s\n' "$pd_rel"
+}
+
 require_text() {
   path="$1"
   pattern="$2"
@@ -393,10 +412,21 @@ check_stack_index_path() {
 check_no_direct_stack_producers() {
   tmp="${TMPDIR:-/tmp}/brief-direct-stack-matches.$$"
   : > "$tmp"
-  find formulas -type f -name '*.toml' ! -name 'brief-shuffle.toml' |
+  # FAIL CLOSED. This check SCANS, and a scan that cannot reach its root finds
+  # nothing -- which is byte-for-byte what "no violations" looks like. Anchoring
+  # the path is therefore not sufficient on its own: if resolution ever fails
+  # again, refusing is the only honest answer, because reporting PASS here means
+  # asserting something was verified that was never looked at.
+  formulas_dir="$(pack_dir formulas)"
+  [ -d "$formulas_dir" ] ||
+    fail "cannot resolve the formulas/ directory (tried: $formulas_dir) — refusing rather than reporting a clean scan that never ran"
+  find "$formulas_dir" -type f -name '*.toml' ! -name 'brief-shuffle.toml' |
   while IFS= read -r file; do
-    case "$file" in
-      formulas/brief-present-next.toml|formulas/brief-review-patrol.toml|formulas/brief-watchdog-refill.toml|formulas/brief-record-decision.toml)
+    # Match on the basename: $file is now absolute whenever the pack resolved,
+    # so the old `formulas/<name>` prefix patterns would silently stop excluding
+    # these four and report them as violations.
+    case "${file##*/}" in
+      brief-present-next.toml|brief-review-patrol.toml|brief-watchdog-refill.toml|brief-record-decision.toml)
         continue
         ;;
     esac

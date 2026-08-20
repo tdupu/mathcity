@@ -667,6 +667,65 @@ $(sed 's/^/    /' "$GC_SCRIPTS_SCAN")"
 fi
 rm -f "$GC_SCRIPTS_SCAN"
 
+echo "=== 39. a stack-producer violation is caught from a cwd that is not the pack root ==="
+# check_no_direct_stack_producers scanned `find formulas ...` -- cwd-relative,
+# same class as the three registry sites, but it fails in the OPPOSITE
+# direction. Off the pack root find matches nothing, the while loop never runs,
+# $tmp stays empty, `[ -s "$tmp" ]` is false, and the check reports PASS. The
+# other sites refuse when they cannot resolve; this one reported success when
+# it could not look, which is unobservable precisely because a pass is also
+# what "clean" looks like. Fixture: a pack that DOES contain a violating
+# formula, scanned from elsewhere. Before the fix this exits 0 (the bug);
+# after it, the violation is found wherever the caller happens to stand.
+SANDBOX="$(mktemp -d)"
+mkdir -p "$SANDBOX/assets/scripts/checks" "$SANDBOX/formulas"
+cp "$CHECK" "$SANDBOX/assets/scripts/checks/brief-check.sh"
+cat > "$SANDBOX/formulas/rogue-producer.toml" <<'ROGUE'
+[[steps]]
+id = "writes-straight-to-stack"
+prompt = """
+BRIEF_PATH="{{artifact_root}}/stack/$slug.md"
+"""
+ROGUE
+STATUS=0
+(cd /tmp && sh "$SANDBOX/assets/scripts/checks/brief-check.sh" no-direct-stack-producers) \
+  >"$SANDBOX/out" 2>"$SANDBOX/err" || STATUS=$?
+if [ "$STATUS" != "0" ]; then
+  ok "stack-producer violation is caught from a foreign cwd"
+else
+  no "stack-producer violation is caught from a foreign cwd (exit=$STATUS -- PASSED while unable to scan)"
+fi
+rm -rf "$SANDBOX"
+
+echo "=== 40. an unresolvable formulas/ directory REFUSES rather than passing ==="
+# The deliberate choice: "I could not look" must not be recorded as "nothing
+# found". A pack that ships the script but no formulas/ must fail, not pass.
+SANDBOX="$(mktemp -d)"
+mkdir -p "$SANDBOX/assets/scripts/checks"
+cp "$CHECK" "$SANDBOX/assets/scripts/checks/brief-check.sh"
+STATUS=0
+(cd /tmp && sh "$SANDBOX/assets/scripts/checks/brief-check.sh" no-direct-stack-producers) \
+  >"$SANDBOX/out" 2>"$SANDBOX/err" || STATUS=$?
+if [ "$STATUS" != "0" ]; then
+  ok "unresolvable formulas/ refuses instead of reporting a clean scan"
+else
+  no "unresolvable formulas/ refuses instead of reporting a clean scan (exit=$STATUS)"
+fi
+rm -rf "$SANDBOX"
+
+echo "=== 41. no filesystem operand in brief-check.sh is a bare cwd-relative literal ==="
+# Test 36 caught cwd-relative "assets/..." literals but not `find formulas`,
+# which carries no quotes and no trailing slash. Generalize to the operand
+# shape rather than the spelling, so a fifth site cannot land unnoticed.
+bare="$(grep -nE '^[^#]*\b(find|ls)[[:space:]]+[a-zA-Z][a-zA-Z0-9_.-]*([[:space:]]|$)' \
+        "$RIG_ROOT/assets/scripts/checks/brief-check.sh" |
+        grep -vE '\bfind[[:space:]]+\.' || true)"
+if [ -z "$bare" ]; then
+  ok "no bare cwd-relative filesystem operand remains in brief-check.sh"
+else
+  no "no bare cwd-relative filesystem operand remains in brief-check.sh (found: $(printf '%s' "$bare" | tr '\n' ' '))"
+fi
+
 echo ""
 echo "=== SUMMARY: $PASS_COUNT passed, $FAIL_COUNT failed ==="
 [ "$FAIL_COUNT" -eq 0 ]
