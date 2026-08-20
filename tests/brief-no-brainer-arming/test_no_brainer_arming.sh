@@ -573,6 +573,54 @@ else
   no "brief-check.sh still has $leftover cwd-relative assets/ literal(s); use pack_asset"
 fi
 
+echo "=== 37. no formula or gate step tells an agent to run an unresolvable path ==="
+# Test 36 generalised (#73 / mc-quq). A formula step `description = \"\"\"` block is
+# not prose -- it is the instruction an agent executes -- so a path in it must
+# resolve in the agent's cwd, which is a per-bead work dir, never the pack root.
+# Two shapes are unresolvable there and both shipped:
+#
+#   $PACK_DIR / $GC_PACK_DIR  injected ONLY for order dispatch (orders' `exec =`)
+#                             and `gc` custom commands; a formula-step agent
+#                             session never gets either, so it expands to empty
+#                             and the command runs against "/assets/...".
+#   bare  assets/...          cwd-relative; resolves only when cwd is the pack
+#                             root, which it never is at runtime.
+#
+# The resolvable forms are `<mathcity-pack-root>/assets/...` (agent resolves it
+# from the `Source:` line of `gc order show`, per brief-present-next.toml) and,
+# for check scripts, the cook-time `path = "../assets/..."` -- both anchored on
+# something other than the cwd, so neither is matched here.
+#
+# PACK_DIR is matched in PATH-EXPANSION position only -- `$PACK_DIR/`, the only
+# shape that is a use. Both fixed steps now carry a prose warning that NAMES the
+# variable to stop the next author reaching for it; a mention is not a defect and
+# matching it would make the warning unwritable.
+#
+# Scope is COMMAND POSITION inside formulas/ and gates/: an `assets/...` token
+# introduced by an interpreter or a flag. Prose and comments that merely cite a
+# pack file by its repo-relative name ("see assets/brief-pipeline/paths.toml",
+# `[catalog] registry = "assets/..."`) are references, not instructions, and are
+# deliberately NOT matched -- widening this to every mention would flag 20+
+# documentation lines and bury the two real defects.
+FORMULA_SCAN="${TMPDIR:-/tmp}/brief-formula-path-scan.$$"
+: > "$FORMULA_SCAN"
+for f in "$RIG_ROOT"/formulas/*.toml "$RIG_ROOT"/gates/*.toml; do
+  [ -f "$f" ] || continue
+  grep -nE '\$(\{(GC_)?PACK_DIR\}|(GC_)?PACK_DIR)/' "$f" | sed "s|^|${f##*/}:PACK_DIR:|" >> "$FORMULA_SCAN" || true
+  grep -nE '(python3|python|bash|sh|source)[[:space:]]+"?assets/' "$f" |
+    sed "s|^|${f##*/}:cwd-relative:|" >> "$FORMULA_SCAN" || true
+  grep -nE '\-\-[a-z][a-z0-9-]*[[:space:]]+"?assets/' "$f" |
+    sed "s|^|${f##*/}:cwd-relative:|" >> "$FORMULA_SCAN" || true
+done
+offenders="$(wc -l < "$FORMULA_SCAN" | tr -d ' ')"
+if [ "$offenders" = "0" ]; then
+  ok "no formula or gate step references \$PACK_DIR or a cwd-relative assets/ path"
+else
+  no "$offenders formula/gate step path(s) cannot resolve in an agent work dir:
+$(sed 's/^/    /' "$FORMULA_SCAN")"
+fi
+rm -f "$FORMULA_SCAN"
+
 echo ""
 echo "=== SUMMARY: $PASS_COUNT passed, $FAIL_COUNT failed ==="
 [ "$FAIL_COUNT" -eq 0 ]
