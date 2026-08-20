@@ -45,6 +45,19 @@ status: revise
 
 # already sent back
 EOF
+# Rows whose filtering signal lives in the INDEX ROW, not in frontmatter. Each
+# file is created with no frontmatter block, so frontmatter_status() returns ""
+# and the row field stays the only thing that can filter the entry -- every
+# assertion below keeps exactly the discriminating power it had.
+#
+# The files must exist at all because frontmatter_status() now fails CLOSED on
+# an unreadable brief (B4). Before that fix an index row could point at nothing
+# and still be presented, which is how adjudicated work got re-presented; these
+# rows were relying on that. Creating the fixture files is the repair -- the
+# assertions are unchanged.
+for missing in future ready legacy-adjudicated legacy-approved brief-prep-dispatched migrated; do
+  printf '# %s\n' "$missing" >"$STACK/$missing.md"
+done
 printf '%s\n' \
   "{\"slug\":\"future\",\"path\":\"$STACK/future.md\",\"unlock_count\":9,\"defer_until\":\"2999-01-01\"}" \
   "{\"slug\":\"ready\",\"path\":\"$STACK/ready.md\",\"unlock_count\":4}" \

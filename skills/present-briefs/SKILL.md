@@ -90,12 +90,38 @@ def is_terminal_status(value, terminal_statuses):
         return False
     return status in terminal_statuses or any(status.startswith(prefix) for prefix in terminal_prefixes)
 
+# Index rows carry three path serializations -- city-root-relative
+# (".beads/briefs/stack/x.md"), absolute, and briefs-root-relative
+# ("stack/x.md"). Resolving any of them against the CALLER's cwd made the
+# queue size depend on where the agent stood: 34 entries from the city root,
+# 63 from anywhere else, same index. Anchor on the brief root instead, which
+# is derivable from STACK_DIR and identical for every caller.
+stack_root = Path(stack_dir).expanduser().resolve()
+brief_roots = (
+    stack_root,               # bare "x.md"
+    stack_root.parent,        # "stack/x.md"
+    stack_root.parent.parent, # "briefs/stack/x.md"
+    stack_root.parent.parent.parent,  # ".beads/briefs/stack/x.md"
+)
+
+UNREADABLE = object()
+
+def resolve_brief_path(path):
+    brief_path = Path(path).expanduser()
+    if brief_path.is_absolute():
+        return brief_path
+    for root in brief_roots:
+        candidate = root / brief_path
+        if candidate.exists():
+            return candidate
+    return None
+
 def frontmatter_status(path):
     if not isinstance(path, str) or not path:
         return ""
-    brief_path = Path(path).expanduser()
-    if not brief_path.is_absolute():
-        brief_path = Path.cwd() / brief_path
+    brief_path = resolve_brief_path(path)
+    if brief_path is None:
+        return UNREADABLE
     try:
         with brief_path.open(errors="replace") as brief:
             first = brief.readline()
@@ -108,7 +134,7 @@ def frontmatter_status(path):
                 if stripped.startswith("status:"):
                     return stripped.split(":", 1)[1].strip()
     except OSError:
-        return ""  # Missing/unreadable brief is fail-open; do not hide unknown work.
+        return UNREADABLE
     return ""
 
 try:
@@ -136,7 +162,16 @@ with lines:
         status = entry.get("manifest_status", entry.get("status", ""))
         if is_terminal_status(status, terminal_index_statuses):
             continue
-        if is_terminal_status(frontmatter_status(path), terminal_frontmatter_statuses):
+        frontmatter = frontmatter_status(path)
+        if frontmatter is UNREADABLE:
+            # Fail CLOSED, and never silently. This filter exists to HIDE
+            # resolved briefs; treating an unreadable file as pending
+            # re-presents adjudicated work (POLICY B2.3). A brief whose file
+            # cannot be read cannot be presented either way, so skip it -- but
+            # name it on stderr so a broken row is repairable, not invisible.
+            print(f"present-briefs: unreadable brief, skipped: {path}", file=sys.stderr)
+            continue
+        if is_terminal_status(frontmatter, terminal_frontmatter_statuses):
             continue
         print(f'{entry.get("unlock_count", 0)} {path}')
 PY
