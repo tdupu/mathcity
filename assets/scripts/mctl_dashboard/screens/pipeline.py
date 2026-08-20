@@ -48,14 +48,20 @@ def _gap(body: str) -> str:
     return f'<p class="review-note" style="margin: 0 0 14px;">{body}</p>'
 
 
-def _rows(briefs: Sequence[Mapping[str, Any]], *, extra: str = "") -> str:
+def _rows(
+    briefs: Sequence[Mapping[str, Any]],
+    *,
+    extra: str = "",
+    cell: Any = None,
+) -> str:
+    """`extra` is one fixed trailing cell; `cell` derives one per brief."""
     body = "".join(
         "<tr>"
         f'<td><a href="/briefs/{_e(attr(brief, "brief_id") or attr(brief, "bead_id"))}">'
         f'<span class="mono">{_e(attr(brief, "bead_id"))}</span></a></td>'
         f'<td style="white-space: normal;">{_e(attr(brief, "title"))}</td>'
         f'<td><span class="mono">{_e(brief.get("updated_at") or "—")}</span></td>'
-        + extra
+        + (cell(brief) if cell else extra)
         + "</tr>"
         for brief in briefs
     )
@@ -63,10 +69,38 @@ def _rows(briefs: Sequence[Mapping[str, Any]], *, extra: str = "") -> str:
         '<div class="scroll-x" style="border-bottom: 2px solid var(--color-neutral-900);">'
         '<table class="ntdata"><thead><tr>'
         "<th>Bead</th><th>Title</th><th>Updated</th>"
-        + ("<th>Verdict</th>" if extra else "")
+        + ("<th>Verdict</th>" if (extra or cell) else "")
         + "</tr></thead><tbody>"
         + body
         + "</tbody></table></div>"
+    )
+
+
+def verdict_cell(brief: Mapping[str, Any]) -> str:
+    """The recorded verdict, with where it was read from and how sure that is.
+
+    Provenance is not decoration here. `source` ranges over typed_field,
+    decisions_track, close_reason, notes and brief_frontmatter, and a verdict
+    lifted out of a close_reason at low confidence is a different artifact
+    from a typed field -- shown identically, the weak ones would be read as
+    strong.
+    """
+    verdict = attr(brief, "verdict")
+    if not isinstance(verdict, Mapping) or not verdict.get("text"):
+        return '<td><span class="mono">&mdash;</span></td>'
+    text = str(verdict["text"])
+    source = str(verdict.get("source") or "")
+    confidence = str(verdict.get("confidence") or "")
+    marks = " · ".join(part for part in (source, confidence) if part)
+    return (
+        '<td><span class="mono">' + _e(text) + "</span>"
+        + (
+            '<br><span class="mono" style="font-size: 10px; '
+            'color: var(--color-neutral-600);">' + _e(marks) + "</span>"
+            if marks
+            else ""
+        )
+        + "</td>"
     )
 
 
@@ -142,23 +176,20 @@ def adjudicated(briefs: Sequence[Mapping[str, Any]]) -> str:
         '<section data-region="adjudicated">'
         + _heading("Adjudicated", f"{len(briefs)} closed · newest first · immutable")
         + _gap(
-            "<strong>The verdict itself is not readable, only that one was "
-            "recorded.</strong> "
-            "<span class=\"mono\">briefs.py::_verdict</span> reads a verdict from the "
-            "bead to decide that these are adjudicated rather than malformed, but "
-            "<span class=\"mono\">to_dict</span> never emits it — so this screen can "
-            "say which briefs were decided and not what was decided, which is the "
-            "column it exists for. The option taken, the recorded reason and the "
-            "follow-up bead are absent for the same reason. "
-            f'Tracked as <a href="{ISSUE_66}">issue #66</a>, and second on the '
-            "design's own backend list."
+            "<strong>The verdict is shown with where it was read from.</strong> "
+            "The read path emits a verdict object — text, source and confidence — "
+            "so this screen names what was decided, not merely that something was. "
+            "Source ranges over <span class=\"mono\">typed_field</span>, "
+            "<span class=\"mono\">decisions_track</span>, "
+            "<span class=\"mono\">close_reason</span>, "
+            "<span class=\"mono\">notes</span> and "
+            "<span class=\"mono\">brief_frontmatter</span>: a verdict recovered from "
+            "a close reason is a weaker artifact than a typed field, and is marked "
+            "as such rather than shown as equivalent. The option taken and the "
+            "follow-up bead are still not exposed. "
+            f'Tracked as <a href="{ISSUE_66}">issue #66</a>.'
         )
-        + _rows(
-            briefs,
-            extra='<td><span class="mono" style="color: var(--color-neutral-500);" '
-            'title="recorded on the bead but not exposed by the read path">'
-            "&mdash;</span></td>",
-        )
+        + _rows(briefs, cell=verdict_cell)
         + '<p class="lede" style="margin-top: 10px; font-style: italic;">'
         "Decision beads are never reopened (B3.8) — a change of mind is a new bead. "
         "That is why there is no control here to undo one.</p>"
@@ -183,7 +214,8 @@ def malformed(briefs: Sequence[Mapping[str, Any]]) -> str:
             "field</em> — it does <strong>not</strong> mean the brief is damaged, "
             "and it is not a queue of things to repair. The verdicts for many of "
             "these are recorded in <span class=\"mono\">close_reason</span> or "
-            "<span class=\"mono\">notes</span>, which the reader does not consult, "
+            "<span class=\"mono\">notes</span>, which the reader now does consult "
+            "for adjudicated briefs but not for these, "
             "and a substantial share of the beads counted here were never briefs at "
             "all. The classification is under review."
         )
