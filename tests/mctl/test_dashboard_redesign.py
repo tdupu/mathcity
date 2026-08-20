@@ -1708,3 +1708,63 @@ def test_a_column_with_fielded_data_is_not_hidden():
     rows = [_fielded(unlock_count=3), _fielded(unlock_count=5)]
     html = stack.table(rows, state.parse({}))
     assert ">Unlock<" in html
+
+
+# --------------------------------------------------------------------------
+# a failed read is not an absent brief
+# --------------------------------------------------------------------------
+
+
+def _dashboard_whose_store_fails_with(code: str):
+    """A dashboard whose reads all fail with one diagnostic code."""
+    from mctl_dashboard.app import Dashboard
+    from mctl_dashboard.client import ToolFailure
+
+    class _Failing:
+        def list_tools(self):
+            return []
+
+        def call(self, name, arguments=None):
+            if name.startswith("briefs_"):
+                raise ToolFailure(name, [{"code": code, "message": "x"}], {})
+            return type("R", (), {"payload": {}, "artifact_trust": None,
+                                  "diagnostics": [], "untrusted_diagnostics": []})()
+
+    return Dashboard(_Failing())
+
+
+def test_a_brief_that_is_absent_is_a_404():
+    from mctl_dashboard.app import Request
+
+    dash = _dashboard_whose_store_fails_with("MBRF010")
+    response = dash.handle(Request.get("/briefs/gt-1", rig="hq"))
+    assert response.status == 404
+    assert "No such brief" in response.body
+
+
+def test_a_brief_that_could_not_be_read_is_not_a_404():
+    """Under load this page called a live brief missing. It had timed out."""
+    from mctl_dashboard.app import Request
+
+    dash = _dashboard_whose_store_fails_with("MCTL_STORE_TIMEOUT")
+    response = dash.handle(Request.get("/briefs/gt-1", rig="hq"))
+    assert response.status == 503
+    assert "No such brief" not in response.body
+    assert "did not answer" in response.body
+
+
+def test_the_not_found_code_is_the_only_one_that_claims_absence():
+    """Under load the page said "No such brief" about a brief that exists.
+
+    Any ToolFailure was being rendered as a 404. A store that times out is a
+    store that did not answer, and telling the operator their bead is gone
+    sends them hunting for something that was never missing.
+    """
+    import inspect
+
+    from mctl_dashboard import app as dash_app
+
+    source = inspect.getsource(dash_app.Dashboard._brief)
+    assert 'MBRF010' in source, "the not-found code must gate the 404"
+    assert "unreadable" in source
+    assert "status=503" in source

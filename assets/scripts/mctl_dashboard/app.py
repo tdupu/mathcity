@@ -412,6 +412,20 @@ class Dashboard:
             listing = self.client.call("briefs_list", self._args(rig))
             return list(listing.payload.get("briefs") or ()), None, []
 
+        if rig:
+            # A city-wide dashboard filtered to one rig was reading all
+            # seventeen and discarding sixteen: 22.5s against the live city,
+            # versus about four for the rig actually asked for.
+            #
+            # It was also saying something untrue. The degraded-rig panel
+            # reports whether the totals on this page cover the whole city --
+            # a claim about a city-wide total, on a page showing one rig. The
+            # honest statement about a rig-scoped page is whether *that* rig
+            # answered, and if it did not, the read raises rather than
+            # under-reporting.
+            listing = self.client.call("briefs_list", self._args(rig))
+            return list(listing.payload.get("briefs") or ()), None, []
+
         view = CityView.from_payload(
             self.client.call("briefs_list", self._args(None, all_rigs=True)).payload
         )
@@ -647,6 +661,34 @@ class Dashboard:
             # either way; the headline has to match it.
             codes = {str(item.get("code")) for item in failure.diagnostics}
             unknown_rig = "MCTL_CONTEXT_UNKNOWN_RIG" in codes
+            # A read that failed is not a brief that is absent. Under load this
+            # page returned "No such brief" for a brief that exists and had
+            # rendered a minute earlier -- the store simply did not answer in
+            # time. Telling an operator their bead is gone when the truth is
+            # that we could not look is the same defect as a silently short
+            # city-wide total, and it sends them hunting for a missing bead.
+            #
+            # `MBRF010` is the only diagnostic that means "there is no such
+            # brief". Anything else is reported as a failure to read.
+            unreadable = not unknown_rig and "MBRF010" not in codes
+            if unreadable:
+                return self._page(
+                    "Could not read this brief",
+                    "/briefs",
+                    self._safe_context(rig),
+                    [
+                        render.notice_panel(
+                            "The store did not answer",
+                            f"Nothing was read, and {brief_id!r} may well exist -- this "
+                            "says the read failed, not that the brief is missing. The "
+                            "diagnostics below are what came back. Retrying is "
+                            "reasonable; the store is often just busy.",
+                            failure.diagnostics,
+                            region="brief-unreadable",
+                        )
+                    ],
+                    status=503,
+                )
             return self._page(
                 "No such rig" if unknown_rig else "Brief not found",
                 "/briefs",
