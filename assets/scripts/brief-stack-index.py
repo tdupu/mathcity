@@ -244,7 +244,14 @@ def serialize_row(row: dict[str, Any]) -> str:
     return json.dumps(row, sort_keys=True, separators=(",", ":"))
 
 
-def build_report(apply: bool, command: str, removed: list[dict[str, Any]], kept: int, malformed: int) -> dict[str, Any]:
+def build_report(
+    apply: bool,
+    command: str,
+    removed: list[dict[str, Any]],
+    kept: int,
+    malformed: int,
+    refused: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "apply": apply,
         "command": command,
@@ -252,6 +259,7 @@ def build_report(apply: bool, command: str, removed: list[dict[str, Any]], kept:
         "kept_count": kept,
         "malformed_kept_count": malformed,
         "removed": removed,
+        "refused": refused or [],
     }
 
 
@@ -295,6 +303,7 @@ def command_remove_archived_row(args: argparse.Namespace) -> int:
     lines = load_index(index)
     remove_lines: set[int] = set()
     removed: list[dict[str, Any]] = []
+    refused: list[dict[str, Any]] = []
     malformed = 0
     for line in lines:
         if line.entry is None:
@@ -303,19 +312,45 @@ def command_remove_archived_row(args: argparse.Namespace) -> int:
         if entry_slug(line.entry) != args.slug:
             continue
         hit = archive_hit(brief_root, line.entry)
+        if hit is None:
+            # The guard this subcommand's NAME already promised. It previously
+            # computed `hit` only to fill `archived_at`, removed the row
+            # unconditionally, and still reported
+            # reason="explicit_slug_archived_row" -- asserting an archive
+            # nothing had looked for.
+            #
+            # This runs as the LAST step of adjudication
+            # (formulas/brief-record-decision.toml:206-213, "after the archive
+            # move succeeds"). That ordering is prose in an agent-executed step,
+            # not an enforced sequence, so a skipped or failed archive move used
+            # to de-index anyway and leave the brief in stack/ as a stray --
+            # the verdict lands and the representations disagree.
+            refused.append({
+                "line": line.line_no,
+                "slug": args.slug,
+                "path": str(entry_path(line.entry) or ""),
+                "reason": "no archive copy found; refusing to de-index an unarchived brief",
+            })
+            continue
         remove_lines.add(line.line_no)
         removed.append({
             "line": line.line_no,
             "slug": args.slug,
             "path": str(entry_path(line.entry) or ""),
             "reason": "explicit_slug_archived_row",
-            "archived_at": str(hit or ""),
+            "archived_at": str(hit),
         })
-    report = build_report(args.apply, "remove-archived-row", removed, len(lines) - len(remove_lines), malformed)
+    report = build_report(
+        args.apply, "remove-archived-row", removed,
+        len(lines) - len(remove_lines), malformed, refused,
+    )
     print(json.dumps(report, indent=2, sort_keys=True))
     if args.apply and remove_lines:
         rewrite_index(index, lines, remove_lines)
-    return 0
+    # Non-zero so the formula step FAILS LOUDLY rather than reporting a
+    # de-index it did not perform. Deliberately no --force: an escape hatch
+    # would reopen the hole under a friendlier name.
+    return 1 if refused else 0
 
 
 def command_add_missing_rows(args: argparse.Namespace) -> int:
