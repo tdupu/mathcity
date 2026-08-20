@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -240,3 +241,92 @@ def test_defer_applies_defer_until_and_reason_to_canonical_bead(tmp_path: Path):
     assert rows["mc-open"]["status"] == "deferred"
     assert rows["mc-open"]["defer_until"] == "2999-01-01"
     assert rows["mc-open"]["metadata"]["defer_reason"] == "waiting on owner"
+
+
+def test_a_blocked_brief_can_still_be_revised(tmp_path: Path):
+    """Refusal gates ratifying, not returning.
+
+    `mc-broken` raises MBRF004, which blocks an approval and should. It must
+    not block a revision: an unlinked, bodiless brief is exactly the brief an
+    adjudicator sends back, and gating that leaves the malformed population
+    with no route out of the queue at all.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(
+            city_root, "adjudicate", "mc-broken",
+            "--verdict", "revise",
+            "--reason", "No body and no source dependency; add the required fields.",
+            "--dry-run", "--json",
+        ),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    # The CLI still exits non-zero because an ERROR-severity finding is
+    # reported -- that convention is unchanged and deliberate. What matters is
+    # that the plan was produced rather than vetoed.
+    assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" not in result.stderr
+    assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["effect_plan"]["bead_updates"], "no plan was produced"
+    assert payload["effect_plan"]["bead_updates"][0]["metadata"]["verdict"] == "revise"
+
+
+def test_a_blocked_brief_can_still_be_rejected(tmp_path: Path):
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(
+            city_root, "adjudicate", "mc-broken",
+            "--verdict", "reject",
+            "--reason", "Not a brief; it decides about no other bead.",
+            "--dry-run", "--json",
+        ),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["effect_plan"]["bead_updates"][0]["metadata"]["verdict"] == "reject"
+
+
+def test_approving_a_blocked_brief_is_still_refused(tmp_path: Path):
+    """The half of the gate that must survive: no ratifying an unreadable brief."""
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(
+            city_root, "adjudicate", "mc-broken",
+            "--verdict", "approve",
+            "--reason", "looks fine",
+            "--dry-run", "--json",
+        ),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+    assert result.returncode != 0
+    assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" in result.stderr
+
+
+def test_returning_a_blocked_brief_still_reports_the_finding(tmp_path: Path):
+    """Demoted to advisory, not suppressed -- the record must still carry it."""
+    import json
+
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(
+            city_root, "adjudicate", "mc-broken",
+            "--verdict", "revise",
+            "--reason", "Add the required fields.",
+            "--dry-run", "--json",
+        ),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+    payload = json.loads(result.stdout)
+    codes = {item.get("code") for item in payload.get("diagnostics") or ()}
+    assert "MBRF004" in codes, payload.get("diagnostics")

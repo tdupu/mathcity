@@ -41,6 +41,20 @@ from .redundant_state import ArtifactLayout, artifact_layout
 from .trace import append_aborted, append_applied, append_planned, trace_path
 
 
+#: Verdicts that send a brief BACK rather than ratifying it.
+#:
+#: The doctor's ERROR diagnostics are preconditions for *accepting* a brief:
+#: they say the bead is not in a state where an approval would mean anything.
+#: They are not preconditions for returning one. A brief with no body and no
+#: source dependency is precisely the brief you revise, and refusing the
+#: revision because the body is missing leaves the operator with no move at
+#: all -- the queue's malformed population then cannot be cleared by the one
+#: person authorised to clear it.
+#:
+#: So for these verdicts the blocking diagnostics are demoted to advisories:
+#: still reported, still on the record, no longer a veto.
+RETURN_VERDICTS = frozenset({"revise", "reject"})
+
 VALID_VERDICTS = {
     "accept": "approve",
     "accepted": "approve",
@@ -329,6 +343,12 @@ def plan_adjudication(
     reason = _require_reason(ctx, reason, brief_id)
     observed = show_brief(ctx, brief_id)
     diagnostics = list(_blocking_preconditions(doctor_briefs(ctx, brief_id).diagnostics))
+    # A return verdict ratifies nothing, so nothing about the brief's own
+    # state can make it wrong. Keep the findings, drop the veto.
+    returned_advisories: list[Diagnostic] = []
+    if normalized in RETURN_VERDICTS:
+        returned_advisories = diagnostics
+        diagnostics = []
     # Plan §4 MOPT001/MOPT002: a verdict on a multi-option brief has to say
     # which option it is approving, or it records a decision against nothing.
     # `show_brief` already carries the canonical body, so options resolve
@@ -379,6 +399,7 @@ def plan_adjudication(
         operation="briefs.adjudicate",
         brief_id=brief_id,
         preconditions=diagnostics,
+        extra_advisories=tuple(returned_advisories),
         bead_update=BeadUpdate(
             brief_id,
             status="closed",
@@ -776,6 +797,7 @@ def _plan(
     preconditions: tuple[Diagnostic, ...],
     bead_update: BeadUpdate,
     cache_fields: Mapping[str, str],
+    extra_advisories: tuple[Diagnostic, ...] = (),
 ) -> EffectPlan:
     cache_updates = _cache_updates(ctx, brief_id, cache_fields)
     event_row = {
@@ -798,6 +820,7 @@ def _plan(
         operation=operation,
         target_brief_id=brief_id,
         preconditions=preconditions,
+        advisories=tuple(extra_advisories),
         bead_updates=(bead_update,),
         cache_updates=cache_updates,
         event_writes=(JsonlWrite("event_write", ctx.rig_root / ".beads" / "mctl" / "events" / f"{today}.jsonl", event_row),),
