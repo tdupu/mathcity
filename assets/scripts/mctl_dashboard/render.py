@@ -141,6 +141,10 @@ KEY_BINDINGS: tuple[tuple[str, str], ...] = (
     ("j", "next row"),
     ("k", "previous row"),
     ("enter", "open the brief under the cursor"),
+    ("n", "next brief"),
+    ("p", "previous brief"),
+    ("q", "back to the queue"),
+    ("a", "jump to the verdict panel"),
 )
 
 
@@ -169,7 +173,7 @@ def key_map() -> str:
         + rows
         + '</div><div style="font-size: 11px; font-style: italic; margin-top: 5px; '
         'color: var(--color-neutral-700);">'
-        "These three are the only part of the dashboard that needs JavaScript, and "
+        "These are the only part of the dashboard that needs JavaScript, and "
         "each one duplicates something you can click. Everything else — sorting, "
         "filtering, opening a brief, recording a verdict — works without it."
         "</div></details>"
@@ -177,35 +181,34 @@ def key_map() -> str:
 
 
 def rig_picker(rig_ids: Sequence[str], selected: Sequence[str] = ()) -> str:
-    """Which rigs to read, as a multi-select defaulting to all.
+    """Which rig to read, as the header dropdown the design draws.
 
-    The design made this a picker rather than an `--all-rigs` checkbox
-    (CHANGELOG §E28), and the default is every rig: a dashboard that silently
-    showed one rig would answer "how much is waiting" with a number that is
-    true of a fraction.
+    The design puts this inline in the context line -- `rig all rigs` with a
+    caret -- not as a separate form in the controls row. An earlier attempt
+    used `<select multiple size="1">`, which browsers draw as a one-line list
+    box indistinguishable from a broken text input.
 
-    Reads may span rigs; mutations never do. Selecting rigs here filters what
-    was read and does not widen what a verdict can touch -- the write path
-    pins its rig at preview time regardless.
+    Reads may span rigs; mutations never do. Choosing a rig here filters what
+    was read and cannot widen what a verdict touches -- the write path pins
+    its rig at preview time regardless.
     """
     if not rig_ids:
         return ""
-    chosen = set(selected)
-    options = "".join(
-        f'<option value="{_e(rig)}"{" selected" if rig in chosen else ""}>{_e(rig)}</option>'
+    chosen = (list(selected) or [""])[0]
+    options = '<option value="">all rigs</option>' + "".join(
+        f'<option value="{_e(rig)}"{" selected" if rig == chosen else ""}>{_e(rig)}</option>'
         for rig in rig_ids
     )
-    note = "all rigs" if not chosen else f"{len(chosen)} of {len(rig_ids)} rigs"
     return (
         '<form method="get" data-region="rig-picker" '
-        'style="display: inline-flex; gap: 6px; align-items: center;">'
-        f'<label class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
-        f"rig <span title=\"reads may span rigs; mutations stay single-rig\">{_e(note)}</span></label>"
-        f'<select name="rig" multiple size="1" '
-        'style="font-family: var(--font-mono); font-size: 11px; max-width: 150px;">'
+        'style="display: inline;">'
+        f'<select name="rig" onchange="this.form.submit()" '
+        'style="font-family: var(--font-mono); font-size: 11.5px; '
+        "border: 0; background: transparent; color: var(--color-accent-800); "
+        'border-bottom: 1px dotted var(--color-accent-600); cursor: pointer;">'
         f"{options}</select>"
-        '<button class="btn btn-ghost" type="submit" '
-        'style="font-size: 11px; padding: 2px 8px;">Apply</button>'
+        '<noscript><button class="btn btn-ghost" type="submit" '
+        'style="font-size: 10px; padding: 1px 5px;">go</button></noscript>'
         "</form>"
     )
 
@@ -254,15 +257,22 @@ def importance(weights: Mapping[str, int]) -> str:
         + '<button class="btn btn-secondary" type="submit" '
         'style="font-size: 11px; padding: 3px 10px; width: 100%;">Apply</button>'
         '<p class="review-note" style="margin: 9px 0 0; font-size: 11px;">'
-        "These change the <strong>Score</strong> column, which has no value for any "
-        "brief yet — <span class=\"mono\">unlock_count</span> and priority are not "
-        "exposed by the core. The sliders work; there is currently nothing for them "
-        "to reorder.</p>"
+        "These change the <strong>Score</strong> column and, when you sort by it, "
+        "the order of the queue. Score is computed from "
+        "<span class=\"mono\">unlock_count</span> and priority, which the core does "
+        "expose — this note previously said it did not, which was a defect in how "
+        "the dashboard read them rather than a gap in the data.</p>"
         "</div></form>"
     )
 
 
-def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
+def masthead(
+    counts: Mapping[str, Any],
+    context: Mapping[str, Any],
+    *,
+    rig_ids: Sequence[str] = (),
+    selected_rig: str | None = None,
+) -> str:
     """Brand, resolved runtime context, and the clickable counts.
 
     The context line shows the *resolved* city, rig and store rather than what
@@ -276,6 +286,14 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     city = context.get("city_root") or context.get("city_active") or "—"
     rig = context.get("rig_id") or "all rigs"
     store = context.get("rig_db") or ".beads"
+    # City-wide the rig is a choice, so it is a control; pinned to one rig it
+    # is a fact, so it is text. Offering a picker on a single-rig dashboard
+    # would imply a choice the deployment already made.
+    rig_control = (
+        rig_picker(rig_ids, selected=(selected_rig,) if selected_rig else ())
+        if rig_ids
+        else _e(rig)
+    )
     chips = "".join(
         (
             _chip("/pile", "pile", counts.get("pile"), key="pile"),
@@ -300,7 +318,7 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
         '<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-700);">'
         f'<span style="color: var(--color-neutral-600);">city</span> {_e(city)} '
         '<span style="color: var(--color-neutral-400);">&middot;</span> '
-        f'<span style="color: var(--color-neutral-600);">rig</span> {_e(rig)} '
+        f'<span style="color: var(--color-neutral-600);">rig</span> {rig_control} '
         '<span style="color: var(--color-neutral-400);">&middot;</span> '
         f'<span style="color: var(--color-neutral-600);">store</span> {_e(store)}'
         "</div>"
@@ -339,6 +357,9 @@ def sidebar(
         '<p style="padding: 7px 12px 4px; font-size: 11px; color: var(--color-neutral-600); '
         'font-style: italic; line-height: 1.35; margin: 0;">'
         "Your ordering over the same stack — nothing here changes pipeline state.</p>"
+        + f'<a class="mc-navlink" href="/priority"><span>My priority list</span>'
+        f'<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
+        f'{len(queued) if queued else "empty"}</span></a>'
         + _next_up(queued)
         + (importance(weights) if weights else "")
         + "</nav>"
@@ -394,6 +415,8 @@ def page(
     trace_id: str = "",
     queued: Sequence[str] = (),
     weights: Mapping[str, int] | None = None,
+    rig_ids: Sequence[str] = (),
+    selected_rig: str | None = None,
 ) -> str:
     """The document shell.
 
@@ -425,7 +448,7 @@ def page(
             f"<style>{STYLESHEET}</style>",
             "</head>",
             "<body>",
-            masthead(counts, context),
+            masthead(counts, context, rig_ids=rig_ids, selected_rig=selected_rig),
             key_map(),
             '<div class="mc-shell">',
             sidebar(current, counts, queued=queued, weights=weights),
@@ -838,9 +861,19 @@ def options_panel(options: Sequence[Mapping[str, Any]]) -> str:
 
 
 def operation_forms(
-    brief_id: str, options: Sequence[Mapping[str, Any]], *, rig: str | None = None
+    brief_id: str,
+    options: Sequence[Mapping[str, Any]],
+    *,
+    rig: str | None = None,
+    omit: Sequence[str] = (),
 ) -> str:
     """The mutation forms, each pinned to the rig whose store owns this brief.
+
+    `omit` drops an operation that a better screen already offers. The
+    adjudication panel supersedes the adjudicate form here, and two forms on
+    one page that write the same field is not a fallback -- it is a chance to
+    submit the one you did not mean, from a form that shows less about what it
+    is doing.
 
     The rig travels as a hidden field rather than being inferred at submit
     time. A city-wide dashboard that let the target store be re-derived from
@@ -859,28 +892,37 @@ def operation_forms(
             "a preview will show the blocking diagnostic code.</p>"
         )
 
+    adjudicate_form = (
+        ""
+        if "adjudicate" in set(omit)
+        else (
+            '<form class="operation" method="post" action="/preview">'
+            f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
+            '<input type="hidden" name="operation" value="adjudicate">'
+            "<label>Verdict"
+            '<select name="verdict">'
+            '<option value="approve">approve</option>'
+            '<option value="reject">reject</option>'
+            '<option value="revise">revise</option>'
+            "</select></label>"
+            '<label>Option (required when the brief offers more than one)'
+            '<input type="text" name="option" placeholder="A"></label>'
+            "<label>Reason (recorded on the bead)"
+            '<textarea name="reason" rows="3"></textarea></label>'
+            '<div><button type="submit">Preview adjudication</button></div>'
+            f"{_blocked('adjudicate')}"
+            "</form>"
+        )
+    )
+    heading = "Defer or dispatch" if "adjudicate" in set(omit) else "Record a decision"
     return (
         '<section class="panel" data-region="mutations">'
-        "<h2>Record a decision</h2>"
+        f"<h2>{heading}</h2>"
         '<p class="lede">Every mutation is preview-first. Submitting here runs a '
         "<strong>dry run</strong> through the MCP tool and writes nothing; the confirm control "
         "appears only on the preview, and only while that preview is still true.</p>"
-        '<form class="operation" method="post" action="/preview">'
-        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
-        '<input type="hidden" name="operation" value="adjudicate">'
-        "<label>Verdict"
-        '<select name="verdict">'
-        '<option value="approve">approve</option>'
-        '<option value="reject">reject</option>'
-        '<option value="revise">revise</option>'
-        "</select></label>"
-        '<label>Option (required when the brief offers more than one)'
-        '<input type="text" name="option" placeholder="A"></label>'
-        '<label>Reason (recorded on the bead)<textarea name="reason" rows="3"></textarea></label>'
-        "<div><button type=\"submit\">Preview adjudication</button></div>"
-        f"{_blocked('adjudicate')}"
-        "</form>"
-        '<form class="operation" method="post" action="/preview">'
+        + adjudicate_form
+        + '<form class="operation" method="post" action="/preview">'
         f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
         '<input type="hidden" name="operation" value="defer">'
         '<label>Defer for (days)<input type="text" name="days" value="7"></label>'

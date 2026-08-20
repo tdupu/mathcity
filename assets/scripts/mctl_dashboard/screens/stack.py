@@ -20,6 +20,7 @@ brief unblocks nothing", which is a claim nobody made.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -47,6 +48,11 @@ UNFED_COLUMNS: dict[str, str] = {
 
 _DASH = "—"
 
+#: Never hidden, however empty. The title is the row's identity, and Health is
+#: the column an operator scans for trouble -- an all-OK Health column is a
+#: real answer ("nothing is wrong here"), not an absence.
+KEEP_ALWAYS: frozenset[str] = frozenset({"slug", "rig", "sev"})
+
 
 # --------------------------------------------------------------------------
 # derivation
@@ -55,7 +61,7 @@ _DASH = "—"
 
 def age_days(brief: Mapping[str, Any], *, now: datetime | None = None) -> int | None:
     """Whole days since the brief bead was created, or None if unknown."""
-    raw = str(brief.get("created_at") or "").strip()
+    raw = str(attr(brief, "created_at") or "").strip()
     if not raw:
         return None
     text = raw.replace("Z", "+00:00")
@@ -76,7 +82,7 @@ def severity(brief: Mapping[str, Any]) -> str:
     as far as anything has looked, and saying so is different from claiming it
     was checked.
     """
-    codes = brief.get("diagnostics") or ()
+    codes = attr(brief, "diagnostics") or ()
     worst = "ok"
     for item in codes:
         level = str((item or {}).get("severity") or "").upper()
@@ -98,8 +104,8 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
     if weights:
         settings.update(weights)
 
-    unlock = brief.get("unlock_count")
-    priority = brief.get("priority")
+    unlock = attr(brief, "unlock_count")
+    priority = attr(brief, "priority")
     days = age_days(brief)
     if unlock is None and priority is None:
         return None
@@ -107,7 +113,7 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
     total = 0.0
     if unlock is not None:
         total += float(unlock) * settings["unlock"]
-    if brief.get("convoy"):
+    if attr(brief, "convoy"):
         total += settings["convoy"] * 2.4
     if days is not None:
         total += days * settings["age"] * 0.35
@@ -116,10 +122,12 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
     return round(total)
 
 
-def sort_value(brief: Mapping[str, Any], key: str) -> Any:
+def sort_value(
+    brief: Mapping[str, Any], key: str, weights: Mapping[str, int] | None = None
+) -> Any:
     """A comparable for one column. Unknowns sort last in both directions."""
     if key == "score":
-        value = score(brief)
+        value = score(brief, weights)
         return (value is None, value if value is not None else 0)
     if key == "age":
         days = age_days(brief)
@@ -127,17 +135,17 @@ def sort_value(brief: Mapping[str, Any], key: str) -> Any:
     if key == "sev":
         return (False, SEV_RANK.get(severity(brief), 1))
     if key == "prio":
-        raw = brief.get("priority")
+        raw = attr(brief, "priority")
         return (raw is None, PRIO_RANK.get(str(raw).lower(), 0))
     if key == "unlock":
-        raw = brief.get("unlock_count")
+        raw = attr(brief, "unlock_count")
         return (raw is None, float(raw) if raw is not None else 0.0)
     if key == "slug":
-        return (False, str(brief.get("title") or "").lower())
+        return (False, str(attr(brief, "title") or "").lower())
     if key == "rig":
-        return (False, str(brief.get("rig_id") or "").lower())
+        return (False, str(attr(brief, "rig_id") or "").lower())
     if key == "source":
-        return (False, str(brief.get("canonical_source") or "").lower())
+        return (False, str(attr(brief, "canonical_source") or "").lower())
     if key == "artifact":
         return (False, _artifact_text(brief).lower())
     return (True, "")
@@ -146,10 +154,11 @@ def sort_value(brief: Mapping[str, Any], key: str) -> Any:
 def sorted_briefs(
     briefs: Sequence[Mapping[str, Any]], view: ViewState
 ) -> list[Mapping[str, Any]]:
-    ordered = sorted(briefs, key=lambda brief: sort_value(brief, view.sort_key))
+    weights = view.weights
+    ordered = sorted(briefs, key=lambda brief: sort_value(brief, view.sort_key, weights))
     if view.sort_dir < 0:
-        known = [b for b in ordered if not sort_value(b, view.sort_key)[0]]
-        unknown = [b for b in ordered if sort_value(b, view.sort_key)[0]]
+        known = [b for b in ordered if not sort_value(b, view.sort_key, weights)[0]]
+        unknown = [b for b in ordered if sort_value(b, view.sort_key, weights)[0]]
         return list(reversed(known)) + unknown
     return ordered
 
@@ -167,9 +176,9 @@ def row_background(brief: Mapping[str, Any], *, index: int, cursor: int) -> str:
     ordinary selected row for exactly as long as the cursor rested on it --
     which is the moment the operator is most likely to act on it.
     """
-    if brief.get("kind") == "error":
+    if attr(brief, "kind") == "error":
         return STOP["error"]["bg"]
-    level = brief.get("sev") or severity(brief)
+    level = attr(brief, "sev") or severity(brief)
     if level == "error":
         return STOP["held"]["bg"]
     if level == "warn":
@@ -180,9 +189,9 @@ def row_background(brief: Mapping[str, Any], *, index: int, cursor: int) -> str:
 
 
 def row_edge(brief: Mapping[str, Any], *, index: int, cursor: int) -> str:
-    if brief.get("kind") == "error":
+    if attr(brief, "kind") == "error":
         return STOP["error"]["edge"]
-    level = brief.get("sev") or severity(brief)
+    level = attr(brief, "sev") or severity(brief)
     if level == "error":
         return STOP["held"]["edge"]
     if level == "warn":
@@ -204,39 +213,63 @@ def _artifact_text(brief: Mapping[str, Any]) -> str:
     return ", ".join(states)
 
 
-def cell_text(brief: Mapping[str, Any], key: str) -> str:
+def attr(brief: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    """One attribute, wherever the core chose to put it.
+
+    `briefs_list` returns most attributes inside a `fields` map that carries
+    provenance -- `{"value": ..., "source": ..., "readings": [...]}` -- rather
+    than at the top level. Reading only the top level saw `None` for
+    `unlock_count` on all 308 live rows when 185 of them carried a value, and
+    the hide-empty rule then hid a column that had data. A read that knows
+    about only one of the two shapes is a read that silently under-reports.
+
+    Top level wins where both exist: it is the already-resolved value.
+    """
+    if key in brief and brief[key] is not None:
+        return brief[key]
+    entry = (brief.get("fields") or {}).get(key)
+    if isinstance(entry, Mapping):
+        value = entry.get("value")
+        if value is not None:
+            return value
+    return default
+
+
+def cell_text(
+    brief: Mapping[str, Any], key: str, weights: Mapping[str, int] | None = None
+) -> str:
     """The visible text for one cell, em dash where the core has no value."""
     if key == "slug":
-        return str(brief.get("title") or brief.get("bead_id") or _DASH)
+        return str(attr(brief, "title") or attr(brief, "bead_id") or _DASH)
     if key == "rig":
-        return str(brief.get("rig_id") or _DASH)
+        return str(attr(brief, "rig_id") or _DASH)
     if key == "artifact":
         return _artifact_text(brief) or _DASH
     if key == "source":
-        return str(brief.get("canonical_source") or _DASH)
+        return str(attr(brief, "canonical_source") or _DASH)
     if key == "age":
         days = age_days(brief)
         return f"{days}d" if days is not None else _DASH
     if key == "score":
-        value = score(brief)
+        value = score(brief, weights)
         return str(value) if value is not None else _DASH
     if key == "sev":
-        if brief.get("kind") == "error":
+        if attr(brief, "kind") == "error":
             return "ERROR"
-        level = brief.get("sev") or severity(brief)
+        level = attr(brief, "sev") or severity(brief)
         return "HELD" if level == "error" else str(level).upper()
     if key == "unlock":
-        raw = brief.get("unlock_count")
+        raw = attr(brief, "unlock_count")
         return str(raw) if raw is not None else _DASH
     if key == "prio":
-        return str(brief.get("priority") or _DASH)
+        return str(attr(brief, "priority") if attr(brief, "priority") is not None else _DASH)
     if key == "kind":
-        return str(brief.get("kind") or brief.get("decision_state") or _DASH)
+        return str(attr(brief, "kind") or attr(brief, "decision_state") or _DASH)
     if key == "nopts":
-        options = brief.get("decision_options")
+        options = attr(brief, "decision_options")
         return str(len(options)) if options else _DASH
     if key == "rec":
-        return str(brief.get("recommendation") or _DASH)
+        return str(attr(brief, "recommendation") or _DASH)
     return _DASH
 
 
@@ -264,9 +297,9 @@ def _cell_style(key: str, numeric: bool) -> str:
 
 
 def _severity_colour(brief: Mapping[str, Any]) -> str:
-    if brief.get("kind") == "error":
+    if attr(brief, "kind") == "error":
         return STOP["error"]["fg"]
-    level = brief.get("sev") or severity(brief)
+    level = attr(brief, "sev") or severity(brief)
     if level == "error":
         return STOP["held"]["fg"]
     if level == "warn":
@@ -312,15 +345,15 @@ def _row(
     index: int,
     queued: Sequence[str],
 ) -> str:
-    bead = str(brief.get("bead_id") or "")
-    brief_id = str(brief.get("brief_id") or bead)
+    bead = str(attr(brief, "bead_id") or "")
+    brief_id = str(attr(brief, "brief_id") or bead)
     # The rig travels with the link. A brief lives in exactly one rig's store,
     # so a city-wide detail page cannot resolve it without being told which --
     # without this every click city-wide returns 400 rig-required.
     href = view.url(
         view="brief",
         brief_id=brief_id,
-        rig=str(brief.get("rig_id") or "") or view.rig,
+        rig=str(attr(brief, "rig_id") or "") or view.rig,
     )
     background = row_background(brief, index=index, cursor=view.cursor)
     edge = row_edge(brief, index=index, cursor=view.cursor)
@@ -330,9 +363,9 @@ def _row(
         style = _cell_style(key, numeric)
         if key == "sev":
             style += f" color: {_severity_colour(brief)};"
-            if brief.get("kind") == "error":
+            if attr(brief, "kind") == "error":
                 style += " font-weight: 600;"
-        text = cell_text(brief, key)
+        text = cell_text(brief, key, view.weights)
         # One line per row, ellipsised. The design's density is the point:
         # a stack you scan is a stack you can rank, and a wrapped title turns
         # thirteen visible rows into seven.
@@ -371,6 +404,61 @@ def _row(
     )
 
 
+def _fed_columns(
+    briefs: Sequence[Mapping[str, Any]], view: ViewState
+) -> tuple[ViewState, tuple[str, ...]]:
+    """Drop columns no brief in this result can feed.
+
+    A column whose every cell is an em dash is not information -- it is a
+    claim that something was measured and came back empty, which is a
+    different and false statement. The stack table was drawing five of them,
+    so the operator's first impression of the queue was a wall of dashes.
+
+    Two properties make this safe to do automatically. It is computed from the
+    rows in hand, so the column **reappears on its own** the moment the core
+    starts feeding it -- no release, no flag. And it never overrides an
+    explicit choice: a column you ticked yourself is a column you get, dashes
+    and all, because you asked a question and empty is the answer.
+
+    Returns the view to render with, and the keys that were dropped so the
+    caller can name them.
+    """
+    if view.columns_chosen:
+        return view, ()
+
+    droppable = tuple(
+        key
+        for key in view.columns
+        if key not in KEEP_ALWAYS
+        and all(cell_text(brief, key, view.weights) == _DASH for brief in briefs)
+    )
+    if not droppable:
+        return view, ()
+    kept = tuple(key for key in view.columns if key not in droppable)
+    return replace(view, columns=kept), droppable
+
+
+def _hidden_note(dropped: Sequence[str]) -> str:
+    """Name what was hidden. A column that vanishes silently reads as absent."""
+    if not dropped:
+        return ""
+    names = ", ".join(
+        f"{COLUMN_LABEL.get(key, key)} ({UNFED_COLUMNS[key]})"
+        if key in UNFED_COLUMNS
+        else COLUMN_LABEL.get(key, key)
+        for key in dropped
+    )
+    return (
+        '<p class="lede" data-region="stack-hidden-columns" '
+        'style="margin-top: 8px; font-style: italic;">'
+        f"{len(dropped)} column{'s' if len(dropped) != 1 else ''} hidden because no "
+        f"brief here carries a value for {'them' if len(dropped) != 1 else 'it'}: "
+        f"{_e(names)}. They return on their own once the core feeds them, and "
+        "the column picker shows them either way."
+        "</p>"
+    )
+
+
 def table(
     briefs: Sequence[Mapping[str, Any]],
     view: ViewState,
@@ -384,6 +472,7 @@ def table(
             "No briefs on this stack. Produced briefs land in the "
             '<a href="/pile">pile</a> and are promoted by the gates.</p>'
         )
+    view, dropped = _fed_columns(ordered, view)
     rows = "".join(
         _row(brief, view, index=index, queued=queued)
         for index, brief in enumerate(ordered)
@@ -405,6 +494,7 @@ def table(
         '<span class="lede" style="font-size: 11px;">Ticking changes nothing until you '
         "add them; the priority list is your ordering, not pipeline state.</span></div>"
         "</form>"
+        + _hidden_note(dropped)
     )
 
 

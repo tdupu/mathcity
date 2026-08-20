@@ -53,7 +53,18 @@ from .screens import priority as priority_screen
 from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
+from .fanout import fan_out
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
+
+#: Marker written into the adjudication reason when the no-brainer box is
+#: ticked. Fixed string so a later migration to a first-class field can find
+#: every one of them: `bd list | grep "[no-brainer]"`.
+NO_BRAINER_MARKER = "[no-brainer] surfacing this was a pipeline regression."
+
+#: Marker for a disposition the brief did not offer. Same reasoning as the
+#: no-brainer marker: a fixed string so a later migration to a first-class
+#: field can find every one of them.
+PROPOSED_OPTION_MARKER = "[proposed-option] not one of the options as filed:"
 
 
 @dataclass(frozen=True)
@@ -136,6 +147,32 @@ SCOPE_STATES: dict[str, frozenset[str]] = {
 }
 
 
+def is_deferred(brief: Mapping[str, Any]) -> bool:
+    """Whether this brief is being held out of the stack.
+
+    Deferral is written to the bead's `status` -- `effects.py::plan_deferral`
+    sets `status="deferred"` -- while `decision_state` is computed separately
+    and never takes that value. Reading only `decision_state`, as every lane
+    did, meant a brief someone deliberately deferred still read as `pending`:
+    it stayed in the queue awaiting a verdict it had already been excused
+    from, and the Deferred screen reported a confident zero about it.
+
+    Both are consulted until the core reconciles them.
+    """
+    return (
+        str(brief.get("decision_state") or "") == "deferred"
+        or str(brief.get("status") or "") == "deferred"
+    )
+
+
+def _in_lane(brief: Mapping[str, Any], lane: str) -> bool:
+    """Whether a brief belongs to one of the pipeline lanes."""
+    if lane == "deferred":
+        return is_deferred(brief)
+    state = str(brief.get("decision_state") or "")
+    return state == lane.rstrip("s") or state == lane
+
+
 def _scoped(
     briefs: Sequence[Mapping[str, Any]], scope: str
 ) -> list[Mapping[str, Any]]:
@@ -151,7 +188,13 @@ def _scoped(
     states = SCOPE_STATES.get(scope)
     if states is None:
         return list(briefs)
-    return [b for b in briefs if str(b.get("decision_state") or "") in states]
+    # A deferred brief is held out of every lane it would otherwise land in --
+    # the whole point of deferring it is that it is not waiting on you.
+    return [
+        b
+        for b in briefs
+        if str(b.get("decision_state") or "") in states and not is_deferred(b)
+    ]
 
 
 def _queued_from(request: "Request") -> list[str]:
@@ -323,12 +366,7 @@ class Dashboard:
             )
 
         briefs, _city, city_extra = self._read_briefs(rig)
-        selected = [
-            brief
-            for brief in briefs
-            if str(brief.get("decision_state") or "") == lane.rstrip("s")
-            or str(brief.get("decision_state") or "") == lane
-        ]
+        selected = [brief for brief in briefs if _in_lane(brief, lane)]
         renderer = {
             "deferred": pipeline_screen.deferred,
             "adjudicated": pipeline_screen.adjudicated,
@@ -398,6 +436,20 @@ class Dashboard:
         reporting a smaller number.
         """
         if not self.city_wide:
+            listing = self.client.call("briefs_list", self._args(rig))
+            return list(listing.payload.get("briefs") or ()), None, []
+
+        if rig:
+            # A city-wide dashboard filtered to one rig was reading all
+            # seventeen and discarding sixteen: 22.5s against the live city,
+            # versus about four for the rig actually asked for.
+            #
+            # It was also saying something untrue. The degraded-rig panel
+            # reports whether the totals on this page cover the whole city --
+            # a claim about a city-wide total, on a page showing one rig. The
+            # honest statement about a rig-scoped page is whether *that* rig
+            # answered, and if it did not, the read raises rather than
+            # under-reporting.
             listing = self.client.call("briefs_list", self._args(rig))
             return list(listing.payload.get("briefs") or ()), None, []
 
@@ -621,15 +673,49 @@ class Dashboard:
         rig = self._rig_for(request)
         if self.city_wide and not rig:
             return self._rig_required(brief_id)
-        try:
-            shown = self.client.call("briefs_show", self._args(rig, brief_id=brief_id))
-        except ToolFailure as failure:
+        # All three reads are independent -- `options` and `doctor` are keyed by
+        # brief id, not by anything `show` returns -- so they go together. Only
+        # the failure of `show` is fatal to the page, and that is handled below.
+        shown, options, doctor, listing = self._brief_reads(brief_id, rig)
+        if isinstance(shown, ToolFailure):
+            failure = shown
+        else:
+            failure = None
+        if failure is not None:
             # "No such brief" would be the wrong headline when the *rig* is
             # the thing that does not exist -- the operator would go looking
             # for a missing bead instead of a mistyped rig. The code is shown
             # either way; the headline has to match it.
             codes = {str(item.get("code")) for item in failure.diagnostics}
             unknown_rig = "MCTL_CONTEXT_UNKNOWN_RIG" in codes
+            # A read that failed is not a brief that is absent. Under load this
+            # page returned "No such brief" for a brief that exists and had
+            # rendered a minute earlier -- the store simply did not answer in
+            # time. Telling an operator their bead is gone when the truth is
+            # that we could not look is the same defect as a silently short
+            # city-wide total, and it sends them hunting for a missing bead.
+            #
+            # `MBRF010` is the only diagnostic that means "there is no such
+            # brief". Anything else is reported as a failure to read.
+            unreadable = not unknown_rig and "MBRF010" not in codes
+            if unreadable:
+                return self._page(
+                    "Could not read this brief",
+                    "/briefs",
+                    self._safe_context(rig),
+                    [
+                        render.notice_panel(
+                            "The store did not answer",
+                            f"Nothing was read, and {brief_id!r} may well exist -- this "
+                            "says the read failed, not that the brief is missing. The "
+                            "diagnostics below are what came back. Retrying is "
+                            "reasonable; the store is often just busy.",
+                            failure.diagnostics,
+                            region="brief-unreadable",
+                        )
+                    ],
+                    status=503,
+                )
             return self._page(
                 "No such rig" if unknown_rig else "Brief not found",
                 "/briefs",
@@ -656,8 +742,6 @@ class Dashboard:
                 context_bar=self._city_bar() if unknown_rig and self.city_wide else None,
             )
         brief = dict(shown.payload.get("brief") or {})
-        options = self._options(brief_id, rig)
-        doctor = self._doctor(brief_id, rig)
         option_rows = (options.payload.get("options") or ()) if options else ()
         # The redesigned detail leads: it is what the operator reads to decide.
         # The existing panels stay beneath it -- `brief_detail_panel` carries
@@ -669,12 +753,26 @@ class Dashboard:
                 view_state.parse(request.query),
                 knowls=self._knowls(brief),
                 options=option_rows,
+                neighbours=self._neighbours(
+                    listing, brief_id, view_state.parse(request.query)
+                ),
+                rig=rig,
             ),
-            panel_screen.entry(brief, option_rows, view_state.parse(request.query), rig=rig),
+            panel_screen.entry(
+                brief,
+                option_rows,
+                view_state.parse(request.query),
+                rig=rig,
+                prefill=request.query.get("prefill"),
+            ),
             render.artifact_trust_panel(shown.artifact_trust, rig=rig),
             render.brief_detail_panel(brief),
             render.options_panel(option_rows) if options else "",
-            render.operation_forms(brief_id, option_rows, rig=rig),
+            # The adjudication panel above supersedes the adjudicate form; two
+            # forms writing the same field is a chance to submit the one you
+            # did not mean. Defer and dispatch have no other home yet, so they
+            # stay.
+            render.operation_forms(brief_id, option_rows, rig=rig, omit=("adjudicate",)),
             render.diagnostics_sections(
                 doctor.diagnostics if doctor else [],
                 doctor.untrusted_diagnostics if doctor else [],
@@ -741,6 +839,65 @@ class Dashboard:
             return self._context(rig)
         except ToolFailure:
             return None
+
+    def _brief_reads(self, brief_id: str, rig: str | None):
+        """Every read the brief page needs, concurrently.
+
+        Returns `(shown, options, doctor)`. `shown` is either a response or the
+        `ToolFailure` that explains why there is no page to draw -- the caller
+        renders the 404 from it. The other two degrade to `None`, so a store
+        that cannot answer costs one panel rather than the page.
+        """
+        shown, options, doctor, listing = fan_out(
+            self.client,
+            [
+                ("briefs_show", self._args(rig, brief_id=brief_id)),
+                ("briefs_options", self._args(rig, brief_id=brief_id)),
+                ("briefs_doctor", self._args(rig, brief_id=brief_id)),
+                # Only for "brief N of M" and prev/next. It rides along in the
+                # fan-out, so knowing where you are in the queue costs no wall
+                # clock, and a failure here loses the navigation rather than
+                # the page.
+                ("briefs_list", self._args(rig)),
+            ],
+        )
+        if isinstance(shown, Exception) and not isinstance(shown, ToolFailure):
+            raise shown
+        return (
+            shown,
+            None if isinstance(options, Exception) else options,
+            None if isinstance(doctor, Exception) else doctor,
+            None if isinstance(listing, Exception) else listing,
+        )
+
+    @staticmethod
+    def _neighbours(listing, brief_id: str, view: "view_state.ViewState") -> Mapping[str, Any] | None:
+        """Position of `brief_id` in the queue, or None if it is not on it.
+
+        Filtered and sorted exactly as `/queue` renders it. A position taken
+        against the unfiltered list said "brief 22 of 308" on a queue showing
+        115, and prev/next would then walk briefs the operator cannot see --
+        the count has to be the count they are looking at.
+
+        Guessing a position would be worse than omitting one: "brief 1 of 1"
+        on a page reached from a 180-row queue is a confident lie.
+        """
+        if listing is None:
+            return None
+        rows = stack.sorted_briefs(
+            _scoped(list(listing.payload.get("briefs") or ()), view.scope), view
+        )
+        ids = [str(row.get("bead_id") or row.get("brief_id") or "") for row in rows]
+        try:
+            index = ids.index(brief_id)
+        except ValueError:
+            return None
+        return {
+            "index": index,
+            "total": len(ids),
+            "prev_id": ids[index - 1] if index > 0 else None,
+            "next_id": ids[index + 1] if index + 1 < len(ids) else None,
+        }
 
     def _options(self, brief_id: str, rig: str | None) -> ToolResponse | None:
         try:
@@ -1268,12 +1425,17 @@ class Dashboard:
         if changed:
             return self._stale(preview, operation, changed, replanned)
         applied = self.client.call(operation.tool, {**preview.arguments, "dry_run": False})
+        # The brief just adjudicated has left the queue, so "next" is computed
+        # against the queue as it stands *after* the write -- offering the
+        # brief that is now at this position, not the one that used to be.
+        advance = self._advance_after(preview.brief_id or "", preview.rig)
         return self._page(
             f"Applied {operation.title}",
             "/briefs",
             context,
             [
                 render.applied_panel(applied.payload, operation.title),
+                advance,
                 render.effect_plan_panel(
                     dict(applied.payload.get("effect_plan") or {}), title="What was applied"
                 ),
@@ -1285,6 +1447,52 @@ class Dashboard:
                     heading="Apply diagnostics",
                 ),
             ],
+        )
+
+    def _advance_after(self, brief_id: str, rig: str | None) -> str:
+        """Where to go next, offered at the moment the operator is free to go.
+
+        Without this the reward for recording a verdict is a terminal page and
+        a back button, which is what makes a 180-brief queue feel like 180
+        errands rather than one sitting.
+        """
+        suffix = f"?rig={render.esc(rig)}" if rig else ""
+        try:
+            listing = self.client.call("briefs_list", self._args(rig))
+        except ToolFailure:
+            listing = None
+        next_id = None
+        if listing is not None:
+            view = view_state.parse({})
+            rows = stack.sorted_briefs(
+                _scoped(list(listing.payload.get("briefs") or ()), view.scope), view
+            )
+            ids = [str(r.get("bead_id") or r.get("brief_id") or "") for r in rows]
+            ids = [i for i in ids if i and i != brief_id]
+            next_id = ids[0] if ids else None
+
+        buttons = [
+            f'<a class="btn btn-secondary" href="/queue{suffix}" '
+            'style="font-size: 12px; padding: 5px 12px;">Back to queue</a>'
+        ]
+        if next_id:
+            buttons.insert(
+                0,
+                f'<a class="btn btn-primary" href="/briefs/{render.esc(next_id)}{suffix}" '
+                'style="font-size: 12px; padding: 5px 14px;">Next brief &rarr;</a>',
+            )
+        remaining = (
+            f'<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
+            f"{len(ids)} left on this queue</span>"
+            if listing is not None and next_id
+            else ""
+        )
+        return (
+            '<section class="panel" data-region="advance" '
+            'style="display: flex; gap: 9px; align-items: center; margin-top: 4px;">'
+            + "".join(buttons)
+            + remaining
+            + "</section>"
         )
 
     def _stale(
@@ -1400,6 +1608,28 @@ def _arguments_for(
             if value:
                 arguments[key] = value
         arguments.setdefault("reason", "")
+        # "Other" is a disposition the brief does not offer, so it must not be
+        # sent as an option letter -- the core would reject it as invalid, and
+        # rightly. It is recorded as a proposal in the reason instead, behind a
+        # fixed marker, exactly as the no-brainer flag is, until the core has
+        # somewhere to put a proposed option.
+        if str(arguments.get("option") or "").strip().lower() == "other":
+            arguments.pop("option", None)
+            proposed = (form.get("option_other") or "").strip()
+            if proposed:
+                existing = arguments["reason"]
+                marker = f"{PROPOSED_OPTION_MARKER} {proposed}"
+                arguments["reason"] = f"{existing}\n\n{marker}" if existing else marker
+        # The no-brainer flag is a classifier signal, not a disposition, and the
+        # core has no field for it yet. Rather than drop it -- which would make
+        # the checkbox decorative -- it is folded into the reason that is
+        # already written to the bead, behind a fixed marker so it stays
+        # greppable when the first-class field lands.
+        if (form.get("no_brainer") or "").strip():
+            note = (form.get("no_brainer_reason") or "").strip()
+            marker = NO_BRAINER_MARKER + (f" {note}" if note else "")
+            existing = arguments["reason"]
+            arguments["reason"] = f"{existing}\n\n{marker}" if existing else marker
         return arguments
     if operation.name == "defer":
         arguments["brief_id"] = brief_id

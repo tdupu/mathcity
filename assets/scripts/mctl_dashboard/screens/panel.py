@@ -66,6 +66,16 @@ VERDICTS: tuple[tuple[str, str], ...] = (
 #: not ratify the violation.
 HELD_ESCAPE = "reject"
 
+#: Verdicts that send a brief BACK. These are never gated, in any state.
+#:
+#: Refusal restricts what you may *ratify*, never what you may *return*. An
+#: empty or malformed brief is precisely the thing you send back for revision,
+#: and its emptiness is the reason for that verdict rather than an obstacle to
+#: recording it. Gating these was a design error: it made the one action the
+#: adjudicator actually needed on the empty briefs -- "revise, go add fields" --
+#: the one action the panel would not accept.
+RETURN_VERDICTS = frozenset({"revise", "reject"})
+
 
 def _adjudicate_option(options: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
     for entry in options or ():
@@ -93,7 +103,7 @@ def panel_state(options: Sequence[Mapping[str, Any]]) -> tuple[str, Mapping[str,
 
 
 def _verdict_control(
-    name: str, label: str, *, state: str, disabled: bool
+    name: str, label: str, *, state: str, disabled: bool, checked: bool = False
 ) -> str:
     struck = state == "held" and disabled
     style = (
@@ -113,6 +123,8 @@ def _verdict_control(
     else:
         style += "var(--color-divider); color: var(--color-neutral-800); cursor: pointer;"
     attrs = ' disabled aria-disabled="true"' if disabled else ""
+    if checked and not disabled:
+        attrs += " checked"
     return (
         f'<label style="{style}">'
         f'<input type="radio" name="verdict" value="{_e(name)}"{attrs} '
@@ -136,9 +148,9 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
             f'<code class="diagnostic-code">{_e(code)}</code></div>'
             f'<div style="font-size: 13px;">{_e(message)}</div>'
             '<div style="font-size: 12.5px; margin-top: 7px; color: var(--color-neutral-800);">'
-            "A gate failed before this reached the stack. Approving or revising it "
-            "would ratify the violation, so reject is the only verdict available. "
-            "Decide the repair first.</div>"
+            "A gate failed before this reached the stack. Approving would ratify "
+            "the violation, so approve is unavailable. Sending it back is not: "
+            "revise it once you know the repair, or reject it.</div>"
             "</div>"
         )
 
@@ -149,14 +161,16 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
         "background: var(--color-neutral-100); padding: 11px 13px; "
         'margin-bottom: 12px; border-radius: var(--radius-sm);">'
         '<div class="mono" style="font-size: 11px; color: var(--color-neutral-700); '
-        'letter-spacing: 0.04em; margin-bottom: 4px;">NOT YET ADJUDICABLE &middot; '
+        'letter-spacing: 0.04em; margin-bottom: 4px;">APPROVE UNAVAILABLE &middot; '
         f'<code class="diagnostic-code">{_e(code)}</code>'
         f'{f" &middot; {_e(policy)}" if policy else ""}</div>'
         f'<div style="font-size: 13px;">{_e(message)}</div>'
         '<div style="font-size: 12.5px; margin-top: 7px; color: var(--color-neutral-800);">'
-        "This brief is <strong>not linked to what it decides</strong>, so a verdict "
+        "This brief is <strong>not linked to what it decides</strong>, so an approval "
         "would land on a bead that points at nothing. Nothing here says the brief is "
-        "wrong — what is missing is the edge, not the reasoning."
+        "wrong — what is missing is the edge, not the reasoning. "
+        "<strong>Revise and reject remain available</strong>: a brief you cannot "
+        "ratify is still a brief you can send back."
         "</div>"
         '<div style="font-size: 12px; margin-top: 7px; color: var(--color-neutral-600); '
         'font-style: italic;">'
@@ -170,28 +184,174 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
     )
 
 
+def _disposition_control(brief: Mapping[str, Any]) -> str:
+    """Which option the verdict adopts, offered as the brief's own options.
+
+    A bare "option letter" text box asks the operator to remember what the
+    letters were and to retype one correctly; the brief already states them,
+    so the panel can offer them. Where a brief names no options the box is
+    honest about that instead of demanding a letter that does not exist.
+
+    The last choice is always to propose something else. A decision-maker who
+    can only pick from the options as filed cannot say "none of these, do
+    that" -- and that is a real verdict, not an absence of one.
+    """
+    options = list(brief.get("decision_options") or ())
+    rows: list[str] = []
+
+    def _chip(value: str, label: str, *, checked: bool = False) -> str:
+        return (
+            '<label style="display: flex; gap: 7px; align-items: baseline; '
+            "font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; "
+            "border: 1px solid var(--color-divider); border-radius: var(--radius-md); "
+            'cursor: pointer;">'
+            f'<input type="radio" name="option" value="{_e(value)}"'
+            f'{" checked" if checked else ""} '
+            'style="accent-color: var(--color-accent-600); margin: 0; flex: none;">'
+            f'<span style="min-width: 0;">{label}</span></label>'
+        )
+
+    rows.append(_chip("", "Accept the recommendation as filed", checked=True))
+    for entry in options:
+        if not isinstance(entry, Mapping):
+            continue
+        label = str(entry.get("label") or "").strip()
+        title = str(entry.get("title") or entry.get("summary") or "").strip()
+        if not label:
+            continue
+        text = f"{_e(label)} &middot; {_e(title)}" if title else _e(label)
+        rows.append(_chip(label, text))
+
+    rows.append(
+        _chip(
+            "other",
+            "Other &mdash; propose your own",
+        )
+    )
+
+    label_text = (
+        "Disposition"
+        if options
+        else "Disposition &mdash; this brief names no options"
+    )
+    return (
+        '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
+        f'color: var(--color-neutral-600); margin-bottom: 5px;">{label_text}</div>'
+        '<div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">'
+        + "".join(rows)
+        + "</div>"
+        '<textarea name="option_other" rows="2" '
+        'placeholder="If you chose Other: describe the disposition you want. Recorded as a '
+        'proposed option on the brief bead." '
+        'style="width: 100%; font-family: var(--font-body); font-size: 12.5px; '
+        "padding: 5px 8px; margin-bottom: 12px; border: 1px solid var(--color-divider); "
+        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
+        "</textarea>"
+    )
+
+
+def _no_brainer_control(*, checked: bool = False, reason: str = "") -> str:
+    """The no-brainer flag: "this reached me and should not have".
+
+    Deliberately NOT a verdict. Ticking it does not change what is recorded as
+    the disposition; it records that surfacing this brief was a pipeline
+    regression, which is a signal about the *classifier* rather than about the
+    brief. Taylor's standing rule is that a no-brainer reaching the adjudicator
+    at all is the defect -- so the flag has to be capturable at the moment of
+    adjudication, when the judgement is fresh, or it never gets captured.
+    """
+    return (
+        '<div style="margin-top: 12px; padding: 9px 11px; '
+        "border: 1px dashed var(--color-neutral-300); "
+        'border-radius: var(--radius-sm); background: var(--color-neutral-050);">'
+        '<label style="display: flex; align-items: center; gap: 7px; '
+        'font-size: 12.5px; cursor: pointer;">'
+        '<input type="checkbox" name="no_brainer" value="1"'
+        + (" checked" if checked else "")
+        + ' style="accent-color: var(--color-accent-600); margin: 0;">'
+        "<strong>No-brainer</strong> &mdash; this should not have needed me"
+        "</label>"
+        '<textarea name="no_brainer_reason" rows="2" '
+        'placeholder="Why was this a no-brainer? Recorded as a classifier signal, '
+        'not part of the verdict." '
+        'style="width: 100%; margin-top: 7px; font-family: var(--font-body); '
+        "font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--color-divider); "
+        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
+        + _e(reason)
+        + "</textarea>"
+        "</div>"
+    )
+
+
+#: The standing verdict for a brief that carries nothing to judge. Taylor's
+#: instruction, 2026-08-19: mark the empty ones revise, flag them no-brainer,
+#: "and send them back saying they need to give more fields".
+INCOMPLETE_REASON = (
+    "Returned as incomplete: this brief carries no body, so there is nothing "
+    "stated for a verdict to be about. Re-file it with the required fields -- "
+    "what is being decided, the options, and what each one commits us to."
+)
+INCOMPLETE_NO_BRAINER = (
+    "An empty brief should not have reached adjudication; the classifier "
+    "should have caught it."
+)
+
+
+def prefill_offer(brief: Mapping[str, Any], *, rig: str | None = None) -> str:
+    """One click to load the standing verdict for an empty brief.
+
+    There are ~90 of these. Adjudicating them one at a time by retyping the
+    same sentence is the kind of work that does not get done, and doing them
+    in a batch means recording ~90 verdicts nobody read. This is the middle:
+    the form arrives filled in, and every one still gets a human confirming it.
+    """
+    has_body = bool(str(brief.get("body") or "").strip()) or bool(brief.get("sections"))
+    if has_body:
+        return ""
+    brief_id = str(brief.get("brief_id") or brief.get("bead_id") or "")
+    query = f"?prefill=incomplete" + (f"&rig={_e(rig)}" if rig else "")
+    return (
+        '<div data-region="prefill-offer" style="margin-bottom: 11px; padding: 8px 11px; '
+        "border: 1px solid var(--color-divider); "
+        "border-left: 3px solid var(--color-accent-600); "
+        'border-radius: var(--radius-sm); background: var(--color-neutral-100);">'
+        '<div style="font-size: 12.5px;">This brief states nothing to judge. '
+        f'<a href="/briefs/{_e(brief_id)}{query}#mc-adjudicate">'
+        "Fill in the standing return &rarr;</a></div>"
+        '<div class="mono" style="font-size: 10.5px; color: var(--color-neutral-600); '
+        'margin-top: 4px;">revise &middot; no-brainer &middot; asks for the required '
+        "fields. Nothing is recorded until you confirm it.</div>"
+        "</div>"
+    )
+
+
 def entry(
     brief: Mapping[str, Any],
     options: Sequence[Mapping[str, Any]],
     view: ViewState,
     *,
     rig: str | None = None,
+    prefill: str | None = None,
 ) -> str:
     """The adjudication form."""
     state, reason = panel_state(options)
     brief_id = str(brief.get("brief_id") or brief.get("bead_id") or "")
 
+    filled = prefill == "incomplete"
     controls = "".join(
         _verdict_control(
             name,
             label,
             state=state,
-            disabled=state != "open" and not (state == "held" and name == HELD_ESCAPE),
+            disabled=state != "open" and name not in RETURN_VERDICTS,
+            checked=filled and name == "revise",
         )
         for name, label in VERDICTS
     )
 
     locked = state != "open"
+    # `locked` still drives the refusal notice and the styling, but no longer
+    # disables the form itself -- a return verdict is always recordable.
     bar_bg = STOP["error"]["edge"] if state == "held" else "var(--color-neutral-900)"
     bar_fg = STOP["error"]["bg"] if state == "held" else "var(--color-accent-200)"
     body_bg = LOCKED_BODY if state == "held" else "var(--color-neutral-100)"
@@ -209,6 +369,7 @@ def entry(
         f'letter-spacing: 0.05em; text-transform: uppercase;">{_e(title)}</div>'
         f'<div style="padding: 13px 14px; background: {body_bg};">'
         + (_refusal_notice(state, reason) if locked else "")
+        + ("" if filled else prefill_offer(brief, rig=rig))
         + '<form method="post" action="/preview">'
         f'<input type="hidden" name="operation" value="adjudicate">'
         f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">'
@@ -217,29 +378,26 @@ def entry(
         'color: var(--color-neutral-600); margin-bottom: 5px;">Verdict</div>'
         f'<div style="display: flex; gap: 7px; margin-bottom: 12px; flex-wrap: wrap;">'
         f"{controls}</div>"
-        '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
-        'color: var(--color-neutral-600); margin-bottom: 5px;">Disposition</div>'
-        '<input type="text" name="option" '
-        'placeholder="Option letter, or leave blank to accept as filed" '
-        f'{"disabled " if locked else ""}'
-        'style="width: 100%; font-family: var(--font-mono); font-size: 12px; '
-        "padding: 5px 8px; margin-bottom: 12px; border: 1px solid var(--color-divider); "
-        'border-radius: var(--radius-sm); box-sizing: border-box;">'
-        '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
+        + _disposition_control(brief)
+        +         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
         '<textarea name="reason" required minlength="3" rows="3" '
         'placeholder="Why this verdict — recorded on the brief bead." '
-        f'{"disabled " if locked else ""}'
+        
         'style="width: 100%; font-family: var(--font-body); font-size: 13px; '
         "padding: 6px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        "</textarea>"
-        '<div style="display: flex; gap: 9px; align-items: center; margin-top: 13px;">'
-        f'<button class="btn btn-primary" type="submit"{" disabled" if locked else ""}>'
+        + (_e(INCOMPLETE_REASON) if filled else "")
+        + "</textarea>"
+        + _no_brainer_control(
+            checked=filled, reason=INCOMPLETE_NO_BRAINER if filled else ""
+        )
+        + '<div style="display: flex; gap: 9px; align-items: center; margin-top: 13px;">'
+        '<button class="btn btn-primary" type="submit">'
         "Review verdict &rarr;</button>"
         '<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
         + (
-            "no verdict can be recorded while this is unresolved"
+            "approve is unavailable here — you can still revise or reject"
             if locked
             else "shows the DRY RUN effect plan first — nothing is written yet"
         )

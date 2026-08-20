@@ -57,6 +57,34 @@ SCRIPT = """
       cursor = Math.max(cursor - 1, 0);
       paint();
       event.preventDefault();
+    } else if (key === 'n' || key === 'p' || key === 'q' || key === 'a') {
+      // Brief-page navigation. The links are the source of truth -- these keys
+      // follow whatever the page already renders, so a key can never navigate
+      // somewhere the page does not offer. On the queue, where the nav is
+      // absent, they simply do nothing.
+      var nav = document.querySelector('[data-region="queue-nav"]');
+      var target = null;
+      if (key === 'a') {
+        var panel = document.querySelector('#mc-adjudicate');
+        if (panel && panel.scrollIntoView) {
+          panel.scrollIntoView({ block: 'start' });
+          event.preventDefault();
+        }
+        return;
+      }
+      if (nav) {
+        var links = nav.querySelectorAll('a[href]');
+        for (var n = 0; n < links.length; n++) {
+          var text = (links[n].textContent || '').toLowerCase();
+          if (key === 'n' && text.indexOf('next') !== -1) { target = links[n]; }
+          if (key === 'p' && text.indexOf('prev') !== -1) { target = links[n]; }
+          if (key === 'q' && text.indexOf('queue') !== -1) { target = links[n]; }
+        }
+      }
+      if (target) {
+        window.location.href = target.getAttribute('href');
+        event.preventDefault();
+      }
     } else if (key === 'enter') {
       var href = rows[cursor] && rows[cursor].getAttribute('data-href');
       if (href) {

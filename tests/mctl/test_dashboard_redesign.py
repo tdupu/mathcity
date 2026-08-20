@@ -573,8 +573,15 @@ def test_a_real_gate_failure_is_held_and_strikes_every_verdict_but_reject():
     assert allowed and "disabled" not in allowed.group(0)
 
 
-def test_every_refused_state_still_disables_the_inputs():
-    """Styling is not a lock -- a disabled-looking radio that submits is a bug."""
+def test_refusal_gates_ratifying_but_never_returning():
+    """Refusal restricts what you may ratify, never what you may send back.
+
+    The earlier version of this test asserted that *every* verdict went dark in
+    a refused state. That encoded a real defect: on the body-less briefs the
+    only sensible verdict is "revise, go add fields", and gating it left the
+    adjudicator with no move at all. `approve` stays gated -- ratifying an
+    unreadable brief is exactly what refusal is for.
+    """
     import re
 
     from mctl_dashboard import state
@@ -582,9 +589,45 @@ def test_every_refused_state_still_disables_the_inputs():
 
     for code in ("MBRF004", "MBRF999"):
         html = panel.entry({"bead_id": "he-1"}, _option(False, code), state.ViewState())
-        for verdict in ("approve", "revise"):
+
+        approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
+        assert approve and "disabled" in approve.group(0), (code, "approve must stay gated")
+
+        for verdict in ("revise", "reject"):
             found = re.search(rf'<input[^>]*value="{verdict}"[^>]*>', html)
-            assert found and "disabled" in found.group(0), (code, verdict)
+            assert found and "disabled" not in found.group(0), (code, verdict)
+
+
+def test_a_returnable_brief_has_a_usable_form():
+    """Freeing the radio is pointless if the reason box and submit stay locked."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
+    assert '<textarea name="reason"' in html
+    assert "disabled" not in html.split('name="reason"')[1].split(">")[0]
+    assert '<button class="btn btn-primary" type="submit">' in html
+
+
+def test_the_no_brainer_flag_is_present_and_is_not_a_verdict():
+    """Ticking it records a classifier signal, not a disposition."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
+    assert 'name="no_brainer"' in html
+    assert 'name="no_brainer_reason"' in html
+    # It must not be one of the verdict radios.
+    assert 'name="verdict" value="no_brainer"' not in html
+
+
+def test_the_no_brainer_flag_survives_refusal():
+    """The empty briefs are exactly the ones Taylor wants to flag."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
+    assert 'name="no_brainer"' in html
 
 
 def test_a_reason_is_required():
@@ -1020,14 +1063,22 @@ def test_rows_can_be_ticked_and_added_together():
     assert "onclick" not in html.lower()
 
 
-def test_the_rig_picker_is_multi_select_and_defaults_to_all():
-    """CHANGELOG §E28: rig became a multi-select picker, default all rigs."""
+def test_the_rig_picker_is_a_dropdown_defaulting_to_all_rigs():
+    """A real dropdown, in the header, as the design draws it.
+
+    An earlier attempt used `<select multiple size="1">`, which browsers draw
+    as a one-line list box indistinguishable from a broken text input -- it
+    rendered as `rig all rigs [agent_skills] Apply` and looked like a defect.
+    """
     from mctl_dashboard import render
 
     html = render.rig_picker(("hecke", "gascity", "mathcity"), selected=())
-    assert "multiple" in html
-    assert html.count("<option") >= 3
-    assert "all rigs" in html.lower()
+    assert "multiple" not in html, "a one-line multi-select draws as a broken text box"
+    assert html.count("<option") >= 4, "every rig plus an all-rigs default"
+    assert 'value=""' in html and "all rigs" in html.lower()
+    # Submits on change, and still submits without script.
+    assert "onchange" in html
+    assert "<noscript>" in html
 
 
 def test_the_importance_sliders_exist_and_submit_without_javascript():
@@ -1193,8 +1244,12 @@ def test_an_empty_brief_that_is_also_refused_says_both():
         options=[{"id": "adjudicate", "enabled": False,
                   "disabled_reason": {"code": "MBRF004", "message": "no source"}}],
     )
-    status = html.split('data-region="brief-status"')[1][:600]
-    assert "nothing to read" in status.lower()
+    status = html.split('data-region="brief-status"')[1][:700]
+    # Was "nothing to read here and nothing you can record". The second half
+    # became false when revise stopped being gated, and the first half framed
+    # an empty brief as a dead end rather than as the reason to return it.
+    assert "grounds to return" in status.lower()
+    assert "send it back" in status.lower()
 
 
 def test_an_adjudicable_brief_says_so_too():
@@ -1257,3 +1312,570 @@ def test_a_conflicting_field_surfaces_both_readings():
     html = fields.attributes(**fields.unpack(payload))
     assert "disagree" in html.lower()
     assert "P2" in html and "1" in html
+
+
+def _adj_op():
+    class _Op:
+        name = "adjudicate"
+
+    return _Op()
+
+
+def test_the_no_brainer_flag_reaches_the_bead():
+    """A control that posts a field the handler drops is decoration.
+
+    The core has no no-brainer field yet, so the flag is folded into the reason
+    that is written to the bead. This test is what stops it from silently
+    becoming a no-op again.
+    """
+    from mctl_dashboard.app import NO_BRAINER_MARKER, _arguments_for
+
+    args = _arguments_for(
+        _adj_op(),
+        "he-1",
+        {"verdict": "revise", "reason": "needs fields", "no_brainer": "1",
+         "no_brainer_reason": "empty brief, classifier should have caught it"},
+        None,
+    )
+    assert args["verdict"] == "revise"
+    assert "needs fields" in args["reason"]
+    assert NO_BRAINER_MARKER in args["reason"]
+    assert "classifier should have caught it" in args["reason"]
+
+
+def test_an_unticked_no_brainer_box_changes_nothing():
+    from mctl_dashboard.app import NO_BRAINER_MARKER, _arguments_for
+
+    args = _arguments_for(
+        _adj_op(), "he-1", {"verdict": "revise", "reason": "needs fields"}, None
+    )
+    assert args["reason"] == "needs fields"
+    assert NO_BRAINER_MARKER not in args["reason"]
+
+
+def test_the_banner_does_not_claim_a_dead_end():
+    """It used to say "nothing you can record" -- which is now false."""
+    from mctl_dashboard import state  # noqa: F401
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.status_banner({"bead_id": "he-1"}, _option(False, "MBRF004"))
+    assert "cannot be adjudicated" not in html
+    assert "nothing you can record" not in html
+    assert "send it back" in html
+    assert "revise or reject" in html
+
+
+def test_an_empty_brief_is_told_that_emptiness_is_grounds_to_return():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.status_banner({"bead_id": "he-1", "body": ""}, _option(False, "MBRF004"))
+    assert "grounds to return" in html
+
+
+def test_an_open_brief_banner_is_unchanged():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.status_banner({"bead_id": "he-1", "body": "x"}, _option(True))
+    assert "Ready to adjudicate" in html
+
+
+def test_the_panel_notice_says_what_is_still_possible():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
+    assert "NOT YET ADJUDICABLE" not in html
+    assert "APPROVE UNAVAILABLE" in html
+    assert "Revise and reject remain available" in html
+
+
+# --------------------------------------------------------------------------
+# empty columns
+# --------------------------------------------------------------------------
+
+
+def _bare_brief(n: int) -> dict:
+    """A brief carrying only what the core actually feeds today."""
+    return {"bead_id": f"gt-{n}", "title": f"brief {n}", "rig_id": "hq",
+            "canonical_source": "bead_store"}
+
+
+def test_a_column_no_brief_can_feed_is_not_drawn():
+    """Five columns of em dashes is noise presented as a table."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    html = stack.table([_bare_brief(i) for i in range(4)], state.parse({}))
+    for label in ("Unlock", "Priority", "Opts", "Rec."):
+        assert f">{label}<" not in html, f"{label} drew with no data behind it"
+
+
+def test_a_column_with_even_one_value_is_kept():
+    """Sparse is not empty -- one real value is a reason to show the column."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    briefs = [_bare_brief(i) for i in range(4)]
+    briefs[2]["unlock_count"] = 7
+    html = stack.table(briefs, state.parse({}))
+    assert ">Unlock<" in html
+    assert ">7<" in html
+
+
+def test_asking_for_a_column_overrides_the_hiding():
+    """Hidden by default is not hidden from someone who asked."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    html = stack.table(
+        [_bare_brief(i) for i in range(3)], state.parse({"columns": "slug,unlock"})
+    )
+    assert ">Unlock<" in html
+
+
+def test_the_hidden_columns_are_named_not_silently_dropped():
+    """A quietly missing column reads as a column that does not exist."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    html = stack.table([_bare_brief(i) for i in range(4)], state.parse({}))
+    assert "unlock_count" in html
+
+
+# --------------------------------------------------------------------------
+# queue navigation
+# --------------------------------------------------------------------------
+
+
+def test_queue_nav_places_the_brief_in_its_queue():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.queue_nav(
+        {"bead_id": "gt-2"},
+        {"index": 4, "total": 115, "prev_id": "gt-1", "next_id": "gt-3"},
+        rig="hq",
+    )
+    assert "brief 5 of 115" in html
+    assert "/briefs/gt-1?rig=hq" in html
+    assert "/briefs/gt-3?rig=hq" in html
+    assert "/queue?rig=hq" in html
+
+
+def test_queue_nav_omits_a_position_it_does_not_know():
+    """A guessed "1 of 1" on a page reached from a 180-row queue is a lie."""
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.queue_nav({"bead_id": "gt-2"}, None, rig="hq")
+    assert "brief " not in html
+    assert "/queue?rig=hq" in html
+
+
+def test_queue_nav_does_not_offer_a_next_that_does_not_exist():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.queue_nav(
+        {"bead_id": "gt-9"},
+        {"index": 114, "total": 115, "prev_id": "gt-8", "next_id": None},
+        rig="hq",
+    )
+    assert "brief 115 of 115" in html
+    assert 'href="/briefs/gt-8?rig=hq"' in html
+    assert "next &rarr;" in html
+    assert 'href="/briefs/None' not in html
+
+
+def test_other_is_not_sent_as_an_option_letter():
+    """The core would reject "other" as an invalid option, and should."""
+    from mctl_dashboard.app import PROPOSED_OPTION_MARKER, _arguments_for
+
+    class _Op:
+        name = "adjudicate"
+
+    args = _arguments_for(
+        _Op(), "he-1",
+        {"verdict": "revise", "reason": "see below", "option": "other",
+         "option_other": "Split it into two briefs and re-file."},
+        None,
+    )
+    assert "option" not in args
+    assert PROPOSED_OPTION_MARKER in args["reason"]
+    assert "Split it into two briefs" in args["reason"]
+
+
+def test_a_real_option_letter_still_goes_through_as_an_option():
+    from mctl_dashboard.app import _arguments_for
+
+    class _Op:
+        name = "adjudicate"
+
+    args = _arguments_for(
+        _Op(), "he-1", {"verdict": "approve", "reason": "ok", "option": "B"}, None
+    )
+    assert args["option"] == "B"
+    assert "proposed-option" not in args["reason"]
+
+
+def test_the_disposition_control_offers_the_briefs_own_options():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1",
+         "decision_options": [{"label": "A", "title": "Merge as filed"},
+                              {"label": "B", "title": "Split first"}]},
+        _option(True), state.ViewState(),
+    )
+    assert 'value="A"' in html and "Merge as filed" in html
+    assert 'value="B"' in html and "Split first" in html
+    assert 'value="other"' in html
+    assert 'name="option_other"' in html
+
+
+def test_a_brief_with_no_options_says_so_rather_than_demanding_a_letter():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
+    assert "names no options" in html
+    assert 'value="other"' in html
+
+
+# --------------------------------------------------------------------------
+# keyboard map
+# --------------------------------------------------------------------------
+
+
+def test_every_advertised_key_is_actually_handled():
+    """The map's docstring claims it cannot drift. Nothing enforced that.
+
+    A key map listing a binding the code does not have teaches the wrong keys,
+    which is worse than no map at all -- and the comment saying so was written
+    without a test behind it.
+    """
+    import re
+
+    from mctl_dashboard import render
+    from mctl_dashboard.assets import SCRIPT
+
+    handled = set(re.findall(r"key === '([a-z]+)'", SCRIPT))
+    advertised = {key for key, _ in render.KEY_BINDINGS}
+    missing = advertised - handled
+    assert not missing, f"advertised but not handled: {sorted(missing)}"
+
+
+def test_every_handled_key_is_advertised():
+    """A working key nobody is told about is a feature that does not exist."""
+    import re
+
+    from mctl_dashboard import render
+    from mctl_dashboard.assets import SCRIPT
+
+    handled = set(re.findall(r"key === '([a-z]+)'", SCRIPT))
+    advertised = {key for key, _ in render.KEY_BINDINGS}
+    undocumented = handled - advertised
+    assert not undocumented, f"handled but undocumented: {sorted(undocumented)}"
+
+
+# --------------------------------------------------------------------------
+# the standing return for an empty brief
+# --------------------------------------------------------------------------
+
+
+def test_an_empty_brief_offers_the_standing_return():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1", "body": ""}, _option(True), state.ViewState())
+    assert 'data-region="prefill-offer"' in html
+    assert "prefill=incomplete" in html
+
+
+def test_a_brief_with_a_body_is_not_offered_it():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1", "body": "a real brief"}, _option(True), state.ViewState()
+    )
+    assert 'data-region="prefill-offer"' not in html
+
+
+def test_the_prefill_fills_the_form_and_records_nothing():
+    """Filled in is not recorded -- every one still needs a human confirm."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1", "body": ""}, _option(True), state.ViewState(),
+        prefill="incomplete",
+    )
+    revise = re.search(r'<input[^>]*value="revise"[^>]*>', html)
+    assert revise and "checked" in revise.group(0)
+    assert "required fields" in html
+    assert 'name="no_brainer" value="1" checked' in html
+    # The offer is gone once taken, and the form is still a form.
+    assert 'data-region="prefill-offer"' not in html
+    assert '<button class="btn btn-primary" type="submit">' in html
+
+
+def test_the_prefill_does_not_preselect_approve():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1", "body": ""}, _option(True), state.ViewState(),
+        prefill="incomplete",
+    )
+    approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
+    assert approve and "checked" not in approve.group(0)
+
+
+def test_the_brief_page_has_only_one_adjudication_form():
+    """Two forms writing the same field is a chance to submit the wrong one."""
+    from mctl_dashboard import render
+
+    html = render.operation_forms(
+        "he-1",
+        [{"id": "adjudicate", "enabled": True}, {"id": "defer", "enabled": True}],
+        rig="hq",
+        omit=("adjudicate",),
+    )
+    assert 'value="adjudicate"' not in html
+    assert "Preview adjudication" not in html
+    # Defer and dispatch have no other home yet, so they must survive.
+    assert 'value="defer"' in html
+    assert "Preview deferral" in html
+
+
+def test_omitting_nothing_keeps_the_legacy_form():
+    from mctl_dashboard import render
+
+    html = render.operation_forms("he-1", [{"id": "adjudicate", "enabled": True}], rig="hq")
+    assert "Preview adjudication" in html
+
+
+# --------------------------------------------------------------------------
+# reading values the core supplies with provenance
+# --------------------------------------------------------------------------
+
+
+def _fielded(**pairs):
+    """A row shaped the way `briefs_list` actually returns one."""
+    return {
+        "brief_id": "gt-1",
+        "title": "t",
+        "fields": {k: {"name": k, "value": v, "readings": []} for k, v in pairs.items()},
+    }
+
+
+def test_a_value_under_fields_is_read():
+    """`briefs_list` returns most attributes with provenance, not at top level.
+
+    unlock_count is on 185 of 308 live rows -- all of them inside `fields`.
+    Reading only the top level saw None everywhere, which then made the
+    hide-empty rule hide a column that had data.
+    """
+    from mctl_dashboard.screens import stack
+
+    assert stack.cell_text(_fielded(unlock_count=7), "unlock") == "7"
+    assert stack.cell_text(_fielded(priority=1), "prio") == "1"
+
+
+def test_a_top_level_value_still_wins():
+    from mctl_dashboard.screens import stack
+
+    row = _fielded(unlock_count=7)
+    row["unlock_count"] = 9
+    assert stack.cell_text(row, "unlock") == "9"
+
+
+def test_a_genuinely_absent_value_is_still_a_dash():
+    from mctl_dashboard.screens import stack
+
+    assert stack.cell_text(_fielded(track="x"), "unlock") == "—"
+
+
+def test_a_zero_under_fields_is_a_value_not_an_absence():
+    from mctl_dashboard.screens import stack
+
+    assert stack.cell_text(_fielded(unlock_count=0), "unlock") == "0"
+
+
+def test_a_column_with_fielded_data_is_not_hidden():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    rows = [_fielded(unlock_count=3), _fielded(unlock_count=5)]
+    html = stack.table(rows, state.parse({}))
+    assert ">Unlock<" in html
+
+
+# --------------------------------------------------------------------------
+# a failed read is not an absent brief
+# --------------------------------------------------------------------------
+
+
+def _dashboard_whose_store_fails_with(code: str):
+    """A dashboard whose reads all fail with one diagnostic code."""
+    from mctl_dashboard.app import Dashboard
+    from mctl_dashboard.client import ToolFailure
+
+    class _Failing:
+        def list_tools(self):
+            return []
+
+        def call(self, name, arguments=None):
+            if name.startswith("briefs_"):
+                raise ToolFailure(name, [{"code": code, "message": "x"}], {})
+            return type("R", (), {"payload": {}, "artifact_trust": None,
+                                  "diagnostics": [], "untrusted_diagnostics": []})()
+
+    return Dashboard(_Failing())
+
+
+def test_a_brief_that_is_absent_is_a_404():
+    from mctl_dashboard.app import Request
+
+    dash = _dashboard_whose_store_fails_with("MBRF010")
+    response = dash.handle(Request.get("/briefs/gt-1", rig="hq"))
+    assert response.status == 404
+    assert "No such brief" in response.body
+
+
+def test_a_brief_that_could_not_be_read_is_not_a_404():
+    """Under load this page called a live brief missing. It had timed out."""
+    from mctl_dashboard.app import Request
+
+    dash = _dashboard_whose_store_fails_with("MCTL_STORE_TIMEOUT")
+    response = dash.handle(Request.get("/briefs/gt-1", rig="hq"))
+    assert response.status == 503
+    assert "No such brief" not in response.body
+    assert "did not answer" in response.body
+
+
+def test_the_not_found_code_is_the_only_one_that_claims_absence():
+    """Under load the page said "No such brief" about a brief that exists.
+
+    Any ToolFailure was being rendered as a 404. A store that times out is a
+    store that did not answer, and telling the operator their bead is gone
+    sends them hunting for something that was never missing.
+    """
+    import inspect
+
+    from mctl_dashboard import app as dash_app
+
+    source = inspect.getsource(dash_app.Dashboard._brief)
+    assert 'MBRF010' in source, "the not-found code must gate the 404"
+    assert "unreadable" in source
+    assert "status=503" in source
+
+
+# --------------------------------------------------------------------------
+# deferral is written to status, not to decision_state
+# --------------------------------------------------------------------------
+
+
+def _deferred_row():
+    """A brief as `plan_deferral` actually leaves it.
+
+    `effects.py::plan_deferral` writes `status="deferred"` on the bead.
+    `decision_state` is computed separately and never takes that value, so a
+    brief someone deliberately deferred still reads as `pending`.
+    """
+    return {"brief_id": "as-1", "title": "deferred one",
+            "status": "deferred", "decision_state": "pending"}
+
+
+def test_a_deferred_brief_is_deferred():
+    from mctl_dashboard.app import is_deferred
+
+    assert is_deferred(_deferred_row())
+    assert is_deferred({"decision_state": "deferred"})
+    assert not is_deferred({"status": "open", "decision_state": "pending"})
+
+
+def test_a_deferred_brief_leaves_the_stack():
+    """It was sitting in the queue of 115 as if it still needed a verdict."""
+    from mctl_dashboard.app import _scoped
+
+    rows = [_deferred_row(), {"brief_id": "b", "decision_state": "pending"}]
+    stack_rows = _scoped(rows, "stack")
+    assert [r["brief_id"] for r in stack_rows] == ["b"]
+
+
+def test_a_deferred_brief_reaches_the_deferred_lane():
+    from mctl_dashboard.app import _in_lane
+
+    assert _in_lane(_deferred_row(), "deferred")
+    assert not _in_lane({"decision_state": "pending"}, "deferred")
+
+
+def test_the_other_lanes_are_unchanged():
+    from mctl_dashboard.app import _in_lane
+
+    assert _in_lane({"decision_state": "adjudicated"}, "adjudicated")
+    assert _in_lane({"decision_state": "malformed"}, "malformed")
+    assert not _in_lane(_deferred_row(), "adjudicated")
+
+
+def test_one_brief_is_not_one_briefs():
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.deferred([{"brief_id": "a", "status": "deferred"}])
+    assert "1 brief<" in html or "1 brief " in html or ">1 brief" in html
+    assert "1 briefs" not in html
+
+
+# --------------------------------------------------------------------------
+# the importance sliders
+# --------------------------------------------------------------------------
+
+
+def _scorable(unlock: int, prio: int) -> dict:
+    return {"brief_id": "a", "title": "t", "unlock_count": unlock, "priority": prio}
+
+
+def test_the_sliders_change_the_score():
+    """They were decorative: score() took weights, no call site passed any.
+
+    Moving a slider rewrote the query string and changed nothing on the page,
+    which is the same defect as a control that looks disabled and submits --
+    the page said something about itself that was not true.
+    """
+    from mctl_dashboard.screens import stack
+
+    row = _scorable(unlock=4, prio=1)
+    heavy = stack.score(row, {"unlock": 10, "convoy": 0, "age": 0, "prio": 0})
+    light = stack.score(row, {"unlock": 1, "convoy": 0, "age": 0, "prio": 0})
+    assert heavy != light, "weights do not move the score at all"
+
+
+def test_the_rendered_score_uses_the_view_weights():
+    """The cell, not the page.
+
+    Diffing whole pages passes without the score moving at all -- the weights
+    ride in the query string, so every link on the page differs.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    row = _scorable(unlock=4, prio=1)
+    heavy = stack.cell_text(row, "score", state.parse({"w_unlock": "10"}).weights)
+    light = stack.cell_text(row, "score", state.parse({"w_unlock": "0"}).weights)
+    assert heavy != light, f"same rendered score at both weightings: {heavy}"
+    assert heavy != "—" and light != "—"
+
+
+def test_sorting_by_score_uses_the_view_weights():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    rows = [
+        {"brief_id": "high-unlock", "title": "a", "unlock_count": 9, "priority": 4},
+        {"brief_id": "high-prio", "title": "b", "unlock_count": 0, "priority": 0},
+    ]
+    by_unlock = state.parse({"sort_key": "score", "w_unlock": "10", "w_prio": "0"})
+    by_prio = state.parse({"sort_key": "score", "w_unlock": "0", "w_prio": "10"})
+    first_u = stack.sorted_briefs(rows, by_unlock)[0]["brief_id"]
+    first_p = stack.sorted_briefs(rows, by_prio)[0]["brief_id"]
+    assert first_u != first_p, "the weighting does not change the ordering"

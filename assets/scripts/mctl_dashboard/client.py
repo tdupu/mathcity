@@ -32,6 +32,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import threading
 from typing import Any, Mapping, Protocol
 
@@ -171,7 +172,16 @@ class _JsonRpcClient:
             # already lost the argument.
             raise UnknownToolError(f"{name!r} is not one of the typed mctl tools")
         self._ensure_initialized()
+        started = time.perf_counter()
         response = self._request("tools/call", {"name": name, "arguments": dict(arguments or {})})
+        if os.environ.get("MCTL_TIME_CALLS"):
+            # Per-call attribution, off by default. Page latency here is
+            # dominated by a small number of core reads, and without this the
+            # only available measurement is the total -- which tells you the
+            # page is slow but not which read to overlap or cache.
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            print(f"[timing] {name} {elapsed_ms:.0f}ms {dict(arguments or {})}",
+                  file=sys.stderr, flush=True)
         if "error" in response:
             data = response["error"].get("data") or {}
             diagnostic = data.get("diagnostic")
@@ -197,6 +207,10 @@ class InProcessMcpClient(_JsonRpcClient):
         super().__init__()
         from mctl_core.mcp_server import MctlMcpServer
 
+        # Kept so `clone()` can build a sibling with the same binding.
+        self.city = Path(city)
+        self.rig = rig
+        self.env = dict(env or {})
         self.server = MctlMcpServer(
             default_city=Path(city),
             default_rig=rig,
@@ -206,6 +220,10 @@ class InProcessMcpClient(_JsonRpcClient):
 
     def _exchange(self, message: dict[str, Any]) -> dict[str, Any] | None:
         return self.server.handle(message)
+
+    def clone(self) -> "InProcessMcpClient":
+        """A sibling for concurrent reads (see `fanout`)."""
+        return InProcessMcpClient(city=self.city, rig=self.rig, env=dict(self.env or {}))
 
     def close(self) -> None:
         return None
@@ -224,6 +242,15 @@ class StdioMcpClient(_JsonRpcClient):
     rig: str | None = None
     env: Mapping[str, str] | None = None
     command: list[str] = field(default_factory=list)
+
+    def clone(self) -> "StdioMcpClient":
+        """A sibling connection, so independent reads can overlap.
+
+        One stdio pipe cannot carry two conversations, so concurrency here
+        means another process. They are created lazily and only up to
+        `fanout.MAX_SIBLINGS`.
+        """
+        return StdioMcpClient(city=self.city, rig=self.rig, env=dict(self.env or {}))
 
     def __post_init__(self) -> None:
         super().__init__()

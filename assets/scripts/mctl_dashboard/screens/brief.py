@@ -188,13 +188,17 @@ def status_banner(
         message = str(reason.get("message") or "")
         held = state_name == "held"
         lead = (
-            "<strong>Adjudication is held.</strong>"
+            "<strong>Approving is held.</strong>"
             if held
-            else "<strong>This brief cannot be adjudicated yet.</strong>"
+            else "<strong>Approving is unavailable.</strong>"
         )
+        # An empty brief used to be described as a dead end -- "nothing you can
+        # record". That was wrong twice over: it is not true (it can be sent
+        # back) and the emptiness is itself the reason to send it back. Say
+        # what the reader can do, because on these briefs there is something.
         empty = (
-            " It also carries no body, so there is <strong>nothing to read</strong> "
-            "here and nothing you can record."
+            " It carries no body either, which is <strong>itself grounds to "
+            "return it</strong>."
             if not has_body
             else ""
         )
@@ -202,7 +206,8 @@ def status_banner(
             f"{lead} "
             f'<code class="diagnostic-code">{_e(code)}</code> — {_e(message)}'
             f"{empty} "
-            '<a href="#mc-adjudicate">See the panel &darr;</a>'
+            "You can still send it back &mdash; "
+            '<a href="#mc-adjudicate">revise or reject in the panel &darr;</a>'
         )
         tone = (
             f"border-left: 3px solid {STOP['error']['edge']};"
@@ -218,12 +223,75 @@ def status_banner(
     )
 
 
+def queue_nav(
+    brief: Mapping[str, Any],
+    neighbours: Mapping[str, Any] | None,
+    *,
+    rig: str | None = None,
+) -> str:
+    """Where this brief sits in the queue, and how to leave it.
+
+    Adjudicating is a sequence, not a lookup: the operator works a queue of
+    ~180 and the cost that matters is the cost of getting to the next one. A
+    page that can only be left by the back button turns a queue into 180
+    separate errands.
+
+    `neighbours` carries `index`, `total`, `prev_id` and `next_id`. When the
+    core could not tell us the queue -- a degraded rig, a brief that is not on
+    this stack -- the position is simply omitted rather than guessed, and the
+    queue link stays, because that is still true.
+    """
+    suffix = f"?rig={_e(rig)}" if rig else ""
+    left = f'<a href="/queue{suffix}">&larr; queue</a>'
+    bead = str(brief.get("bead_id") or "")
+
+    if not neighbours:
+        return (
+            '<div class="mono" data-region="queue-nav" style="display: flex; gap: 10px; '
+            'align-items: baseline; font-size: 11.5px; color: var(--color-neutral-600);">'
+            f"{left}<span>{_e(bead)}</span></div>"
+        )
+
+    index = neighbours.get("index")
+    total = neighbours.get("total")
+    position = (
+        f"brief {int(index) + 1} of {int(total)}"
+        if isinstance(index, int) and isinstance(total, int)
+        else ""
+    )
+    prev_id = neighbours.get("prev_id")
+    next_id = neighbours.get("next_id")
+    prev_link = (
+        f'<a href="/briefs/{_e(prev_id)}{suffix}">&larr; prev</a>'
+        if prev_id
+        else '<span style="color: var(--color-neutral-400);">&larr; prev</span>'
+    )
+    next_link = (
+        f'<a href="/briefs/{_e(next_id)}{suffix}">next &rarr;</a>'
+        if next_id
+        else '<span style="color: var(--color-neutral-400);">next &rarr;</span>'
+    )
+    return (
+        '<div class="mono" data-region="queue-nav" style="display: flex; gap: 10px; '
+        'align-items: baseline; font-size: 11.5px; color: var(--color-neutral-600); '
+        'font-feature-settings: \'tnum\';">'
+        f"{left}"
+        f'<span style="color: var(--color-neutral-400);">&middot;</span>'
+        f"<span>{_e(bead)}</span>"
+        f'<span style="margin-left: auto; display: flex; gap: 12px; align-items: baseline;">'
+        f'<span>{_e(position)}</span>{prev_link}{next_link}</span>'
+        "</div>"
+    )
+
+
 def detail(
     brief: Mapping[str, Any],
     view: ViewState,
     *,
     knowls: Mapping[str, Any] | None = None,
     options: Sequence[Mapping[str, Any]] | None = None,
+    neighbours: Mapping[str, Any] | None = None,
+    rig: str | None = None,
 ) -> str:
     """The brief detail screen."""
     knowls = dict(knowls or {})
@@ -278,7 +346,8 @@ def detail(
 
     content = (
         '<div style="flex: 1 1 auto; min-width: 0; max-width: 640px;">'
-        f'<h1 style="font-family: var(--font-heading); font-size: 30px; '
+        + queue_nav(brief, neighbours, rig=rig)
+        + f'<h1 style="font-family: var(--font-heading); font-size: 30px; '
         f'font-weight: 600; margin: 6px 0 2px; line-height: 1.15;">'
         f'{_e(brief.get("title"))}</h1>'
         f'<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
