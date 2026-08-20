@@ -304,24 +304,47 @@ absent the runner errors, `GateResult` is empty, and control never reaches
 `GatePass`. Flagged as D9 in the 2026-08-19 drift audit and
 originally in `DOGFOOD.md` on 2026-07-11.
 
-**Reading of the runner says this fails closed** (gascity
-`internal/convergence/condition.go::ResolveConditionPath` errors on a
-non-existent path — its own comment: *"a dangling or unresolvable
-conditionPath must fail gate resolution here"* — and
-`internal/dispatch/ralph.go` returns that error to the caller without ever
-reaching `GatePass`). **This was NOT executed**: the gascity module does not
-build in this environment (`go-icu-regex` needs ICU headers that are not
-installed), so the claim rests on code reading plus an upstream test that
-asserts the error return, not on a run.
+**RESOLVED 2026-08-19 (cc58a95) — both claims below were overtaken. Kept for the
+record, struck rather than deleted, per the same convention as the paragraph above.**
 
-Two things follow:
+> ~~**Reading of the runner says this fails closed** (gascity
+> `internal/convergence/condition.go::ResolveConditionPath` errors on a
+> non-existent path — its own comment: *"a dangling or unresolvable
+> conditionPath must fail gate resolution here"* — and
+> `internal/dispatch/ralph.go` returns that error to the caller without ever
+> reaching `GatePass`). **This was NOT executed**: the gascity module does not
+> build in this environment (`go-icu-regex` needs ICU headers that are not
+> installed), so the claim rests on code reading plus an upstream test that
+> asserts the error return, not on a run.~~
+>
+> ~~Two things follow:~~
+>
+> ~~1. **Install the checks into every rig that runs the pool**, so the gate's
+>    protection does not depend on the runner's failure mode at all. This is
+>    the real fix and it is a one-line consequence of D9.~~
+> ~~2. Until then, the pack-side invariant is pinned by test 31: no formula in
+>    this pack may reference a check script the pack does not ship. That closes
+>    the drift this repo controls; it does not close the install gap.~~
 
-1. **Install the checks into every rig that runs the pool**, so the gate's
-   protection does not depend on the runner's failure mode at all. This is
-   the real fix and it is a one-line consequence of D9.
-2. Until then, the pack-side invariant is pinned by test 31: no formula in
-   this pack may reference a check script the pack does not ship. That closes
-   the drift this repo controls; it does not close the install gap.
+Two corrections, in increasing order of consequence.
+
+**Fail-closed is measured, not inferred.** The build blocker was not real: `icu4c@78`
+is installed and `CGO_CXXFLAGS=-I$(brew --prefix icu4c@78)/include` builds the module.
+With the check script absent, `runRalphCheck` returns `resolving check path: … no such
+file or directory` and an empty `GateResult`; `processRalphCheck` propagates the error,
+reports no pass action, and leaves the logical bead open with no `gc.outcome`. The same
+harness returns pass for a present script exiting 0 and fail for one exiting 1, so
+absent is distinguishable from both.
+
+**Item 1 prescribed the wrong fix — and it is the one this section was built on.**
+There is no install mechanism to be behind on, so "install the checks into every rig"
+cannot be the real fix; it rests on the same mistaken premise corrected in the struck
+paragraph above. The supported mechanism is a path form, not an install:
+`../assets/scripts/checks/<name>.sh`, resolved at cook time against the formula layers,
+where under the v2 graph compiler a path no layer ships is a compile error. All 28
+declarations were migrated in cc58a95 and hecke's 27 hand-placed copies deleted.
+Item 2's pack-side invariant stands, and is now the whole story rather than a stopgap:
+there is no remaining "install gap" to close, because there was never an install.
 
 ## 6. Where the declined argument would become relevant again
 
