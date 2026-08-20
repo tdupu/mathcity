@@ -1,0 +1,18 @@
+# Event-trigger order — start the pile shuffle immediately when a brief lands.
+#
+# `brief.submitted` is emitted by brief-prep's submit-to-pile step as soon as
+# the brief is written to .pile. Catching it here starts the shuffle within
+# seconds instead of waiting for the next supervisor tick.
+#
+# The condition-based brief-shuffle-pile order remains in place as the
+# backstop for lost events (events are best-effort, not durable).
+
+[order]
+description = "Promote or reject a newly submitted pile brief without waiting for the next supervisor tick"
+scope = "rig"
+formula = "brief-shuffle"
+trigger = "event"
+on = "brief.submitted"
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true
