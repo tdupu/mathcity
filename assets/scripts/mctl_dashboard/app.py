@@ -630,7 +630,7 @@ class Dashboard:
         # All three reads are independent -- `options` and `doctor` are keyed by
         # brief id, not by anything `show` returns -- so they go together. Only
         # the failure of `show` is fatal to the page, and that is handled below.
-        shown, options, doctor = self._brief_reads(brief_id, rig)
+        shown, options, doctor, listing = self._brief_reads(brief_id, rig)
         if isinstance(shown, ToolFailure):
             failure = shown
         else:
@@ -679,6 +679,10 @@ class Dashboard:
                 view_state.parse(request.query),
                 knowls=self._knowls(brief),
                 options=option_rows,
+                neighbours=self._neighbours(
+                    listing, brief_id, view_state.parse(request.query)
+                ),
+                rig=rig,
             ),
             panel_screen.entry(brief, option_rows, view_state.parse(request.query), rig=rig),
             render.artifact_trust_panel(shown.artifact_trust, rig=rig),
@@ -760,12 +764,17 @@ class Dashboard:
         renders the 404 from it. The other two degrade to `None`, so a store
         that cannot answer costs one panel rather than the page.
         """
-        shown, options, doctor = fan_out(
+        shown, options, doctor, listing = fan_out(
             self.client,
             [
                 ("briefs_show", self._args(rig, brief_id=brief_id)),
                 ("briefs_options", self._args(rig, brief_id=brief_id)),
                 ("briefs_doctor", self._args(rig, brief_id=brief_id)),
+                # Only for "brief N of M" and prev/next. It rides along in the
+                # fan-out, so knowing where you are in the queue costs no wall
+                # clock, and a failure here loses the navigation rather than
+                # the page.
+                ("briefs_list", self._args(rig)),
             ],
         )
         if isinstance(shown, Exception) and not isinstance(shown, ToolFailure):
@@ -774,7 +783,37 @@ class Dashboard:
             shown,
             None if isinstance(options, Exception) else options,
             None if isinstance(doctor, Exception) else doctor,
+            None if isinstance(listing, Exception) else listing,
         )
+
+    @staticmethod
+    def _neighbours(listing, brief_id: str, view: "view_state.ViewState") -> Mapping[str, Any] | None:
+        """Position of `brief_id` in the queue, or None if it is not on it.
+
+        Filtered and sorted exactly as `/queue` renders it. A position taken
+        against the unfiltered list said "brief 22 of 308" on a queue showing
+        115, and prev/next would then walk briefs the operator cannot see --
+        the count has to be the count they are looking at.
+
+        Guessing a position would be worse than omitting one: "brief 1 of 1"
+        on a page reached from a 180-row queue is a confident lie.
+        """
+        if listing is None:
+            return None
+        rows = stack.sorted_briefs(
+            _scoped(list(listing.payload.get("briefs") or ()), view.scope), view
+        )
+        ids = [str(row.get("bead_id") or row.get("brief_id") or "") for row in rows]
+        try:
+            index = ids.index(brief_id)
+        except ValueError:
+            return None
+        return {
+            "index": index,
+            "total": len(ids),
+            "prev_id": ids[index - 1] if index > 0 else None,
+            "next_id": ids[index + 1] if index + 1 < len(ids) else None,
+        }
 
     def _options(self, brief_id: str, rig: str | None) -> ToolResponse | None:
         try:

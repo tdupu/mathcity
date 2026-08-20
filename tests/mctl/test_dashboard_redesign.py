@@ -1440,3 +1440,45 @@ def test_the_hidden_columns_are_named_not_silently_dropped():
 
     html = stack.table([_bare_brief(i) for i in range(4)], state.parse({}))
     assert "unlock_count" in html
+
+
+# --------------------------------------------------------------------------
+# queue navigation
+# --------------------------------------------------------------------------
+
+
+def test_queue_nav_places_the_brief_in_its_queue():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.queue_nav(
+        {"bead_id": "gt-2"},
+        {"index": 4, "total": 115, "prev_id": "gt-1", "next_id": "gt-3"},
+        rig="hq",
+    )
+    assert "brief 5 of 115" in html
+    assert "/briefs/gt-1?rig=hq" in html
+    assert "/briefs/gt-3?rig=hq" in html
+    assert "/queue?rig=hq" in html
+
+
+def test_queue_nav_omits_a_position_it_does_not_know():
+    """A guessed "1 of 1" on a page reached from a 180-row queue is a lie."""
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.queue_nav({"bead_id": "gt-2"}, None, rig="hq")
+    assert "brief " not in html
+    assert "/queue?rig=hq" in html
+
+
+def test_queue_nav_does_not_offer_a_next_that_does_not_exist():
+    from mctl_dashboard.screens import brief as brief_screen
+
+    html = brief_screen.queue_nav(
+        {"bead_id": "gt-9"},
+        {"index": 114, "total": 115, "prev_id": "gt-8", "next_id": None},
+        rig="hq",
+    )
+    assert "brief 115 of 115" in html
+    assert 'href="/briefs/gt-8?rig=hq"' in html
+    assert "next &rarr;" in html
+    assert 'href="/briefs/None' not in html
