@@ -1,0 +1,2 @@
+SMOKE TEST: PASS - brief-check.sh is syntactically valid and its dispatcher fails safely (exit 1, stderr mentions 'unknown check') on an unrecognized command
+exit_code: 0

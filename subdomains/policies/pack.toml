@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-policies"
+version = "0.1.0"
+schema = 2
+description = "Policy management for the mathcity pack: meta-policy governance, policy lifecycle skills, and cross-domain policy tooling."
