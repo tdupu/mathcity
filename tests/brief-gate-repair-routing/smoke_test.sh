@@ -22,7 +22,14 @@ FAIL_COUNT=0
 ok() { echo "PASS: $1"; PASS_COUNT=$((PASS_COUNT + 1)); }
 no() { echo "FAIL: $1"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 
-python3 - "$GATES" "$ROOT" <<'PY' > /tmp/gate-repair-report.$$ 2>&1 || true
+REPORT="$(mktemp)"
+# `|| true` here would make this whole file a vacuous pass: a traceback leaves
+# every `val` lookup empty, which reads identically to "no problems found".
+# Probed 2026-08-20 by pointing $GATES at a nonexistent file -- the suite
+# reported 4 passed / exit 0. So the probe's exit status AND its output shape
+# are both asserted below before any finding is trusted.
+set +e
+python3 - "$GATES" "$ROOT" > "$REPORT" 2>&1 <<'PY'
 import sys, tomllib, pathlib
 gates_path, root = sys.argv[1], pathlib.Path(sys.argv[2])
 reg = tomllib.load(open(gates_path, "rb"))
@@ -55,8 +62,40 @@ print("DANGLING", ",".join(dangling))
 print("WRONGSTOP", ",".join(wrong_stop))
 print("UNASSIGNED", ",".join(unassigned))
 PY
-REPORT="/tmp/gate-repair-report.$$"
+probe_rc=$?
+set -e
 val() { grep "^$1 " "$REPORT" | cut -d' ' -f2- ; }
+
+# --- 0. The probe itself ran and produced the shape we are about to read -----
+probe_ok=true
+if [ "$probe_rc" -ne 0 ]; then
+  no "gate registry probe exited $probe_rc; findings below would be vacuous"
+  sed 's/^/    /' "$REPORT"
+  probe_ok=false
+else
+  total="$(val TOTAL)"
+  case "$total" in
+    ''|*[!0-9]*) no "probe emitted no TOTAL line; findings below would be vacuous"; probe_ok=false ;;
+    *) if [ "$total" -lt 1 ]; then
+         no "probe read 0 gates; every assertion below would pass vacuously"
+         probe_ok=false
+       else
+         for key in MISSING BADKIND DANGLING WRONGSTOP UNASSIGNED; do
+           grep -q "^$key " "$REPORT" || grep -q "^$key$" "$REPORT" || {
+             no "probe output is missing the $key line; findings would be vacuous"
+             probe_ok=false
+           }
+         done
+         $probe_ok && ok "probe read $total gates and emitted every finding line"
+       fi ;;
+  esac
+fi
+
+if ! $probe_ok; then
+  rm -f "$REPORT"
+  echo "brief-gate-repair-routing: $PASS_COUNT passed, $FAIL_COUNT failed"
+  exit 1
+fi
 
 [ -z "$(val MISSING)" ] \
   && ok "every gate declares repair_kind" \
