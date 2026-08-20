@@ -356,6 +356,134 @@ by what adjudication unlocks, not by arrival time.*
 
 ---
 
+- **B2.11 `mctl` is the API, and an AGENT reaches it through the MCP.** This
+  rule has two halves and the second was missing from its first draft. Owner's
+  canonical text, quoted rather than paraphrased because three successive
+  restatements drifted:
+
+  > - **mctl is an API for mathcity.**
+  > - users/webpages/etc having agents do something in mathcity should always be
+  >   performed by an **API call**.
+  > - other simple commands should also go through API calls.
+  > - **AGENTS acting on mathcity should always go through an MCP for the API.**
+
+  > *"The idea is that this hardens agent behavior. **If an mctl call fails then
+  > we know where it is.** We know the source of the problem and we don't need to
+  > deal with 100 different ways to try and do the same thing. It also doesn't
+  > expose the whole API to the agents where they can make mistakes like we have
+  > seen before."*
+
+  So a skill whose job is to walk an agent through bash to change brief state is
+  **the deprecated pattern**, not merely an unregistered writer: its capability
+  belongs in the MCP as a typed tool. `skills/adjudicate-brief/SKILL.md` is the
+  worked example — it is a violation twice over, once for writing outside
+  `mctl` and once for being agent-control-by-bash at all.
+
+  **A fix is a change to the MCP, to `mctl`, or to the Python underneath — not a
+  shim, not a wrapper, not a careful bash block.** If the sensible fix is larger
+  than expected, say so; do not shrink it into a workaround. And if `mctl` does
+  not expose what a fix needs, that is an **interface gap to file**, not a
+  licence to reach around it — a violation that turns out to be a gap is more
+  valuable than one that turns out to be laziness, because it says what the
+  interface is missing.
+
+  **The write rule.** Each artifact named in
+  `assets/brief-pipeline/brief-writers.toml` has exactly one authorized writer:
+  `mctl`. Any other process that writes one — a pack script,
+  a check, a formula shelling out, a skill with an open bash block — is a
+  violation, whatever its result. The reasoning is the point and is not about
+  tidiness: work behind one interface fails **loudly, in one place, with an
+  error code**, and work scattered outside it fails in many places silently.
+  Every brief-system defect found on 2026-08-20 — four cwd-relative
+  `brief-check.sh` sites, a `manifest-current` gate that cannot detect a stale
+  index, `remove-archived-row` recording an archival it never verified — was
+  loose logic outside the interface, and every one produced a confident wrong
+  answer instead of an error. Mechanical check:
+  `tests/brief-writer-authority` compares the set of source files referencing
+  each artifact against the register and fails on any that is unregistered.
+
+- **B2.12 Known violations are a dated register that may only shrink.** A
+  violation that exists today is recorded in `brief-writers.toml` with
+  `role = "violation"` and a `since` date, not silently tolerated and not
+  quietly removed. **The list may shrink; it may not grow.** A new
+  non-`mctl` writer fails the check until it is either moved behind `mctl` or
+  admitted deliberately with a rationale. Five entries at adoption:
+  `brief-stack-index.py`, `brief-shuffle-fast-drain.py`,
+  `brief-decisions-track-inventory.py` and `checks/brief-check.sh` against
+  `stack/.index.jsonl`; `brief-shuffle-fast-drain.py` against
+  `.pile/manifest.jsonl`. Mechanical check: every `violation` entry carries a
+  `since` date, and the count is printed on every run so it is visible rather
+  than assumed.
+
+- **B2.13 (JUDGEMENT RULE) A write path may not report a state it did not
+  verify.** If a tool's output asserts a precondition — an archive exists, a
+  gate passed, a representation agrees — that assertion must come from a check
+  that can return false. `remove-archived-row` is the worked example: it
+  computed `archive_hit`, never tested it, removed the row unconditionally, and
+  still reported `reason: "explicit_slug_archived_row"` with `archived_at: ""`,
+  asserting an archive nothing had looked for. **A check that cannot fail is
+  indistinguishable from a check that passed.**
+
+  **This is deliberately a judgement rule, not a mechanical one.** Whether a
+  given assertion is genuinely backed cannot be decided by grep: the check may
+  live in a helper, be inherited from a caller, or be legitimately unnecessary.
+  A mechanical proxy here would pass confidently on the cases it cannot see,
+  which is the failure this rule exists to prevent. Per [[check-zero]], the
+  established shape for a judgement-deferring check is to name what is being
+  weighed and what evidence a verdict must cite.
+
+  **What the reviewing agent weighs:** for each precondition the output names,
+  can that precondition be false at that point, and does the code branch on it?
+
+  **Evidence a reasoned verdict must cite**, in the artifact or the review:
+  1. the specific output field asserting the precondition (name it);
+  2. the line where the precondition is computed **and** the line where it is
+     tested — or an explicit statement that no test exists;
+  3. a negative case: an input that makes the precondition false, and the
+     observed behaviour on it. A verdict citing only a passing run has not
+     established the check can fail.
+
+  A verdict of "verified" without item 3 is not a verdict; it is the vacuous
+  pass restated one level up.
+- **B2.14 (JUDGEMENT RULE) A brief's own frontmatter is written only by
+  `mctl`.** The brief document's `status:` and `verdict:` are the
+  representation Taylor reads, and B2.11 governs them like any other artifact.
+  Enforcement, however, is deliberately **judgement, not mechanism**, and the
+  measurement behind that choice is recorded here so it is not re-litigated:
+
+  The register's reference scan works because artifact names are **invented for
+  one purpose** — a file mentioning `.index.jsonl`, `manifest.jsonl` or
+  `decisions/` is strong evidence it touches them. Frontmatter has no such
+  literal. Keying the same scan on `status:`/`verdict:` was built and probed on
+  2026-08-20: **41 referencers for `status:`, 20 for `verdict:`**, and it hit
+  **all four** probe cases including the two known-clean ones —
+  `create-brief` and `present-briefs` discuss the fields without writing them.
+  Field names are ubiquitous domain vocabulary; mentioning one carries no
+  signal. A green check that classifies `create-brief` as a frontmatter writer
+  is worse than no check, and 41-of-60 rows marked unaudited is a backlog
+  nobody burns down. **Do not rebuild the mechanical version.** Two earlier
+  detectors (write-idiom proximity, ```-fence extraction) were discarded for
+  missing real writers; this third one fails in the opposite direction.
+
+  **What the reviewing agent weighs:** does this file *write* a brief's own
+  `status:`/`verdict:`, as against reading, validating, or describing them?
+
+  **Evidence a reasoned verdict must cite:**
+  1. the specific construct that performs the write (an in-place edit, a
+     frontmatter helper, an instruction to an agent to patch the field) — or
+     an explicit statement that the file only reads or discusses;
+  2. that the target is a **brief document**, not the file's own frontmatter
+     or an unrelated document;
+  3. whether the write goes through `mctl`, and if not, why the file exists
+     outside it.
+
+  Known violations at adoption: `skills/adjudicate-brief/SKILL.md` (the
+  founding reach-around, `#77`) and `formulas/brief-review-patrol.toml`, whose
+  instruction is **pure prose** — *"patch the brief's frontmatter in place"* —
+  with no shell command at all, which is why command-syntax detection cannot
+  reach it.
+
+
 ## Pillar 3 — Work closure discipline (B3.x)
 
 *A bead is not closed until the work is verifiably done. Closing early to
@@ -858,4 +986,8 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
+| 2026-08-20 | Add B2.14: brief frontmatter is governed by B2.11 but enforced as a JUDGEMENT rule. The mechanical version was built and probed, not assumed unworkable: keying the register's reference scan on `status:`/`verdict:` hit 41 and 20 referencers and flagged all four probe cases, including the two known-clean (`create-brief`, `present-briefs`). Path literals are invented for one purpose and carry signal; field names are ubiquitous vocabulary and do not | reviewer trans set the bar at 3/3 probe cases and accepted the measurement at 2/3: "a green check that misclassifies create-brief is worse than not having the check at all" |
+| 2026-08-20 | Amend B2.11 to carry BOTH halves of the architecture: `mctl` is the API, and an AGENT reaches it through the MCP. The first draft encoded only "repeated work behind mctl" and was incomplete — it did not say that a skill walking an agent through bash is the DEPRECATED PATTERN rather than merely an unregistered writer. Owner's canonical text is quoted verbatim rather than paraphrased, including the rationale, because three successive restatements drifted | the human adjudicator, verbatim: "AGENTS acting on mathcity should always go through an MCP for the API" and "If an mctl call fails then we know where it is... we don't need to deal with 100 different ways to try and do the same thing" |
+| 2026-08-20 | Amend B2.13 to an explicit JUDGEMENT rule (naming what is weighed and the three items a reasoned verdict must cite, per `check-zero`) rather than a mechanical clause; add a paths.toml cross-check to `tests/brief-writer-authority` after `check-zero` found `mctl_core/redundant_state.py::artifact_layout` already models artifact locations | the human adjudicator: "Sometimes we need to defer to agent judgement. That is the power of agents." A bad mechanical proxy for a judgement call passes confidently on cases it cannot see |
+| 2026-08-20 | Add B2.11/B2.12/B2.13: `mctl` is the sole writer of every brief artifact; non-`mctl` writers are violations recorded in a dated register (`assets/brief-pipeline/brief-writers.toml`) that may only shrink; and no write path may report a state it did not verify. Enforced by `tests/brief-writer-authority`, which compares references rather than attempting write-detection (a proximity heuristic was prototyped and rejected for classifying `brief-shuffle-fast-drain.py` as read-only when `append_index()` writes the index) | the human adjudicator, verbatim: "We want to factor repeated work through a single point of failure" and "There is a central failure point which is the mctl commands. Debugging those will fix the whole thing." Five violations registered at adoption rather than fixed, so the burn-down is visible |
 | 2026-08-20 | Add B2.1a: a brief may declare it has no bead subject (`MBRF056`), scoping B2.1 rather than rewriting it; declaration is explicit-only, so an omitting brief still raises `MBRF004` | the human adjudicator ruled YES on the principle (bead `mc-csr`, workflow `mc-sxz`); the explicit-only shape follows the measurement — 30 of a 40-brief sample of the 135 `MBRF004` population are omissions, 27 of them with a still-recoverable subject, so an inferred declaration would be a loophole three times larger than the category it serves |
