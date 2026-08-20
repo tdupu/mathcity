@@ -122,10 +122,12 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
     return round(total)
 
 
-def sort_value(brief: Mapping[str, Any], key: str) -> Any:
+def sort_value(
+    brief: Mapping[str, Any], key: str, weights: Mapping[str, int] | None = None
+) -> Any:
     """A comparable for one column. Unknowns sort last in both directions."""
     if key == "score":
-        value = score(brief)
+        value = score(brief, weights)
         return (value is None, value if value is not None else 0)
     if key == "age":
         days = age_days(brief)
@@ -152,10 +154,11 @@ def sort_value(brief: Mapping[str, Any], key: str) -> Any:
 def sorted_briefs(
     briefs: Sequence[Mapping[str, Any]], view: ViewState
 ) -> list[Mapping[str, Any]]:
-    ordered = sorted(briefs, key=lambda brief: sort_value(brief, view.sort_key))
+    weights = view.weights
+    ordered = sorted(briefs, key=lambda brief: sort_value(brief, view.sort_key, weights))
     if view.sort_dir < 0:
-        known = [b for b in ordered if not sort_value(b, view.sort_key)[0]]
-        unknown = [b for b in ordered if sort_value(b, view.sort_key)[0]]
+        known = [b for b in ordered if not sort_value(b, view.sort_key, weights)[0]]
+        unknown = [b for b in ordered if sort_value(b, view.sort_key, weights)[0]]
         return list(reversed(known)) + unknown
     return ordered
 
@@ -232,7 +235,9 @@ def attr(brief: Mapping[str, Any], key: str, default: Any = None) -> Any:
     return default
 
 
-def cell_text(brief: Mapping[str, Any], key: str) -> str:
+def cell_text(
+    brief: Mapping[str, Any], key: str, weights: Mapping[str, int] | None = None
+) -> str:
     """The visible text for one cell, em dash where the core has no value."""
     if key == "slug":
         return str(attr(brief, "title") or attr(brief, "bead_id") or _DASH)
@@ -246,7 +251,7 @@ def cell_text(brief: Mapping[str, Any], key: str) -> str:
         days = age_days(brief)
         return f"{days}d" if days is not None else _DASH
     if key == "score":
-        value = score(brief)
+        value = score(brief, weights)
         return str(value) if value is not None else _DASH
     if key == "sev":
         if attr(brief, "kind") == "error":
@@ -360,7 +365,7 @@ def _row(
             style += f" color: {_severity_colour(brief)};"
             if attr(brief, "kind") == "error":
                 style += " font-weight: 600;"
-        text = cell_text(brief, key)
+        text = cell_text(brief, key, view.weights)
         # One line per row, ellipsised. The design's density is the point:
         # a stack you scan is a stack you can rank, and a wrapped title turns
         # thirteen visible rows into seven.
@@ -425,7 +430,7 @@ def _fed_columns(
         key
         for key in view.columns
         if key not in KEEP_ALWAYS
-        and all(cell_text(brief, key) == _DASH for brief in briefs)
+        and all(cell_text(brief, key, view.weights) == _DASH for brief in briefs)
     )
     if not droppable:
         return view, ()

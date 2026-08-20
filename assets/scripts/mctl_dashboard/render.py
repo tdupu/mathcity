@@ -257,10 +257,11 @@ def importance(weights: Mapping[str, int]) -> str:
         + '<button class="btn btn-secondary" type="submit" '
         'style="font-size: 11px; padding: 3px 10px; width: 100%;">Apply</button>'
         '<p class="review-note" style="margin: 9px 0 0; font-size: 11px;">'
-        "These change the <strong>Score</strong> column, which has no value for any "
-        "brief yet — <span class=\"mono\">unlock_count</span> and priority are not "
-        "exposed by the core. The sliders work; there is currently nothing for them "
-        "to reorder.</p>"
+        "These change the <strong>Score</strong> column and, when you sort by it, "
+        "the order of the queue. Score is computed from "
+        "<span class=\"mono\">unlock_count</span> and priority, which the core does "
+        "expose — this note previously said it did not, which was a defect in how "
+        "the dashboard read them rather than a gap in the data.</p>"
         "</div></form>"
     )
 

@@ -1824,3 +1824,58 @@ def test_one_brief_is_not_one_briefs():
     html = pipeline.deferred([{"brief_id": "a", "status": "deferred"}])
     assert "1 brief<" in html or "1 brief " in html or ">1 brief" in html
     assert "1 briefs" not in html
+
+
+# --------------------------------------------------------------------------
+# the importance sliders
+# --------------------------------------------------------------------------
+
+
+def _scorable(unlock: int, prio: int) -> dict:
+    return {"brief_id": "a", "title": "t", "unlock_count": unlock, "priority": prio}
+
+
+def test_the_sliders_change_the_score():
+    """They were decorative: score() took weights, no call site passed any.
+
+    Moving a slider rewrote the query string and changed nothing on the page,
+    which is the same defect as a control that looks disabled and submits --
+    the page said something about itself that was not true.
+    """
+    from mctl_dashboard.screens import stack
+
+    row = _scorable(unlock=4, prio=1)
+    heavy = stack.score(row, {"unlock": 10, "convoy": 0, "age": 0, "prio": 0})
+    light = stack.score(row, {"unlock": 1, "convoy": 0, "age": 0, "prio": 0})
+    assert heavy != light, "weights do not move the score at all"
+
+
+def test_the_rendered_score_uses_the_view_weights():
+    """The cell, not the page.
+
+    Diffing whole pages passes without the score moving at all -- the weights
+    ride in the query string, so every link on the page differs.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    row = _scorable(unlock=4, prio=1)
+    heavy = stack.cell_text(row, "score", state.parse({"w_unlock": "10"}).weights)
+    light = stack.cell_text(row, "score", state.parse({"w_unlock": "0"}).weights)
+    assert heavy != light, f"same rendered score at both weightings: {heavy}"
+    assert heavy != "—" and light != "—"
+
+
+def test_sorting_by_score_uses_the_view_weights():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    rows = [
+        {"brief_id": "high-unlock", "title": "a", "unlock_count": 9, "priority": 4},
+        {"brief_id": "high-prio", "title": "b", "unlock_count": 0, "priority": 0},
+    ]
+    by_unlock = state.parse({"sort_key": "score", "w_unlock": "10", "w_prio": "0"})
+    by_prio = state.parse({"sort_key": "score", "w_unlock": "0", "w_prio": "10"})
+    first_u = stack.sorted_briefs(rows, by_unlock)[0]["brief_id"]
+    first_p = stack.sorted_briefs(rows, by_prio)[0]["brief_id"]
+    assert first_u != first_p, "the weighting does not change the ordering"
