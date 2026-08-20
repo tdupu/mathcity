@@ -224,3 +224,45 @@ the rig-scoped fix helps but the floor is core-side and contended.
 
 Still needed from cozy, unchanged: `title` and `bead_id` on `briefs_list` rows;
 first-class `no_brainer`. Merge still gated and unrequested.
+
+---
+
+## 10:55 — hourly check
+
+**Tests green: 710 passing. 19 commits.** `/queue?rig=hq` 200 in 6.1s
+(contention eased). No reply from cozy since 06:20; `main` unchanged.
+
+### A deferred brief was hiding in your queue
+
+cozy's last note said the Deferred screen "is still not done". I checked the
+live screen instead of taking it: it said *"No briefs are deferred. This is a
+real zero read from the bead store, not a gap."*
+
+The store had **one brief with `status: deferred`** — `as-npcp1-harvest-latex-
+exercises-stabilize`. `plan_deferral` writes deferral to the bead's `status`;
+`decision_state` is computed separately and never takes that value; every lane
+read `decision_state`. So a brief someone had deliberately deferred read as
+`pending`, **sat in the stack of 115 awaiting a verdict it had been excused
+from**, and the Deferred screen reported zero about it.
+
+The copy asserted the mistake in so many words — "the deferred state is
+reported by `decision_state` and no brief currently carries it" — confidently
+wrong about the one thing that screen exists to report.
+
+Fixed: both fields are consulted, deferral is honoured by the stack scope, and
+the copy now names both places and says which one it used to miss. The defer
+*window* is still unreadable (`effects.py` writes `defer_until`, the read path
+discards it) and the screen still says so — that half is cozy's.
+
+### The pattern, now at five
+
+Wedged-server zeros read as data · wrong-shape field reads · populated columns
+measured as empty · a timed-out read reported as "No such brief" · a deferred
+brief reported as absent. Every one is **a failure to look, reported as a
+finding**, and three of the five carried copy asserting their own correctness.
+Worth a design conversation rather than five more point fixes.
+
+### Blocked
+
+Nothing. Still needed from cozy: `title`/`bead_id` on `briefs_list` rows;
+first-class `no_brainer`; `defer_until` on the read path. Merge still gated.
