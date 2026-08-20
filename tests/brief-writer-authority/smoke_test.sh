@@ -23,12 +23,25 @@ no() { echo "FAIL: $1"; FAIL_COUNT=$((FAIL_COUNT + 1)); }
 REPORT="$(mktemp)"
 set +e
 python3 - "$ROOT" "$REGISTER" > "$REPORT" 2>&1 <<'PY'
-import sys, tomllib
+import re, sys, tomllib
 from pathlib import Path
 root, register = Path(sys.argv[1]), Path(sys.argv[2])
 reg = tomllib.load(register.open("rb"))
-SEARCH = ["assets/scripts"]
-EXT = {".py", ".sh"}
+SEARCH = ["assets", "formulas", "orders", "skills", "subdomains"]
+EXT = {".py", ".sh", ".toml", ".md"}
+
+def regions(f):
+    """Executable regions BY FILE ROLE. See the register header for the two
+    detectors discarded before this one -- a write-idiom proximity heuristic
+    and a ```-fence extractor -- both of which MISSED real writers."""
+    t = f.read_text(errors="replace")
+    if f.suffix in {".py", ".sh"} or f.name == "SKILL.md":
+        return t
+    if f.suffix == ".toml":
+        body = "\n".join(l for l in t.splitlines() if not l.lstrip().startswith("#"))
+        return "\n".join(m.group(0) for m in re.finditer(
+            r'(description|check|command)\s*=\s*("""(?:.|\n)*?"""|\'\'\'(?:.|\n)*?\'\'\'|"[^"]*")', body))
+    return ""   # other .md is descriptive (POLICY, README, audits, plans)
 total_arts = 0
 for art in reg.get("artifact", []):
     total_arts += 1
@@ -39,8 +52,10 @@ for art in reg.get("artifact", []):
         for f in (root / base).rglob("*"):
             if not f.is_file() or f.suffix not in EXT or "__pycache__" in str(f):
                 continue
+            if "/tests/" in str(f):
+                continue
             try:
-                if literal in f.read_text(errors="replace"):
+                if literal in regions(f):
                     found.add(str(f.relative_to(root)))
             except OSError:
                 continue
@@ -127,6 +142,10 @@ else
   ok "every registered violation carries a date"
 fi
 
+echo "NOTE: unaudited referencers still to classify: $(python3 -c "
+import tomllib
+d=tomllib.load(open('$REGISTER','rb'))
+print(sum(1 for a in d['artifact'] for r in a['referencer'] if r['role']=='unaudited'))")"
 echo "NOTE: registered violations still to burn down: $(python3 -c "
 import tomllib,sys
 d=tomllib.load(open('$REGISTER','rb'))

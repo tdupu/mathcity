@@ -1,57 +1,34 @@
 # BRIEF ARTIFACT WRITER REGISTER (POLICY B2.11 / B2.12).
 #
-# The principle (Taylor, 2026-08-20): repeated work goes behind `mctl`; `mctl`
-# is the single point of failure BY DESIGN, because a thing that fails in one
-# place is a thing you can fix in one place. Work scattered across open bash
-# fails in many places, silently, and produces confident wrong answers instead
-# of errors.
+# Principle (owner, 2026-08-20): repeated work goes behind `mctl`, which is the
+# single point of failure BY DESIGN -- a thing that fails in one place is a
+# thing you can fix in one place.
 #
-# HOW THE CHECK WORKS, AND WHY IT OVER-APPROXIMATES ON PURPOSE.
-# `tests/brief-writer-authority` compares the set of source files that
-# REFERENCE an artifact's path literal against the entries below. It does not
-# try to detect writes. A write-detector was prototyped and rejected: a
-# proximity heuristic classified `brief-shuffle-fast-drain.py` as read-only
-# for `.index.jsonl` when `append_index()` demonstrably writes it, because the
-# write idiom lives in a helper far from the literal. A detector that misses a
-# real writer is worse than none -- it is the vacuous-check class this repo has
-# hit four times today.
+# DETECTION: BY FILE ROLE, and TWO EARLIER DETECTORS WERE DISCARDED.
+#   1. A write-idiom proximity heuristic classified brief-shuffle-fast-drain.py
+#      as read-only for .index.jsonl when append_index() writes it -- the idiom
+#      lives in a helper far from the literal.
+#   2. A ```-fence extractor missed formulas/brief-shuffle.toml, which has ZERO
+#      fences: its command sits in prose inside description = """...""" with
+#      inline backticks.
+# Both would have MISSED real writers, which is the vacuous-check class. The
+# surviving signal is file role, which is structural rather than textual:
+#   .py/.sh                 executable in full
+#   formulas/orders .toml   description/check/command fields, comments stripped
+#   SKILL.md                agent-executed instruction in full
+#   other .md               DESCRIPTIVE (POLICY, README, audits, plans) -- excluded
 #
-# So: referencing is the trigger, and every referencer must be registered,
-# including read-only ones. That fails toward "register something harmless"
-# and never toward "miss a writer".
+# Scope widened 2026-08-20 after trans's review: the first register scanned only
+# assets/scripts/*.{py,sh} and was structurally blind to formulas and SKILL.md --
+# the category the founding violation (adjudicate-brief) belongs to.
 #
-# `role` is one of:
-#   authorized  -- inside mctl; may write the artifact
-#   violation   -- writes it from outside mctl. A dated burn-down entry.
-#                  This list may SHRINK, never grow: a new writer fails the
-#                  check until someone either moves it behind mctl or files a
-#                  registration with a rationale.
-#   reader      -- references the path but does not write it
-#   config      -- declares the path; writes nothing
+# role: authorized (inside mctl) | violation (writes from outside, dated,
+#       may only shrink) | reader | unaudited (references it; NOT yet
+#       classified -- an honest placeholder, also a burn-down)
 
 [[artifact]]
 path = "stack/.index.jsonl"
-description = "The authoritative presentation queue Taylor adjudicates from."
 sole_writer = "mctl"
-
-  [[artifact.referencer]]
-  file = "assets/scripts/mctl_core/effects.py"
-  role = "authorized"
-  note = "_update_stack_index: splices one row under flock, atomic replace."
-
-  [[artifact.referencer]]
-  file = "assets/scripts/brief-stack-index.py"
-  role = "violation"
-  since = "2026-08-20"
-  note = """Removes and adds rows from outside mctl. formulas/brief-record-decision.toml
-shells out to it for the LAST write of adjudication, so one of the four
-representations leaves the interface for every caller."""
-
-  [[artifact.referencer]]
-  file = "assets/scripts/brief-shuffle-fast-drain.py"
-  role = "violation"
-  since = "2026-08-20"
-  note = "append_index(): appends a row on promotion, outside mctl."
 
   [[artifact.referencer]]
   file = "assets/scripts/brief-decisions-track-inventory.py"
@@ -60,14 +37,29 @@ representations leaves the interface for every caller."""
   note = "Writes index rows during decisions-track migration."
 
   [[artifact.referencer]]
-  file = "assets/scripts/checks/brief-check.sh"
+  file = "assets/scripts/brief-shuffle-fast-drain.py"
   role = "violation"
   since = "2026-08-20"
-  note = "Contains a write idiom against the index; unaudited at registration time."
+  note = "append_index() and mark_manifest_rejected() write outside mctl."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-stack-index.py"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Removes/adds rows outside mctl; brief-record-decision.toml shells out to it for adjudication's LAST write."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/checks/brief-check.sh"
+  role = "unaudited"
 
   [[artifact.referencer]]
   file = "assets/scripts/checks/brief-drain-manifest.sh"
   role = "reader"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/effects.py"
+  role = "authorized"
+  note = "_update_stack_index: splices one row under flock, atomic replace."
 
   [[artifact.referencer]]
   file = "assets/scripts/mctl_core/manifest.py"
@@ -77,20 +69,70 @@ representations leaves the interface for every caller."""
   file = "assets/scripts/mctl_core/redundant_state.py"
   role = "reader"
 
+  [[artifact.referencer]]
+  file = "formulas/brief-prep.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/brief-present-next.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/brief-record-decision.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/brief-shuffle-fast-drain.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/brief-shuffle.toml"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Inline `printf >> {{artifact_root}}/stack/.index.jsonl` under flock. Found by trans's sweep 2026-08-20."
+
+  [[artifact.referencer]]
+  file = "formulas/brief-watchdog-refill.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/math-brief-prep.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/adjudicate-brief/SKILL.md"
+  role = "violation"
+  since = "2026-08-20"
+  note = "The founding violation: reach-around writes behind mctl."
+
+  [[artifact.referencer]]
+  file = "skills/create-brief/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/present-briefs/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/prime-clerk/SKILL.md"
+  role = "unaudited"
+
+
 [[artifact]]
 path = ".pile/manifest.jsonl"
-description = "Pile membership. Has no reader in mctl and no paths.toml key."
 sole_writer = "mctl"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-decisions-track-inventory.py"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Writes index rows during decisions-track migration."
 
   [[artifact.referencer]]
   file = "assets/scripts/brief-shuffle-fast-drain.py"
   role = "violation"
   since = "2026-08-20"
-  note = "mark_manifest_rejected(): splices the row on gate failure, outside mctl."
-
-  [[artifact.referencer]]
-  file = "assets/scripts/brief-decisions-track-inventory.py"
-  role = "reader"
+  note = "append_index() and mark_manifest_rejected() write outside mctl."
 
   [[artifact.referencer]]
   file = "assets/scripts/mctl_core/manifest.py"
@@ -103,3 +145,36 @@ sole_writer = "mctl"
   [[artifact.referencer]]
   file = "assets/scripts/mctl_core/verdicts.py"
   role = "reader"
+
+  [[artifact.referencer]]
+  file = "skills/adjudicate-brief/SKILL.md"
+  role = "violation"
+  since = "2026-08-20"
+  note = "The founding violation: reach-around writes behind mctl."
+
+  [[artifact.referencer]]
+  file = "skills/create-brief/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/mayor-math-prime/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/present-briefs/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/refine-bead-manifest/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "subdomains/brief-system/skills/check-brief-policy/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "subdomains/brief-system/skills/decisions-to-briefs/SKILL.md"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Instructs direct appends to .pile/manifest.jsonl; zero mctl mentions. Found by trans's sweep 2026-08-20."
+
