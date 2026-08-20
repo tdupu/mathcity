@@ -126,7 +126,14 @@ content after the artifact header must still be the decision statement. If a
 reviewer-driven revision displaced the decision, fix before proceeding.
 
 If a judgment step fails and cannot be resolved, escalate immediately using
-`mathcity/assets/scripts/escalate.sh` (see escalation-protocol.md).
+`<mathcity-pack-root>/assets/scripts/escalate.sh` (see escalation-protocol.md).
+
+Resolve `<mathcity-pack-root>` as the parent of the `orders/` directory on the
+`Source:` line of `gc order show brief-review-patrol`. A city-root-relative
+`mathcity/assets/...` is NOT the same file: it names the rig checkout at
+`<city-root>/mathcity`, whereas city.toml imports the pack from elsewhere, and
+it only resolves at all when the cwd is the city root -- your cwd is a per-bead
+work dir.
 """
 
 [[steps]]
