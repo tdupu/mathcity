@@ -353,6 +353,7 @@ class Dashboard:
             'margin: 8px 0 0;"></div>',
             stack.column_picker(view) if columns_open else "",
             stack.table(briefs, view, queued=()),
+            stack.empty_sort_note(briefs, view),
             stack.key_legend(),
             stack.unfed_note(),
             render.artifact_trust_panel(listing.artifact_trust, rig=rig),

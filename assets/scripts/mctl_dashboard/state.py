@@ -51,6 +51,15 @@ COLUMN_LABEL: dict[str, str] = {key: label for key, label, _, _, _ in COLUMNS}
 #: The leading tick+row-number cell and the trailing add-to-queue cell have
 #: fixed widths; the title column declares none and absorbs the remainder, so
 #: it needs a floor of its own or it collapses.
+#: The column the stack opens on.
+#:
+#: Not `score`, which is what the design shows: score folds unlock_count
+#: and priority, and the core exposes neither, so it is empty on every real
+#: brief. A default sort over an all-empty column is worse than no sort --
+#: it looks like it worked. Age is derived from created_at, which is always
+#: present, so it orders something real until issue #66 lands.
+DEFAULT_SORT_KEY = "age"
+
 LEADING_WIDTH = 46
 TRAILING_WIDTH = 104
 TITLE_FLOOR = 290
@@ -79,7 +88,7 @@ class ViewState:
     scope: str = "stack"
     rig: str | None = None
     all_rigs: bool = False
-    sort_key: str = "score"
+    sort_key: str = DEFAULT_SORT_KEY
     sort_dir: int = -1
     columns: tuple[str, ...] = DEFAULT_COLUMNS
     brief_id: str | None = None
@@ -96,7 +105,7 @@ class ViewState:
             out["rig"] = self.rig
         if self.all_rigs:
             out["all_rigs"] = "1"
-        if self.sort_key != "score":
+        if self.sort_key != DEFAULT_SORT_KEY:
             out["sort_key"] = self.sort_key
         out["sort_dir"] = str(self.sort_dir)
         if tuple(self.columns) != DEFAULT_COLUMNS:
@@ -194,7 +203,7 @@ def parse(query: Mapping[str, str]) -> ViewState:
         scope=_one(query.get("scope"), SCOPES, "stack"),
         rig=rig,
         all_rigs=_flag(query.get("all_rigs")),
-        sort_key=_one(query.get("sort_key"), COLUMN_KEYS, "score"),
+        sort_key=_one(query.get("sort_key"), COLUMN_KEYS, DEFAULT_SORT_KEY),
         sort_dir=sort_dir,
         columns=columns,
         brief_id=brief_id,

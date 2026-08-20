@@ -602,3 +602,40 @@ def test_the_verdict_set_is_not_a_closed_four():
     names = {name for name, _label in panel.VERDICTS}
     assert len(panel.VERDICTS) >= 4
     assert {"approve", "reject"} <= names
+
+
+# --------------------------------------------------------------------------
+# sorting on a column with no data
+# --------------------------------------------------------------------------
+
+
+def test_the_default_sort_uses_a_column_that_has_values():
+    """Score is empty on every real brief until unlock_count exists.
+
+    Defaulting to it means the stack opens ordered by nothing, which looks
+    exactly like a working sort. Age is derived from created_at and is always
+    present, so it is the honest default until #66 lands.
+    """
+    from mctl_dashboard import state
+
+    assert state.ViewState().sort_key == "age"
+
+
+def test_sorting_by_an_empty_column_says_so_out_loud():
+    """Silence here reads as 'sorted, and this is the order'."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    briefs = [{"bead_id": "he-1", "title": "a"}, {"bead_id": "he-2", "title": "b"}]
+    note = stack.empty_sort_note(briefs, state.ViewState(sort_key="score"))
+    assert note, "an all-empty sort column must be announced"
+    assert "score" in note.lower()
+    assert "no values" in note.lower()
+
+
+def test_no_notice_when_the_sort_column_has_values():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    briefs = [{"bead_id": "he-1", "title": "a", "created_at": "2026-08-01T00:00:00Z"}]
+    assert stack.empty_sort_note(briefs, state.ViewState(sort_key="age")) == ""

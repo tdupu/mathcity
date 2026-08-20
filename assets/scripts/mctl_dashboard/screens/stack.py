@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
 from mctl_dashboard.render import esc as _e
-from mctl_dashboard.state import ViewState
+from mctl_dashboard.state import COLUMN_LABEL, ViewState
 from mctl_dashboard.theme import STOP
 
 #: Score weights. Deliberately adjustable and deliberately not canonical: no
@@ -482,4 +482,33 @@ def unfed_note() -> str:
         "They are tracked on "
         '<a href="https://github.com/tdupu/mathcity/issues/66">issue #66</a>. '
         "An empty cell here means no value was read, not a value of zero.</p>"
+    )
+
+
+def empty_sort_note(
+    briefs: Sequence[Mapping[str, Any]], view: ViewState
+) -> str:
+    """Say so when the active sort column has no values at all.
+
+    A sort over an empty column produces a stable, arbitrary order that is
+    indistinguishable from a working one -- the rows are lined up, the arrow is
+    drawn, and nothing indicates the ordering means nothing. That is the same
+    failure as showing a zero for an unread value, one level up: the operator
+    reads an ordering as a ranking.
+
+    Louder than the column footnote, because this one changes what the whole
+    screen appears to be telling you.
+    """
+    if not briefs:
+        return ""
+    label = COLUMN_LABEL.get(view.sort_key, view.sort_key)
+    if any(not sort_value(brief, view.sort_key)[0] for brief in briefs):
+        return ""
+    return (
+        '<p class="review-note" data-region="empty-sort" style="margin-top: 10px;">'
+        f"<strong>Sorted by {_e(label)}, which has no values.</strong> "
+        "Every brief here is missing that field, so the order below is stable "
+        "but arbitrary — it is not a ranking. Sort by a column with data, or see "
+        '<a href="https://github.com/tdupu/mathcity/issues/66">issue #66</a> for '
+        "when this one gets a source.</p>"
     )
