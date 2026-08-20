@@ -73,6 +73,7 @@ from .effects import (
     plan_create_brief,
     plan_deferral,
 )
+from .fields import read_frontmatter
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
 from .redundant_state import artifact_layout
@@ -187,22 +188,24 @@ class ArtifactTrust:
 
 
 def _frontmatter_artifact_id(path: Path) -> str | None:
-    """Read the `artifact:` frontmatter key the live pile convention uses."""
+    """Read the `artifact:` frontmatter key the live pile convention uses.
+
+    Delegates to `fields.read_frontmatter()` -- the same parser
+    `materialize_plan`/`mctl` use everywhere else -- rather than a second,
+    hand-rolled fence scan. The hand-rolled version diverged in two proven
+    ways: it silently dropped a key on any line with leading whitespace
+    (the canonical parser's key regex is column-anchored, so the hand-rolled
+    version was the more permissive one there), and it capped its scan at 64
+    lines, so an `artifact:` key past that point read as absent while the
+    canonical parser -- which locates the closing fence rather than counting
+    lines -- found it correctly. Neither case occurs in the live corpus
+    today; this removes the possibility going forward.
+    """
     try:
-        with path.open(encoding="utf-8") as handle:
-            first = handle.readline().strip()
-            if first != "---":
-                return None
-            for _ in range(64):
-                line = handle.readline()
-                if not line or line.strip() == "---":
-                    return None
-                key, separator, value = line.partition(":")
-                if separator and key.strip() == "artifact":
-                    return value.strip().strip("\"'") or None
+        text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    return None
+    return read_frontmatter(text).get("artifact", "").strip("\"'") or None
 
 
 def _frontmatter_lookup_mismatch(pile: Path) -> tuple[str, str] | None:
