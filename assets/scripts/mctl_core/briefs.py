@@ -6,7 +6,7 @@ import re
 import tomllib
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Callable, Iterable, Mapping
 
 from .beads import BD_LIST_ARGS, Bead, BeadReadError, read_beads
 from .context import MctlContext
@@ -51,6 +51,94 @@ from .verdicts import (
 class BriefFilters:
     status: str | None = None
     label: str | None = None
+
+
+#: The lanes a roster read draws from, named so a degraded answer can say
+#: which half of it is missing.
+#:
+#: `LANE_BEADS` is the bead store, reached through a `bd` subprocess against
+#: Dolt. `LANE_DOCUMENTS` is the decisions-track manifest and the brief stack
+#: directory -- **files on disk, which never touch the bead store.** Keeping
+#: them named apart is the whole point: a slow or dead data plane is a fact
+#: about one lane, and must not be able to hide the other.
+LANE_BEADS = "beads"
+LANE_DOCUMENTS = "documents"
+
+#: Which record `source` values each lane produces, so a caller reading a
+#: degraded listing can tell exactly which rows are absent rather than
+#: inferring it from the lane name.
+LANE_SOURCES: dict[str, tuple[str, ...]] = {
+    LANE_BEADS: (SOURCE_BEAD,),
+    LANE_DOCUMENTS: (SOURCE_MANIFEST, SOURCE_STACK_FILE),
+}
+
+#: Human names for the stores behind each lane, used in the one sentence a
+#: partial answer has to get right.
+LANE_DESCRIPTIONS: dict[str, str] = {
+    LANE_BEADS: "the bead store",
+    LANE_DOCUMENTS: "the decisions-track manifest and the brief stack",
+}
+
+
+@dataclass(frozen=True)
+class SourceOutcome:
+    """Whether one lane of a roster read answered, and why not if it did not.
+
+    A roster read has two independent stores behind it and, until this
+    existed, exactly one way to report them: all or nothing. A `bd` read that
+    timed out took the manifest rows and stack files with it even though
+    those had already been read off disk -- 245 of this city's 442 records,
+    lost to a query none of them ran.
+    """
+
+    lane: str
+    ok: bool
+    reason: str = ""
+    diagnostics: tuple[Diagnostic, ...] = ()
+
+    @property
+    def sources(self) -> tuple[str, ...]:
+        return LANE_SOURCES.get(self.lane, ())
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "diagnostics": [diagnostic.to_dict() for diagnostic in self.diagnostics],
+            "lane": self.lane,
+            "ok": self.ok,
+            "reason": self.reason,
+            "sources": list(self.sources),
+        }
+
+
+@dataclass(frozen=True)
+class BriefListing:
+    """A roster read, with the lanes that did not answer named.
+
+    `records` is always what *was* read, never a truncated stand-in for what
+    should have been: a lane that failed contributes no rows and one
+    `SourceOutcome` saying so. A caller that ignores `degraded_sources` sees
+    a smaller list; a caller that reads it can say precisely which store is
+    missing from it.
+    """
+
+    records: tuple[BriefRecord, ...] = ()
+    degraded_sources: tuple[SourceOutcome, ...] = ()
+
+    @property
+    def complete(self) -> bool:
+        """Whether every lane answered -- the question a total most needs."""
+        return not self.degraded_sources
+
+    @property
+    def reason(self) -> str:
+        """One sentence naming which stores were read and which were not."""
+        if self.complete:
+            return ""
+        return "; ".join(outcome.reason for outcome in self.degraded_sources if outcome.reason)
+
+    def degraded_payload(self) -> list[dict[str, object]]:
+        """The lane report, wire-shaped. Empty when every lane answered."""
+        return [outcome.to_dict() for outcome in self.degraded_sources]
 
 
 @dataclass(frozen=True)
@@ -370,7 +458,37 @@ class BriefError(Exception):
 def list_briefs(
     ctx: MctlContext, filters: BriefFilters, *, bodies: bool = False
 ) -> tuple[BriefRecord, ...]:
-    """Every brief this rig can show, from all three stores.
+    """The plan's declared roster signature: records, or a raised failure.
+
+    Kept because the MCP implementation plan names it, and because a caller
+    that genuinely wants all-or-nothing should be able to say so. No mctl
+    surface uses it: every one of them takes `list_briefs_report`, since a
+    caller that cannot see `degraded_sources` cannot tell a small city from a
+    broken one -- which is the whole defect.
+    """
+    listing = list_briefs_report(ctx, filters, bodies=bodies)
+    failure = next(
+        (
+            diagnostic
+            for outcome in listing.degraded_sources
+            for diagnostic in outcome.diagnostics
+        ),
+        None,
+    )
+    if failure is not None:
+        raise BriefError(failure)
+    return listing.records
+
+
+def list_briefs_report(
+    ctx: MctlContext,
+    filters: BriefFilters,
+    *,
+    bodies: bool = False,
+    bead_timeout: int | None = None,
+    on_documents: Callable[[BriefListing], None] | None = None,
+) -> BriefListing:
+    """Every brief this rig can show, from all three stores, lane by lane.
 
     The bead population first, then the decisions-track rows nothing else
     represents. They are concatenated rather than merged: no manifest row
@@ -384,11 +502,35 @@ def list_briefs(
     stack file or manifest row has no bead to act on. Listing one as decidable
     in those surfaces would be the `pending`-lane error one level up.
 
-    The bead population is computed first because it is what tells the
-    document read which stack files are already spoken for: a bead whose
-    cached document is `stack/<bead-id>-…-brief.md` already carries that file,
-    and emitting it again would be the mirror image of the defect this slice
-    fixes. Two live files are in that lane.
+    ## The document lane is read first, and it is read whatever the bead store does
+
+    The documents used to be read *behind* the beads, and only for the beads:
+    the bead population is what tells the document read which stack files are
+    already spoken for, so it was computed first and the document read was
+    sequenced after it. That made a file read on disk depend on a query
+    against Dolt. When `hq`'s bead query went to a full partition scan and
+    blew the cross-rig deadline, the rig was dropped whole and its 158
+    manifest rows and 87 stack files went with it -- 245 records that never
+    touched the store that was slow, city total 442 to 8.
+
+    So the order is inverted. The document lane runs first with an empty
+    claim map, costs ~27 ms of file I/O against ~2.8 s for `hq`'s bead read,
+    and is handed to `on_documents` the moment it exists. A cross-rig caller
+    publishes that as its partial answer, so a deadline that expires during
+    the bead read returns the document half instead of nothing.
+
+    If the bead read then succeeds, the documents are re-read *with* the
+    claim map, because suppressing a stack file a bead already carries is a
+    fact about the pair and cannot be derived from the file alone. That
+    second pass is the only cost this ordering adds -- 27 ms on the largest
+    rig, nothing at all on the fourteen rigs that have no documents -- and it
+    keeps a healthy listing byte-identical to what it was.
+
+    If the bead read fails, the document half is returned with a
+    `SourceOutcome` naming the bead store as unread. Nothing is suppressed
+    then, and that is correct rather than a compromise: the two stack files a
+    bead normally claims have no bead row to be duplicates *of*, so emitting
+    them is the only way they appear at all.
 
     ## `bodies` defaults to off, and that is a payload decision
 
@@ -403,9 +545,65 @@ def list_briefs(
     whose body was left out says so in `body_elided`; nothing is truncated,
     because a shortened brief still reads as a whole one.
     """
-    beads = _records(ctx)
-    records = beads + _document_records(ctx, beads, bodies=bodies)
-    return tuple(record for record in records if _matches(record, filters))
+    layout = artifact_layout(ctx)
+
+    def keep(records: Iterable[BriefRecord]) -> tuple[BriefRecord, ...]:
+        return tuple(record for record in records if _matches(record, filters))
+
+    # Claim map deliberately empty: nothing has been read from the bead store
+    # yet, so nothing can be claimed. Two live stack files are affected.
+    documents_alone = _document_records(ctx, (), layout, bodies=bodies)
+    if on_documents is not None:
+        on_documents(
+            BriefListing(
+                records=keep(documents_alone),
+                degraded_sources=(_lane_unanswered(LANE_BEADS, LANE_DOCUMENTS),),
+            )
+        )
+    try:
+        beads = _records(ctx, layout=layout, timeout=bead_timeout)
+    except BriefError as error:
+        return BriefListing(
+            records=keep(documents_alone),
+            degraded_sources=(
+                _lane_failed(LANE_BEADS, LANE_DOCUMENTS, error.diagnostic),
+            ),
+        )
+    documents = _document_records(ctx, beads, layout, bodies=bodies)
+    return BriefListing(records=keep(beads + documents))
+
+
+def _lane_read(lane: str) -> str:
+    return LANE_DESCRIPTIONS.get(lane, lane)
+
+
+def _lane_unanswered(lane: str, read: str) -> SourceOutcome:
+    """The lane has not answered *yet*, published mid-read.
+
+    Only ever observed by a caller whose deadline expired before the read
+    finished, so the sentence is written for that reader: it says what is in
+    the rows they are holding and what is not.
+    """
+    return SourceOutcome(
+        lane=lane,
+        ok=False,
+        reason=(
+            f"{_lane_read(lane)} had not answered when this partial answer was "
+            f"published; {_lane_read(read)} were read"
+        ),
+    )
+
+
+def _lane_failed(lane: str, read: str, diagnostic: Diagnostic) -> SourceOutcome:
+    return SourceOutcome(
+        lane=lane,
+        ok=False,
+        reason=(
+            f"{_lane_read(lane)} could not be read ({diagnostic.message}); "
+            f"{_lane_read(read)} were read"
+        ),
+        diagnostics=(diagnostic,),
+    )
 
 
 def show_brief(ctx: MctlContext, brief_id: str) -> BriefRecord:
@@ -1259,6 +1457,7 @@ def _records(
     beads: tuple[Bead, ...] | None = None,
     layout: ArtifactLayout | None = None,
     legacy_state: LegacyManifestState | None = None,
+    timeout: int | None = None,
 ) -> tuple[BriefRecord, ...]:
     """The brief population: `type=decision`, minus B2.1's standalone beads.
 
@@ -1274,7 +1473,7 @@ def _records(
     """
     layout = artifact_layout(ctx) if layout is None else layout
     legacy_state = legacy_manifest_state(layout) if legacy_state is None else legacy_state
-    beads = _beads(ctx) if beads is None else beads
+    beads = _beads(ctx, timeout=timeout) if beads is None else beads
     return tuple(
         _bead_record(ctx, bead, layout, legacy_state) for bead in brief_population(beads)
     )
@@ -1567,9 +1766,17 @@ def _issue_location(issue: ManifestIssue, manifest_path: Path) -> str:
     return f"{manifest_path}:{issue.line}" if issue.line is not None else str(manifest_path)
 
 
-def _beads(ctx: MctlContext) -> tuple[Bead, ...]:
+def _beads(ctx: MctlContext, *, timeout: int | None = None) -> tuple[Bead, ...]:
+    """The rig's bead store, or MBRF012 naming why it would not answer.
+
+    `timeout` lets a caller working against a wall clock of its own bound the
+    `bd` subprocess below its remaining budget. Without it the default is 30 s
+    -- *above* the 25 s cross-rig deadline -- so on a slow store the fan-out
+    always gave up before this read could report its own failure, and the
+    caller got "the rig did not answer" instead of "the bead store did not".
+    """
     try:
-        return read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture)
+        return read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture, timeout=timeout)
     except BeadReadError as error:
         raise BriefError(_diagnostic(ctx, Severity.FATAL, "MBRF012", str(error))) from error
 

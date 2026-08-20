@@ -24,6 +24,20 @@ mistake one layer up. Rigs are read concurrently and the whole fan-out is
 bounded by a deadline. Measured on the live 16-rig city, 200 briefs: 3.94s in
 series, ~1.4s here.
 
+**A rig that runs out of deadline still reports what it had already read.**
+The deadline above is what keeps one wedged rig from costing the other
+fifteen, and for a while it also threw away everything the wedged rig had
+managed to read. That is only harmless when a rig has one store. A brief
+roster has two -- a bead store behind Dolt, and manifest rows and stack files
+on disk -- and when `hq`'s bead query became a full partition scan the
+deadline dropped 245 file-sourced records that had never touched Dolt at all,
+taking the city total from 442 to 8. A read that can produce a usable answer
+without its slowest store now publishes that answer into a `RigProgress`
+slot as soon as it exists, and an expired deadline returns it as a
+*partially* degraded rig rather than as nothing. Partial is not success:
+`ok` is False, `reason` names which store answered and which did not, and the
+CLI exit code is still non-zero.
+
 **"Every rig" includes the city's own store.** The fan-out iterates
 `CityScope.rigs`, which `context.city_rig_entries` builds from `city.toml`
 *plus* the reserved `hq` entry for `<city-root>/.beads`. That store held 80 of
@@ -48,6 +62,7 @@ from __future__ import annotations
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
 import time
 from typing import Any, Callable, Mapping, Sequence
 
@@ -70,41 +85,161 @@ ALL_RIGS_WORKERS = 8
 ALL_RIGS_SCOPE = "all-rigs"
 
 
+#: Key a per-rig read may set on its payload to declare that some of its own
+#: stores did not answer while others did. Each entry is one lane, shaped by
+#: `briefs.SourceOutcome`: `{lane, ok, reason, sources, diagnostics}`.
+#:
+#: `city.py` stays out of the question of what a lane *is* -- that is the
+#: core read's own vocabulary, and briefs, validate and work do not share
+#: one. All this module does is refuse to call a payload carrying a
+#: not-ok lane a clean success.
+DEGRADED_SOURCES = "degraded_sources"
+
+
+class RigProgress:
+    """A slot one rig's read publishes a usable partial answer into.
+
+    Handed to `run` so that a read with more than one store can say "this
+    half is done" before the slow half finishes. The collector reads it only
+    when that rig's future misses the deadline: on the ordinary path the
+    published value is discarded and the completed payload is used instead.
+
+    Single writer (the worker thread), single reader (the collector, after
+    that thread has stopped mattering), but the two are different threads and
+    the deadline fires while the writer is still running -- so the handoff
+    takes a lock rather than relying on the GIL making a dict assignment
+    look atomic.
+    """
+
+    __slots__ = ("_lock", "_payload", "_expires_at", "_sink")
+
+    def __init__(
+        self,
+        expires_at: float | None = None,
+        sink: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
+        self._lock = Lock()
+        self._payload: dict[str, Any] | None = None
+        self._expires_at = expires_at
+        self._sink = sink
+
+    def publish(self, payload: Mapping[str, Any]) -> None:
+        """Record what is readable so far. Later calls replace earlier ones."""
+        snapshot = dict(payload)
+        with self._lock:
+            self._payload = snapshot
+        if self._sink is not None:
+            # Outside the lock: the sink is another slot's `publish`, which
+            # takes its own, and holding both would order two locks.
+            self._sink(snapshot)
+
+    def snapshot(self) -> dict[str, Any] | None:
+        """The last published partial answer, or None if the read published none."""
+        with self._lock:
+            return dict(self._payload) if self._payload is not None else None
+
+    def relaying(self, transform: Callable[[dict[str, Any]], Mapping[str, Any]]) -> "RigProgress":
+        """A slot that forwards every publish into this one through `transform`.
+
+        For an adapter that has to finish a partial answer before it is
+        published -- add the artifact-trust verdict, say -- without waiting
+        for the read to return. Forwarding has to be eager: the whole point
+        of the slot is to hold a value at the moment the read is still
+        running, and a relay that only drained afterwards would publish
+        exactly nothing on the one path that needs it.
+
+        The deadline is shared, because the inner read sizes its own timeouts
+        off it.
+        """
+        return RigProgress(self._expires_at, sink=lambda payload: self.publish(transform(payload)))
+
+    def remaining_seconds(self) -> float | None:
+        """Wall-clock budget left before the fan-out gives up on this rig.
+
+        A read whose slowest store has a timeout of its own should bound it by
+        this rather than by its own default, so the store reports why it
+        failed instead of the fan-out reporting that the rig went quiet. None
+        when the caller set no deadline.
+        """
+        if self._expires_at is None:
+            return None
+        return max(0.0, self._expires_at - time.monotonic())
+
+
 @dataclass(frozen=True)
 class RigOutcome:
-    """What one rig answered, or the typed reason it could not."""
+    """What one rig answered, or the typed reason it could not.
+
+    Three states, not two. `failure` means nothing was read and there is no
+    payload; `partial_failure` means some of the rig's stores answered and
+    others did not, and `payload` holds what did. Both are `ok is False`,
+    because a partial answer that renders as a clean success is the exact
+    dishonesty the degraded-rig rule exists to prevent -- but only the first
+    has nothing worth merging.
+    """
 
     rig_id: str
     rig_root: str
     rig_db: str
     payload: dict[str, Any] = field(default_factory=dict)
     failure: tuple[Mapping[str, Any], ...] = ()
+    partial_failure: tuple[Mapping[str, Any], ...] = ()
     elapsed_ms: int = 0
 
     @property
     def ok(self) -> bool:
+        """Whether every store this rig reads answered."""
+        return not self.failure and not self.partial_failure
+
+    @property
+    def readable(self) -> bool:
+        """Whether there is a payload to merge -- true for a partial answer."""
         return not self.failure
 
     @property
+    def partial(self) -> bool:
+        """Whether this rig answered from some of its stores but not all."""
+        return bool(self.partial_failure) and not self.failure
+
+    @property
+    def diagnostics(self) -> tuple[Mapping[str, Any], ...]:
+        return tuple(self.failure) + tuple(self.partial_failure)
+
+    @property
     def reason(self) -> str:
-        """One line naming why this rig could not be read."""
-        for item in self.failure:
+        """One line naming why this rig is not a clean read."""
+        for item in self.diagnostics:
             message = str(item.get("message") or "").strip()
             if message:
                 return message
         return "the rig did not answer"
 
+    @property
+    def degraded_sources(self) -> tuple[Mapping[str, Any], ...]:
+        return tuple(
+            dict(entry)
+            for entry in self.payload.get(DEGRADED_SOURCES) or ()
+            if isinstance(entry, Mapping)
+        )
+
     def to_dict(self, arrays: Sequence[str] = ()) -> dict[str, Any]:
         entry: dict[str, Any] = {
             "counts": {name: len(self.payload.get(name) or ()) for name in arrays},
-            "diagnostics": [dict(item) for item in self.failure],
+            "diagnostics": [dict(item) for item in self.diagnostics],
             "elapsed_ms": self.elapsed_ms,
             "ok": self.ok,
+            "partial": self.partial,
             "reason": "" if self.ok else self.reason,
             "rig_db": self.rig_db,
             "rig_id": self.rig_id,
             "rig_root": self.rig_root,
         }
+        sources = self.degraded_sources
+        if sources:
+            # Per lane, beside the counts, so "247 briefs" and "the bead store
+            # did not answer" are read together. A count with no lane report
+            # beside it is the number that looked complete.
+            entry[DEGRADED_SOURCES] = list(sources)
         trust = self.payload.get("artifact_trust")
         if isinstance(trust, Mapping):
             # Per rig, never collapsed into one city-wide claim: the resolved
@@ -138,6 +273,26 @@ def rig_timeout_diagnostic(rig_id: str, rig_root: str, seconds: float) -> dict[s
     )
 
 
+def rig_partial_diagnostic(rig_id: str, rig_root: str, reason: str) -> dict[str, Any]:
+    """A rig that answered from some of its stores and not others.
+
+    Separate from `MCTL_CITY_RIG_UNREADABLE` on purpose. "Could not be read"
+    and "was read from one of its two stores" call for different actions, and
+    a reader given the first sentence for the second situation either
+    discards rows that are perfectly good or trusts a total that is short.
+    The message carries the whole answer -- which store answered, which did
+    not, and why -- because the rig entry is where an operator looks.
+    """
+    return _diagnostic(
+        "MCTL_CITY_RIG_PARTIAL",
+        f"Rig {rig_id!r} answered from only part of its stores: {reason}.",
+        f"The rows for {rig_id} are that partial read; re-run once the named store answers.",
+        implementation_provenance="mctl cross-rig read",
+        rig_name=rig_id,
+        rig_path=rig_root,
+    )
+
+
 def rig_unreadable_diagnostic(rig_id: str, rig_root: str, error: BaseException) -> dict[str, Any]:
     return _diagnostic(
         "MCTL_CITY_RIG_UNREADABLE",
@@ -149,26 +304,58 @@ def rig_unreadable_diagnostic(rig_id: str, rig_root: str, error: BaseException) 
     )
 
 
+def _partial_failure(payload: Mapping[str, Any], rig_id: str, rig_root: str) -> tuple[dict[str, Any], ...]:
+    """Promote a payload's self-declared lane failures to the rig entry.
+
+    The read knows which of *its* stores failed; this module knows only that
+    a rig whose payload says so is not a clean success. Keeping the knowledge
+    on that side is what lets briefs, validate and work each name their own
+    stores without `city.py` learning three vocabularies.
+
+    The lane's own diagnostics are deliberately not copied up: they are
+    already in the payload's `diagnostics`, which `merge_outcomes` tags and
+    concatenates, and a diagnostic reported twice reads as two findings.
+    """
+    reasons = [
+        str(entry.get("reason") or "").strip()
+        for entry in payload.get(DEGRADED_SOURCES) or ()
+        if isinstance(entry, Mapping) and not entry.get("ok")
+    ]
+    reasons = [reason for reason in reasons if reason]
+    if not reasons:
+        return ()
+    return (rig_partial_diagnostic(rig_id, rig_root, "; ".join(reasons)),)
+
+
 def for_each_rig(
     cwd: Path,
     *,
     city: Path | None,
     env: Mapping[str, str],
-    run: Callable[[MctlContext], dict[str, Any]],
+    run: Callable[[MctlContext, RigProgress], dict[str, Any]],
     workers: int = ALL_RIGS_WORKERS,
     deadline: float = ALL_RIGS_DEADLINE_SECONDS,
 ) -> tuple[CityScope, tuple[RigOutcome, ...]]:
     """Run one read against every registered rig, concurrently and fail-soft.
 
-    `run` receives a fully resolved `MctlContext` for one rig and returns that
-    rig's payload. It is called off the calling thread, so it must not mutate
-    shared state -- which is automatic for the read functions this is for.
+    `run` receives a fully resolved `MctlContext` for one rig and a
+    `RigProgress` slot, and returns that rig's payload. It is called off the
+    calling thread, so it must not mutate shared state -- which is automatic
+    for the read functions this is for.
+
+    A `run` with more than one store should publish the fast stores into the
+    progress slot before starting the slow one, and may bound the slow one by
+    `progress.remaining_seconds()`. Doing neither is still correct; it just
+    means a deadline that expires on this rig returns nothing for it instead
+    of the half that was ready.
 
     Results come back in registry order, not completion order: a page whose
     rows reshuffle between refreshes because one rig got faster is a page
     nobody can scan.
     """
     scope = resolve_city(cwd, city=city, require_runtime_city=True, env=env)
+    expires_at = time.monotonic() + deadline
+    progress = {rig.name: RigProgress(expires_at) for rig in scope.rigs}
 
     def one(rig) -> RigOutcome:
         started = time.monotonic()
@@ -201,7 +388,7 @@ def for_each_rig(
                 elapsed_ms=elapsed(),
             )
         try:
-            payload = run(ctx)
+            payload = run(ctx, progress[rig.name])
         except Exception as error:  # noqa: BLE001 - one rig may not kill the answer
             diagnostic = getattr(error, "diagnostic", None)
             failure = (
@@ -210,32 +397,54 @@ def for_each_rig(
                 else rig_unreadable_diagnostic(rig.name, rig_root, error)
             )
             return RigOutcome(rig.name, rig_root, rig.db, failure=(failure,), elapsed_ms=elapsed())
-        return RigOutcome(rig.name, rig_root, rig.db, payload=dict(payload), elapsed_ms=elapsed())
+        return RigOutcome(
+            rig.name,
+            rig_root,
+            rig.db,
+            payload=dict(payload),
+            partial_failure=_partial_failure(payload, rig.name, rig_root),
+            elapsed_ms=elapsed(),
+        )
 
     pool = ThreadPoolExecutor(max_workers=max(1, workers), thread_name_prefix="mctl-rig")
     try:
         futures: list[tuple[Any, Future]] = [(rig, pool.submit(one, rig)) for rig in scope.rigs]
-        expires_at = time.monotonic() + deadline
         outcomes: list[RigOutcome] = []
         for rig, future in futures:
             remaining = max(0.0, expires_at - time.monotonic())
             try:
                 outcomes.append(future.result(timeout=remaining))
             except Exception:  # noqa: BLE001 - TimeoutError included, deliberately
-                outcomes.append(
-                    RigOutcome(
-                        rig.name,
-                        str(rig.root),
-                        rig.db,
-                        failure=(rig_timeout_diagnostic(rig.name, str(rig.root), deadline),),
-                    )
-                )
+                outcomes.append(_timed_out(rig, deadline, progress[rig.name].snapshot()))
     finally:
         # Not waited on: a straggler finishes into a result nobody reads, but
         # the answer already went out. Waiting here would reintroduce exactly
         # the "one wedged rig holds the page" failure the deadline removes.
         pool.shutdown(wait=False)
     return scope, tuple(outcomes)
+
+
+def _timed_out(rig, deadline: float, partial: dict[str, Any] | None) -> RigOutcome:
+    """The rig ran out of deadline -- with whatever it had already published.
+
+    A rig whose read published nothing is degraded exactly as before: no
+    payload, one `MCTL_CITY_RIG_TIMEOUT`. A rig that published a partial
+    answer keeps it, and keeps the timeout diagnostic beside the
+    `MCTL_CITY_RIG_PARTIAL` that says which store went quiet -- the operator
+    needs both, one to know what is missing and one to know why.
+    """
+    rig_root = str(rig.root)
+    timeout = rig_timeout_diagnostic(rig.name, rig_root, deadline)
+    if partial is None:
+        return RigOutcome(rig.name, rig_root, rig.db, failure=(timeout,))
+    declared = _partial_failure(partial, rig.name, rig_root)
+    return RigOutcome(
+        rig.name,
+        rig_root,
+        rig.db,
+        payload=partial,
+        partial_failure=(declared or ()) + (timeout,),
+    )
 
 
 def _tagged(diagnostics: Sequence[Mapping[str, Any]], rig_id: str) -> list[dict[str, Any]]:
@@ -269,6 +478,12 @@ def merge_outcomes(
     no rig is an address with no store behind it -- and the caller that opens
     or adjudicates it has to know which bead store it belongs to. Aggregation
     is a read-side convenience; addressing stays per rig.
+
+    A *partially* readable rig contributes its rows and its reason both. The
+    rows are real -- they came out of stores that answered -- and the reason
+    is what stops the total they are part of from reading as complete: the
+    rig entry stays `ok: false`, `valid` goes false, and the lane report
+    travels in `rigs[].degraded_sources`.
     """
     merged: dict[str, list[Any]] = {name: [] for name in arrays}
     diagnostics: list[dict[str, Any]] = []
@@ -281,9 +496,15 @@ def merge_outcomes(
 
     for outcome in outcomes:
         if not outcome.ok:
-            valid = False  # a rig that could not be read cannot be called consistent
-            diagnostics.extend(_tagged(outcome.failure, outcome.rig_id))
+            # A rig that could not be fully read cannot be called consistent,
+            # whether it answered from none of its stores or from some.
+            valid = False
+            diagnostics.extend(_tagged(outcome.diagnostics, outcome.rig_id))
+        if not outcome.readable:
             continue
+        # A partial rig's rows ARE merged. They are rows that were read, from
+        # stores that answered; dropping them because a *different* store on
+        # the same rig went quiet is the coupling this whole path removes.
         for name in arrays:
             for row in outcome.payload.get(name) or ():
                 merged[name].append(

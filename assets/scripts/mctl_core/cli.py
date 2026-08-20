@@ -10,16 +10,18 @@ import sys
 from .briefs import (
     BriefError,
     BriefFilters,
+    BriefListing,
     brief_command_diagnostics,
     brief_options_report,
     doctor_briefs,
-    list_briefs,
+    list_briefs_report,
     present_it_label,
     show_brief,
     validate_brief,
     validation_scope,
 )
-from .city import for_each_rig, merge_outcomes
+from .beads import bd_timeout_within
+from .city import DEGRADED_SOURCES, RigProgress, for_each_rig, merge_outcomes
 from .context import ContextError, MctlContext, resolve_context
 from .diagnostics import Diagnostic, render_diagnostic
 from .liveness import city_not_active_diagnostic
@@ -118,16 +120,21 @@ def _all_rigs_command(args: argparse.Namespace) -> int:
     key = (args.command, getattr(args, "brief_command", None) or getattr(args, "work_command", None))
     arrays = _ALL_RIGS_ARRAYS[key]
 
-    def run(context: MctlContext) -> dict[str, object]:
+    def run(context: MctlContext, progress: RigProgress) -> dict[str, object]:
         if key == ("briefs", "list"):
-            records = list_briefs(
-                context, BriefFilters(args.status, args.label), bodies=args.bodies
-            )
-            return _brief_payload(
+            # The document lane is published the moment it is read, so a rig
+            # whose bead store outlives the deadline still contributes its
+            # manifest rows and stack files instead of vanishing whole.
+            listing = list_briefs_report(
                 context,
-                briefs=[brief.to_dict() for brief in records],
-                diagnostics=brief_command_diagnostics(context, records),
+                BriefFilters(args.status, args.label),
+                bodies=args.bodies,
+                bead_timeout=bd_timeout_within(progress.remaining_seconds()),
+                on_documents=lambda partial: progress.publish(
+                    _brief_listing_payload(context, partial)
+                ),
             )
+            return _brief_listing_payload(context, listing)
         if key == ("briefs", "validate"):
             report = validate_brief(context, _validation_scope(context, args))
             payload = report.to_dict()
@@ -159,6 +166,30 @@ def _all_rigs_command(args: argparse.Namespace) -> int:
     return 1 if any(not outcome.ok for outcome in outcomes) else 0
 
 
+def _brief_listing_payload(context: MctlContext, listing: BriefListing) -> dict[str, object]:
+    """One roster payload, carrying the lanes that did not answer.
+
+    `degraded_sources` travels beside `briefs` rather than only inside
+    `diagnostics` because it is the answer to a different question. The
+    diagnostics say what went wrong; this says which rows are consequently
+    absent -- and that is what a caller has to read before treating the count
+    as the whole roster.
+    """
+    payload = _brief_payload(
+        context,
+        briefs=[brief.to_dict() for brief in listing.records],
+        diagnostics=brief_command_diagnostics(context, listing.records)
+        + tuple(
+            diagnostic
+            for outcome in listing.degraded_sources
+            for diagnostic in outcome.diagnostics
+        ),
+    )
+    if not listing.complete:
+        payload[DEGRADED_SOURCES] = listing.degraded_payload()
+    return payload
+
+
 def _render_all_rigs_payload(payload: dict[str, object]) -> str:
     """Human output that leads with the per-rig breakdown.
 
@@ -168,22 +199,34 @@ def _render_all_rigs_payload(payload: dict[str, object]) -> str:
     """
     rigs = [entry for entry in payload.get("rigs") or () if isinstance(entry, dict)]
     readable = [entry for entry in rigs if entry.get("ok")]
-    degraded = [entry for entry in rigs if not entry.get("ok")]
+    partial = [entry for entry in rigs if entry.get("partial")]
+    degraded = [entry for entry in rigs if not entry.get("ok") and not entry.get("partial")]
     lines = [
         f"city: {payload.get('city_root', '?')}  "
         f"({len(readable)} of {len(rigs)} rigs readable)"
     ]
     for entry in rigs:
-        counts = entry.get("counts") or {}
-        detail = (
-            "  ".join(f"{name}={value}" for name, value in sorted(counts.items()))
-            if entry.get("ok")
-            else f"could not read ({entry.get('reason')})"
+        counts = "  ".join(
+            f"{name}={value}" for name, value in sorted((entry.get("counts") or {}).items())
         )
-        lines.append(f"  {'ok ' if entry.get('ok') else 'DEGRADED'} {entry.get('rig_id')}: {detail}")
+        if entry.get("ok"):
+            label, detail = "ok ", counts
+        elif entry.get("partial"):
+            # Counts AND reason. A partial rig reported real rows from the
+            # stores that answered, and showing only the reason would hide
+            # them exactly as showing only the count would hide the gap.
+            label, detail = "PARTIAL", f"{counts}  partial ({entry.get('reason')})"
+        else:
+            label, detail = "DEGRADED", f"could not read ({entry.get('reason')})"
+        lines.append(f"  {label} {entry.get('rig_id')}: {detail}")
     if degraded:
         lines.append(
             f"  {len(degraded)} rig(s) could not be read; totals below are incomplete."
+        )
+    if partial:
+        lines.append(
+            f"  {len(partial)} rig(s) answered from only part of their stores; "
+            "totals below are incomplete."
         )
     lines.append("")
     lines.append(_render_brief_payload(payload))
@@ -403,14 +446,10 @@ def _add_work_dispatch_parser(commands: argparse._SubParsersAction[argparse.Argu
 def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     try:
         if args.brief_command == "list":
-            records = list_briefs(
+            listing = list_briefs_report(
                 context, BriefFilters(args.status, args.label), bodies=args.bodies
             )
-            payload = _brief_payload(
-                context,
-                briefs=[brief.to_dict() for brief in records],
-                diagnostics=brief_command_diagnostics(context, records),
-            )
+            payload = _brief_listing_payload(context, listing)
         elif args.brief_command == "show":
             record = show_brief(context, args.brief_id)
             payload = _brief_payload(
@@ -474,6 +513,12 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(_render_brief_payload(payload))
+    if payload.get(DEGRADED_SOURCES):
+        # The rows printed above are real and worth having; the roster they
+        # came from is not whole. A pipeline reading this as a complete list
+        # is the same mistake `--all-rigs` exits non-zero to prevent, one
+        # scope down.
+        return 1
     # A mutation that reports ERROR or FATAL has not fully succeeded, even
     # when the canonical write landed. Read commands still exit 0 with
     # diagnostics -- reporting drift is what they are for.
@@ -576,6 +621,12 @@ def _render_brief_payload(payload: dict[str, object]) -> str:
     briefs = payload.get("briefs")
     if isinstance(briefs, list):
         lines.append(f"briefs: {len(briefs)}")
+        for entry in payload.get(DEGRADED_SOURCES) or ():
+            if isinstance(entry, dict) and not entry.get("ok"):
+                # Immediately under the count, because the count is what it
+                # qualifies: these rows are what the stores that answered
+                # hold, not what the rig holds.
+                lines.append(f"  INCOMPLETE: {entry.get('reason')}")
         for brief in briefs:
             lines.append(f"  {_brief_line(brief)}")
 

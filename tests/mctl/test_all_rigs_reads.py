@@ -208,7 +208,9 @@ def test_a_rig_that_does_not_answer_in_time_is_degraded_rather_than_holding_the_
     """The deadline is the guard against one wedged rig costing every rig."""
     fixture = multi_rig.build(tmp_path)
 
-    def run(ctx):
+    def run(ctx, progress):
+        # Publishes nothing, so there is no partial answer to harvest: this
+        # rig is degraded outright, exactly as before `RigProgress` existed.
         if ctx.rig_id == "gascity_packs":
             time.sleep(5)
         return {"briefs": [], "diagnostics": []}

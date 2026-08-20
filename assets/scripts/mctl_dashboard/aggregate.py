@@ -31,10 +31,17 @@ class RigView:
     rig_root: str = ""
     rig_db: str = ""
     ok: bool = True
+    #: The rig answered from some of its stores and not others. Its rows ARE
+    #: in `CityView.rows`; the ones its unread stores hold are not. Carried
+    #: separately from `ok` because the page has to say two different things:
+    #: "this rig contributed nothing" and "this rig contributed part of what
+    #: it has" are different instructions to whoever is reading a total.
+    partial: bool = False
     reason: str = ""
     counts: Mapping[str, int] = field(default_factory=dict)
     elapsed_ms: int = 0
     diagnostics: tuple[Mapping[str, Any], ...] = ()
+    degraded_sources: tuple[Mapping[str, Any], ...] = ()
     artifact_trust: Mapping[str, Any] | None = None
 
     @classmethod
@@ -45,10 +52,12 @@ class RigView:
             rig_root=str(entry.get("rig_root") or ""),
             rig_db=str(entry.get("rig_db") or ""),
             ok=bool(entry.get("ok")),
+            partial=bool(entry.get("partial")),
             reason=str(entry.get("reason") or ""),
             counts={str(k): int(v) for k, v in (entry.get("counts") or {}).items()},
             elapsed_ms=int(entry.get("elapsed_ms") or 0),
             diagnostics=tuple(entry.get("diagnostics") or ()),
+            degraded_sources=tuple(entry.get("degraded_sources") or ()),
             artifact_trust=dict(trust) if isinstance(trust, Mapping) else None,
         )
 
@@ -91,15 +100,35 @@ class CityView:
 
     @property
     def degraded(self) -> tuple[RigView, ...]:
+        """Every rig that is not a clean read -- partial ones included.
+
+        Deliberately not narrowed to "contributed nothing". This is what the
+        rig-health panel is built from, and a rig whose bead store went quiet
+        while its documents were read belongs on that panel: its rows are on
+        the page and the rows behind the unread store are not. `RigView.partial`
+        is how the panel tells the two cases apart in its wording.
+        """
         return tuple(rig for rig in self.rigs if not rig.ok)
 
     @property
+    def unreadable(self) -> tuple[RigView, ...]:
+        """Rigs that contributed no rows at all."""
+        return tuple(rig for rig in self.rigs if not rig.ok and not rig.partial)
+
+    @property
+    def partial(self) -> tuple[RigView, ...]:
+        """Rigs that contributed the rows their readable stores hold."""
+        return tuple(rig for rig in self.rigs if rig.partial)
+
+    @property
     def complete(self) -> bool:
-        """Whether every registered rig answered.
+        """Whether every registered rig answered from every one of its stores.
 
         Exposed rather than inferred at each call site: "is this total the
         whole city" is the question a reader most needs answered and least
-        likely to think to ask.
+        likely to think to ask. A partial rig makes it False -- the total is
+        short by whatever its unread store holds, even though the rig is on
+        the page with a count beside it.
         """
         return not self.degraded
 

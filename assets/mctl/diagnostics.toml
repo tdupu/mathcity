@@ -294,6 +294,11 @@ severity = "FATAL"
 meaning = "The explicit MCTL_BEADS_FIXTURE path is not a file."
 module = "context.py"
 
+[MCTL_CITY_RIG_PARTIAL]
+severity = "ERROR"
+meaning = "A rig answered a cross-rig read from some of its stores and not others; its rows are emitted and the unread store is named, because a store that never ran the failing query must not be hidden by one that did."
+module = "city.py"
+
 [MCTL_CITY_RIG_TIMEOUT]
 severity = "ERROR"
 meaning = "A rig did not answer a cross-rig read within the deadline and is reported degraded rather than allowed to hold the whole answer."

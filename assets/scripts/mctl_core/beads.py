@@ -36,6 +36,32 @@ def bd_timeout_seconds() -> int:
     return value if value > 0 else DEFAULT_BD_TIMEOUT_SECONDS
 
 
+#: Slack left between the `bd` subprocess timeout and a caller's own deadline,
+#: so the store reports "I could not answer" a beat before the caller reports
+#: "the read went quiet". The store's sentence is the more useful one: it names
+#: which of a multi-store read's lanes failed.
+BD_DEADLINE_MARGIN_SECONDS = 2.0
+
+
+def bd_timeout_within(remaining: float | None) -> int | None:
+    """The `bd` timeout to use inside a caller's remaining wall-clock budget.
+
+    The default above is 30s and the cross-rig fan-out's deadline is 25s, so
+    a caller that just took the default always lost the race: the fan-out gave
+    up first and reported that the *rig* went quiet, when the fact available
+    one layer down was that the *bead store* did. This bounds the subprocess
+    below whatever budget is actually left.
+
+    It bounds, it does not raise: an operator who lowered
+    `MCTL_BD_TIMEOUT_SECONDS` keeps the lower number. `None` remaining means
+    the caller set no deadline, and the configured value stands.
+    """
+    configured = bd_timeout_seconds()
+    if remaining is None:
+        return configured
+    return max(1, min(configured, int(remaining - BD_DEADLINE_MARGIN_SECONDS)))
+
+
 @dataclass(frozen=True)
 class Bead:
     id: str

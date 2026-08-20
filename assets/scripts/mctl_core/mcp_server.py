@@ -42,18 +42,26 @@ from pathlib import Path
 import sys
 from typing import Any, Callable, Mapping, Sequence
 
+from .beads import bd_timeout_within
 from .briefs import (
     BriefError,
     BriefFilters,
+    BriefListing,
     brief_command_diagnostics,
     brief_options_report,
     doctor_briefs,
-    list_briefs,
+    list_briefs_report,
     show_brief,
     validate_brief,
     validation_scope,
 )
-from .city import for_each_rig, merge_outcomes
+from .city import (
+    ALL_RIGS_DEADLINE_SECONDS,
+    DEGRADED_SOURCES,
+    RigProgress,
+    for_each_rig,
+    merge_outcomes,
+)
 from .context import CityScope, ContextError, MctlContext, resolve_city, resolve_context
 from .diagnostics import Diagnostic, Severity
 from .effects import (
@@ -387,9 +395,15 @@ class ToolSpec:
     description: str
     input_schema: Schema
     output_schema: Schema
-    handler: Callable[[Any, Mapping[str, Any]], dict[str, object]]
+    handler: Callable[..., dict[str, object]]
     mutating: bool = False
     scope: str = RIG_SCOPE
+    #: Whether `handler` takes a third argument, the cross-rig read's
+    #: `RigProgress` slot. Declared rather than sniffed from the signature:
+    #: a tool that quietly stopped accepting it would silently lose its
+    #: partial answers, and that is the failure this whole path is about.
+    #: Ignored on the single-rig path, where there is no deadline to miss.
+    accepts_progress: bool = False
 
     @property
     def cross_rig(self) -> bool:
@@ -445,12 +459,46 @@ def _handle_context_rigs(scope: CityScope, arguments: Mapping[str, Any]) -> dict
     }
 
 
-def _handle_briefs_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
-    records = list_briefs(ctx, _filters(arguments), bodies=bool(arguments.get("bodies")))
-    return {
-        "briefs": [record.to_dict() for record in records],
-        "diagnostics": _diagnostics(ctx, brief_command_diagnostics(ctx, records)),
+def _handle_briefs_list(
+    ctx: MctlContext, arguments: Mapping[str, Any], progress: RigProgress | None = None
+) -> dict[str, object]:
+    """The roster, from both lanes, with either lane's failure named.
+
+    `progress` is the cross-rig read's partial slot. The document lane is
+    published into it before the bead read starts, so a rig whose bead store
+    outlives the fan-out deadline still reports its manifest rows and stack
+    files -- documents on disk that never touched the store that was slow.
+    """
+    listing = list_briefs_report(
+        ctx,
+        _filters(arguments),
+        bodies=bool(arguments.get("bodies")),
+        bead_timeout=None if progress is None else bd_timeout_within(progress.remaining_seconds()),
+        on_documents=(
+            None
+            if progress is None
+            else lambda partial: progress.publish(_briefs_list_payload(ctx, partial))
+        ),
+    )
+    return _briefs_list_payload(ctx, listing)
+
+
+def _briefs_list_payload(ctx: MctlContext, listing: BriefListing) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "briefs": [record.to_dict() for record in listing.records],
+        "diagnostics": _diagnostics(
+            ctx,
+            brief_command_diagnostics(ctx, listing.records)
+            + tuple(
+                diagnostic
+                for outcome in listing.degraded_sources
+                for diagnostic in outcome.diagnostics
+            ),
+        ),
     }
+    if not listing.complete:
+        payload[DEGRADED_SOURCES] = listing.degraded_payload()
+    return payload
 
 
 def _handle_briefs_show(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -756,6 +804,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         handler=_handle_briefs_list,
         artifact_state=True,
+        accepts_progress=True,
     ),
     ToolSpec(
         name="briefs_show",
@@ -1016,6 +1065,9 @@ class MctlMcpServer:
     client_class: str = "external"
     env: Mapping[str, str] = field(default_factory=dict)
     cwd: Path | None = None
+    #: Wall-clock budget for one cross-rig fan-out. Overridable so a test can
+    #: reach the deadline path in under a second instead of twenty-five.
+    all_rigs_deadline: float = ALL_RIGS_DEADLINE_SECONDS
 
     def __post_init__(self) -> None:
         declared = self.env.get(CLIENT_CLASS_ENV) or self.client_class
@@ -1177,12 +1229,21 @@ class MctlMcpServer:
         city = arguments.get("city") or self.default_city
         per_rig = {key: value for key, value in arguments.items() if key not in {"rig", "all_rigs"}}
 
-        def run(ctx: MctlContext) -> dict[str, object]:
-            payload = tool.handler(ctx, per_rig)
+        def finish(ctx: MctlContext, payload: dict[str, object]) -> dict[str, object]:
             payload.setdefault("diagnostics", [])
             if tool.artifact_state:
                 payload = apply_artifact_trust(ctx, payload, assess_artifact_trust(ctx))
             return payload
+
+        def run(ctx: MctlContext, progress: RigProgress) -> dict[str, object]:
+            if not tool.accepts_progress:
+                return finish(ctx, tool.handler(ctx, per_rig))
+            # The handler publishes its own partial answers, and they go
+            # through the same `finish` as the whole one -- a partial payload
+            # that skipped the artifact-trust pass would be the one payload on
+            # this surface carrying artifact state with no verdict beside it.
+            relay = progress.relaying(lambda partial: finish(ctx, partial))
+            return finish(ctx, tool.handler(ctx, per_rig, relay))
 
         try:
             scope, outcomes = for_each_rig(
@@ -1190,6 +1251,7 @@ class MctlMcpServer:
                 city=Path(city) if city else None,
                 env=self.env,
                 run=run,
+                deadline=self.all_rigs_deadline,
             )
         except ContextError as error:
             return _tool_error([error.diagnostic.to_dict()], None)

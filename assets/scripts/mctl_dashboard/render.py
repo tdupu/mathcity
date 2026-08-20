@@ -897,11 +897,19 @@ def city_context_panel(payload: Mapping[str, Any], *, degraded: Sequence[str] = 
 
 
 def degraded_rigs_panel(degraded: Sequence[Any], total: int) -> str:
-    """Name every rig that could not be read, and say the totals are partial.
+    """Name every rig that is not a clean read, and say what that costs.
 
     Silence here would be the worst available behavior: a city-wide page that
     drops a rig without saying so looks complete, and an operator would read
     a missing queue as an empty one.
+
+    Two rows are not the same finding, so they are not worded the same. A rig
+    that could not be read contributes nothing and its briefs are counted
+    nowhere. A **partial** rig contributes the rows its readable stores hold
+    -- they are on this page, in the totals -- and is short only by whatever
+    the store that went quiet holds. Telling an operator that a partial rig's
+    briefs are "counted nowhere" would send them looking for 247 rows that
+    are already in front of them.
     """
     if not degraded:
         return (
@@ -910,23 +918,35 @@ def degraded_rigs_panel(degraded: Sequence[Any], total: int) -> str:
             f'<p class="lede">All {total} registered rigs answered, so the totals on this page '
             "cover the whole city.</p></section>"
         )
+    partial = [rig for rig in degraded if getattr(rig, "partial", False)]
     rows = "".join(
         "<tr>"
         f'<td><span class="mono">{_e(rig.rig_id)}</span></td>'
+        f'<td>{"partial" if getattr(rig, "partial", False) else "unreadable"}</td>'
         f"<td>{_e(rig.reason)}</td>"
         f'<td><a href="/briefs?rig={quote(rig.rig_id, safe="")}">read this rig alone</a></td>'
         "</tr>"
         for rig in degraded
     )
     diagnostics = [item for rig in degraded for item in rig.diagnostics]
+    partial_note = (
+        ""
+        if not partial
+        else (
+            f" {len(partial)} of them answered from only <em>part</em> of their stores "
+            "(marked <strong>partial</strong>): the rows those stores hold are counted here, "
+            "and the rows behind the store that did not answer are not."
+        )
+    )
     return (
         '<section class="panel untrusted" data-region="degraded-rigs" '
-        f'data-degraded-count="{len(degraded)}">'
+        f'data-degraded-count="{len(degraded)}" data-partial-count="{len(partial)}">'
         f"<h2>Degraded rigs ({len(degraded)} of {total})</h2>"
         '<p class="lede"><strong>The totals on this page are incomplete.</strong> These rigs '
-        "could not be read, so their briefs are counted nowhere. Every other rig still "
-        "reports normally.</p>"
-        '<div class="scroll-x"><table><thead><tr><th>Rig</th><th>Why</th><th></th></tr></thead>'
+        "could not be read in full, so some briefs are counted nowhere."
+        f"{partial_note} Every other rig still reports normally.</p>"
+        '<div class="scroll-x"><table><thead><tr><th>Rig</th><th>State</th><th>Why</th>'
+        "<th></th></tr></thead>"
         f"<tbody>{rows}</tbody></table></div>"
         + diagnostic_list(diagnostics, empty="No further detail was reported.")
         + "</section>"
