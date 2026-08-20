@@ -154,11 +154,25 @@ That is still a wrong answer presented as a right one, which is why the
 degraded rigs are named in the output rather than absorbed. Never report the
 table without the banner when `DEGRADED` rows exist.
 
-**`gt-*` is still not covered by `--all-rigs`.** `gt-*` beads live in the
-city-root HQ store, which is **not a registered rig** in `city.toml`, so it is
-not in the roster `--all-rigs` enumerates — its absence is not a degraded rig
-and will not appear in `DEGRADED` rows. For `gt-*` and any other id absent
-from the rig registry, the direct probe is the only path:
+**`gt-*` / HQ IS in the `--all-rigs` roster (changed 2026-08-19).** The
+city-root HQ store has no `[[rigs]]` entry in `city.toml`, but
+`mctl_core/context.py::city_rig_entries` **synthesises** a reserved `hq` entry
+for it whenever `<city-root>/.beads/config.yaml` exists and no configured rig
+claims the name (commit `effa679`). So HQ is enumerated, it is read like any
+other rig, and **it can and does appear in `DEGRADED` rows** — it is a large
+store and the first thing observed to hit the 25s deadline:
+
+```
+DEGRADED  hq  ->  Rig 'hq' did not answer within 25s and is reported as degraded.
+```
+
+Treat that as a real degraded rig, not as noise. Do NOT assume an id is missing
+from the roster just because its rig is absent from `city.toml`;
+`city_rig_entries` is the authority, not the config file.
+
+`gt-*` ids are therefore covered by the STATE rows like any other rig when HQ
+answers. The direct probe below remains the fallback for when HQ is degraded,
+and for any id whose prefix is in no registered rig at all:
 
 ```bash
 bead_status=$(cd "$CITY_ROOT" && bd show "$TARGET" 2>/dev/null \
@@ -242,8 +256,9 @@ their data. Do **not** invent an mctl subcommand to close these:
   is city-root-level and cross-rig (`<city-root>/.beads/briefs/stack`). Every
   artifact therefore reports `missing` in the live deployment, so step 2 keeps
   scanning `$STACK_DIR` directly.
-- **The `gt-*` HQ store** — not a registered rig, so no `--rig` and no
-  `--all-rigs` read can address it. See the fallback in step 3.
+- ~~**The `gt-*` HQ store**~~ — no longer a gap. `city_rig_entries`
+  synthesises a reserved `hq` rig for the city-root store, so `--all-rigs`
+  covers it. See step 3.
 
 Cross-rig *assembly* is no longer on this list: `--all-rigs` owns it. Do not
 reintroduce a per-rig loop here.
