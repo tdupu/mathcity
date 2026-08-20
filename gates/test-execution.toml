@@ -58,7 +58,7 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/gate-test-execution-declaration.sh"
+path = "../assets/scripts/checks/gate-test-execution-declaration.sh"
 timeout = "1m"
 
 # ---------------------------------------------------------------------------
@@ -106,5 +106,5 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/gate-test-execution-evidence.sh"
+path = "../assets/scripts/checks/gate-test-execution-evidence.sh"
 timeout = "2m"

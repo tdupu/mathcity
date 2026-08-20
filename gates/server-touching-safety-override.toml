@@ -79,5 +79,5 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-server-touching-safety.sh"
+path = "../assets/scripts/checks/brief-server-touching-safety.sh"
 timeout = "30s"

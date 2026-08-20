@@ -118,7 +118,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/latex-gate-approval-required.sh"
+path = "../assets/scripts/checks/latex-gate-approval-required.sh"
 timeout = "5m"
 # The check script reads its inputs from the ambient environment (same
 # convention as brief-check.sh reading GC_BEAD_ID). The runner must export:

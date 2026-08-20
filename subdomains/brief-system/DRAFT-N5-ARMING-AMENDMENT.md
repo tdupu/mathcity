@@ -1,15 +1,51 @@
-# DRAFT — N5: dry-run as a runtime mode (NOT ADOPTED)
+# N5: dry-run as a runtime mode — proposal, and the owner's ruling
 
-**Status: DRAFT. Not adopted. Not in force.** This document proposes an
-amendment to `subdomains/brief-system/POLICY.md` rule **N5**. It must go
-through `new-brief-policy` and be adjudicated before any of it becomes
-policy. Nothing here has been written into POLICY.md.
+**Status: the inversion proposed here was DECLINED. ARMED remains the default
+and N5 stands as adopted.** The implemented behaviour matches N5: the mode
+tokens are brakes, not enablers, and an absent token means auto-execute.
 
-**Date:** 2026-08-19 · **Author:** implementation agent · **Adjudicator:** the human adjudicator
+**No POLICY.md amendment is required or proposed any more.** This document is
+retained as the decision record for why the question was raised, what was
+argued on both sides, and what was built as a result. The rejected argument is
+kept in full rather than deleted — a rejected argument that is written down is
+worth more than one that vanishes, and if the classifier's measured α ever
+comes in badly this is the analysis someone will want.
+
+**Date:** 2026-08-19 · **Author:** implementation agent · **Adjudicator:** the owner
+
+## 0. The ruling
+
+Proposed: invert N5 so an absent token means DRY-RUN, requiring a positive
+token to auto-execute. **The owner declined it.** Verbatim: *"Yeah, no. That's
+not the default."*
+
+**ARMED is the default.** Unset or absent tokens mean auto-execute; a token
+reading `false` pins DRY-RUN. Brakes, not enablers — which is what
+`paths.toml` and N5 already said, and what the doctrine has said since
+2026-06-23. This restores the stated design rather than changing it.
+
+The argument in §2a below was relayed in full and lost on the merits.
+
+**What shifted underneath it, and this matters:** the case for a dry-run
+default rested on the gate being untrustworthy — and it was, in four separate
+ways documented in §1.3. Those are now fixed. Arming a gate that refuses
+category E from frontmatter, refuses unresolvable briefs, refuses missing
+classifier evidence, and refuses sub-threshold confidence is a materially
+different act from arming the gate that permitted all four on the morning of
+2026-08-19. The safety work is what makes the default defensible; the default
+was never the safety mechanism.
+
+**Implemented accordingly:** absent → ARMED, `false` → pinned DRY-RUN
+(recorded distinguishably), `false` + `expires=` → temporary pin that
+auto-resumes, unreadable → DRY-RUN. Either level alone can pin, so stopping
+automation stays a one-place act.
 
 ---
 
-## 1. Why this is being proposed
+
+---
+
+## 1. Why the question was raised
 
 The owner's directive, as refined mid-task, is that **dry-run should be a
 runtime mode that can be turned on and off** — not a designation that gets
@@ -19,11 +55,11 @@ or ARMED (classify and execute), the active mode is observable on demand, and
 it flips in both directions at runtime without editing any skill or formula
 file. Returning to dry-run is one command and is always permitted.
 
-What follows is about the remaining open question — **which mode an
-unconfigured city should be in** — plus the mechanism work that had to happen
-before ARMED was reachable at all. Acting on "just take it off dry-run"
-literally would have been unsafe, for a reason that only shows up when you
-look at the mechanism rather than the documents.
+What follows is the mechanism work that had to happen before ARMED was safe to
+reach at all, plus the now-settled question of which mode an unconfigured city
+is in (§0: ARMED). Acting on "just take it off dry-run" literally, on the
+morning of 2026-08-19, would have been unsafe — for a reason that only shows
+up when you look at the mechanism rather than the documents.
 
 The `catch-no-brainer` skill carried the designation **"PRELIMINARY v0.2 —
 DRY-RUN ONLY"**. That designation was, in practice, *the entire safety
@@ -71,7 +107,7 @@ standing between the live brief corpus (89 files in
 `<city-root>/.beads/briefs/stack/`, measured this session) and city-wide
 auto-execution was a line of prose in a skill file's header.*
 
-## 2. The specific defect in N5 as written
+## 2. The argued defect in N5 as written (superseded by the ruling)
 
 N5 says: *"automation runs unless a kill switch is ENGAGED"*, with
 **absent or `true` → proceed** at both levels.
@@ -100,7 +136,7 @@ Absent-means-go is the wrong default for an irreversible action:
   unattended execution to a classifier whose accuracy is by its own policy's
   admission unknown.
 
-## 2a. The default is the real question — recommendation and reasoning
+## 2a. The declined argument (preserved) — why I recommended a dry-run default
 
 There is a genuine tension here and it deserves a straight answer rather than
 a silent choice.
@@ -117,8 +153,8 @@ already assumes it happened: `present-it` consumes `compact_eligible`.
 Dry-run was a proving state that outlasted its purpose by two months, not a
 deliberate resting place. I accept that reading.
 
-**Recommendation: default DRY-RUN. Destination ARMED, per category, on
-measured evidence.**
+**Recommendation (DECLINED by the owner, 2026-08-19): default DRY-RUN;
+destination ARMED, per category, on measured evidence.**
 
 The argument for "default armed" is an argument about the *destination*, and
 it is correct about the destination. It is being used to settle a different
@@ -174,107 +210,108 @@ Three things decide it:
 The mode being a toggle is what makes this cheap: choosing dry-run today does
 not cost a code change later, it costs one file.
 
-## 3. Proposed amendment
+## 3. What was built (N5-conformant, no amendment needed)
 
-Replace N5's switch model with **a two-position runtime mode**: brakes
-(unchanged, still halt) plus a positive arming token that selects ARMED.
+N5's switch model is unchanged in substance — brakes, not enablers — and gains
+a two-position runtime mode with an observable state and a one-command
+rollback. The text below describes the implemented behaviour. It is NOT a
+proposed policy edit; it is here so the mechanism is written down somewhere
+normative-looking without pretending to be policy.
 
-> **N5 Auto-execution is a runtime mode; DRY-RUN is the default; kill
-> switches remain brakes.**
+> **Auto-execution is a runtime mode; ARMED is the default; the tokens and
+> kill switches are brakes.**
 > When the classifier returns a confident registry-backed classification AND
 > all stop gates pass, the brief auto-executes without surfacing to the human
 > adjudicator **only if the executing rig is ARMED**. Otherwise the brief
 > stays on the human presentation path — unarmed behaves exactly like a dry
 > run.
 >
-> - **Arming tokens (positive, both required).**
->   `<city-root>/.beads/no_brainer_auto_execute_armed` **and**
->   `<rig_root>/.beads/no_brainer_auto_execute_armed`. A token selects ARMED
->   when its first line is exactly `true`; it MAY carry a second line
->   `expires=<ISO-8601-utc>`, past which it lapses back to DRY-RUN on its own.
->   A token reading `false` **pins** DRY-RUN. Absent, malformed, expired, or
->   pinned at either level → DRY-RUN. Both tokens are required to reach ARMED
->   so that arming is a per-rig decision and no single act can arm the whole
->   city.
+> - **Mode tokens (brakes).**
+>   `<city-root>/.beads/no_brainer_auto_execute_armed` and
+>   `<rig_root>/.beads/no_brainer_auto_execute_armed`. **Absent → ARMED**;
+>   `true` → ARMED (explicit, same effect); `false` → DRY-RUN pinned;
+>   `false` with `expires=<ISO-8601-utc>` → DRY-RUN until that instant, then
+>   the ARMED default resumes on its own; anything unreadable → DRY-RUN.
+>   **Either level alone** can pin DRY-RUN, so stopping automation is a
+>   one-place act.
+> - **Unreadable is not consent.** An absent token means "take the default";
+>   a malformed one means "somebody tried to say something we cannot read".
+>   Those are different claims, and only the first is a default. mctl's live
+>   dispatch resolves the same ambiguity the same way.
 > - **The mode toggles in both directions at runtime**, with no edit to any
 >   skill or formula file, and the active mode MUST be answerable on demand
->   (`brief-check.sh no-brainer-mode`). Returning to DRY-RUN is always
->   permitted, needs no authorization, takes effect immediately, and has a
->   one-command form (`brief-check.sh no-brainer-disarm`). Reaching ARMED
->   takes two deliberate acts; leaving it takes one. That asymmetry is
->   intentional: the recovery path must be the easier one.
-> - **A pinned DRY-RUN is recorded distinguishably from a never-armed one**,
->   in both the audit trail and the mode report, so an operator can confirm a
->   rollback actually landed instead of inferring it from silence.
-> - **Kill switches (negative, retained).** `auto_merge_enabled` at city then
->   rig level: a file that exists and reads `false` halts, exactly as before.
->   A released brake is **not** an arming signal.
-> - **Stop gates outrank both.** Category E / server-touching, G5b
->   user-skill-touching, L4, and `classifier_state=safety_blocked` refuse
->   auto-execution regardless of arming or switch state. This is a stop-gate,
->   not a preference.
-> - **Authorization.** Creating or renewing either token requires explicit
->   human authorization recorded as a STANDALONE decision bead, on the same
->   terms N5 already requires for engaging or releasing a brake. Disarming
->   requires nothing — deleting either file is always allowed and always
->   takes effect immediately.
+>   (`brief-check.sh no-brainer-mode`). Pinning DRY-RUN is always permitted,
+>   needs no authorization, takes effect immediately, and has a one-command
+>   form (`brief-check.sh no-brainer-disarm`) that works from any rig.
+>   Returning to ARMED is a deliberate `rm` of the tokens. The easy direction
+>   is the safe one.
+> - **Stop gates outrank the mode entirely.** Category E / server-touching,
+>   G5b user-skill-touching, L4, and `classifier_state=safety_blocked` refuse
+>   regardless of mode or switch state, and are evaluated before either is
+>   read. This is the property the armed default rests on.
+> - **A pinned DRY-RUN is recorded distinguishably** from an unreadable token
+>   and from the absent default, in both the audit trail and the mode report,
+>   so an operator can confirm a rollback landed instead of inferring it.
 > - **Executor check order:** (1) resolve the brief, refuse if unresolvable;
->   (2) stop gates; (3) classifier evidence; (4) kill switches; (5) arming
->   tokens; (6) execute. A refusal at any step routes the brief to the pile
->   in compact form and is never silent.
+>   (2) stop gates; (3) classifier evidence; (4) kill switches; (5) mode;
+>   (6) execute. A refusal at any step is audited and never silent.
 
-Consequential edits if adopted: **G12** (`gates.toml`) description; **B2.9**
-and **N7** to name the execution audit log; `paths.toml`
-`arm_token_city` / `arm_token_rig` / `no_brainer_execution_log`; and the N5
-prose in `formulas/no-brainer-classify.toml`, `skills/create-brief/SKILL.md`,
-`skills/brief-prep/SKILL.md`, `docs/CITY-OPERATION-REFERENCE.md`,
-`subdomains/brief-system/DOGFOOD.md`.
+## 4. What is implemented, and what is policy
 
-## 4. Relationship to what has already been implemented
+The mode and the gate are **implemented and tested**: `brief-check.sh
+no-brainer-execute-safety` (the gate), `no-brainer-mode` (observe),
+`no-brainer-disarm` (roll back), with 33 cases in
+`tests/brief-no-brainer-arming/test_no_brainer_arming.sh` — including the
+toggle proven in both directions, a full armed → dry-run → armed → dry-run
+round trip, category E refused across toggles, and the audit contract.
 
-The mode and the gate described above are **implemented and tested** as of
-this branch — `brief-check.sh no-brainer-execute-safety` (the gate),
-`no-brainer-mode` (observe), `no-brainer-disarm` (roll back) — with 30 cases
-in `tests/brief-no-brainer-arming/test_no_brainer_arming.sh`, including the
-toggle proven in **both** directions and a full dry-run → armed → dry-run →
-armed round trip. The policy text is **not** amended.
+**`POLICY.md` is untouched and needs no amendment.** The implementation now
+matches N5 as adopted, which is the whole point of the ruling: the earlier
+divergence (a conservative arming requirement) has been removed rather than
+regularised. `paths.toml`, `gates.toml` G12, the formula, the skill,
+`CITY-OPERATION-REFERENCE.md` and `DOGFOOD.md` all state the ARMED default.
 
-This is a deliberate and, I think, defensible asymmetry: the implemented gate
-is **strictly more conservative** than N5 as adopted. It refuses in cases
-where policy would permit; it never permits where policy would refuse. A gate
-that under-permits cannot cause the harm N5 exists to prevent, whereas
-waiting for adjudication before fixing a fail-open execution path would leave
-the fail-open path in place in the meantime.
+## 5. Consequence of the ruling: the install gap is now load-bearing
 
-It is still drift, and it should not be left standing. Adopting this
-amendment closes it. **Rejecting** this amendment also closes it — in that
-case the arming requirement should be removed from `brief-check.sh` and the
-other fixes (stop-gate coverage, fail-closed brief resolution, classifier
-evidence, audit trail) kept, since none of those depend on it.
+Under a dry-run default, one caveat was minor. Under an armed default it is
+the whole safety story, and it should be tracked as its own work:
 
-## 5. Recommendation on the owner's actual request
+**The gate scripts are installed in one rig.** Formulas exec their checks at
+`<rig_root>/.gc/scripts/checks/…`. That directory exists in **hecke and
+gascity-packs only** — and only hecke actually carries
+`brief-no-brainer-execute-safety.sh`. It is **absent from every
+`mathcity.brief-operator*` rig**, which is the pool the `no-brainer-process`
+order actually runs in. Flagged as D9 in the 2026-08-19 drift audit and
+originally in `DOGFOOD.md` on 2026-07-11.
 
-The owner asked for a mode that turns on and off. **That exists now, in both
-directions, and it is tested in both directions.** What remains is the
-default, and my recommendation is to **leave the default at DRY-RUN and not
-arm anything yet** — see §2a for the full argument.
+**Reading of the runner says this fails closed** (gascity
+`internal/convergence/condition.go::ResolveConditionPath` errors on a
+non-existent path — its own comment: *"a dangling or unresolvable
+conditionPath must fail gate resolution here"* — and
+`internal/dispatch/ralph.go` returns that error to the caller without ever
+reaching `GatePass`). **This was NOT executed**: the gascity module does not
+build in this environment (`go-icu-regex` needs ICU headers that are not
+installed), so the claim rests on code reading plus an upstream test that
+asserts the error return, not on a run.
 
-The reason is no longer the switch; the switch is real now. It is N8: the
-classifier is PRELIMINARY, and α has never been measured because the ledger
-was never written. The audit log added in this branch
-(`decisions/no-brainer-execution.jsonl`) **is** that ledger. The sequence that
-gets the owner what they actually want:
+Two things follow:
 
-1. Land this branch. Dry-run is a mode, not a designation; the gate is real;
-   the mode is observable and reversible.
-2. Run the pipeline in DRY-RUN over live briefs. Every evaluation writes a
-   `REFUSED / not_armed` audit line carrying the category and confidence that
-   *would* have executed. Shadow mode, zero risk, and it is the first time
-   N8's substrate has ever existed.
-3. When enough rows exist, compute α per category and compare to `S/(S+T)`.
-4. Arm **one** rig with an `expires=` token measured in days. Watch the log.
-   Widen on evidence, or `no-brainer-disarm` and go back to step 2.
+1. **Install the checks into every rig that runs the pool**, so the gate's
+   protection does not depend on the runner's failure mode at all. This is
+   the real fix and it is a one-line consequence of D9.
+2. Until then, the pack-side invariant is pinned by test 31: no formula in
+   this pack may reference a check script the pack does not ship. That closes
+   the drift this repo controls; it does not close the install gap.
 
-Nothing in this branch armed anything: no arming token exists in the live
-city, `<city-root>/.beads/auto_merge_enabled` is untouched, and no brief, bead,
-or order was executed.
+## 6. Where the declined argument would become relevant again
+
+Not a re-litigation, a tripwire. The audit ledger now being written
+(`decisions/no-brainer-execution.jsonl`) records category and confidence on
+every PERMITTED line, which makes N8's α computable for the first time. If α
+for any category exceeds `S/(S+T)`, N8 already requires that category's
+threshold be raised or the category removed — no amendment needed, that is
+adopted policy. §2a is the analysis to reach for if that happens.
+
+Nothing in this branch armed or disarmed anything in the live city: no mode
+token exists anywhere under the city root, `<city-root>/.beads/auto_merge_enabled`
+is untouched at its 2026-07-15 mtime, and no brief, bead, or order was executed.

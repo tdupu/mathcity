@@ -111,7 +111,7 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/decision-record-exists.sh"
+path = "../assets/scripts/checks/decision-record-exists.sh"
 timeout = "1m"
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/decision-alignment-check.sh"
+path = "../assets/scripts/checks/decision-alignment-check.sh"
 timeout = "1m"
 
 # ---------------------------------------------------------------------------

@@ -86,6 +86,6 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-breadcrumb-required.sh"
+path = "../assets/scripts/checks/brief-breadcrumb-required.sh"
 timeout = "1m"
 

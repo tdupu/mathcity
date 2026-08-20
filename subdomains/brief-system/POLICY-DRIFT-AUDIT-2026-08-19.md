@@ -247,6 +247,64 @@ Formulas exec checks at `.gc/scripts/checks/…`. That directory exists in **hec
 
 `DOGFOOD.md:39` flagged this on 2026-07-11. It is still true 5 weeks later. Every gate whose only enforcer is a check script is therefore unenforced everywhere except hecke.
 
+**RESOLVED 2026-08-19 — and the diagnosis above is wrong in its second half.**
+Re-measured and then tested by execution:
+
+- *The rig count was a category error.* `mathcity.brief-operator{,-1,-3,-5,-8}` are
+  not rigs. `gc rig list` knows one rig here, `mathcity` at `<city-root>/mathcity`;
+  the `mathcity.brief-operator*` directories are agent session homes holding
+  per-bead work dirs. `<city-root>/hecke/.gc/scripts/checks` is the only such
+  directory anywhere under the city root.
+- *There is no install mechanism to be behind on.* gascity contains no code that
+  materializes pack `assets/scripts/checks/*` into any `.gc/scripts/checks/`.
+  The only `.gc/scripts` staging is `cmd/gc/template_resolve.go`, which copies
+  the **city-level** `<city-root>/.gc/scripts` into agent runtimes; that
+  directory holds only `gc-beads-bd.sh`. Hecke's 28 files are a hand-install
+  dated 2026-07-11 that matches no committed pack revision and had drifted five
+  weeks stale (`brief-check.sh`: 9,093 B installed vs 38,801 B shipped). An
+  installed-but-stale enforcer is worse than an absent one, because it reports
+  PASS under superseded rules. The belief that a copy happens traces to
+  `subdomains/dev/docs/CODEX-REVIEW-RESPONSE-2026-07-08.md`, which recorded it
+  as a to-be-verified assumption ("Verify the pack materialization copies
+  `assets/scripts/checks/*` into `.gc/scripts/checks/`") and it was never
+  verified.
+- *The supported mechanism is a path form, not an install.* `path =
+  "../assets/scripts/checks/<name>.sh"` is resolved by
+  `internal/formula/parser.go::resolveCheckPaths` at cook time to the absolute
+  path of the highest-priority formula layer that ships the script, and the
+  ralph runner trusts it via `FormulaSearchPaths`. Under the v2 graph compiler
+  a path no layer ships is a **compile error**, surfacing at cook time instead
+  of as a runtime resolution failure. gascity's own test names this "the chain
+  the brittle `.gc/scripts/checks/...` references are migrating to".
+- *Fail-closed is now measured, not inferred.* With the check script absent,
+  `runRalphCheck` returns `resolving check path: … no such file or directory`
+  and an empty `GateResult`; `processRalphCheck` propagates that error, reports
+  no `pass` action, and leaves the logical bead open with no `gc.outcome`. The
+  same harness returns `pass` for a present script exiting 0 and `fail` for one
+  exiting 1, so the absent case is distinguishable from both. (Executed against
+  `internal/dispatch` with an injected test; the go-icu-regex build blocker is
+  not real — `icu4c@78` is installed and `CGO_CXXFLAGS=-I$(brew --prefix
+  icu4c@78)/include` builds the module.)
+
+**Remediation applied:** all 28 check-path declarations in `formulas/` and
+`gates/` migrated from `.gc/scripts/checks/…` to `../assets/scripts/checks/…`.
+Verified by compiling every affected formula through the live `gc` binary: each
+`gc.check_path` is now an absolute path to a script that exists, and the real
+`brief-no-brainer-execute-safety.sh` was executed through the ralph runner in a
+rig with no `.gc/scripts/checks` at all, returning a genuine refusal. Test 31 in
+`tests/brief-no-brainer-arming/` was updated to assert the new form and to fail
+on any regression to the legacy one.
+
+**Open, NOT fixed — read before arming anything.** `check_no_brainer_execute_safety`
+resolves the category registry as the CWD-relative literal
+`assets/brief-pipeline/no-brainer-categories.toml` (`brief-check.sh`). The check
+runs with CWD set to the agent work dir, not the pack root, so that file is
+absent and every candidate refuses `classifier_evidence_invalid` no matter how
+well-classified it is. The direction is safe — it refuses, never permits — but
+it means the ARMED gate cannot currently PERMIT at all, and the refusal reason
+misdescribes the cause. Deliberately left unfixed here: making a safety gate
+newly capable of permitting is an adjudicated change, not a drive-by.
+
 ### D10. B2.5's ordering rule is not what the presenters do (**MEASURED**)
 
 B2.5: *"the presenter computes unlock_count from live dependency data at presentation time."* Both `check-briefs` and `present-briefs` read `unlock_count` from frontmatter, `0` if absent. 29/89 stack files carry no `unlock_count`; 27 more carry `0`. Given that only 60/264 decision beads have any dependency edge at all, a live computation would return 0 for nearly everything anyway — so the rule is both unimplemented and, as written, not currently computable to a useful value.

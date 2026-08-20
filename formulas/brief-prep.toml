@@ -104,7 +104,7 @@ max_attempts = 3
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-test-evidence-required.sh"
+path = "../assets/scripts/checks/brief-test-evidence-required.sh"
 timeout = "2m"
 
 [[steps]]
@@ -148,6 +148,6 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-pile-entry-required.sh"
+path = "../assets/scripts/checks/brief-pile-entry-required.sh"
 timeout = "2m"
 

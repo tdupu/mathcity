@@ -179,7 +179,7 @@ max_attempts = 2
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-shuffle-result-required.sh"
+path = "../assets/scripts/checks/brief-shuffle-result-required.sh"
 timeout = "2m"
 
 [[steps]]
@@ -219,5 +219,5 @@ max_attempts = 1
 
 [steps.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/brief-staging-clear.sh"
+path = "../assets/scripts/checks/brief-staging-clear.sh"
 timeout = "1m"

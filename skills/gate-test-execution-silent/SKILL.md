@@ -34,12 +34,18 @@ Brief markdown file path. Accepts any of:
 
 ## Check procedure (two steps)
 
+Both check scripts ship in the pack at `<mathcity-pack-root>/assets/scripts/checks/`.
+No rig carries a `.gc/scripts/checks/` — nothing in gascity installs one — so resolve
+`<mathcity-pack-root>` at runtime from the `Source:` line of
+`gc order show brief-review-patrol`. It is the city.toml import source, which is not
+necessarily `<city-root>/mathcity`.
+
 ### Step 1 — declaration check
 
 If the check script exists, run it:
 
 ```sh
-GC_BRIEF_PATH="<path>" sh .gc/scripts/checks/gate-test-execution-declaration.sh
+GC_BRIEF_PATH="<path>" sh <mathcity-pack-root>/assets/scripts/checks/gate-test-execution-declaration.sh
 ```
 
 If the script is unavailable, apply the grep directly:
@@ -69,7 +75,7 @@ Only when step 1 found `test-execution: PASSED` or `G14_test_execution_silent: P
 that §5 (or a cited artifact) contains all three evidence fields. Run:
 
 ```sh
-GC_BRIEF_PATH="<path>" sh .gc/scripts/checks/gate-test-execution-evidence.sh
+GC_BRIEF_PATH="<path>" sh <mathcity-pack-root>/assets/scripts/checks/gate-test-execution-evidence.sh
 ```
 
 Or grep directly for:
@@ -119,4 +125,4 @@ When this gate emits FAIL, the shuffler or gate-keep orchestrator MUST:
 
 - **v1.0** (2026-07-12, `he-8akk`): initial implementation.
   Detection: tri-state `test-execution:` frontmatter + legacy `gate_status.G14_test_execution_silent` compat.
-  Evidence check delegates to `.gc/scripts/checks/gate-test-execution-evidence.sh`.
+  Evidence check delegates to `<mathcity-pack-root>/assets/scripts/checks/gate-test-execution-evidence.sh`.

@@ -59,6 +59,30 @@ require_dir() {
   [ -d "$path" ] || fail "missing directory: $path"
 }
 
+# pack_asset <path-under-assets/> -- locate a file that ships in this pack,
+# without depending on the working directory.
+#
+# Since cc58a95 check scripts are resolved FROM THE PACK at cook time
+# (`path = "../assets/scripts/checks/<name>.sh"`), but the ralph runner still
+# runs them with the agent work dir as cwd, which is never the pack root. A
+# cwd-relative literal thus resolves to nothing in production even though it
+# resolves fine under the test suite, which runs from the pack root. Anchor on
+# the script's own location instead: assets/scripts/checks/.. /.. -> assets.
+#
+# Always exits 0 and always prints a path, so `set -e` cannot trip here and the
+# caller's own -f test remains the thing that decides. When the asset cannot be
+# found the cwd-relative form is printed unchanged, so callers that refuse on a
+# missing file go on refusing exactly as before.
+pack_asset() {
+  pa_rel="$1"
+  pa_assets="$(CDPATH= cd -- "$(dirname -- "$0")/../.." 2>/dev/null && pwd || true)"
+  if [ -n "$pa_assets" ] && [ -f "$pa_assets/$pa_rel" ]; then
+    printf '%s\n' "$pa_assets/$pa_rel"
+    return 0
+  fi
+  printf '%s\n' "assets/$pa_rel"
+}
+
 require_text() {
   path="$1"
   pattern="$2"
@@ -515,25 +539,22 @@ check_no_brainer_classification_evidence() {
 #   3. classifier evidence               -> REFUSE  classifier_not_no_brainer
 #                                                 / classifier_evidence_invalid
 #   4. N5 kill switch reads `false`      -> REFUSE  kill_switch_engaged
-#   5. not explicitly armed              -> REFUSE  not_armed / arming_expired
+#   5. DRY-RUN pinned or token unreadable-> REFUSE  dry_run_pinned /
+#                                                   dry_run_token_invalid
 #   6. otherwise                         -> PERMIT
 #
-# Steps 1-3 are evaluated BEFORE any switch or arming state is consulted, so a
+# Steps 1-3 are evaluated BEFORE any switch or mode state is consulted, so a
 # server-touching brief is refused regardless of how the city is configured.
 #
-# Step 5 inverts the historic absent-means-go default.  Auto-execution is an
-# irreversible act driven by a classifier whose own header still reads
-# PRELIMINARY; it now requires a positive, revocable, expiring token at BOTH
-# the city and the rig level.  This mirrors mctl's already-adopted
-# MCTL_ENABLE_LIVE_DISPATCH doctrine ("not armed: behave exactly like a dry
-# run") rather than N5's brakes-only model.  The N5 brakes are retained and
-# still halt, so an engaged kill switch keeps working exactly as before.
+# ARMED is the DEFAULT (POLICY.md N5 Adopted 2026-07-12, reaffirmed by the
+# owner 2026-08-19): the mode tokens are brakes, not enablers, so an absent
+# token proceeds.  What makes that default safe is steps 1-3 and the audit
+# record, not the token -- this gate previously permitted a `server_touching:
+# true` brief, an unresolvable path, a brief with no classifier evidence, and
+# confidence=0.5, all of which now refuse.
 #
-# POLICY.md N5 as Adopted (2026-07-12) still states absent-or-true = proceed.
-# The divergence here is deliberate and strictly conservative -- this gate
-# refuses in cases policy would permit, never the reverse.  The corresponding
-# N5 amendment is DRAFTED, not adopted:
-#   subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md
+# `brief-check.sh no-brainer-mode` reports the active mode; `no-brainer-disarm`
+# pins DRY-RUN in one command from any rig, needing no authorization.
 # ---------------------------------------------------------------------------
 
 NB_CLASSIFIER_VERSION="mathcity.catch-no-brainer v0.4 (PRELIMINARY)"
@@ -555,13 +576,30 @@ nb_flag_state() {
   esac
 }
 
-# absent | disarmed | invalid | expired | armed
+# absent | armed | disarmed | pin_expired | invalid
 #
-# `disarmed` is an EXPLICIT pin back to dry-run (the token reads `false`), and
-# is deliberately distinct from `absent` (never armed). Both mean dry-run;
-# only the audit trail and the mode report can tell you which, and that
-# difference is what lets an operator confirm a rollback actually landed
-# rather than inferring it from silence.
+# The token is a BRAKE, not an enabler (paths.toml's standing language, and
+# the owner's ruling of 2026-08-19): ARMED is the default, so an ABSENT token
+# means auto-execute. Only a token that positively says `false` pins DRY-RUN.
+#
+#   absent       -> ARMED   (default; nobody has pinned this rig)
+#   true         -> ARMED   (explicit, same effect as absent)
+#   false        -> DRY-RUN (pinned by a deliberate act)
+#   false+expires-> DRY-RUN until the instant given, then the ARMED default
+#                   resumes on its own -- a TEMPORARY disarm, for pinning
+#                   dry-run across a migration without having to remember to
+#                   undo it
+#   anything else-> DRY-RUN (invalid)
+#
+# `invalid` refusing is not an exception to brakes-not-enablers. An ABSENT
+# token is "nobody configured this, take the default"; a MALFORMED token is
+# "somebody tried to say something and it cannot be read", which is not the
+# same claim. mctl's live-dispatch doctrine already resolves that ambiguity
+# the same way -- an unknown control plane refuses rather than proceeds.
+#
+# `disarmed` stays distinct from `absent` in the audit trail and the mode
+# report, so an operator can confirm a rollback actually landed rather than
+# inferring it from silence.
 nb_arm_state() {
   path="$1"
   if [ ! -f "$path" ]; then
@@ -569,21 +607,22 @@ nb_arm_state() {
     return 0
   fi
   case "$(head -n 1 "$path" | tr -d '[:space:]')" in
-    true) : ;;
-    false) printf 'disarmed\n'; return 0 ;;
+    true) printf 'armed\n'; return 0 ;;
+    false) : ;;
     *) printf 'invalid\n'; return 0 ;;
   esac
+  # Only a `false` pin carries an expiry: it bounds how long DRY-RUN is held.
   expires="$(grep -Eo '^expires=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "$path" | head -n 1 | cut -d= -f2)"
   if [ -n "$expires" ]; then
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     # ISO-8601 UTC sorts lexicographically, so no date arithmetic is needed.
     if [ "$(printf '%s\n%s\n' "$expires" "$now" | sort | tail -n 1)" = "$now" ] &&
        [ "$now" != "$expires" ]; then
-      printf 'expired\n'
+      printf 'pin_expired\n'
       return 0
     fi
   fi
-  printf 'armed\n'
+  printf 'disarmed\n'
 }
 
 # Durable audit record.  N7 requires that an auto-execution be reconstructable
@@ -643,10 +682,16 @@ nb_resolve_mode() {
   NB_KS_RIG="$(nb_flag_state "$NB_RIG_ROOT/.beads/auto_merge_enabled")"
   NB_ARM_CITY="$(nb_arm_state "$NB_ARM_CITY_PATH")"
   NB_ARM_RIG="$(nb_arm_state "$NB_ARM_RIG_PATH")"
-  if [ "$NB_ARM_CITY" = "armed" ] && [ "$NB_ARM_RIG" = "armed" ] &&
-     [ "$NB_KS_CITY" != "false" ] && [ "$NB_KS_RIG" != "false" ]; then
-    NB_MODE="armed"
-  else
+  # ARMED is the default. DRY-RUN needs a positive pin at either level --
+  # either token saying `false` (unexpired) or being unreadable is enough, so
+  # returning to DRY-RUN stays a one-place act. The N5 brakes are folded in
+  # here for the REPORT only, so an operator asking "am I armed" is told no
+  # when a kill switch is holding it; the gate still reports an engaged brake
+  # under its own distinct reason code.
+  NB_MODE="armed"
+  case "$NB_ARM_CITY" in disarmed | invalid) NB_MODE="dry-run" ;; esac
+  case "$NB_ARM_RIG" in disarmed | invalid) NB_MODE="dry-run" ;; esac
+  if [ "$NB_KS_CITY" = "false" ] || [ "$NB_KS_RIG" = "false" ]; then
     NB_MODE="dry-run"
   fi
 }
@@ -660,26 +705,32 @@ report_no_brainer_mode() {
     echo "no-brainer auto-execution mode: ARMED"
     echo "  a classified no-brainer WILL be executed without being surfaced."
     echo "  the classifier making that call is $NB_CLASSIFIER_VERSION."
+    if [ "$NB_ARM_CITY" = "absent" ] && [ "$NB_ARM_RIG" = "absent" ]; then
+      echo "  ARMED is the DEFAULT — this rig is armed because no token pins it,"
+      echo "  not because anyone configured it. That is the intended semantics."
+    fi
   else
     echo "no-brainer auto-execution mode: DRY-RUN"
     echo "  no-brainers are classified and recorded; nothing is executed."
   fi
   echo ""
-  echo "  city arming token  $NB_ARM_CITY_PATH  [$NB_ARM_CITY]"
-  echo "  rig arming token   $NB_ARM_RIG_PATH  [$NB_ARM_RIG]"
+  echo "  city mode token    $NB_ARM_CITY_PATH  [$NB_ARM_CITY]"
+  echo "  rig mode token     $NB_ARM_RIG_PATH  [$NB_ARM_RIG]"
   echo "  city kill switch   $NB_CITY_ROOT/.beads/auto_merge_enabled  [$NB_KS_CITY]"
   echo "  rig kill switch    $NB_RIG_ROOT/.beads/auto_merge_enabled  [$NB_KS_RIG]"
   case "$NB_ARM_CITY$NB_ARM_RIG" in
-    *disarmed*) echo "  (dry-run is explicitly pinned — someone put it back, it did not lapse)" ;;
-    *expired*) echo "  (an arming token has expired — dry-run resumed on its own)" ;;
+    *disarmed*) echo "  (dry-run is explicitly pinned — someone put it there, it did not lapse)" ;;
+    *invalid*) echo "  (a mode token is unreadable — holding DRY-RUN until it is fixed or removed)" ;;
+    *pin_expired*) echo "  (a dry-run pin has expired — the ARMED default resumed on its own)" ;;
   esac
   echo ""
-  echo "  to ARM (deliberate; record a standalone decision bead first):"
-  # printf '%s\n', not echo: these lines contain literal \n that must survive.
-  printf '%s\n' "    printf 'true\\nexpires=<ISO-8601-utc>\\n' > $NB_ARM_CITY_PATH"
-  printf '%s\n' "    printf 'true\\nexpires=<ISO-8601-utc>\\n' > $NB_ARM_RIG_PATH"
-  echo "  to return to DRY-RUN (always allowed, takes effect immediately):"
+  echo "  to pin DRY-RUN (always allowed, no authorization, takes effect immediately):"
   echo "    brief-check.sh no-brainer-disarm"
+  echo "  to pin DRY-RUN only until a deadline, then auto-resume ARMED:"
+  # printf '%s\n', not echo: these lines contain literal \n that must survive.
+  printf '%s\n' "    printf 'false\\nexpires=<ISO-8601-utc>\\n' > $NB_ARM_RIG_PATH"
+  echo "  to return to ARMED:"
+  echo "    rm -f $NB_ARM_CITY_PATH $NB_ARM_RIG_PATH   # absent = armed default"
   echo ""
   printf '{"mode":"%s","armed_city":"%s","armed_rig":"%s","kill_switch_city":"%s","kill_switch_rig":"%s","classifier_version":"%s"}\n' \
     "$NB_MODE" "$NB_ARM_CITY" "$NB_ARM_RIG" "$NB_KS_CITY" "$NB_KS_RIG" \
@@ -687,9 +738,11 @@ report_no_brainer_mode() {
 }
 
 # `brief-check.sh no-brainer-disarm` — the recovery path, deliberately a
-# single command.  Arming has no matching one-shot helper: going back to
-# dry-run should always be easier than leaving it, so the asymmetry is the
-# point, not an oversight.
+# single command.  Under an ARMED default this is the control that matters:
+# it is the one an operator reaches for when something is going wrong, so it
+# takes no authorization, needs no argument, and works from any rig.  Going
+# back to ARMED is a deliberate `rm` of the tokens rather than a helper, so
+# the easy direction is always the safe one.
 disarm_no_brainer() {
   nb_resolve_mode
   for nb_token in "$NB_ARM_CITY_PATH" "$NB_ARM_RIG_PATH"; do
@@ -771,7 +824,7 @@ check_no_brainer_execute_safety() {
   if ! printf '%s\n' "$nb_g9" | grep -Eq 'stop_gates_clear=true'; then
     nb_refuse "classifier_evidence_invalid" "known_no_brainer G9 evidence requires stop_gates_clear=true in $NB_BRIEF"
   fi
-  nb_registry="assets/brief-pipeline/no-brainer-categories.toml"
+  nb_registry="$(pack_asset brief-pipeline/no-brainer-categories.toml)"
   if [ -z "$NB_CATEGORY" ] || [ "$NB_CATEGORY" = "none" ] || [ ! -f "$nb_registry" ] ||
      ! grep -Eq '^id[[:space:]]*=[[:space:]]*"'"$NB_CATEGORY"'"' "$nb_registry"; then
     nb_refuse "classifier_evidence_invalid" \
@@ -788,20 +841,16 @@ check_no_brainer_execute_safety() {
       "kill switch ENGAGED (city=$NB_KS_CITY rig=$NB_KS_RIG) — auto-execution halted (N5); route brief to the pile in compact form"
   fi
 
-  # --- 5. mode: dry-run or armed (inverts absent-means-go) ---------------
-  # An explicit pin back to dry-run is reported as such, so a rollback is
-  # confirmable rather than inferred.
+  # --- 5. mode: ARMED is the default; DRY-RUN must be pinned -------------
+  # An explicit pin is reported distinguishably from a malformed token, so a
+  # rollback is confirmable rather than inferred from silence.
   if [ "$NB_ARM_CITY" = "disarmed" ] || [ "$NB_ARM_RIG" = "disarmed" ]; then
     nb_refuse "dry_run_pinned" \
       "no-brainer auto-execution is pinned to DRY-RUN (city=$NB_ARM_CITY rig=$NB_ARM_RIG) — classification recorded, nothing executed"
   fi
-  if [ "$NB_ARM_CITY" = "expired" ] || [ "$NB_ARM_RIG" = "expired" ]; then
-    nb_refuse "arming_expired" \
-      "no-brainer auto-execution arming has EXPIRED (city=$NB_ARM_CITY rig=$NB_ARM_RIG) — re-arm deliberately or leave it in dry-run"
-  fi
-  if [ "$NB_MODE" != "armed" ]; then
-    nb_refuse "not_armed" \
-      "no-brainer auto-execution is in DRY-RUN (city=$NB_ARM_CITY rig=$NB_ARM_RIG) — arming requires a deliberate token at BOTH $NB_CITY_ROOT/.beads/no_brainer_auto_execute_armed and $NB_RIG_ROOT/.beads/no_brainer_auto_execute_armed"
+  if [ "$NB_ARM_CITY" = "invalid" ] || [ "$NB_ARM_RIG" = "invalid" ]; then
+    nb_refuse "dry_run_token_invalid" \
+      "a no-brainer mode token is unreadable (city=$NB_ARM_CITY rig=$NB_ARM_RIG) — an unreadable instruction is not consent to execute; write `true` or `false`, or remove the file to take the ARMED default"
   fi
 
   # --- 6. permitted ------------------------------------------------------
