@@ -480,6 +480,26 @@ class Dashboard:
         ]
         return list(view.rows_for(rig)), view, extra
 
+    def _elsewhere(self, rig: str | None) -> Mapping[str, Any] | None:
+        """How many briefs exist outside this rig, for the empty-stack notice.
+
+        Only called when the scoped page came back empty, so the cost lands on
+        the one path that needs it. A failure here must not take down the page
+        -- the notice is an explanation, and an unexplained empty stack is
+        still better than a traceback.
+        """
+        try:
+            payload = self.client.call(
+                "briefs_list", self._args(None, all_rigs=True)
+            ).payload
+        except Exception:  # noqa: BLE001 - explanation is best-effort
+            return None
+        rows = payload.get("briefs") or []
+        rigs = payload.get("rigs") or []
+        if not rows:
+            return None
+        return {"rig": rig, "total": len(rows), "rigs": len(rigs)}
+
     def _scope_context(self, rig: str | None) -> Mapping[str, Any] | None:
         """The context line's facts, in whichever scope is being served.
 
@@ -516,6 +536,11 @@ class Dashboard:
         context = self._scope_context(rig)
         all_briefs, _city, city_extra = self._read_briefs(rig)
         briefs = _scoped(all_briefs, view.scope)
+        # A rig-scoped page with nothing on it is indistinguishable from a
+        # broken one. If the rig is empty, find out whether the *city* is --
+        # one extra read, only on the empty path, so the page can say which
+        # of the two it is looking at.
+        elsewhere = self._elsewhere(rig) if not briefs and not self.city_wide else None
 
         titles = {
             "stack": "Brief stack",
@@ -564,7 +589,7 @@ class Dashboard:
             '<div style="height: 2px; background: var(--color-neutral-900); '
             'margin: 8px 0 0;"></div>',
             stack.column_picker(view) if columns_open else "",
-            stack.table(briefs, view, queued=()),
+            stack.table(briefs, view, queued=(), elsewhere=elsewhere),
             stack.empty_sort_note(briefs, view),
             stack.key_legend(),
             stack.unfed_note(briefs),

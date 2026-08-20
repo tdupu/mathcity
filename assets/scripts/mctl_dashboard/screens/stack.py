@@ -438,19 +438,49 @@ def _hidden_note(dropped: Sequence[str]) -> str:
     )
 
 
+def empty_notice(elsewhere: Mapping[str, Any] | None = None) -> str:
+    """Say why the stack is empty, not merely that it is.
+
+    A rig-scoped dashboard on a rig with no briefs is *correct* on an empty
+    set, and looks exactly like a broken one: empty table, empty priority
+    list, blank counts. Nothing distinguishes "there is nothing here" from
+    "I could not look", and those two have opposite next moves.
+
+    So when briefs exist outside the current scope, name the scope, the
+    count, and how to widen it. The operator should never have to know that
+    a `--rig` flag was the difference.
+    """
+    base = (
+        "No briefs on this stack. Produced briefs land in the "
+        '<a href="/pile">pile</a> and are promoted by the gates.'
+    )
+    if not elsewhere or not elsewhere.get("total"):
+        return f'<p class="lede" data-region="brief-stack-empty">{base}</p>'
+    rig = _e(str(elsewhere.get("rig") or "this rig"))
+    total = int(elsewhere["total"])
+    rigs = int(elsewhere.get("rigs") or 0)
+    where = f"{total} brief{'' if total == 1 else 's'} exist in "
+    where += f"{rigs} registered rigs" if rigs else "other rigs"
+    return (
+        '<p class="review-note" data-region="brief-stack-empty">'
+        f"<strong>Rig <code>{rig}</code> has no briefs at all.</strong> "
+        f"{where} — this page is empty because of its scope, not because the "
+        "city is. Restart the dashboard without <code>--rig</code> to work "
+        "across all rigs.</p>"
+        f'<p class="lede">{base}</p>'
+    )
+
+
 def table(
     briefs: Sequence[Mapping[str, Any]],
     view: ViewState,
     *,
     queued: Sequence[str] = (),
+    elsewhere: Mapping[str, Any] | None = None,
 ) -> str:
     ordered = sorted_briefs(briefs, view)
     if not ordered:
-        return (
-            '<p class="lede" data-region="brief-stack-empty">'
-            "No briefs on this stack. Produced briefs land in the "
-            '<a href="/pile">pile</a> and are promoted by the gates.</p>'
-        )
+        return empty_notice(elsewhere)
     view, dropped = _fed_columns(ordered, view)
     rows = "".join(
         _row(brief, view, index=index, queued=queued)
