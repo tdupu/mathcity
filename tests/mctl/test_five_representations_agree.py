@@ -80,6 +80,7 @@ FRONTMATTER = (
 #: uses -- `adjudicated:ratify(...)`, `adjudicated:approve(bug-convoy)` -- reads
 #: as NON-terminal and trips the gate.
 MANIFEST_ROW = {
+    "n": 1,
     "slug": BRIEF_ID,
     "status": "adjudicated",
     "path": f"{BRIEF_ID}.md",
@@ -128,8 +129,20 @@ def fixture(tmp_path: Path) -> Fixture:
     result = Fixture(city_root, rig_root)
     result.path.write_text(FRONTMATTER, encoding="utf-8")
     result.pile_path.write_text(FRONTMATTER, encoding="utf-8")
-    # Seeded with exactly one row, for this brief, in a non-terminal state.
     result.manifest.write_text(json.dumps(MANIFEST_ROW) + "\n", encoding="utf-8")
+
+    # The join is read off the migration's own record -- `legacy_n` on the
+    # stack index row -- and is deliberately NOT inferred from the slug, because
+    # a second identity rule would drift from the first the moment a slug was
+    # edited. A fixture that seeds a manifest row without it constructs a state
+    # the migration never produces, and the writer correctly declines to guess.
+    index = result.brief_root / "stack" / ".index.jsonl"
+    rows = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines() if line.strip()]
+    for row in rows:
+        if row.get("slug") == BRIEF_ID:
+            row["legacy_n"] = MANIFEST_ROW["n"]
+            row["legacy_source"] = BRIEF_ID
+    index.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
     return result
 
 
