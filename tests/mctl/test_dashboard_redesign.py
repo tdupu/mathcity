@@ -727,3 +727,65 @@ def test_malformed_briefs_are_surfaced_with_their_caveat():
     assert "closed with no verdict field" in html.lower()
     assert "damaged" in html.lower(), "the caveat must rebut the word malformed"
     assert "read this count carefully" in html.lower()
+
+
+# --------------------------------------------------------------------------
+# priority list
+# --------------------------------------------------------------------------
+
+
+def test_the_priority_list_starts_empty_with_a_real_empty_state():
+    """It is the operator's own ordering, so it begins with nothing in it."""
+    from mctl_dashboard.screens import priority
+
+    html = priority.screen([])
+    assert "nothing here yet" in html.lower()
+    assert "go to the stack" in html.lower()
+
+
+def test_reordering_works_without_javascript():
+    """Drag is the enhancement; move-up/move-down links are the baseline."""
+    from mctl_dashboard.screens import priority
+
+    html = priority.screen(
+        [{"bead_id": "he-1", "title": "a"}, {"bead_id": "he-2", "title": "b"}]
+    )
+    assert html.count("move up") >= 1
+    assert html.count("move down") >= 1
+    for banned in ("onclick", "onchange", "javascript:"):
+        assert banned not in html.lower()
+
+
+def test_the_ordering_is_not_presented_as_canonical():
+    """No policy defines importance; this is one clerk's hypothesis.
+
+    Persisting it server-side would make one operator's experiment look like a
+    fact about briefs, which is why it lives in the browser.
+    """
+    from mctl_dashboard.screens import priority
+
+    html = priority.screen([{"bead_id": "he-1", "title": "a"}])
+    assert "your own ordering" in html.lower()
+    assert "this browser" in html.lower()
+
+
+def test_moving_the_first_item_up_is_a_no_op_not_an_error():
+    from mctl_dashboard.screens import priority
+
+    assert priority.reorder(["a", "b", "c"], "a", "up") == ["a", "b", "c"]
+    assert priority.reorder(["a", "b", "c"], "c", "down") == ["a", "b", "c"]
+
+
+def test_moving_an_item_down_lands_where_a_reader_expects():
+    """The prototype's splice arithmetic shifted downward moves by one."""
+    from mctl_dashboard.screens import priority
+
+    assert priority.reorder(["a", "b", "c"], "a", "down") == ["b", "a", "c"]
+    assert priority.reorder(["a", "b", "c"], "c", "up") == ["a", "c", "b"]
+
+
+def test_reorder_ignores_an_unknown_id():
+    """A stale link must not raise."""
+    from mctl_dashboard.screens import priority
+
+    assert priority.reorder(["a", "b"], "zzz", "up") == ["a", "b"]

@@ -49,6 +49,7 @@ from . import state as view_state
 from .screens import brief as brief_screen
 from .screens import panel as panel_screen
 from .screens import pipeline as pipeline_screen
+from .screens import priority as priority_screen
 from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
@@ -329,6 +330,36 @@ class Dashboard:
             f"/{lane}",
             context,
             [renderer(selected)],
+            counts=self._counts(briefs),
+            context_bar="",
+        )
+
+    def _priority(self, request: Request) -> Response:
+        """The operator's own ordering over the stack.
+
+        The order arrives in the query string rather than from a store: it is
+        one clerk's working hypothesis about importance, and persisting it
+        server-side would present an experiment as a property of the briefs.
+        That also makes move-up and move-down ordinary links, so the list
+        reorders with scripting disabled.
+        """
+        rig = self._rig_for(request) or self.rig
+        context = self._context(rig) if not self.city_wide else None
+        listing = self.client.call("briefs_list", self._args(rig))
+        briefs = list(listing.payload.get("briefs") or ())
+        by_id = {str(b.get("bead_id")): b for b in briefs}
+
+        wanted = [
+            part
+            for part in (request.query.get("order") or "").split(",")
+            if part and part in by_id
+        ]
+        ordered = [by_id[bead] for bead in wanted]
+        return self._page(
+            "Priority list",
+            "/priority",
+            context,
+            [priority_screen.screen(ordered)],
             counts=self._counts(briefs),
             context_bar="",
         )
@@ -885,6 +916,8 @@ class Dashboard:
             return self._queue(request)
         if request.path in ("/pile", "/deferred", "/adjudicated", "/malformed"):
             return self._lane(request.path[1:], request)
+        if request.path == "/priority":
+            return self._priority(request)
         if request.path == "/briefs":
             return self._briefs(request)
         if request.path.startswith("/briefs/"):
