@@ -639,3 +639,91 @@ def test_no_notice_when_the_sort_column_has_values():
 
     briefs = [{"bead_id": "he-1", "title": "a", "created_at": "2026-08-01T00:00:00Z"}]
     assert stack.empty_sort_note(briefs, state.ViewState(sort_key="age")) == ""
+
+
+# --------------------------------------------------------------------------
+# pipeline screens
+# --------------------------------------------------------------------------
+
+
+def test_the_pile_names_its_gap_rather_than_rendering_empty():
+    """Nothing reads the pile through the typed surface yet.
+
+    An empty table would say "the pile is empty", which is a measurement
+    nobody took.
+    """
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.pile()
+    assert "#66" in html
+    assert "not" in html.lower()
+    assert 'data-region="pile"' in html
+
+
+def test_a_truly_empty_deferred_list_differs_from_an_unreadable_one():
+    """Zero deferred briefs is a fact; unreadable windows is a gap.
+
+    Collapsing the two would let a broken read look like a quiet queue.
+    """
+    from mctl_dashboard.screens import pipeline
+
+    empty = pipeline.deferred([])
+    assert "no briefs are deferred" in empty.lower()
+    assert "#66" not in empty.split("</h1>")[0]
+
+    listed = pipeline.deferred([{"bead_id": "he-1", "title": "t", "decision_state": "deferred"}])
+    assert "window" in listed.lower()
+    assert "#66" in listed
+
+
+def test_adjudicated_says_the_verdict_is_not_readable():
+    """The verdict is the point of this screen and the payload lacks it.
+
+    `_verdict` computes one internally to classify decision_state, but
+    `to_dict` never emits it -- so the screen can say which briefs were
+    decided and not what was decided. Silence would imply no verdict existed.
+    """
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.adjudicated(
+        [{"bead_id": "he-1", "title": "t", "decision_state": "adjudicated",
+          "updated_at": "2026-08-01T00:00:00Z"}]
+    )
+    assert "he-1" in html
+    assert "verdict" in html.lower()
+    assert "#66" in html
+
+
+def test_adjudicated_offers_no_reopen_control():
+    """B3.8 -- decision beads are immutable; a change of mind is a new bead.
+
+    Explaining that in prose is wanted; offering a control is not. So this
+    checks for the affordance, not the word.
+    """
+    import re
+
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.adjudicated(
+        [{"bead_id": "he-1", "title": "t", "decision_state": "adjudicated"}]
+    )
+    assert not re.search(r"<(button|form)\b", html), "no control may undo a decision"
+    assert "never reopened" in html.lower(), "and the page should say why"
+
+
+def test_malformed_briefs_are_surfaced_with_their_caveat():
+    """19 of 114 live briefs are `malformed`, and the design has no lane.
+
+    Leaving them out of the nav makes them invisible. Showing the count bare
+    would be worse: "malformed" means closed with no verdict *field*, not
+    damaged, and the caveat has to travel with the number.
+    """
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.malformed(
+        [{"bead_id": "he-1", "title": "t", "decision_state": "malformed"}]
+    )
+    assert "he-1" in html
+    assert "closed with no verdict field" in html.lower()
+    assert "damaged" in html.lower(), "the caveat must rebut the word malformed"
+    assert "read this count carefully" in html.lower()

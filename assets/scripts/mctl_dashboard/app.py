@@ -48,6 +48,7 @@ from . import render
 from . import state as view_state
 from .screens import brief as brief_screen
 from .screens import panel as panel_screen
+from .screens import pipeline as pipeline_screen
 from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
@@ -269,6 +270,7 @@ class Dashboard:
             "stack": states.get("pending", 0),
             "deferred": states.get("deferred", 0),
             "adjudicated": states.get("adjudicated", 0),
+            "malformed": states.get("malformed", 0),
         }
 
     def _knowls(self, brief: Mapping[str, Any]) -> dict[str, Any]:
@@ -291,6 +293,45 @@ class Dashboard:
                     "file": raw,
                 }
         return {"rules": rules}
+
+    def _lane(self, lane: str, request: Request) -> Response:
+        """Pile, Deferred, Adjudicated and Malformed.
+
+        One handler because they share a shape: read the listing once, filter
+        by decision state, and let the screen say which kind of absence it is
+        looking at. The pile is the exception -- it has no source at all, so it
+        never touches the listing.
+        """
+        rig = self._rig_for(request) or self.rig
+        context = self._context(rig) if not self.city_wide else None
+
+        if lane == "pile":
+            # Nothing to read: no tool reports pile membership.
+            return self._page(
+                "Pile", "/pile", context, [pipeline_screen.pile()], context_bar=""
+            )
+
+        listing = self.client.call("briefs_list", self._args(rig))
+        briefs = list(listing.payload.get("briefs") or ())
+        selected = [
+            brief
+            for brief in briefs
+            if str(brief.get("decision_state") or "") == lane.rstrip("s")
+            or str(brief.get("decision_state") or "") == lane
+        ]
+        renderer = {
+            "deferred": pipeline_screen.deferred,
+            "adjudicated": pipeline_screen.adjudicated,
+            "malformed": pipeline_screen.malformed,
+        }[lane]
+        return self._page(
+            lane.capitalize(),
+            f"/{lane}",
+            context,
+            [renderer(selected)],
+            counts=self._counts(briefs),
+            context_bar="",
+        )
 
     # -- read views --
 
@@ -842,6 +883,8 @@ class Dashboard:
             return self._overview(request)
         if request.path == "/queue":
             return self._queue(request)
+        if request.path in ("/pile", "/deferred", "/adjudicated", "/malformed"):
+            return self._lane(request.path[1:], request)
         if request.path == "/briefs":
             return self._briefs(request)
         if request.path.startswith("/briefs/"):

@@ -56,6 +56,11 @@ NAV = (
     ("/queue?scope=errors", "Error briefs", "errors"),
     ("/adjudicated", "Adjudicated — closed", "adjudicated"),
     ("/queue?scope=nobrainer", "No-brainers — DRY RUN", "nobrainer"),
+    # Not in the adopted design, but 19 of 114 live briefs are in this
+    # state and with no lane they were invisible. The caveat that
+    # "malformed" means closed-without-a-verdict-field, not damaged,
+    # travels with the screen.
+    ("/malformed", "Malformed — no verdict field", "malformed"),
 )
 
 #: The older tab bar, kept so the pre-redesign routes still navigate while the
