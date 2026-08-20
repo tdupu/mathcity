@@ -664,7 +664,12 @@ class Dashboard:
         # canonical fields the new screen deliberately does not duplicate, and
         # the option forms are still the only mutation path until Slice 3.
         sections = [
-            brief_screen.detail(brief, view_state.parse(request.query), knowls=self._knowls(brief)),
+            brief_screen.detail(
+                brief,
+                view_state.parse(request.query),
+                knowls=self._knowls(brief),
+                options=option_rows,
+            ),
             panel_screen.entry(brief, option_rows, view_state.parse(request.query), rig=rig),
             render.artifact_trust_panel(shown.artifact_trust, rig=rig),
             render.brief_detail_panel(brief),
@@ -678,7 +683,15 @@ class Dashboard:
             ),
         ]
         return self._page(
-            str(brief.get("title") or brief_id), "/briefs", self._context(rig), sections
+            str(brief.get("title") or brief_id),
+            "/briefs",
+            self._scope_context(rig),
+            sections,
+            # The masthead already names the resolved city, rig and store, and
+            # the properties box carries the brief's own facts. A Context panel
+            # here is a third copy that pushes the title -- and the status
+            # banner telling you whether you can act at all -- below the fold.
+            context_bar="",
         )
 
     def _rig_required(self, brief_id: str) -> Response:

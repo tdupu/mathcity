@@ -67,7 +67,54 @@ PREFERRED_ORDER = (
 
 #: Never shown as an attribute row: either rendered elsewhere on the page, or
 #: internal bookkeeping that tells the reader nothing.
-SUPPRESSED = frozenset({"title", "body", "sections", "body_diagnostics"})
+SUPPRESSED = frozenset(
+    {
+        "title",
+        "body",
+        "sections",
+        "body_diagnostics",
+        # Structural payloads rendered elsewhere or unpacked by `unpack`.
+        # Left in, they stringify as Python reprs -- agent exhaust in the
+        # operator's page, which is the thing this dashboard is least allowed
+        # to do.
+        "fields",
+        "policy_references",
+        "redundant_artifacts",
+        "readings",
+    }
+)
+
+
+def unpack(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Split a `briefs_show` payload into attributes, sources and conflicts.
+
+    The core reports field provenance as
+    `fields: {name: {value, source, conflict, readings}}`. That is precisely
+    what this module was built to render -- but only once it is taken apart.
+    Passed through whole it renders as a dict repr.
+
+    A field the core has provenance for wins over a bare top-level key of the
+    same name, because the provenanced one knows where it came from.
+    """
+    attrs = {k: v for k, v in payload.items() if k not in SUPPRESSED}
+    sources: dict[str, str] = {}
+    conflicts: dict[str, dict[str, Any]] = {}
+
+    for name, entry in (payload.get("fields") or {}).items():
+        if not isinstance(entry, Mapping):
+            continue
+        attrs[name] = entry.get("value")
+        origin = entry.get("source")
+        if origin:
+            sources[name] = str(origin)
+        if entry.get("conflict"):
+            readings = entry.get("readings") or []
+            conflicts[name] = {
+                str(r.get("source") or "?"): r.get("value")
+                for r in readings
+                if isinstance(r, Mapping)
+            }
+    return {"attrs": attrs, "sources": sources, "conflicts": conflicts}
 
 
 def _label(key: str) -> str:

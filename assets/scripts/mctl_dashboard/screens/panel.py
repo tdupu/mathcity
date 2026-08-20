@@ -201,7 +201,7 @@ def entry(
     rig_field = f'<input type="hidden" name="rig" value="{_e(rig)}">' if rig else ""
 
     return (
-        f'<section data-region="adjudicate" data-panel-state="{_e(state)}" '
+        f'<section id="mc-adjudicate" data-region="adjudicate" data-panel-state="{_e(state)}" '
         f'style="border: 1px solid {border}; border-radius: var(--radius-md); '
         'max-width: 640px; overflow: hidden; margin-top: 18px;">'
         f'<div style="background: {bar_bg}; color: {bar_fg}; padding: 7px 12px; '

@@ -37,6 +37,7 @@ from typing import Any, Mapping, Sequence
 from mctl_dashboard import fields, knowl
 from mctl_dashboard.render import esc as _e
 from mctl_dashboard.state import ViewState
+from mctl_dashboard.theme import STOP
 
 #: §-number to the design's heading. From `mctl_core.briefs.PRESENT_IT_SECTIONS`.
 SECTION_LABELS: dict[int, str] = {
@@ -142,12 +143,7 @@ def properties(brief: Mapping[str, Any]) -> str:
     bead-sourced one and a disagreement between the two is shown rather than
     silently resolved.
     """
-    body = fields.attributes(
-        brief,
-        sources=brief.get("field_sources") or {},
-        conflicts=brief.get("field_conflicts") or {},
-        region="properties",
-    )
+    body = fields.attributes(**fields.unpack(brief), region="properties")
     if not body:
         return ""
     return (
@@ -161,11 +157,73 @@ def properties(brief: Mapping[str, Any]) -> str:
     )
 
 
+def status_banner(
+    brief: Mapping[str, Any], options: Sequence[Mapping[str, Any]] | None
+) -> str:
+    """Whether this brief can be acted on, stated before it is read.
+
+    The adjudication panel sits below the body, the properties and the
+    diagnostics -- on a real brief about 59% down the page. A reader who opens
+    a refused brief scrolls all of that to arrive at four disabled controls and
+    only then learns there was nothing to do. Decision-at-Top is the rule the
+    briefs themselves must follow; the page about a brief owes the reader the
+    same courtesy.
+
+    So: state it at the top, name the code, and offer a jump to the panel
+    rather than making the reader hunt for it.
+    """
+    from mctl_dashboard.screens import panel as panel_screen
+
+    state_name, reason = panel_screen.panel_state(options or [])
+    has_body = bool(str(brief.get("body") or "").strip()) or bool(brief.get("sections"))
+
+    if state_name == "open":
+        text = (
+            '<strong>Ready to adjudicate.</strong> '
+            '<a href="#mc-adjudicate">Go to the verdict panel &darr;</a>'
+        )
+        tone = "border-left: 3px solid var(--color-accent-600);"
+    else:
+        code = str(reason.get("code") or "")
+        message = str(reason.get("message") or "")
+        held = state_name == "held"
+        lead = (
+            "<strong>Adjudication is held.</strong>"
+            if held
+            else "<strong>This brief cannot be adjudicated yet.</strong>"
+        )
+        empty = (
+            " It also carries no body, so there is <strong>nothing to read</strong> "
+            "here and nothing you can record."
+            if not has_body
+            else ""
+        )
+        text = (
+            f"{lead} "
+            f'<code class="diagnostic-code">{_e(code)}</code> — {_e(message)}'
+            f"{empty} "
+            '<a href="#mc-adjudicate">See the panel &darr;</a>'
+        )
+        tone = (
+            f"border-left: 3px solid {STOP['error']['edge']};"
+            if held
+            else "border-left: 3px solid var(--color-neutral-400);"
+        )
+
+    return (
+        f'<div data-region="brief-status" style="{tone} '
+        "background: var(--color-neutral-100); padding: 9px 12px; margin: 10px 0 0; "
+        'border-radius: var(--radius-sm); font-size: 12.5px;">'
+        f"{text}</div>"
+    )
+
+
 def detail(
     brief: Mapping[str, Any],
     view: ViewState,
     *,
     knowls: Mapping[str, Any] | None = None,
+    options: Sequence[Mapping[str, Any]] | None = None,
 ) -> str:
     """The brief detail screen."""
     knowls = dict(knowls or {})
@@ -225,7 +283,8 @@ def detail(
         f'{_e(brief.get("title"))}</h1>'
         f'<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
         f'{_e(bead)}</div>'
-        '<div style="height: 2px; background: var(--color-neutral-900); '
+        + status_banner(brief, options)
+        + '<div style="height: 2px; background: var(--color-neutral-900); '
         'margin: 14px 0 18px;"></div>'
         + _decision_at_top_notice(sections)
         + _parse_notice(diagnostics)

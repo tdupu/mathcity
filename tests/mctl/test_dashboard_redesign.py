@@ -1144,3 +1144,116 @@ def test_a_brief_link_carries_its_rig_city_wide(tmp_path):
     assert 'data-region="rig-required"' not in response.body, (
         f"{first} still resolves to rig-required"
     )
+
+
+def test_a_brief_says_up_front_whether_it_can_be_adjudicated():
+    """Whether you can act is the first thing you need, not the last.
+
+    The panel sits below the body, the properties and the diagnostics -- about
+    59% down a real page. On a brief that is refused, the reader scrolls all
+    of that to reach four disabled controls. Decision-at-Top is the rule for
+    briefs; the page about a brief owes the reader the same.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    refused = [
+        {
+            "id": "adjudicate",
+            "enabled": False,
+            "disabled_reason": {"code": "MBRF004", "message": "no source dependency"},
+        }
+    ]
+    html = brief.detail(
+        {"bead_id": "gt-1", "title": "t", "sections": [], "body_diagnostics": []},
+        state.ViewState(),
+        options=refused,
+    )
+    banner = html.split('data-region="brief-status"')[1][:400]
+    assert "MBRF004" in banner
+    assert "#mc-adjudicate" in html, "there should be a jump to the panel"
+    # And the status must come before the panel it describes.
+    assert html.index('data-region="brief-status"') < html.index("mc-adjudicate")
+
+
+def test_an_empty_brief_that_is_also_refused_says_both():
+    """Nothing to read and nothing to do is worth stating once, plainly."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    html = brief.detail(
+        {
+            "bead_id": "gt-1",
+            "title": "t",
+            "body": "",
+            "sections": [],
+            "body_diagnostics": [{"code": "MBRF040", "message": "no description"}],
+        },
+        state.ViewState(),
+        options=[{"id": "adjudicate", "enabled": False,
+                  "disabled_reason": {"code": "MBRF004", "message": "no source"}}],
+    )
+    status = html.split('data-region="brief-status"')[1][:600]
+    assert "nothing to read" in status.lower()
+
+
+def test_an_adjudicable_brief_says_so_too():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    html = brief.detail(
+        {"bead_id": "gt-1", "title": "t", "sections": [], "body_diagnostics": []},
+        state.ViewState(),
+        options=[{"id": "adjudicate", "enabled": True}],
+    )
+    status = html.split('data-region="brief-status"')[1][:300]
+    assert "ready" in status.lower() or "can be" in status.lower()
+
+
+def test_the_core_field_provenance_is_unpacked_not_dumped():
+    """cozy ships `fields` as {name: {value, source, conflict, readings}}.
+
+    Rendered generically it stringifies as a Python repr -- agent exhaust
+    leaking into the operator's page. It is exactly the provenance the
+    renderer was built for, so it is unpacked into value + source instead.
+    """
+    from mctl_dashboard import fields
+
+    payload = {
+        "bead_id": "gt-1",
+        "fields": {
+            "priority": {
+                "value": "1",
+                "source": "bead",
+                "conflict": False,
+                "readings": [{"source": "bead", "value": "1"}],
+            }
+        },
+    }
+    html = fields.attributes(**fields.unpack(payload))
+    assert "priority" in html
+    assert ">1<" in html or "1</span>" in html
+    assert "bead" in html
+    assert "readings" not in html, "internal structure must not leak"
+    assert "{" not in html and "'" not in html, "no Python repr in the page"
+
+
+def test_a_conflicting_field_surfaces_both_readings():
+    from mctl_dashboard import fields
+
+    payload = {
+        "fields": {
+            "priority": {
+                "value": "1",
+                "source": "bead",
+                "conflict": True,
+                "readings": [
+                    {"source": "bead", "value": "1"},
+                    {"source": "frontmatter", "value": "P2"},
+                ],
+            }
+        }
+    }
+    html = fields.attributes(**fields.unpack(payload))
+    assert "disagree" in html.lower()
+    assert "P2" in html and "1" in html
