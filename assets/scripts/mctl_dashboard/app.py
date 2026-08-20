@@ -55,6 +55,11 @@ from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
+#: Marker written into the adjudication reason when the no-brainer box is
+#: ticked. Fixed string so a later migration to a first-class field can find
+#: every one of them: `bd list | grep "[no-brainer]"`.
+NO_BRAINER_MARKER = "[no-brainer] surfacing this was a pipeline regression."
+
 
 @dataclass(frozen=True)
 class Request:
@@ -1400,6 +1405,16 @@ def _arguments_for(
             if value:
                 arguments[key] = value
         arguments.setdefault("reason", "")
+        # The no-brainer flag is a classifier signal, not a disposition, and the
+        # core has no field for it yet. Rather than drop it -- which would make
+        # the checkbox decorative -- it is folded into the reason that is
+        # already written to the bead, behind a fixed marker so it stays
+        # greppable when the first-class field lands.
+        if (form.get("no_brainer") or "").strip():
+            note = (form.get("no_brainer_reason") or "").strip()
+            marker = NO_BRAINER_MARKER + (f" {note}" if note else "")
+            existing = arguments["reason"]
+            arguments["reason"] = f"{existing}\n\n{marker}" if existing else marker
         return arguments
     if operation.name == "defer":
         arguments["brief_id"] = brief_id

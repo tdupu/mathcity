@@ -573,8 +573,15 @@ def test_a_real_gate_failure_is_held_and_strikes_every_verdict_but_reject():
     assert allowed and "disabled" not in allowed.group(0)
 
 
-def test_every_refused_state_still_disables_the_inputs():
-    """Styling is not a lock -- a disabled-looking radio that submits is a bug."""
+def test_refusal_gates_ratifying_but_never_returning():
+    """Refusal restricts what you may ratify, never what you may send back.
+
+    The earlier version of this test asserted that *every* verdict went dark in
+    a refused state. That encoded a real defect: on the body-less briefs the
+    only sensible verdict is "revise, go add fields", and gating it left the
+    adjudicator with no move at all. `approve` stays gated -- ratifying an
+    unreadable brief is exactly what refusal is for.
+    """
     import re
 
     from mctl_dashboard import state
@@ -582,9 +589,45 @@ def test_every_refused_state_still_disables_the_inputs():
 
     for code in ("MBRF004", "MBRF999"):
         html = panel.entry({"bead_id": "he-1"}, _option(False, code), state.ViewState())
-        for verdict in ("approve", "revise"):
+
+        approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
+        assert approve and "disabled" in approve.group(0), (code, "approve must stay gated")
+
+        for verdict in ("revise", "reject"):
             found = re.search(rf'<input[^>]*value="{verdict}"[^>]*>', html)
-            assert found and "disabled" in found.group(0), (code, verdict)
+            assert found and "disabled" not in found.group(0), (code, verdict)
+
+
+def test_a_returnable_brief_has_a_usable_form():
+    """Freeing the radio is pointless if the reason box and submit stay locked."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
+    assert '<textarea name="reason"' in html
+    assert "disabled" not in html.split('name="reason"')[1].split(">")[0]
+    assert '<button class="btn btn-primary" type="submit">' in html
+
+
+def test_the_no_brainer_flag_is_present_and_is_not_a_verdict():
+    """Ticking it records a classifier signal, not a disposition."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
+    assert 'name="no_brainer"' in html
+    assert 'name="no_brainer_reason"' in html
+    # It must not be one of the verdict radios.
+    assert 'name="verdict" value="no_brainer"' not in html
+
+
+def test_the_no_brainer_flag_survives_refusal():
+    """The empty briefs are exactly the ones Taylor wants to flag."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
+    assert 'name="no_brainer"' in html
 
 
 def test_a_reason_is_required():
@@ -1020,14 +1063,22 @@ def test_rows_can_be_ticked_and_added_together():
     assert "onclick" not in html.lower()
 
 
-def test_the_rig_picker_is_multi_select_and_defaults_to_all():
-    """CHANGELOG §E28: rig became a multi-select picker, default all rigs."""
+def test_the_rig_picker_is_a_dropdown_defaulting_to_all_rigs():
+    """A real dropdown, in the header, as the design draws it.
+
+    An earlier attempt used `<select multiple size="1">`, which browsers draw
+    as a one-line list box indistinguishable from a broken text input -- it
+    rendered as `rig all rigs [agent_skills] Apply` and looked like a defect.
+    """
     from mctl_dashboard import render
 
     html = render.rig_picker(("hecke", "gascity", "mathcity"), selected=())
-    assert "multiple" in html
-    assert html.count("<option") >= 3
-    assert "all rigs" in html.lower()
+    assert "multiple" not in html, "a one-line multi-select draws as a broken text box"
+    assert html.count("<option") >= 4, "every rig plus an all-rigs default"
+    assert 'value=""' in html and "all rigs" in html.lower()
+    # Submits on change, and still submits without script.
+    assert "onchange" in html
+    assert "<noscript>" in html
 
 
 def test_the_importance_sliders_exist_and_submit_without_javascript():
@@ -1257,3 +1308,42 @@ def test_a_conflicting_field_surfaces_both_readings():
     html = fields.attributes(**fields.unpack(payload))
     assert "disagree" in html.lower()
     assert "P2" in html and "1" in html
+
+
+def _adj_op():
+    class _Op:
+        name = "adjudicate"
+
+    return _Op()
+
+
+def test_the_no_brainer_flag_reaches_the_bead():
+    """A control that posts a field the handler drops is decoration.
+
+    The core has no no-brainer field yet, so the flag is folded into the reason
+    that is written to the bead. This test is what stops it from silently
+    becoming a no-op again.
+    """
+    from mctl_dashboard.app import NO_BRAINER_MARKER, _arguments_for
+
+    args = _arguments_for(
+        _adj_op(),
+        "he-1",
+        {"verdict": "revise", "reason": "needs fields", "no_brainer": "1",
+         "no_brainer_reason": "empty brief, classifier should have caught it"},
+        None,
+    )
+    assert args["verdict"] == "revise"
+    assert "needs fields" in args["reason"]
+    assert NO_BRAINER_MARKER in args["reason"]
+    assert "classifier should have caught it" in args["reason"]
+
+
+def test_an_unticked_no_brainer_box_changes_nothing():
+    from mctl_dashboard.app import NO_BRAINER_MARKER, _arguments_for
+
+    args = _arguments_for(
+        _adj_op(), "he-1", {"verdict": "revise", "reason": "needs fields"}, None
+    )
+    assert args["reason"] == "needs fields"
+    assert NO_BRAINER_MARKER not in args["reason"]

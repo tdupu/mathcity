@@ -66,6 +66,16 @@ VERDICTS: tuple[tuple[str, str], ...] = (
 #: not ratify the violation.
 HELD_ESCAPE = "reject"
 
+#: Verdicts that send a brief BACK. These are never gated, in any state.
+#:
+#: Refusal restricts what you may *ratify*, never what you may *return*. An
+#: empty or malformed brief is precisely the thing you send back for revision,
+#: and its emptiness is the reason for that verdict rather than an obstacle to
+#: recording it. Gating these was a design error: it made the one action the
+#: adjudicator actually needed on the empty briefs -- "revise, go add fields" --
+#: the one action the panel would not accept.
+RETURN_VERDICTS = frozenset({"revise", "reject"})
+
 
 def _adjudicate_option(options: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
     for entry in options or ():
@@ -170,6 +180,37 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
     )
 
 
+def _no_brainer_control() -> str:
+    """The no-brainer flag: "this reached me and should not have".
+
+    Deliberately NOT a verdict. Ticking it does not change what is recorded as
+    the disposition; it records that surfacing this brief was a pipeline
+    regression, which is a signal about the *classifier* rather than about the
+    brief. Taylor's standing rule is that a no-brainer reaching the adjudicator
+    at all is the defect -- so the flag has to be capturable at the moment of
+    adjudication, when the judgement is fresh, or it never gets captured.
+    """
+    return (
+        '<div style="margin-top: 12px; padding: 9px 11px; '
+        "border: 1px dashed var(--color-neutral-300); "
+        'border-radius: var(--radius-sm); background: var(--color-neutral-050);">'
+        '<label style="display: flex; align-items: center; gap: 7px; '
+        'font-size: 12.5px; cursor: pointer;">'
+        '<input type="checkbox" name="no_brainer" value="1" '
+        'style="accent-color: var(--color-accent-600); margin: 0;">'
+        "<strong>No-brainer</strong> &mdash; this should not have needed me"
+        "</label>"
+        '<textarea name="no_brainer_reason" rows="2" '
+        'placeholder="Why was this a no-brainer? Recorded as a classifier signal, '
+        'not part of the verdict." '
+        'style="width: 100%; margin-top: 7px; font-family: var(--font-body); '
+        "font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--color-divider); "
+        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
+        "</textarea>"
+        "</div>"
+    )
+
+
 def entry(
     brief: Mapping[str, Any],
     options: Sequence[Mapping[str, Any]],
@@ -186,12 +227,14 @@ def entry(
             name,
             label,
             state=state,
-            disabled=state != "open" and not (state == "held" and name == HELD_ESCAPE),
+            disabled=state != "open" and name not in RETURN_VERDICTS,
         )
         for name, label in VERDICTS
     )
 
     locked = state != "open"
+    # `locked` still drives the refusal notice and the styling, but no longer
+    # disables the form itself -- a return verdict is always recordable.
     bar_bg = STOP["error"]["edge"] if state == "held" else "var(--color-neutral-900)"
     bar_fg = STOP["error"]["bg"] if state == "held" else "var(--color-accent-200)"
     body_bg = LOCKED_BODY if state == "held" else "var(--color-neutral-100)"
@@ -221,7 +264,7 @@ def entry(
         'color: var(--color-neutral-600); margin-bottom: 5px;">Disposition</div>'
         '<input type="text" name="option" '
         'placeholder="Option letter, or leave blank to accept as filed" '
-        f'{"disabled " if locked else ""}'
+        
         'style="width: 100%; font-family: var(--font-mono); font-size: 12px; '
         "padding: 5px 8px; margin-bottom: 12px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); box-sizing: border-box;">'
@@ -229,17 +272,18 @@ def entry(
         'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
         '<textarea name="reason" required minlength="3" rows="3" '
         'placeholder="Why this verdict — recorded on the brief bead." '
-        f'{"disabled " if locked else ""}'
+        
         'style="width: 100%; font-family: var(--font-body); font-size: 13px; '
         "padding: 6px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
         "</textarea>"
-        '<div style="display: flex; gap: 9px; align-items: center; margin-top: 13px;">'
-        f'<button class="btn btn-primary" type="submit"{" disabled" if locked else ""}>'
+        + _no_brainer_control()
+        + '<div style="display: flex; gap: 9px; align-items: center; margin-top: 13px;">'
+        '<button class="btn btn-primary" type="submit">'
         "Review verdict &rarr;</button>"
         '<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
         + (
-            "no verdict can be recorded while this is unresolved"
+            "approve is unavailable here — you can still revise or reject"
             if locked
             else "shows the DRY RUN effect plan first — nothing is written yet"
         )

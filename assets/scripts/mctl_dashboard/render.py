@@ -177,35 +177,34 @@ def key_map() -> str:
 
 
 def rig_picker(rig_ids: Sequence[str], selected: Sequence[str] = ()) -> str:
-    """Which rigs to read, as a multi-select defaulting to all.
+    """Which rig to read, as the header dropdown the design draws.
 
-    The design made this a picker rather than an `--all-rigs` checkbox
-    (CHANGELOG §E28), and the default is every rig: a dashboard that silently
-    showed one rig would answer "how much is waiting" with a number that is
-    true of a fraction.
+    The design puts this inline in the context line -- `rig all rigs` with a
+    caret -- not as a separate form in the controls row. An earlier attempt
+    used `<select multiple size="1">`, which browsers draw as a one-line list
+    box indistinguishable from a broken text input.
 
-    Reads may span rigs; mutations never do. Selecting rigs here filters what
-    was read and does not widen what a verdict can touch -- the write path
-    pins its rig at preview time regardless.
+    Reads may span rigs; mutations never do. Choosing a rig here filters what
+    was read and cannot widen what a verdict touches -- the write path pins
+    its rig at preview time regardless.
     """
     if not rig_ids:
         return ""
-    chosen = set(selected)
-    options = "".join(
-        f'<option value="{_e(rig)}"{" selected" if rig in chosen else ""}>{_e(rig)}</option>'
+    chosen = (list(selected) or [""])[0]
+    options = '<option value="">all rigs</option>' + "".join(
+        f'<option value="{_e(rig)}"{" selected" if rig == chosen else ""}>{_e(rig)}</option>'
         for rig in rig_ids
     )
-    note = "all rigs" if not chosen else f"{len(chosen)} of {len(rig_ids)} rigs"
     return (
         '<form method="get" data-region="rig-picker" '
-        'style="display: inline-flex; gap: 6px; align-items: center;">'
-        f'<label class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
-        f"rig <span title=\"reads may span rigs; mutations stay single-rig\">{_e(note)}</span></label>"
-        f'<select name="rig" multiple size="1" '
-        'style="font-family: var(--font-mono); font-size: 11px; max-width: 150px;">'
+        'style="display: inline;">'
+        f'<select name="rig" onchange="this.form.submit()" '
+        'style="font-family: var(--font-mono); font-size: 11.5px; '
+        "border: 0; background: transparent; color: var(--color-accent-800); "
+        'border-bottom: 1px dotted var(--color-accent-600); cursor: pointer;">'
         f"{options}</select>"
-        '<button class="btn btn-ghost" type="submit" '
-        'style="font-size: 11px; padding: 2px 8px;">Apply</button>'
+        '<noscript><button class="btn btn-ghost" type="submit" '
+        'style="font-size: 10px; padding: 1px 5px;">go</button></noscript>'
         "</form>"
     )
 
@@ -262,7 +261,13 @@ def importance(weights: Mapping[str, int]) -> str:
     )
 
 
-def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
+def masthead(
+    counts: Mapping[str, Any],
+    context: Mapping[str, Any],
+    *,
+    rig_ids: Sequence[str] = (),
+    selected_rig: str | None = None,
+) -> str:
     """Brand, resolved runtime context, and the clickable counts.
 
     The context line shows the *resolved* city, rig and store rather than what
@@ -276,6 +281,14 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     city = context.get("city_root") or context.get("city_active") or "—"
     rig = context.get("rig_id") or "all rigs"
     store = context.get("rig_db") or ".beads"
+    # City-wide the rig is a choice, so it is a control; pinned to one rig it
+    # is a fact, so it is text. Offering a picker on a single-rig dashboard
+    # would imply a choice the deployment already made.
+    rig_control = (
+        rig_picker(rig_ids, selected=(selected_rig,) if selected_rig else ())
+        if rig_ids
+        else _e(rig)
+    )
     chips = "".join(
         (
             _chip("/pile", "pile", counts.get("pile"), key="pile"),
@@ -300,7 +313,7 @@ def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
         '<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-700);">'
         f'<span style="color: var(--color-neutral-600);">city</span> {_e(city)} '
         '<span style="color: var(--color-neutral-400);">&middot;</span> '
-        f'<span style="color: var(--color-neutral-600);">rig</span> {_e(rig)} '
+        f'<span style="color: var(--color-neutral-600);">rig</span> {rig_control} '
         '<span style="color: var(--color-neutral-400);">&middot;</span> '
         f'<span style="color: var(--color-neutral-600);">store</span> {_e(store)}'
         "</div>"
@@ -339,6 +352,9 @@ def sidebar(
         '<p style="padding: 7px 12px 4px; font-size: 11px; color: var(--color-neutral-600); '
         'font-style: italic; line-height: 1.35; margin: 0;">'
         "Your ordering over the same stack — nothing here changes pipeline state.</p>"
+        + f'<a class="mc-navlink" href="/priority"><span>My priority list</span>'
+        f'<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
+        f'{len(queued) if queued else "empty"}</span></a>'
         + _next_up(queued)
         + (importance(weights) if weights else "")
         + "</nav>"
@@ -394,6 +410,8 @@ def page(
     trace_id: str = "",
     queued: Sequence[str] = (),
     weights: Mapping[str, int] | None = None,
+    rig_ids: Sequence[str] = (),
+    selected_rig: str | None = None,
 ) -> str:
     """The document shell.
 
@@ -425,7 +443,7 @@ def page(
             f"<style>{STYLESHEET}</style>",
             "</head>",
             "<body>",
-            masthead(counts, context),
+            masthead(counts, context, rig_ids=rig_ids, selected_rig=selected_rig),
             key_map(),
             '<div class="mc-shell">',
             sidebar(current, counts, queued=queued, weights=weights),
