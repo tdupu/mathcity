@@ -217,9 +217,11 @@ Triggered immediately by `brief.archive_requested` via `brief-archive-on-request
 
 The goal of the no-brainer system is to keep work flowing by auto-processing briefs that
 are too easy to require the human adjudicator's input. **Current state (2026-08-19): auto-execution is
-designed, policy-adopted (N5, 2026-07-12), wired, and now gated by a real,
-tested execution check. It is manual-trigger only (see below) and it is NOT
-ARMED anywhere.**
+designed, policy-adopted (N5, 2026-07-12), wired, and now gated by a real, tested
+execution check. **ARMED is the default** — the owner reaffirmed on 2026-08-19
+that the switches are brakes, not enablers, so an absent token means
+auto-execute. Execution is still manual-trigger only (see below): `gc start`
+does not fire it.**
 
 **Correction to this document (2026-08-19).** The paragraph here previously
 stated that the kill switch was set to `false` and auto-execution was HALTED.
@@ -283,24 +285,26 @@ Decision order — each step is terminal, and every decision is audited:
 | 2 | stop gates | `server_touching: true` in frontmatter **or** `G5 …: FAIL/BLOCKED`; `user_skill_touching_override: true` or `G5b …: FAIL/BLOCKED`; `classifier_state=safety_blocked` |
 | 3 | classifier evidence | not exactly one `G9 …: PASS` line; state ≠ `known_no_brainer`; category absent from `no-brainer-categories.toml`; `stop_gates_clear` ≠ true; `confidence < 0.85` |
 | 4 | N5 kill switches | city then rig `auto_merge_enabled` exists and reads `false` |
-| 5 | mode | the city/rig mode is DRY-RUN — token absent, pinned `false`, malformed, or expired |
+| 5 | mode | DRY-RUN is pinned — a token reads `false` (unexpired) or is unreadable, at either level. **Absent = ARMED = proceed.** |
 
-Steps 1–3 run **before** any switch or arming state is read, so a category-E /
+Steps 1–3 run **before** any switch or mode state is read, so a category-E /
 server-touching brief is refused no matter how the city is configured. This is
-a stop-gate, not a preference.
+a stop-gate, not a preference, and it is what the armed default rests on.
 
 **Kill switches (brakes, unchanged):** `<city-root>/.beads/auto_merge_enabled`,
 then `<rig_root>/.beads/auto_merge_enabled`. A file that exists and reads
 `false` halts. Absent or `true` does **not** by itself permit anything.
 
-**Mode tokens (DRY-RUN / ARMED):**
-`<city-root>/.beads/no_brainer_auto_execute_armed` **and**
-`<rig_root>/.beads/no_brainer_auto_execute_armed`. First line exactly `true`
-selects ARMED; optional second line `expires=<ISO-8601-utc>` lapses back to
-DRY-RUN on its own. A token reading `false` **pins** DRY-RUN. Absent /
-malformed / expired / pinned at either level = DRY-RUN, which behaves exactly
-as the old dry-run designation did. **Nothing is armed anywhere today, and
-nothing in this change armed anything.**
+**Mode tokens (ARMED / DRY-RUN) — ARMED is the DEFAULT:**
+`<city-root>/.beads/no_brainer_auto_execute_armed` and
+`<rig_root>/.beads/no_brainer_auto_execute_armed`. These are **brakes, not
+enablers** (owner ruling 2026-08-19): an **absent token means auto-execute**.
+Only a token that positively reads `false` pins DRY-RUN, and either level
+alone is enough, so stopping automation is always a one-place act. A `false`
+token may carry `expires=<ISO-8601-utc>` to hold DRY-RUN temporarily and
+auto-resume ARMED. An unreadable token holds DRY-RUN rather than falling
+through to the default — an absent token is "take the default", an unreadable
+one is not consent to execute.
 
 Dry-run is a runtime mode, not a designation — it toggles both ways with no
 edit to any skill or formula file:
@@ -309,25 +313,23 @@ edit to any skill or formula file:
 # which mode am I in?  (read-only, writes nothing, safe anywhere)
 brief-check.sh no-brainer-mode
 
-# -> ARMED: deliberate, both levels, record a standalone decision bead first
-printf 'true\nexpires=2026-08-26T00:00:00Z\n' > <city-root>/.beads/no_brainer_auto_execute_armed
-printf 'true\nexpires=2026-08-26T00:00:00Z\n' > <rig_root>/.beads/no_brainer_auto_execute_armed
-
 # -> DRY-RUN: one command, no authorization needed, effective immediately
 brief-check.sh no-brainer-disarm
+
+# -> DRY-RUN until a deadline, then auto-resume ARMED
+printf 'false\nexpires=2026-08-26T00:00:00Z\n' > <rig_root>/.beads/no_brainer_auto_execute_armed
+
+# -> ARMED: remove the pins (absent = the armed default)
+rm -f <city-root>/.beads/no_brainer_auto_execute_armed <rig_root>/.beads/no_brainer_auto_execute_armed
 ```
 
-Reaching ARMED takes two deliberate acts; returning to DRY-RUN takes one and
-is always permitted. The asymmetry is intentional — the recovery path is the
-one that has to work under pressure. A pinned dry-run is recorded
-distinguishably from a never-armed one (`dry_run_pinned` vs `not_armed` in the
-audit log, and called out in the mode report), so a rollback is confirmable
-rather than inferred from silence.
-
-> N5 as adopted still says absent-or-`true` = proceed. The arming requirement
-> is strictly more conservative (it refuses where policy would permit, never
-> the reverse). The amendment is **drafted, not adopted**:
-> `subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md`.
+What makes an armed default safe is steps 1–3 of the gate and the audit
+record, not the token. Before 2026-08-19 this gate permitted a
+`server_touching: true` brief, an unresolvable brief path, a brief with no
+classifier evidence at all, and `known_no_brainer` at `confidence=0.5`. All
+four now refuse. A pinned dry-run is recorded distinguishably from an
+unreadable token (`dry_run_pinned` vs `dry_run_token_invalid`) and from the
+absent default, so a rollback is confirmable rather than inferred.
 
 **Audit trail (N7).** Every gate evaluation — PERMITTED and REFUSED alike —
 appends one JSON line to
@@ -337,9 +339,10 @@ confidence, and the full switch and arming state that produced it. If that
 record cannot be written the gate **refuses**: an auto-execution nobody can
 reconstruct afterwards is worse than a dry run.
 
-Unarmed, the refusal lines are a zero-risk shadow-mode ledger — they record
-what *would* have executed, which is the substrate N8's α measurement has
-always needed and never had.
+In DRY-RUN the refusal lines are a zero-risk shadow ledger — they record what
+*would* have executed. In ARMED the PERMITTED lines are the α substrate N8 has
+always required and never had: category and confidence per execution, which is
+what makes the calibration check computable for the first time.
 
 To inspect what the classifier would have done:
 ```bash

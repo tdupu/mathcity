@@ -137,15 +137,14 @@ kind = "stop"
 required = true
 rules = ["N5"]
 evidence_key = "G12 Auto-merge-kill-switch"
-# N5 (Adopted 2026-07-12) states that auto-execute is the DEFAULT and the kill
-# switches are brakes. The enforcing gate (brief-check.sh
-# `no-brainer-execute-safety`) keeps those brakes and adds a positive arming
-# requirement on top, because a released brake is not a decision to automate.
-# Switch and token locations are declared in paths.toml (kill_switch_city,
-# kill_switch_rig, arm_token_city, arm_token_rig). The corresponding N5
-# amendment is DRAFTED, not adopted:
-# subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md
-description = "Automation must clear the execution gate before mutating anything: stop gates (server-touching/category E, user-skill-touching, safety_blocked) refuse regardless of switch state; classifier evidence must be a registry-backed known_no_brainer with stop_gates_clear=true and confidence >= 0.85; the two-level kill-switch hierarchy (city-wide <city-root>/.beads/auto_merge_enabled, then <rig_root>/.beads/auto_merge_enabled) halts when a file exists and reads `false`; and the runtime mode must be ARMED, which requires a valid unexpired token at BOTH <city-root>/.beads/no_brainer_auto_execute_armed and <rig_root>/.beads/no_brainer_auto_execute_armed. DRY-RUN is the default mode and behaves exactly like the old dry-run designation; the mode is reported by `brief-check.sh no-brainer-mode` and returned to DRY-RUN in one command by `brief-check.sh no-brainer-disarm`. Every evaluation appends a durable audit line to <artifact_root>/decisions/no-brainer-execution.jsonl; an unwritable sink refuses."
+# N5 (Adopted 2026-07-12): auto-execute is the DEFAULT and the switches are
+# brakes, not enablers. Reaffirmed by the owner 2026-08-19. The enforcing gate
+# (brief-check.sh `no-brainer-execute-safety`) applies that default and adds
+# the stop-gate, classifier-evidence, and audit requirements below, which are
+# what make an armed default safe to run. Switch and token locations are
+# declared in paths.toml (kill_switch_city, kill_switch_rig, arm_token_city,
+# arm_token_rig).
+description = "Automation must clear the execution gate before mutating anything: stop gates (server-touching/category E, user-skill-touching, safety_blocked) refuse regardless of switch state; classifier evidence must be a registry-backed known_no_brainer with stop_gates_clear=true and confidence >= 0.85; the two-level kill-switch hierarchy (city-wide <city-root>/.beads/auto_merge_enabled, then <rig_root>/.beads/auto_merge_enabled) halts when a file exists and reads `false`; and the runtime mode must not be pinned to DRY-RUN. ARMED is the DEFAULT: the mode tokens <city-root>/.beads/no_brainer_auto_execute_armed and <rig_root>/.beads/no_brainer_auto_execute_armed are brakes, so an absent token proceeds and only a token reading `false` (or an unreadable one) holds DRY-RUN, at either level. The mode is reported by `brief-check.sh no-brainer-mode` and pinned to DRY-RUN in one command by `brief-check.sh no-brainer-disarm`. Every evaluation appends a durable audit line to <artifact_root>/decisions/no-brainer-execution.jsonl; an unwritable sink refuses."
 
 [[gates]]
 id = "G13"

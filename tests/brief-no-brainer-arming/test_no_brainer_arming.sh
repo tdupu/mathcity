@@ -6,12 +6,15 @@
 # It must therefore be a real gate, not an advisory audit:
 #
 #   1. brief unresolvable            -> REFUSE (cannot prove safety of an unread artifact)
-#   2. stop gates (category E etc.)  -> REFUSE, evaluated BEFORE any switch/arm state
+#   2. stop gates (category E etc.)  -> REFUSE, evaluated BEFORE any switch/mode state
 #   3. classifier evidence           -> REFUSE unless known_no_brainer + registry
 #                                       category + stop_gates_clear + confidence >= 0.85
 #   4. N5 kill switch reads `false`  -> REFUSE (city, then rig)
-#   5. NOT explicitly armed          -> REFUSE  <-- inverts absent-means-go
+#   5. DRY-RUN is pinned             -> REFUSE (token reads `false`, or unreadable)
 #   6. otherwise                     -> PERMIT
+#
+# ARMED is the DEFAULT (owner ruling, 2026-08-19): an ABSENT token means
+# auto-execute. The tokens are brakes, not enablers. DRY-RUN must be pinned.
 #
 # Every terminal decision leaves a durable audit line; an unwritable audit
 # sink refuses rather than executing unreconstructably.
@@ -54,9 +57,13 @@ mk_sandbox() {
   LAST_AUDIT="$AUDIT"
 }
 
+# ARMED is the default, so "arming" is the absence of a pin. These helpers
+# exist for the cases that assert the EXPLICIT `true` form behaves identically.
 arm_city() { printf 'true\n' > "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"; }
 arm_rig()  { printf 'true\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"; }
 arm_both() { arm_city; arm_rig; }
+pin_city() { printf 'false\n' > "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"; }
+pin_rig()  { printf 'false\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"; }
 
 run_gate() {
   LAST_OUT="$SANDBOX/out"; LAST_ERR="$SANDBOX/err"
@@ -108,63 +115,80 @@ else
 fi
 cleanup
 
-echo "=== 4. ABSENT arm files -> REFUSE (absent-means-go is inverted) ==="
+echo "=== 4. ABSENT tokens -> PERMIT (ARMED is the default; brakes, not enablers) ==="
 mk_sandbox "$GOOD_G9"; run_gate
-if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "not_armed" ]; then
-  ok "absent arm files refuse (explicit arming required)"
+if [ "$STATUS" = "0" ] && [ "$(audit_field decision)" = "PERMITTED" ] && \
+   [ "$(audit_field armed_city)" = "absent" ]; then
+  ok "absent tokens permit — an unconfigured rig takes the ARMED default"
 else
-  no "absent arm files refuse (exit=$STATUS reason=$(audit_field reason))"
+  no "absent tokens permit (exit=$STATUS decision=$(audit_field decision) city=$(audit_field armed_city))"
 fi
 cleanup
 
-echo "=== 5. absent arm files + kill switch reads true -> still REFUSE ==="
+echo "=== 5. absent tokens + kill switch reads true -> PERMIT ==="
 mk_sandbox "$GOOD_G9"
 printf 'true\n' > "$SANDBOX/city/.beads/auto_merge_enabled"
 run_gate
-if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "not_armed" ]; then
-  ok "a released brake is not an arming signal"
-else
-  no "a released brake is not an arming signal (exit=$STATUS reason=$(audit_field reason))"
-fi
-cleanup
-
-echo "=== 6. city armed but rig not armed -> REFUSE (both levels required) ==="
-mk_sandbox "$GOOD_G9"; arm_city; run_gate
-if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "not_armed" ]; then
-  ok "city-only arming refuses; arming is per-rig"
-else
-  no "city-only arming refuses (exit=$STATUS reason=$(audit_field reason))"
-fi
-cleanup
-
-echo "=== 7. rig armed but city not armed -> REFUSE ==="
-mk_sandbox "$GOOD_G9"; arm_rig; run_gate
-if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "not_armed" ]; then
-  ok "rig-only arming refuses"
-else
-  no "rig-only arming refuses (exit=$STATUS reason=$(audit_field reason))"
-fi
-cleanup
-
-echo "=== 8. expired arm token -> REFUSE (arming decays) ==="
-mk_sandbox "$GOOD_G9"; arm_rig
-printf 'true\nexpires=2000-01-01T00:00:00Z\n' > "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"
-run_gate
-if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "arming_expired" ]; then
-  ok "expired arm token refuses"
-else
-  no "expired arm token refuses (exit=$STATUS reason=$(audit_field reason))"
-fi
-cleanup
-
-echo "=== 9. unexpired arm token -> PERMIT ==="
-mk_sandbox "$GOOD_G9"; arm_rig
-printf 'true\nexpires=2999-01-01T00:00:00Z\n' > "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"
-run_gate
 if [ "$STATUS" = "0" ] && [ "$(audit_field decision)" = "PERMITTED" ]; then
-  ok "unexpired arm token permits"
+  ok "a released brake and an absent token both mean proceed"
 else
-  no "unexpired arm token permits (exit=$STATUS decision=$(audit_field decision))"
+  no "a released brake and an absent token both mean proceed (exit=$STATUS decision=$(audit_field decision))"
+fi
+cleanup
+
+echo "=== 6. explicit true at city, absent at rig -> PERMIT (same as default) ==="
+mk_sandbox "$GOOD_G9"; arm_city; run_gate
+if [ "$STATUS" = "0" ] && [ "$(audit_field armed_city)" = "armed" ] && \
+   [ "$(audit_field armed_rig)" = "absent" ]; then
+  ok "explicit true is equivalent to absent, and both permit"
+else
+  no "explicit true equivalent to absent (exit=$STATUS city=$(audit_field armed_city) rig=$(audit_field armed_rig))"
+fi
+cleanup
+
+echo "=== 7. pinning EITHER level alone is enough to reach DRY-RUN ==="
+mk_sandbox "$GOOD_G9"; arm_city; pin_rig; run_gate
+rig_only="$STATUS:$(audit_field reason)"
+cleanup
+mk_sandbox "$GOOD_G9"; pin_city; arm_rig; run_gate
+city_only="$STATUS:$(audit_field reason)"
+if [ "$rig_only" = "1:dry_run_pinned" ] && [ "$city_only" = "1:dry_run_pinned" ]; then
+  ok "either level alone pins dry-run — rollback is a one-place act"
+else
+  no "either level alone pins dry-run (rig_only=$rig_only city_only=$city_only)"
+fi
+cleanup
+
+echo "=== 8. an EXPIRED dry-run pin lapses back to the ARMED default ==="
+mk_sandbox "$GOOD_G9"
+printf 'false\nexpires=2000-01-01T00:00:00Z\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"
+run_gate
+if [ "$STATUS" = "0" ] && [ "$(audit_field armed_rig)" = "pin_expired" ]; then
+  ok "a temporary dry-run pin auto-resumes ARMED when it expires"
+else
+  no "expired pin resumes ARMED (exit=$STATUS rig=$(audit_field armed_rig))"
+fi
+cleanup
+
+echo "=== 9. an UNEXPIRED dry-run pin still holds ==="
+mk_sandbox "$GOOD_G9"
+printf 'false\nexpires=2999-01-01T00:00:00Z\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"
+run_gate
+if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "dry_run_pinned" ]; then
+  ok "a dry-run pin holds until its deadline"
+else
+  no "a dry-run pin holds until its deadline (exit=$STATUS reason=$(audit_field reason))"
+fi
+cleanup
+
+echo "=== 9b. an UNREADABLE token holds DRY-RUN (unreadable is not consent) ==="
+mk_sandbox "$GOOD_G9"
+printf 'maybe?\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"
+run_gate
+if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "dry_run_token_invalid" ]; then
+  ok "a malformed token refuses rather than falling through to the default"
+else
+  no "malformed token refuses (exit=$STATUS reason=$(audit_field reason))"
 fi
 cleanup
 
@@ -287,27 +311,28 @@ fi
 cleanup
 
 echo "=== 20. armed run is distinguishable from the dry-run path in output ==="
-mk_sandbox "$GOOD_G9"; arm_both; run_gate
+mk_sandbox "$GOOD_G9"; run_gate
 armed_banner=0
 grep -q "PRELIMINARY" "$LAST_ERR" && armed_banner=1
 armed_decision="$(audit_field decision)"
+armed_mode="$(audit_field mode)"
 cleanup
-mk_sandbox "$GOOD_G9"; run_gate
+mk_sandbox "$GOOD_G9"; pin_rig; run_gate
 dry_decision="$(audit_field decision)"
 dry_mode="$(audit_field mode)"
-if [ "$armed_banner" = "1" ] && [ "$armed_decision" = "PERMITTED" ] && \
+if [ "$armed_banner" = "1" ] && [ "$armed_decision" = "PERMITTED" ] && [ "$armed_mode" = "armed" ] && \
    [ "$dry_decision" = "REFUSED" ] && [ "$dry_mode" = "dry-run" ]; then
   ok "armed and dry-run paths are distinguishable (banner + mode + decision)"
 else
-  no "armed and dry-run paths distinguishable (banner=$armed_banner armed=$armed_decision dry=$dry_decision mode=$dry_mode)"
+  no "armed and dry-run paths distinguishable (banner=$armed_banner armed=$armed_decision/$armed_mode dry=$dry_decision/$dry_mode)"
 fi
 cleanup
 
 # ---------------------------------------------------------------------------
 # Dry-run is a RUNTIME MODE that toggles in BOTH directions, not a one-way
-# arming. The recovery path (armed -> dry-run) is the one that has to work
-# under pressure, so it is tested at least as hard as the forward path, and
-# every toggle happens at runtime with no edit to any skill or formula file.
+# arming. Under an ARMED default the recovery path (armed -> dry-run) is the
+# one that has to work under pressure, so it is tested hardest, and every
+# toggle happens at runtime with no edit to any skill or formula file.
 # ---------------------------------------------------------------------------
 
 run_mode() {
@@ -329,50 +354,49 @@ run_disarm() {
      "$CHECK" no-brainer-disarm) >"$SANDBOX/disarm-out" 2>"$SANDBOX/disarm-err" || DISARM_STATUS=$?
 }
 
-echo "=== 21. mode is observable: unarmed reports DRY-RUN ==="
+echo "=== 21. mode is observable: an unconfigured city reports ARMED ==="
 mk_sandbox "$GOOD_G9"; run_mode
-if [ "$MODE_STATUS" = "0" ] && grep -q "DRY-RUN" "$LAST_OUT" && ! grep -q "mode: ARMED" "$LAST_OUT"; then
-  ok "unarmed city reports DRY-RUN when asked"
+if [ "$MODE_STATUS" = "0" ] && grep -q "mode: ARMED" "$LAST_OUT" && \
+   grep -q "ARMED is the DEFAULT" "$LAST_OUT"; then
+  ok "an unconfigured city reports ARMED and says so is the default"
 else
-  no "unarmed city reports DRY-RUN when asked (exit=$MODE_STATUS)"
+  no "unconfigured city reports ARMED by default (exit=$MODE_STATUS)"
 fi
 cleanup
 
-echo "=== 22. mode is observable: armed reports ARMED ==="
-mk_sandbox "$GOOD_G9"; arm_both; run_mode
-if [ "$MODE_STATUS" = "0" ] && grep -q "ARMED" "$LAST_OUT"; then
-  ok "armed city reports ARMED when asked"
+echo "=== 22. mode is observable: a pinned city reports DRY-RUN ==="
+mk_sandbox "$GOOD_G9"; pin_rig; run_mode
+if [ "$MODE_STATUS" = "0" ] && grep -q "mode: DRY-RUN" "$LAST_OUT"; then
+  ok "a pinned city reports DRY-RUN when asked"
 else
-  no "armed city reports ARMED when asked (exit=$MODE_STATUS)"
+  no "a pinned city reports DRY-RUN when asked (exit=$MODE_STATUS)"
 fi
 cleanup
 
 echo "=== 23. mode report names the toggle commands in both directions ==="
 mk_sandbox "$GOOD_G9"; run_mode
-if grep -q "no_brainer_auto_execute_armed" "$LAST_OUT" && grep -q "no-brainer-disarm" "$LAST_OUT"; then
+if grep -q "no-brainer-disarm" "$LAST_OUT" && grep -q "absent = armed default" "$LAST_OUT"; then
   ok "mode report tells the operator how to toggle each way"
 else
   no "mode report tells the operator how to toggle each way"
 fi
 cleanup
 
-echo "=== 24. toggle FORWARD at runtime: dry-run refuses, then armed permits ==="
+echo "=== 24. an engaged kill switch is reported as DRY-RUN, not as ARMED ==="
 mk_sandbox "$GOOD_G9"
-run_gate; first_status="$STATUS"; first_reason="$(audit_field reason)"
-arm_both
-run_gate; second_status="$STATUS"; second_decision="$(audit_field decision)"
-if [ "$first_status" = "1" ] && [ "$first_reason" = "not_armed" ] && \
-   [ "$second_status" = "0" ] && [ "$second_decision" = "PERMITTED" ]; then
-  ok "dry-run -> armed takes effect at runtime"
+printf 'false\n' > "$SANDBOX/city/.beads/auto_merge_enabled"
+run_mode
+if grep -q "mode: DRY-RUN" "$LAST_OUT"; then
+  ok "a brake holding the city is not reported as ARMED"
 else
-  no "dry-run -> armed takes effect at runtime (first=$first_status/$first_reason second=$second_status/$second_decision)"
+  no "a brake holding the city is not reported as ARMED"
 fi
 cleanup
 
-echo '=== 25. toggle BACK by pinning: armed permits, then a false token refuses ==='
-mk_sandbox "$GOOD_G9"; arm_both
+echo "=== 25. toggle BACK by pinning: default permits, then a false token refuses ==="
+mk_sandbox "$GOOD_G9"
 run_gate; first_status="$STATUS"
-printf 'false\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"
+pin_rig
 run_gate; second_status="$STATUS"; second_reason="$(audit_field reason)"
 if [ "$first_status" = "0" ] && [ "$second_status" = "1" ] && [ "$second_reason" = "dry_run_pinned" ]; then
   ok "armed -> dry-run by writing false takes effect at runtime"
@@ -381,59 +405,64 @@ else
 fi
 cleanup
 
-echo "=== 26. toggle BACK by deletion: removing one token is enough ==="
-mk_sandbox "$GOOD_G9"; arm_both
+echo "=== 26. toggle FORWARD by deletion: removing the pin restores ARMED ==="
+mk_sandbox "$GOOD_G9"; pin_rig; pin_city
 run_gate; first_status="$STATUS"
-rm -f "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"
-run_gate; second_status="$STATUS"; second_reason="$(audit_field reason)"
-if [ "$first_status" = "0" ] && [ "$second_status" = "1" ] && [ "$second_reason" = "not_armed" ]; then
-  ok "deleting either token returns to dry-run"
+rm -f "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed" \
+      "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"
+run_gate; second_status="$STATUS"; second_decision="$(audit_field decision)"
+if [ "$first_status" = "1" ] && [ "$second_status" = "0" ] && [ "$second_decision" = "PERMITTED" ]; then
+  ok "deleting the pins returns to the ARMED default"
 else
-  no "deleting either token returns to dry-run (first=$first_status second=$second_status/$second_reason)"
+  no "deleting the pins returns to ARMED (first=$first_status second=$second_status/$second_decision)"
 fi
 cleanup
 
 echo "=== 27. the disarm command is a one-shot recovery path, and it works ==="
-mk_sandbox "$GOOD_G9"; arm_both
+mk_sandbox "$GOOD_G9"
 run_gate; armed_status="$STATUS"
 run_disarm
 run_gate; after_status="$STATUS"; after_reason="$(audit_field reason)"
 run_mode
 if [ "$armed_status" = "0" ] && [ "$DISARM_STATUS" = "0" ] && \
    [ "$after_status" = "1" ] && [ "$after_reason" = "dry_run_pinned" ] && \
-   grep -q "DRY-RUN" "$LAST_OUT"; then
-  ok "no-brainer-disarm returns the city to dry-run in one command"
+   grep -q "mode: DRY-RUN" "$LAST_OUT"; then
+  ok "no-brainer-disarm stops an armed-by-default city in one command"
 else
-  no "no-brainer-disarm returns to dry-run (armed=$armed_status disarm=$DISARM_STATUS after=$after_status/$after_reason)"
+  no "no-brainer-disarm stops an armed city (armed=$armed_status disarm=$DISARM_STATUS after=$after_status/$after_reason)"
 fi
 cleanup
 
-echo "=== 28. round trip: dry-run -> armed -> dry-run -> armed is repeatable ==="
+echo "=== 28. round trip: armed -> dry-run -> armed -> dry-run is repeatable ==="
 mk_sandbox "$GOOD_G9"
 trip=""
 run_gate; trip="$trip$STATUS"
-arm_both;                      run_gate; trip="$trip$STATUS"
 run_disarm;                    run_gate; trip="$trip$STATUS"
-arm_both;                      run_gate; trip="$trip$STATUS"
-if [ "$trip" = "1010" ]; then
-  ok "the mode round-trips (refuse, permit, refuse, permit)"
+rm -f "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed" \
+      "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"
+run_gate; trip="$trip$STATUS"
+run_disarm;                    run_gate; trip="$trip$STATUS"
+if [ "$trip" = "0101" ]; then
+  ok "the mode round-trips (permit, refuse, permit, refuse)"
 else
-  no "the mode round-trips (got '$trip', expected '1010')"
+  no "the mode round-trips (got '$trip', expected '0101')"
 fi
 cleanup
 
-echo "=== 29. an explicitly pinned dry-run is distinguishable from never-armed ==="
-mk_sandbox "$GOOD_G9"; arm_city
-printf 'false\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"
+echo "=== 29. a pinned dry-run is distinguishable from an unreadable token ==="
+mk_sandbox "$GOOD_G9"; pin_rig
 run_gate; pinned_reason="$(audit_field reason)"
 run_mode; pinned_report=0
-grep -q "pinned" "$LAST_OUT" && pinned_report=1
+grep -q "explicitly pinned" "$LAST_OUT" && pinned_report=1
 cleanup
-mk_sandbox "$GOOD_G9"; run_gate; never_reason="$(audit_field reason)"
-if [ "$pinned_reason" = "dry_run_pinned" ] && [ "$never_reason" = "not_armed" ] && [ "$pinned_report" = "1" ]; then
-  ok "pinned dry-run and never-armed are distinguishable in audit and report"
+mk_sandbox "$GOOD_G9"
+printf 'yes please\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"
+run_gate; invalid_reason="$(audit_field reason)"
+if [ "$pinned_reason" = "dry_run_pinned" ] && [ "$invalid_reason" = "dry_run_token_invalid" ] && \
+   [ "$pinned_report" = "1" ]; then
+  ok "pinned and unreadable are distinguishable in audit and report"
 else
-  no "pinned vs never-armed distinguishable (pinned=$pinned_reason never=$never_reason report=$pinned_report)"
+  no "pinned vs unreadable distinguishable (pinned=$pinned_reason invalid=$invalid_reason report=$pinned_report)"
 fi
 cleanup
 
@@ -442,14 +471,44 @@ mk_sandbox "---
 server_touching: true
 ---
 $GOOD_G9"
-arm_both; run_disarm; arm_both
+run_disarm
+rm -f "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed" \
+      "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"
 run_gate
 if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "stop_gate_server_touching" ]; then
-  ok "category E stays refused across mode toggles"
+  ok "category E stays refused across mode toggles, armed by default"
 else
   no "category E stays refused across mode toggles (exit=$STATUS reason=$(audit_field reason))"
 fi
 cleanup
+
+echo "=== 31. the pack never ships a formula pointing at a check it does not provide ==="
+# Under an ARMED default the gate script's PRESENCE is load-bearing: the
+# formula names it by rig-relative path, so a pack that referenced a check it
+# does not ship would be relying entirely on the runner failing closed.
+missing_checks=""
+for ref in $(grep -ho '\.gc/scripts/checks/[a-z0-9-]*\.sh' "$RIG_ROOT"/formulas/*.toml | sort -u); do
+  base="$(basename "$ref")"
+  [ -f "$RIG_ROOT/assets/scripts/checks/$base" ] || missing_checks="$missing_checks $base"
+done
+gate_sh="$RIG_ROOT/assets/scripts/checks/brief-no-brainer-execute-safety.sh"
+if [ -z "$missing_checks" ] && [ -x "$gate_sh" ]; then
+  ok "every formula-referenced check ships in the pack and the gate is executable"
+else
+  no "formula-referenced checks missing from the pack:$missing_checks (gate executable: $([ -x "$gate_sh" ] && echo yes || echo NO))"
+fi
+
+echo "=== 32. the guarded-execute step is gated by the EXECUTE check, not the weaker one ==="
+# The execute gate must sit on the step that mutates. It was previously on the
+# classification step while guarded-execute ran a check that never read the
+# switches at all.
+formula="$RIG_ROOT/formulas/no-brainer-classify.toml"
+guarded_block="$(awk '/^id = "guarded-execute"/,/^\[\[steps\]\]/' "$formula")"
+if printf '%s' "$guarded_block" | grep -q 'brief-no-brainer-execute-safety.sh'; then
+  ok "guarded-execute is gated by brief-no-brainer-execute-safety.sh"
+else
+  no "guarded-execute is gated by the execute-safety check"
+fi
 
 echo ""
 echo "=== SUMMARY: $PASS_COUNT passed, $FAIL_COUNT failed ==="

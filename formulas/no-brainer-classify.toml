@@ -3,10 +3,10 @@ Classify and optionally process no-brainer briefs.
 
 This formula classifies candidates and records the result. Shortcut execution
 is allowed only for a known registry category with confidence at or above the
-threshold, all stop gates clear, no N5 kill switch engaged, AND explicit
-arming at both the city and rig level. Unarmed is the default and is
-indistinguishable from a dry run: nothing executes and the brief stays on the
-human presentation path.
+threshold, all stop gates clear, no N5 kill switch engaged, and the runtime
+mode not pinned to DRY-RUN. ARMED is the default; pinning DRY-RUN (either
+level, or `brief-check.sh no-brainer-disarm`) makes the step a no-op: nothing
+executes and the brief stays on the human presentation path.
 """
 formula = "no-brainer-classify"
 version = 1
@@ -125,17 +125,18 @@ The check refuses, in this order: an unresolvable brief; a stop gate
 classifier evidence that is not a registry-backed `known_no_brainer` with
 `stop_gates_clear=true` and `confidence >= 0.85`; an ENGAGED N5 kill switch
 (`<city-root>/.beads/auto_merge_enabled` then `<rig_root>/.beads/auto_merge_enabled`,
-a file that exists and reads `false`); and — the arming requirement — the
-absence of a valid, unexpired positive token at BOTH
-`<city-root>/.beads/no_brainer_auto_execute_armed` and
+a file that exists and reads `false`); and a runtime mode pinned to DRY-RUN by
+a token reading `false` — or unreadable — at either
+`<city-root>/.beads/no_brainer_auto_execute_armed` or
 `<rig_root>/.beads/no_brainer_auto_execute_armed`.
 
-DRY-RUN is the default mode and behaves exactly like the old dry-run
-designation: classification is recorded, nothing executes, and the brief stays
-on the normal human presentation path. The mode toggles both ways at runtime
-without editing this formula — `brief-check.sh no-brainer-mode` reports it,
-`brief-check.sh no-brainer-disarm` returns to DRY-RUN in one command. Every
-evaluation appends a durable audit line to
+ARMED is the default: those tokens are brakes, not enablers, so an absent
+token proceeds. Pinning DRY-RUN makes this step a no-op — classification is
+recorded, nothing executes, and the brief stays on the normal human
+presentation path. The mode toggles both ways at runtime without editing this
+formula — `brief-check.sh no-brainer-mode` reports it, `brief-check.sh
+no-brainer-disarm` pins DRY-RUN in one command. Every evaluation appends a
+durable audit line to
 `{{artifact_root}}/decisions/no-brainer-execution.jsonl`; if that record
 cannot be written the check refuses rather than executing unreconstructably.
 """

@@ -120,11 +120,11 @@ else
 fi
 rm -rf "$tmp" "$KS_CITY"
 
-echo "=== no-brainer-execute-safety: kill switch flag ABSENT no longer allows execution (arming required) ==="
-# Was: "absent kill switch allows execute-safety (expected=0)".  Absent-means-go
-# put the brake in the go position by default; auto-execution now requires a
-# positive arming token at both the city and rig level, so an absent brake and
-# an absent arm token both mean DO NOT EXECUTE.
+echo "=== no-brainer-execute-safety: kill switch flag ABSENT allows execution (ARMED default) ==="
+# ARMED is the default (owner ruling 2026-08-19): the switches are brakes, not
+# enablers, so an absent brake and an absent mode token both mean proceed.
+# The gate still refuses here for any stop-gate, classifier-evidence, engaged-
+# brake, or pinned-dry-run reason -- see tests/brief-no-brainer-arming/.
 KS_CITY2="$(mktemp -d)"
 mkdir -p "$KS_CITY2/.beads"
 tmp="$(mktemp -d)"
@@ -134,11 +134,11 @@ printf '%s\n' 'G5 Server-touching: PASS
 G9 No-brainer-filter: PASS classifier_state=known_no_brainer category=stale-branch stop_gates_clear=true confidence=0.9 classified_at=2026-07-28T00:00:00Z' > "$brief_path"
 status=0
 (cd "$RIG_ROOT" && GC_CITY="$KS_CITY2" GC_RIG_ROOT="$tmp/rig" BRIEF_ROOT="$tmp/rig/.beads/briefs" GC_BRIEF_PATH="$brief_path" "$CHECK" no-brainer-execute-safety) >"$tmp/out" 2>"$tmp/err" || status=$?
-if [ "$status" = "1" ] && grep -q '"reason":"not_armed"' "$tmp/rig/.beads/briefs/decisions/no-brainer-execution.jsonl"; then
-  echo "PASS: absent kill switch alone does not arm execute-safety (exit=$status, expected=1, reason=not_armed)"
+if [ "$status" = "0" ] && grep -q '"decision":"PERMITTED"' "$tmp/rig/.beads/briefs/decisions/no-brainer-execution.jsonl"; then
+  echo "PASS: absent kill switch allows execute-safety (exit=$status, expected=0, decision=PERMITTED)"
   PASS_COUNT=$((PASS_COUNT + 1))
 else
-  echo "FAIL: absent kill switch alone does not arm execute-safety (exit=$status, expected=1)"
+  echo "FAIL: absent kill switch allows execute-safety (exit=$status, expected=0)"
   echo "  --- stderr ---"; sed 's/^/  /' "$tmp/err"
   FAIL_COUNT=$((FAIL_COUNT + 1))
 fi
