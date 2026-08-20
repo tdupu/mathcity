@@ -557,3 +557,9 @@ module = "provenance.py"
 severity = "FATAL"
 meaning = "Dispatch provenance schema could not be loaded."
 module = "provenance.py"
+
+[MBRF056]
+severity = "INFO"
+meaning = "Brief declares no bead subject."
+policy_ref = "B2.1a"
+module = "briefs.py"

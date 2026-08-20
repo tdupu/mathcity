@@ -196,10 +196,17 @@ Present the violation to Mayor/the human adjudicator:
 
 Format the violation report as a numbered list and escalate using:
 
-    .gc/scripts/escalate.sh \\
+    "<mathcity-pack-root>/assets/scripts/escalate.sh" \\
       --title "[decision-enforce] violation: {{source_bead}}" \\
       --body "<violation details>" \\
       --priority 2
+
+The helper ships in the mathcity pack, not in any rig; resolve
+`<mathcity-pack-root>` as the parent of the `orders/` directory on the
+`Source:` line of `gc order show brief-review-patrol`. Your cwd is a per-bead work dir,
+never the pack root, so a bare `assets/...` resolves to nothing, and
+`$PACK_DIR` is not a substitute — gascity injects it for order dispatch and
+`gc` custom commands only, never into a formula step's agent session.
 
 If `escalate.sh` is absent, print the violation to stderr and exit 1 so
 the orchestrator surfaces it as a failed step for manual follow-up.

@@ -4,18 +4,21 @@ When you are blocked mid-process and cannot make progress without human input,
 file an escalation bead immediately rather than spinning or halting silently.
 Stalled work wastes running compute and may block a downstream chain.
 
-Use the escalation helper script at its canonical absolute location:
+Use the escalation helper script that ships in the mathcity pack:
 
 ```
-.gc/scripts/escalate.sh \
+<mathcity-pack-root>/assets/scripts/escalate.sh \
   --title "<concise summary of the block>" \
   --body  "<detail: what you tried, what you need>" \
   --priority <N>
 ```
 
-TODO(Phase 2): absolute path required — an agent's work dir is not the pack
-root, so a pack-relative path cannot be resolved reliably. Replace with a
-pack-root mechanism when one exists (plan Global Constraints carve-out).
+The helper ships in the mathcity pack, not in any rig; resolve
+`<mathcity-pack-root>` as the parent of the `orders/` directory on the
+`Source:` line of `gc order show brief-review-patrol`. Your cwd is a per-bead
+work dir, never the pack root, so a bare `assets/...` resolves to nothing.
+`$PACK_DIR` is not a substitute either: gascity injects it for order dispatch
+and `gc` custom commands only, never into a formula step's agent session.
 
 The script creates a bead, flags it with the `human` label, and for P0/P1
 immediately sends a mail to the human overseer and fires a macOS notification.

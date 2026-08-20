@@ -62,6 +62,9 @@ When the task is complete:
 
 If you are blocked and cannot proceed without human input, file an
 escalation bead using the escalate helper at
-`.gc/scripts/escalate.sh`
-before stopping.
+`<mathcity-pack-root>/assets/scripts/escalate.sh`
+before stopping. Resolve `<mathcity-pack-root>` as the parent of the `orders/`
+directory on the `Source:` line of `gc order show brief-review-patrol`; your
+cwd is a per-bead work dir, never the pack root, and `$PACK_DIR` is not
+injected into a formula step.
 """

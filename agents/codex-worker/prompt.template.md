@@ -23,14 +23,17 @@ instructs otherwise.
 ## Escalation
 
 If you are blocked mid-process and cannot make progress without human input,
-file an escalation bead immediately using the helper at its canonical absolute
-location `.gc/scripts/escalate.sh`.
+file an escalation bead immediately using the helper at
+`<mathcity-pack-root>/assets/scripts/escalate.sh`.
 
-TODO(Phase 2): absolute path required — your work dir is not the pack root, so
-a pack-relative path cannot be resolved reliably; replace with a pack-root
-mechanism when one exists (plan Global Constraints carve-out). If the script is
-absent, escalate manually with `bd create --type=task --priority=<N>
---description "<detail>" "<title>"` followed by `bd label add <bead-id> human`.
+The helper ships in the mathcity pack, not in any rig; resolve
+`<mathcity-pack-root>` as the parent of the `orders/` directory on the
+`Source:` line of `gc order show brief-review-patrol`. Your work dir is not the
+pack root, so a bare `assets/...` resolves to nothing, and `$PACK_DIR` is not a
+substitute — gascity injects it for order dispatch and `gc` custom commands
+only. If the script is absent, escalate manually with `bd create --type=task
+--priority=<N> --description "<detail>" "<title>"` followed by
+`bd label add <bead-id> human`.
 
 See `template-fragments/escalation-protocol.md`
 for the full escalation protocol, priority bar, and when to escalate vs. retry.

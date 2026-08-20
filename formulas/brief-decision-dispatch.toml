@@ -161,12 +161,20 @@ Terminalizing: append a TERMINAL ledger line carrying `dispatched_at` (so
 the scan treats it as settled) with `action = "undispatchable"`, then invoke
 the escalation helper:
 ```
-.gc/scripts/escalate.sh \
+"<mathcity-pack-root>/assets/scripts/escalate.sh" \
   --title "[undispatchable] brief decision <slug>" \
   --body "<reason>" --priority 2
 ```
 (P2 = accumulates, no immediate ping.) If `escalate.sh` is absent, note it
 in the ledger line and continue.
+
+The helper ships in the mathcity pack, not in any rig; resolve
+`<mathcity-pack-root>` as the parent of the `orders/` directory on the
+`Source:` line of `gc order show brief-decision-dispatch`, and substitute it
+into `ESCALATE=` below before running the script. Your cwd is a per-bead work
+dir, never the pack root, so a bare `assets/...` resolves to nothing, and
+`$PACK_DIR` is not a substitute — gascity injects it for order dispatch and
+`gc` custom commands only, never into a formula step's agent session.
 
 Run this as one shell script:
 
@@ -174,7 +182,7 @@ Run this as one shell script:
 set -euo pipefail
 CITY="${GC_CITY_PATH:-${GC_CITY:-$HOME/gt}}"
 DEFAULT_BRANCH="${GC_DEFAULT_BRANCH:-{{default_branch}}}"
-ESCALATE=".gc/scripts/escalate.sh"
+ESCALATE="<mathcity-pack-root>/assets/scripts/escalate.sh"
 WORK_BEAD="${GC_BEAD_ID:-}"
 
 # Helper functions use ROOT, LEDGER, RIG_DIR set in the main scan block.

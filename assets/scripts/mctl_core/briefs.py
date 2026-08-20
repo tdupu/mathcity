@@ -42,6 +42,7 @@ from .verdicts import (
     NON_BRIEF_MESSAGES,
     Verdict,
     brief_population,
+    declares_no_subject,
     non_brief_code,
     read_verdict,
 )
@@ -1416,7 +1417,17 @@ def _doctor_briefs(ctx: MctlContext, brief_id: str | None, beads: tuple[Bead, ..
     for record in records:
         bead = bead_by_id[record.bead_id]
         if not bead.source_dependencies:
-            diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF004", "Brief bead has no source dependency.", brief_id=record.brief_id, data_location=_canonical_bead_location(ctx), policy_ref="B2.1"))
+            # B2.1a: a brief that DECLARES it is about no bead is compliant.
+            # A brief that merely omits the link is not -- silence must not
+            # become compliance, or the diagnostic becomes a no-op for the
+            # omissions it exists to surface. The declaring brief still gets a
+            # record: dropping it silently from the diagnostics would be
+            # indistinguishable from never having checked it, the same reason
+            # the B2.1 exemptions above emit MBRF054/MBRF055.
+            if declares_no_subject(bead):
+                diagnostics.append(_diagnostic(ctx, Severity.INFO, "MBRF056", "Brief declares no bead subject.", brief_id=record.brief_id, data_location=_canonical_bead_location(ctx), policy_ref="B2.1a"))
+            else:
+                diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF004", "Brief bead has no source dependency.", brief_id=record.brief_id, data_location=_canonical_bead_location(ctx), policy_ref="B2.1"))
         if bead.status.lower() in {"closed", "done"} and not _has_verdict(bead):
             diagnostics.append(_diagnostic(ctx, Severity.ERROR, "MBRF005", "Closed brief bead has no recorded verdict.", brief_id=record.brief_id, data_location=_canonical_bead_location(ctx), policy_ref="B2.2"))
         for artifact in record.redundant_artifacts:

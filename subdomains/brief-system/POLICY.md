@@ -194,6 +194,62 @@ by what adjudication unlocks, not by arrival time.*
   has `type=decision` and lists at least one source dependency. A brief file
   with no corresponding bead, a brief bead of any other type, or a brief bead
   with no source link, is malformed and cannot enter the pile.
+- **B2.1a Scope of B2.1: a brief may DECLARE that it has no bead subject.**
+  Some briefs are genuinely about no bead — a policy question, a standing-rule
+  change, a "should we do X at all". For those, B2.1's source-link requirement
+  is the checker asking a question that does not apply, the same shape as the
+  push-authorization receipts B2.1's Definitions paragraph already exempts. A
+  brief that **declares** it has no bead subject satisfies B2.1 and reports
+  `MBRF056` (INFO) instead of `MBRF004`.
+
+  **The declaration must be explicit. Silence is never a declaration.** A brief
+  that merely omits its source link still raises `MBRF004`. Only a structured
+  marker the author had to write on purpose counts: the `no-subject` label, a
+  `[no-subject]` title tag, or a whole-line `Source: none` in a body field.
+
+  **Why the asymmetry is the whole rule.** Measured 2026-08-20 across all 17
+  registered rigs, 135 of the 197-bead brief population raise `MBRF004` (71
+  open, 64 closed). A hand-classified sample of 40 of those 135 (29.6%,
+  `random.seed(20260820)`):
+
+  | class | n | % |
+  | --- | --- | --- |
+  | genuinely no bead subject | 9 | 22.5% |
+  | **omission — the brief has a subject and failed to record it** | **30** | **75.0%** |
+  | indeterminate | 1 | 2.5% |
+
+  **27 of those 30 omissions (90%) still name their subject** in their own
+  title or body — `gt-57dccr` carries it in parentheses in the title, and 18
+  `[brief-record]` trackers say the words "Source bead" in the body. So the
+  omissions are *recoverable right now*, and a declaration inferred from their
+  silence is precisely what would stop anyone recovering them. "No bead
+  subject" is a real category and a minority one; as an inferred state it would
+  be a loophole three times larger than the category it serves.
+
+  **Consequence for readers.** A declaring brief is compliant, not invisible:
+  it stays in the brief population, stays adjudicable, and reports `MBRF056`.
+  A bead dropped silently from every listing is indistinguishable, to an
+  operator, from a bead that was lost — the same reason the B2.1 exemptions
+  report `MBRF054`/`MBRF055` rather than vanishing.
+
+  **What this rule deliberately does NOT do.** It does not falsify a
+  declaration mechanically. Refusing any brief whose body names a bead id was
+  considered and measured: 7 of the 9 genuine no-subject briefs in the sample
+  also mention beads, as cross-references rather than subjects, so that guard
+  would wrongly refuse ~78% of true declarations. This is the same judgement
+  `verdicts.is_brief_bead` records for B2.1's "non-brief adjudications" class —
+  a rule wide enough to catch the abuse also catches the legitimate case, so
+  the residue is reported to a human instead of guessed at. The protection here
+  is that the declaration is an explicit act, not that a checker second-guesses
+  it.
+
+  **Measured effect at adoption: zero.** No live bead in any readable rig
+  carries any of the three markers, so `MBRF056` is 0 city-wide and the
+  `MBRF004` population is unchanged on the day this shipped. B2.1a is an
+  affordance for briefs written from here on, not a retroactive amnesty. Note
+  also that `MBRF004` feeds no `decision_state`: `malformed` is B2.2's "closed,
+  and no verdict could be read", so this rule does not move the malformed
+  count and was not expected to.
 - **B2.2 Adjudication records the verdict on the brief bead.** Rendering a
   verdict on a brief REQUIRES recording on the brief bead itself: verdict
   (approve/revise/reject/defer-with-record), one-line rationale, authorizer
@@ -802,3 +858,4 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
+| 2026-08-20 | Add B2.1a: a brief may declare it has no bead subject (`MBRF056`), scoping B2.1 rather than rewriting it; declaration is explicit-only, so an omitting brief still raises `MBRF004` | the human adjudicator ruled YES on the principle (bead `mc-csr`, workflow `mc-sxz`); the explicit-only shape follows the measurement — 30 of a 40-brief sample of the 135 `MBRF004` population are omissions, 27 of them with a still-recoverable subject, so an inferred declaration would be a loophole three times larger than the category it serves |

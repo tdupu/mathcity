@@ -621,6 +621,52 @@ $(sed 's/^/    /' "$FORMULA_SCAN")"
 fi
 rm -f "$FORMULA_SCAN"
 
+echo "=== 38. no agent-facing surface points at the uninstalled .gc/scripts/ ==="
+# #69 / mc-3yh. Nine references named `.gc/scripts/escalate.sh`, a path NOTHING
+# installs: `<city-root>/.gc/scripts/` holds one unrelated script, and the
+# location gascity's own resolver searches -- `<city-root>/.gc/system/packs/
+# <pack>/assets/scripts/escalate.sh`, per resolve_escalate_script() in the core
+# pack's reaper.sh -- does not exist on this city at all. So the escalation path
+# every one of those call sites named was unreachable, and one of them (the
+# ESCALATE= variable in brief-decision-dispatch.toml) SWALLOWS the absence:
+# it records "(escalate.sh absent)" in the ledger and continues, so an
+# undispatchable brief is terminalized with no human ever notified.
+#
+# The helper does ship -- in the mathcity pack, at assets/scripts/escalate.sh,
+# reachable because city.toml imports mathcity by local path. It is reached the
+# same way every other pack asset is after #73: `<mathcity-pack-root>/assets/...`.
+#
+# Scope is the AGENT-FACING INSTRUCTION surfaces only -- formulas/, gates/,
+# agents/, template-fragments/, skills/. The `.gc/scripts/` literal also appears
+# in subdomains/*/docs and the 2026-08-19 policy-drift audit, where it is the
+# FINDING being recorded rather than an instruction; rewriting those would
+# falsify the audit that caught this.
+#
+# What is matched is a RUNNABLE ARTIFACT under that directory -- a path ending
+# in `.sh` -- because naming one is what tells an agent something executable
+# lives there, and all nine references did. A bare directory mention is NOT
+# matched: gate-test-execution-silent/SKILL.md warns that "no rig carries a
+# `.gc/scripts/checks/`", and that warning is the fix, not the defect. This is
+# test 37's carve-out for the `$PACK_DIR` warning, applied to the same shape --
+# matching a mention would make the warning unwritable. The cost is that a
+# future warning naming a specific `.sh` would trip; phrase it as the directory,
+# the way the existing one already does.
+GC_SCRIPTS_SCAN="${TMPDIR:-/tmp}/brief-gc-scripts-scan.$$"
+: > "$GC_SCRIPTS_SCAN"
+for d in formulas gates agents template-fragments skills; do
+  [ -d "$RIG_ROOT/$d" ] || continue
+  grep -rnE '\.gc/scripts/[A-Za-z0-9._/-]*\.sh' "$RIG_ROOT/$d" 2>/dev/null |
+    sed "s|^$RIG_ROOT/||" >> "$GC_SCRIPTS_SCAN" || true
+done
+gc_offenders="$(wc -l < "$GC_SCRIPTS_SCAN" | tr -d ' ')"
+if [ "$gc_offenders" = "0" ]; then
+  ok "no formula, gate, agent prompt, fragment, or skill points at .gc/scripts/"
+else
+  no "$gc_offenders agent-facing reference(s) to the uninstalled .gc/scripts/:
+$(sed 's/^/    /' "$GC_SCRIPTS_SCAN")"
+fi
+rm -f "$GC_SCRIPTS_SCAN"
+
 echo ""
 echo "=== SUMMARY: $PASS_COUNT passed, $FAIL_COUNT failed ==="
 [ "$FAIL_COUNT" -eq 0 ]
