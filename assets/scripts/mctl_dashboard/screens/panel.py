@@ -182,6 +182,72 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
     )
 
 
+def _disposition_control(brief: Mapping[str, Any]) -> str:
+    """Which option the verdict adopts, offered as the brief's own options.
+
+    A bare "option letter" text box asks the operator to remember what the
+    letters were and to retype one correctly; the brief already states them,
+    so the panel can offer them. Where a brief names no options the box is
+    honest about that instead of demanding a letter that does not exist.
+
+    The last choice is always to propose something else. A decision-maker who
+    can only pick from the options as filed cannot say "none of these, do
+    that" -- and that is a real verdict, not an absence of one.
+    """
+    options = list(brief.get("decision_options") or ())
+    rows: list[str] = []
+
+    def _chip(value: str, label: str, *, checked: bool = False) -> str:
+        return (
+            '<label style="display: flex; gap: 7px; align-items: baseline; '
+            "font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; "
+            "border: 1px solid var(--color-divider); border-radius: var(--radius-md); "
+            'cursor: pointer;">'
+            f'<input type="radio" name="option" value="{_e(value)}"'
+            f'{" checked" if checked else ""} '
+            'style="accent-color: var(--color-accent-600); margin: 0; flex: none;">'
+            f'<span style="min-width: 0;">{label}</span></label>'
+        )
+
+    rows.append(_chip("", "Accept the recommendation as filed", checked=True))
+    for entry in options:
+        if not isinstance(entry, Mapping):
+            continue
+        label = str(entry.get("label") or "").strip()
+        title = str(entry.get("title") or entry.get("summary") or "").strip()
+        if not label:
+            continue
+        text = f"{_e(label)} &middot; {_e(title)}" if title else _e(label)
+        rows.append(_chip(label, text))
+
+    rows.append(
+        _chip(
+            "other",
+            "Other &mdash; propose your own",
+        )
+    )
+
+    label_text = (
+        "Disposition"
+        if options
+        else "Disposition &mdash; this brief names no options"
+    )
+    return (
+        '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
+        f'color: var(--color-neutral-600); margin-bottom: 5px;">{label_text}</div>'
+        '<div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">'
+        + "".join(rows)
+        + "</div>"
+        '<textarea name="option_other" rows="2" '
+        'placeholder="If you chose Other: describe the disposition you want. Recorded as a '
+        'proposed option on the brief bead." '
+        'style="width: 100%; font-family: var(--font-body); font-size: 12.5px; '
+        "padding: 5px 8px; margin-bottom: 12px; border: 1px solid var(--color-divider); "
+        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
+        "</textarea>"
+    )
+
+
 def _no_brainer_control() -> str:
     """The no-brainer flag: "this reached me and should not have".
 
@@ -262,15 +328,8 @@ def entry(
         'color: var(--color-neutral-600); margin-bottom: 5px;">Verdict</div>'
         f'<div style="display: flex; gap: 7px; margin-bottom: 12px; flex-wrap: wrap;">'
         f"{controls}</div>"
-        '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
-        'color: var(--color-neutral-600); margin-bottom: 5px;">Disposition</div>'
-        '<input type="text" name="option" '
-        'placeholder="Option letter, or leave blank to accept as filed" '
-        
-        'style="width: 100%; font-family: var(--font-mono); font-size: 12px; '
-        "padding: 5px 8px; margin-bottom: 12px; border: 1px solid var(--color-divider); "
-        'border-radius: var(--radius-sm); box-sizing: border-box;">'
-        '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
+        + _disposition_control(brief)
+        +         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
         '<textarea name="reason" required minlength="3" rows="3" '
         'placeholder="Why this verdict — recorded on the brief bead." '

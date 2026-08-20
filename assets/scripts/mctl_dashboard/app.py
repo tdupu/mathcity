@@ -61,6 +61,11 @@ from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, 
 #: every one of them: `bd list | grep "[no-brainer]"`.
 NO_BRAINER_MARKER = "[no-brainer] surfacing this was a pipeline regression."
 
+#: Marker for a disposition the brief did not offer. Same reasoning as the
+#: no-brainer marker: a fixed string so a later migration to a first-class
+#: field can find every one of them.
+PROPOSED_OPTION_MARKER = "[proposed-option] not one of the options as filed:"
+
 
 @dataclass(frozen=True)
 class Request:
@@ -1524,6 +1529,18 @@ def _arguments_for(
             if value:
                 arguments[key] = value
         arguments.setdefault("reason", "")
+        # "Other" is a disposition the brief does not offer, so it must not be
+        # sent as an option letter -- the core would reject it as invalid, and
+        # rightly. It is recorded as a proposal in the reason instead, behind a
+        # fixed marker, exactly as the no-brainer flag is, until the core has
+        # somewhere to put a proposed option.
+        if str(arguments.get("option") or "").strip().lower() == "other":
+            arguments.pop("option", None)
+            proposed = (form.get("option_other") or "").strip()
+            if proposed:
+                existing = arguments["reason"]
+                marker = f"{PROPOSED_OPTION_MARKER} {proposed}"
+                arguments["reason"] = f"{existing}\n\n{marker}" if existing else marker
         # The no-brainer flag is a classifier signal, not a disposition, and the
         # core has no field for it yet. Rather than drop it -- which would make
         # the checkbox decorative -- it is folded into the reason that is

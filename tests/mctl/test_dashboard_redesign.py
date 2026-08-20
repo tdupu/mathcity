@@ -1482,3 +1482,59 @@ def test_queue_nav_does_not_offer_a_next_that_does_not_exist():
     assert 'href="/briefs/gt-8?rig=hq"' in html
     assert "next &rarr;" in html
     assert 'href="/briefs/None' not in html
+
+
+def test_other_is_not_sent_as_an_option_letter():
+    """The core would reject "other" as an invalid option, and should."""
+    from mctl_dashboard.app import PROPOSED_OPTION_MARKER, _arguments_for
+
+    class _Op:
+        name = "adjudicate"
+
+    args = _arguments_for(
+        _Op(), "he-1",
+        {"verdict": "revise", "reason": "see below", "option": "other",
+         "option_other": "Split it into two briefs and re-file."},
+        None,
+    )
+    assert "option" not in args
+    assert PROPOSED_OPTION_MARKER in args["reason"]
+    assert "Split it into two briefs" in args["reason"]
+
+
+def test_a_real_option_letter_still_goes_through_as_an_option():
+    from mctl_dashboard.app import _arguments_for
+
+    class _Op:
+        name = "adjudicate"
+
+    args = _arguments_for(
+        _Op(), "he-1", {"verdict": "approve", "reason": "ok", "option": "B"}, None
+    )
+    assert args["option"] == "B"
+    assert "proposed-option" not in args["reason"]
+
+
+def test_the_disposition_control_offers_the_briefs_own_options():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1",
+         "decision_options": [{"label": "A", "title": "Merge as filed"},
+                              {"label": "B", "title": "Split first"}]},
+        _option(True), state.ViewState(),
+    )
+    assert 'value="A"' in html and "Merge as filed" in html
+    assert 'value="B"' in html and "Split first" in html
+    assert 'value="other"' in html
+    assert 'name="option_other"' in html
+
+
+def test_a_brief_with_no_options_says_so_rather_than_demanding_a_letter():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
+    assert "names no options" in html
+    assert 'value="other"' in html
