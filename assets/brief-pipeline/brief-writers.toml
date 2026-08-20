@@ -1,0 +1,105 @@
+# BRIEF ARTIFACT WRITER REGISTER (POLICY B2.11 / B2.12).
+#
+# The principle (Taylor, 2026-08-20): repeated work goes behind `mctl`; `mctl`
+# is the single point of failure BY DESIGN, because a thing that fails in one
+# place is a thing you can fix in one place. Work scattered across open bash
+# fails in many places, silently, and produces confident wrong answers instead
+# of errors.
+#
+# HOW THE CHECK WORKS, AND WHY IT OVER-APPROXIMATES ON PURPOSE.
+# `tests/brief-writer-authority` compares the set of source files that
+# REFERENCE an artifact's path literal against the entries below. It does not
+# try to detect writes. A write-detector was prototyped and rejected: a
+# proximity heuristic classified `brief-shuffle-fast-drain.py` as read-only
+# for `.index.jsonl` when `append_index()` demonstrably writes it, because the
+# write idiom lives in a helper far from the literal. A detector that misses a
+# real writer is worse than none -- it is the vacuous-check class this repo has
+# hit four times today.
+#
+# So: referencing is the trigger, and every referencer must be registered,
+# including read-only ones. That fails toward "register something harmless"
+# and never toward "miss a writer".
+#
+# `role` is one of:
+#   authorized  -- inside mctl; may write the artifact
+#   violation   -- writes it from outside mctl. A dated burn-down entry.
+#                  This list may SHRINK, never grow: a new writer fails the
+#                  check until someone either moves it behind mctl or files a
+#                  registration with a rationale.
+#   reader      -- references the path but does not write it
+#   config      -- declares the path; writes nothing
+
+[[artifact]]
+path = "stack/.index.jsonl"
+description = "The authoritative presentation queue Taylor adjudicates from."
+sole_writer = "mctl"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/effects.py"
+  role = "authorized"
+  note = "_update_stack_index: splices one row under flock, atomic replace."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-stack-index.py"
+  role = "violation"
+  since = "2026-08-20"
+  note = """Removes and adds rows from outside mctl. formulas/brief-record-decision.toml
+shells out to it for the LAST write of adjudication, so one of the four
+representations leaves the interface for every caller."""
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-shuffle-fast-drain.py"
+  role = "violation"
+  since = "2026-08-20"
+  note = "append_index(): appends a row on promotion, outside mctl."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-decisions-track-inventory.py"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Writes index rows during decisions-track migration."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/checks/brief-check.sh"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Contains a write idiom against the index; unaudited at registration time."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/checks/brief-drain-manifest.sh"
+  role = "reader"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/manifest.py"
+  role = "reader"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/redundant_state.py"
+  role = "reader"
+
+[[artifact]]
+path = ".pile/manifest.jsonl"
+description = "Pile membership. Has no reader in mctl and no paths.toml key."
+sole_writer = "mctl"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-shuffle-fast-drain.py"
+  role = "violation"
+  since = "2026-08-20"
+  note = "mark_manifest_rejected(): splices the row on gate failure, outside mctl."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-decisions-track-inventory.py"
+  role = "reader"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/manifest.py"
+  role = "reader"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/redundant_state.py"
+  role = "reader"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/verdicts.py"
+  role = "reader"

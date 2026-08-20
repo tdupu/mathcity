@@ -356,6 +356,46 @@ by what adjudication unlocks, not by arrival time.*
 
 ---
 
+- **B2.11 `mctl` is the sole writer of every brief artifact.** Each artifact
+  named in `assets/brief-pipeline/brief-writers.toml` has exactly one
+  authorized writer: `mctl`. Any other process that writes one — a pack script,
+  a check, a formula shelling out, a skill with an open bash block — is a
+  violation, whatever its result. The reasoning is the point and is not about
+  tidiness: work behind one interface fails **loudly, in one place, with an
+  error code**, and work scattered outside it fails in many places silently.
+  Every brief-system defect found on 2026-08-20 — four cwd-relative
+  `brief-check.sh` sites, a `manifest-current` gate that cannot detect a stale
+  index, `remove-archived-row` recording an archival it never verified — was
+  loose logic outside the interface, and every one produced a confident wrong
+  answer instead of an error. Mechanical check:
+  `tests/brief-writer-authority` compares the set of source files referencing
+  each artifact against the register and fails on any that is unregistered.
+
+- **B2.12 Known violations are a dated register that may only shrink.** A
+  violation that exists today is recorded in `brief-writers.toml` with
+  `role = "violation"` and a `since` date, not silently tolerated and not
+  quietly removed. **The list may shrink; it may not grow.** A new
+  non-`mctl` writer fails the check until it is either moved behind `mctl` or
+  admitted deliberately with a rationale. Five entries at adoption:
+  `brief-stack-index.py`, `brief-shuffle-fast-drain.py`,
+  `brief-decisions-track-inventory.py` and `checks/brief-check.sh` against
+  `stack/.index.jsonl`; `brief-shuffle-fast-drain.py` against
+  `.pile/manifest.jsonl`. Mechanical check: every `violation` entry carries a
+  `since` date, and the count is printed on every run so it is visible rather
+  than assumed.
+
+- **B2.13 A write path may not report a state it did not verify.** If a tool's
+  output asserts a precondition — an archive exists, a gate passed, a
+  representation agrees — that assertion must come from a check that can
+  return false. `remove-archived-row` is the worked example: it computed
+  `archive_hit`, never tested it, removed the row unconditionally, and still
+  reported `reason: "explicit_slug_archived_row"` with `archived_at: ""`,
+  asserting an archive nothing had looked for. **A check that cannot fail is
+  indistinguishable from a check that passed.** Mechanical check: every write
+  path asserting a precondition has a test that drives the precondition FALSE
+  and asserts refusal — a negative test, not only a happy path.
+
+
 ## Pillar 3 — Work closure discipline (B3.x)
 
 *A bead is not closed until the work is verifiably done. Closing early to
@@ -858,4 +898,5 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
+| 2026-08-20 | Add B2.11/B2.12/B2.13: `mctl` is the sole writer of every brief artifact; non-`mctl` writers are violations recorded in a dated register (`assets/brief-pipeline/brief-writers.toml`) that may only shrink; and no write path may report a state it did not verify. Enforced by `tests/brief-writer-authority`, which compares references rather than attempting write-detection (a proximity heuristic was prototyped and rejected for classifying `brief-shuffle-fast-drain.py` as read-only when `append_index()` writes the index) | the human adjudicator, verbatim: "We want to factor repeated work through a single point of failure" and "There is a central failure point which is the mctl commands. Debugging those will fix the whole thing." Five violations registered at adoption rather than fixed, so the burn-down is visible |
 | 2026-08-20 | Add B2.1a: a brief may declare it has no bead subject (`MBRF056`), scoping B2.1 rather than rewriting it; declaration is explicit-only, so an omitting brief still raises `MBRF004` | the human adjudicator ruled YES on the principle (bead `mc-csr`, workflow `mc-sxz`); the explicit-only shape follows the measurement — 30 of a 40-brief sample of the 135 `MBRF004` population are omissions, 27 of them with a still-recoverable subject, so an inferred declaration would be a loophole three times larger than the category it serves |
