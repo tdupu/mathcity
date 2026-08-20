@@ -414,6 +414,44 @@ by what adjudication unlocks, not by arrival time.*
 
   A verdict of "verified" without item 3 is not a verdict; it is the vacuous
   pass restated one level up.
+- **B2.14 (JUDGEMENT RULE) A brief's own frontmatter is written only by
+  `mctl`.** The brief document's `status:` and `verdict:` are the
+  representation Taylor reads, and B2.11 governs them like any other artifact.
+  Enforcement, however, is deliberately **judgement, not mechanism**, and the
+  measurement behind that choice is recorded here so it is not re-litigated:
+
+  The register's reference scan works because artifact names are **invented for
+  one purpose** — a file mentioning `.index.jsonl`, `manifest.jsonl` or
+  `decisions/` is strong evidence it touches them. Frontmatter has no such
+  literal. Keying the same scan on `status:`/`verdict:` was built and probed on
+  2026-08-20: **41 referencers for `status:`, 20 for `verdict:`**, and it hit
+  **all four** probe cases including the two known-clean ones —
+  `create-brief` and `present-briefs` discuss the fields without writing them.
+  Field names are ubiquitous domain vocabulary; mentioning one carries no
+  signal. A green check that classifies `create-brief` as a frontmatter writer
+  is worse than no check, and 41-of-60 rows marked unaudited is a backlog
+  nobody burns down. **Do not rebuild the mechanical version.** Two earlier
+  detectors (write-idiom proximity, ```-fence extraction) were discarded for
+  missing real writers; this third one fails in the opposite direction.
+
+  **What the reviewing agent weighs:** does this file *write* a brief's own
+  `status:`/`verdict:`, as against reading, validating, or describing them?
+
+  **Evidence a reasoned verdict must cite:**
+  1. the specific construct that performs the write (an in-place edit, a
+     frontmatter helper, an instruction to an agent to patch the field) — or
+     an explicit statement that the file only reads or discusses;
+  2. that the target is a **brief document**, not the file's own frontmatter
+     or an unrelated document;
+  3. whether the write goes through `mctl`, and if not, why the file exists
+     outside it.
+
+  Known violations at adoption: `skills/adjudicate-brief/SKILL.md` (the
+  founding reach-around, `#77`) and `formulas/brief-review-patrol.toml`, whose
+  instruction is **pure prose** — *"patch the brief's frontmatter in place"* —
+  with no shell command at all, which is why command-syntax detection cannot
+  reach it.
+
 
 ## Pillar 3 — Work closure discipline (B3.x)
 
@@ -917,6 +955,7 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
+| 2026-08-20 | Add B2.14: brief frontmatter is governed by B2.11 but enforced as a JUDGEMENT rule. The mechanical version was built and probed, not assumed unworkable: keying the register's reference scan on `status:`/`verdict:` hit 41 and 20 referencers and flagged all four probe cases, including the two known-clean (`create-brief`, `present-briefs`). Path literals are invented for one purpose and carry signal; field names are ubiquitous vocabulary and do not | reviewer trans set the bar at 3/3 probe cases and accepted the measurement at 2/3: "a green check that misclassifies create-brief is worse than not having the check at all" |
 | 2026-08-20 | Amend B2.13 to an explicit JUDGEMENT rule (naming what is weighed and the three items a reasoned verdict must cite, per `check-zero`) rather than a mechanical clause; add a paths.toml cross-check to `tests/brief-writer-authority` after `check-zero` found `mctl_core/redundant_state.py::artifact_layout` already models artifact locations | the human adjudicator: "Sometimes we need to defer to agent judgement. That is the power of agents." A bad mechanical proxy for a judgement call passes confidently on cases it cannot see |
 | 2026-08-20 | Add B2.11/B2.12/B2.13: `mctl` is the sole writer of every brief artifact; non-`mctl` writers are violations recorded in a dated register (`assets/brief-pipeline/brief-writers.toml`) that may only shrink; and no write path may report a state it did not verify. Enforced by `tests/brief-writer-authority`, which compares references rather than attempting write-detection (a proximity heuristic was prototyped and rejected for classifying `brief-shuffle-fast-drain.py` as read-only when `append_index()` writes the index) | the human adjudicator, verbatim: "We want to factor repeated work through a single point of failure" and "There is a central failure point which is the mctl commands. Debugging those will fix the whole thing." Five violations registered at adoption rather than fixed, so the burn-down is visible |
 | 2026-08-20 | Add B2.1a: a brief may declare it has no bead subject (`MBRF056`), scoping B2.1 rather than rewriting it; declaration is explicit-only, so an omitting brief still raises `MBRF004` | the human adjudicator ruled YES on the principle (bead `mc-csr`, workflow `mc-sxz`); the explicit-only shape follows the measurement — 30 of a 40-brief sample of the 135 `MBRF004` population are omissions, 27 of them with a still-recoverable subject, so an inferred declaration would be a loophole three times larger than the category it serves |
