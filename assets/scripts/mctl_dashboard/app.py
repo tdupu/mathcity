@@ -312,8 +312,7 @@ class Dashboard:
                 "Pile", "/pile", context, [pipeline_screen.pile()], context_bar=""
             )
 
-        listing = self.client.call("briefs_list", self._args(rig))
-        briefs = list(listing.payload.get("briefs") or ())
+        briefs, _city, city_extra = self._read_briefs(rig)
         selected = [
             brief
             for brief in briefs
@@ -329,7 +328,7 @@ class Dashboard:
             lane.capitalize(),
             f"/{lane}",
             context,
-            [renderer(selected)],
+            [renderer(selected), *city_extra],
             counts=self._counts(briefs),
             context_bar="",
         )
@@ -345,8 +344,7 @@ class Dashboard:
         """
         rig = self._rig_for(request) or self.rig
         context = self._context(rig) if not self.city_wide else None
-        listing = self.client.call("briefs_list", self._args(rig))
-        briefs = list(listing.payload.get("briefs") or ())
+        briefs, _city, city_extra = self._read_briefs(rig)
         by_id = {str(b.get("bead_id")): b for b in briefs}
 
         wanted = [
@@ -359,10 +357,39 @@ class Dashboard:
             "Priority list",
             "/priority",
             context,
-            [priority_screen.screen(ordered)],
+            [priority_screen.screen(ordered), *city_extra],
             counts=self._counts(briefs),
             context_bar="",
         )
+
+    def _read_briefs(self, rig: str | None) -> tuple[list[Mapping[str, Any]], Any, list[str]]:
+        """Read briefs in whichever scope this dashboard is serving.
+
+        Returns (briefs, city_view_or_None, extra_sections).
+
+        City-wide reads need `all_rigs`; a rig-scoped read must not pass it.
+        The redesigned screens were written and tested rig-scoped only, so in
+        city scope `rig` was None, `briefs_list` was called with neither a rig
+        nor `all_rigs`, and every one of them raised.
+
+        The second return value carries the degraded-rig accounting. A rig that
+        cannot be read contributes no rows, so a city-wide total is silently
+        short while looking complete -- honesty property 4 exists for exactly
+        that, and the caller must render the panel rather than quietly
+        reporting a smaller number.
+        """
+        if not self.city_wide:
+            listing = self.client.call("briefs_list", self._args(rig))
+            return list(listing.payload.get("briefs") or ()), None, []
+
+        view = CityView.from_payload(
+            self.client.call("briefs_list", self._args(None, all_rigs=True)).payload
+        )
+        extra = [
+            render.degraded_rigs_panel(view.degraded, len(view.rigs)),
+            render.rig_trust_panels(view),
+        ]
+        return list(view.rows_for(rig)), view, extra
 
     # -- read views --
 
@@ -376,8 +403,7 @@ class Dashboard:
         view = view_state.parse(request.query)
         rig = self._rig_for(request) or self.rig
         context = self._context(rig) if not self.city_wide else None
-        listing = self.client.call("briefs_list", self._args(rig))
-        all_briefs = list(listing.payload.get("briefs") or ())
+        all_briefs, _city, city_extra = self._read_briefs(rig)
         briefs = _scoped(all_briefs, view.scope)
 
         titles = {
@@ -428,7 +454,7 @@ class Dashboard:
             stack.empty_sort_note(briefs, view),
             stack.key_legend(),
             stack.unfed_note(),
-            render.artifact_trust_panel(listing.artifact_trust, rig=rig),
+            *city_extra,
         ]
         # Counts come from the whole listing, not the scoped slice: the
         # sidebar has to report every lane, not just the one being viewed.
