@@ -35,6 +35,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from mctl_dashboard import fields, knowl
+from mctl_dashboard.reading import attr
 from mctl_dashboard.render import esc as _e
 from mctl_dashboard.state import ViewState
 from mctl_dashboard.theme import STOP
@@ -243,7 +244,7 @@ def queue_nav(
     """
     suffix = f"?rig={_e(rig)}" if rig else ""
     left = f'<a href="/queue{suffix}">&larr; queue</a>'
-    bead = str(brief.get("bead_id") or "")
+    bead = str(attr(brief, "bead_id") or "")
 
     if not neighbours:
         return (
@@ -297,7 +298,7 @@ def detail(
     knowls = dict(knowls or {})
     sections = list(brief.get("sections") or ())
     diagnostics = list(brief.get("body_diagnostics") or ())
-    bead = str(brief.get("bead_id") or "")
+    bead = str(attr(brief, "bead_id") or "")
 
     blocks: list[str] = []
     for position, section in enumerate(sections):
@@ -349,7 +350,7 @@ def detail(
         + queue_nav(brief, neighbours, rig=rig)
         + f'<h1 style="font-family: var(--font-heading); font-size: 30px; '
         f'font-weight: 600; margin: 6px 0 2px; line-height: 1.15;">'
-        f'{_e(brief.get("title"))}</h1>'
+        f'{_e(attr(brief, "title"))}</h1>'
         f'<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
         f'{_e(bead)}</div>'
         + status_banner(brief, options)
