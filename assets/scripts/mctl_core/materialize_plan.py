@@ -273,8 +273,20 @@ def humanised_title(stack_file: StackFile) -> str:
     return "[brief] " + " ".join(words) if words else "[brief] " + stack_file.slug
 
 
-def _disposed(status: str) -> bool:
+def is_disposed(status: str) -> bool:
+    """Whether a frontmatter `status` asserts the brief was already disposed of.
+
+    Public because the B1.3 shape repair must skip already-adjudicated briefs
+    ("repair unless they are already closed") and needs *this* answer, not a
+    second opinion. A repair tool that redefined the prefix list would drift
+    from `classify_tier` the first time either side gained a status, and the
+    two would then disagree about which briefs are still open.
+    """
     return status.lower().startswith(_DISPOSED_STATUS_PREFIXES)
+
+
+#: The in-module callers keep the original private spelling.
+_disposed = is_disposed
 
 
 def classify_tier(frontmatter: Mapping[str, str]) -> str:
