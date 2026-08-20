@@ -170,8 +170,15 @@ about city health, not a property of HQ**. HQ is not inherently slow: measured
 directly it answers in ~2.5s, comparable to the other rigs. The one observed
 `hq` timeout (2026-08-19) coincided with a supervisor file-descriptor
 exhaustion incident that swung `gc status` latency from 3s to 92s
-(`tdupu/mathcity#70`). So `DEGRADED hq` most likely means the data plane is
-sick, which is worth escalating rather than absorbing.
+(`tdupu/mathcity#70`) — but **the cause is not established**. A dolt restart
+happened between that timeout and the fast readings, so "the leak did it" and
+"the restart cleared something else" fit the evidence equally. Nobody has
+measured `hq` during an FD climb and after it with nothing else changing, which
+is the only observation that would separate them.
+
+What IS established is the part you need: **HQ is not always slow, so a timeout
+is an event rather than a baseline.** Escalate it rather than absorbing it, and
+do not assume the cause.
 
 Do NOT assume an id is missing from the roster just because its rig is absent
 from `city.toml`; `city_rig_entries` is the authority, not the config file.
