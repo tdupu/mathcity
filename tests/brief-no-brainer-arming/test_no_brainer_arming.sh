@@ -65,16 +65,21 @@ arm_both() { arm_city; arm_rig; }
 pin_city() { printf 'false\n' > "$SANDBOX/city/.beads/no_brainer_auto_execute_armed"; }
 pin_rig()  { printf 'false\n' > "$SANDBOX/rig/.beads/no_brainer_auto_execute_armed"; }
 
-run_gate() {
+# run_gate_cwd <cwd> — run the gate from an arbitrary working directory.
+# run_gate keeps the pack root, which is what every case above wants; the
+# cwd-independence cases below pass a directory that is not the pack root.
+run_gate_cwd() {
   LAST_OUT="$SANDBOX/out"; LAST_ERR="$SANDBOX/err"
   STATUS=0
-  (cd "$RIG_ROOT" && \
+  (cd "$1" && \
      GC_CITY="$SANDBOX/city" \
      GC_RIG_ROOT="$SANDBOX/rig" \
      BRIEF_ROOT="$SANDBOX/rig/.beads/briefs" \
      GC_BRIEF_PATH="${FORCE_BRIEF_PATH:-$BRIEF}" \
      "$CHECK" no-brainer-execute-safety) >"$LAST_OUT" 2>"$LAST_ERR" || STATUS=$?
 }
+
+run_gate() { run_gate_cwd "$RIG_ROOT"; }
 
 cleanup() { rm -rf "$SANDBOX"; FORCE_BRIEF_PATH=""; }
 FORCE_BRIEF_PATH=""
@@ -515,6 +520,46 @@ if printf '%s' "$guarded_block" | grep -q 'brief-no-brainer-execute-safety.sh'; 
 else
   no "guarded-execute is gated by the execute-safety check"
 fi
+
+echo "=== 33. the gate resolves its category registry independently of cwd ==="
+# Since cc58a95 the ralph runner resolves this check script from the PACK, but
+# it still runs it with the agent work dir as cwd -- never the pack root. A
+# cwd-relative registry literal therefore resolves to nothing in production, so
+# every candidate refused with reason=classifier_evidence_invalid: the gate
+# could not PERMIT at all, and the recorded reason blamed the brief's evidence
+# for what was really a missing file. Every case above runs from the pack root,
+# so none of them could see it. Same fixture, different cwd, same verdict.
+mk_sandbox "$GOOD_G9"; arm_both
+run_gate_cwd "$SANDBOX"
+if [ "$STATUS" = "0" ] && [ "$(audit_field decision)" = "PERMITTED" ]; then
+  ok "gate permits from a cwd that is not the pack root"
+else
+  no "gate permits from a cwd that is not the pack root (exit=$STATUS decision=$(audit_field decision) reason=$(audit_field reason))"
+fi
+cleanup
+
+echo "=== 34. a genuinely absent registry still refuses, from any cwd ==="
+# The counterpart to 33: resolving the registry from the script's own location
+# must not degrade into "assume it is fine when it cannot be found". A pack
+# layout that ships the script but no registry must still refuse.
+mk_sandbox "$GOOD_G9"; arm_both
+FAKE_CHECKS="$SANDBOX/fakepack/assets/scripts/checks"
+mkdir -p "$FAKE_CHECKS"
+cp "$CHECK" "$FAKE_CHECKS/brief-check.sh"
+STATUS=0
+(cd "$SANDBOX" && \
+   GC_CITY="$SANDBOX/city" \
+   GC_RIG_ROOT="$SANDBOX/rig" \
+   BRIEF_ROOT="$SANDBOX/rig/.beads/briefs" \
+   GC_BRIEF_PATH="$BRIEF" \
+   sh "$FAKE_CHECKS/brief-check.sh" no-brainer-execute-safety) \
+   >"$SANDBOX/out" 2>"$SANDBOX/err" || STATUS=$?
+if [ "$STATUS" = "1" ] && [ "$(audit_field reason)" = "classifier_evidence_invalid" ]; then
+  ok "absent category registry still refuses (fail-closed preserved)"
+else
+  no "absent category registry still refuses (exit=$STATUS reason=$(audit_field reason))"
+fi
+cleanup
 
 echo ""
 echo "=== SUMMARY: $PASS_COUNT passed, $FAIL_COUNT failed ==="

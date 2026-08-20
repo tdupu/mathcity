@@ -59,6 +59,30 @@ require_dir() {
   [ -d "$path" ] || fail "missing directory: $path"
 }
 
+# pack_asset <path-under-assets/> -- locate a file that ships in this pack,
+# without depending on the working directory.
+#
+# Since cc58a95 check scripts are resolved FROM THE PACK at cook time
+# (`path = "../assets/scripts/checks/<name>.sh"`), but the ralph runner still
+# runs them with the agent work dir as cwd, which is never the pack root. A
+# cwd-relative literal thus resolves to nothing in production even though it
+# resolves fine under the test suite, which runs from the pack root. Anchor on
+# the script's own location instead: assets/scripts/checks/.. /.. -> assets.
+#
+# Always exits 0 and always prints a path, so `set -e` cannot trip here and the
+# caller's own -f test remains the thing that decides. When the asset cannot be
+# found the cwd-relative form is printed unchanged, so callers that refuse on a
+# missing file go on refusing exactly as before.
+pack_asset() {
+  pa_rel="$1"
+  pa_assets="$(CDPATH= cd -- "$(dirname -- "$0")/../.." 2>/dev/null && pwd || true)"
+  if [ -n "$pa_assets" ] && [ -f "$pa_assets/$pa_rel" ]; then
+    printf '%s\n' "$pa_assets/$pa_rel"
+    return 0
+  fi
+  printf '%s\n' "assets/$pa_rel"
+}
+
 require_text() {
   path="$1"
   pattern="$2"
@@ -800,7 +824,7 @@ check_no_brainer_execute_safety() {
   if ! printf '%s\n' "$nb_g9" | grep -Eq 'stop_gates_clear=true'; then
     nb_refuse "classifier_evidence_invalid" "known_no_brainer G9 evidence requires stop_gates_clear=true in $NB_BRIEF"
   fi
-  nb_registry="assets/brief-pipeline/no-brainer-categories.toml"
+  nb_registry="$(pack_asset brief-pipeline/no-brainer-categories.toml)"
   if [ -z "$NB_CATEGORY" ] || [ "$NB_CATEGORY" = "none" ] || [ ! -f "$nb_registry" ] ||
      ! grep -Eq '^id[[:space:]]*=[[:space:]]*"'"$NB_CATEGORY"'"' "$nb_registry"; then
     nb_refuse "classifier_evidence_invalid" \

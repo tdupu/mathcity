@@ -36,8 +36,10 @@ id = "read-manifest"
 title = "Read manifest and partition pending briefs"
 metadata = { "gc.run_target" = "{{presenter_target}}", "gc.brief.root" = "{{artifact_root}}", "gc.brief.manifest" = "{{artifact_root}}/stack/.index.jsonl" }
 description = """
-Run `.gc/scripts/checks/brief-drain-manifest.sh` against
-`{{artifact_root}}/stack/.index.jsonl`.
+Run `<mathcity-pack-root>/assets/scripts/checks/brief-drain-manifest.sh`
+against `{{artifact_root}}/stack/.index.jsonl`. The script ships in the
+mathcity pack, not in any rig; resolve `<mathcity-pack-root>` from the
+`Source:` line of `gc order show brief-review-patrol`.
 
 The script reads all manifest entries, filters out entries with
 `status: decided` or `status: archived`, sorts the remaining entries by
