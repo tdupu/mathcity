@@ -120,57 +120,24 @@ sole_writer = "mctl"
 
 [[artifact]]
 path = ".pile/manifest.jsonl"
+literals = [".pile/manifest.jsonl", "PILE_MANIFEST"]
 sole_writer = "mctl"
-
-  [[artifact.referencer]]
-  file = "assets/scripts/brief-decisions-track-inventory.py"
-  role = "violation"
-  since = "2026-08-20"
-  note = "Writes index rows during decisions-track migration."
+# KNOWN-INCOMPLETE, and deliberately so. This artifact has no canonical literal:
+# brief-shuffle-fast-drain.py builds the path from PILE_MANIFEST_NAME, while
+# decisions-to-briefs/SKILL.md writes ".pile/manifest.jsonl" in prose. Measured
+# 2026-08-20: each literal finds exactly ONE of the two known writers and misses
+# the other. The bare literal "manifest.jsonl" was worse -- it also matches
+# decisions-track/manifest.jsonl, and five referencers registered here were in
+# fact decisions-track-only. A ".pile" literal was worse in the other direction:
+# 38 files, because .pile matches .rejected/ and .no-brainer/ too.
+# So the union is used, and B2.14's judgement clause also applies to this
+# artifact: a mechanical pass here is not evidence that no other writer exists.
 
   [[artifact.referencer]]
   file = "assets/scripts/brief-shuffle-fast-drain.py"
   role = "violation"
   since = "2026-08-20"
   note = "append_index() and mark_manifest_rejected() write outside mctl."
-
-  [[artifact.referencer]]
-  file = "assets/scripts/mctl_core/manifest.py"
-  role = "reader"
-
-  [[artifact.referencer]]
-  file = "assets/scripts/mctl_core/redundant_state.py"
-  role = "reader"
-
-  [[artifact.referencer]]
-  file = "assets/scripts/mctl_core/verdicts.py"
-  role = "reader"
-
-  [[artifact.referencer]]
-  file = "skills/adjudicate-brief/SKILL.md"
-  role = "violation"
-  since = "2026-08-20"
-  note = "The founding violation: reach-around writes behind mctl."
-
-  [[artifact.referencer]]
-  file = "skills/create-brief/SKILL.md"
-  role = "unaudited"
-
-  [[artifact.referencer]]
-  file = "skills/mayor-math-prime/SKILL.md"
-  role = "unaudited"
-
-  [[artifact.referencer]]
-  file = "skills/present-briefs/SKILL.md"
-  role = "unaudited"
-
-  [[artifact.referencer]]
-  file = "skills/refine-bead-manifest/SKILL.md"
-  role = "unaudited"
-
-  [[artifact.referencer]]
-  file = "subdomains/brief-system/skills/check-brief-policy/SKILL.md"
-  role = "unaudited"
 
   [[artifact.referencer]]
   file = "subdomains/brief-system/skills/decisions-to-briefs/SKILL.md"
@@ -257,6 +224,109 @@ sole_writer = "mctl"
 
   [[artifact.referencer]]
   file = "subdomains/brief-system/skills/check-brief-policy/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "subdomains/brief-system/skills/decisions-to-briefs/SKILL.md"
+  role = "unaudited"
+
+
+[[artifact]]
+path = "decisions-track/manifest.jsonl"
+literal = "decisions-track"
+sole_writer = "mctl"
+# THE FIFTH REPRESENTATION (bob, 2026-08-20). Specs written against four
+# representations are short one, and this is the one `mctl` does not write
+# AT ALL -- adjudicate-brief patches it in place after mctl returns, so it
+# agrees only when a human runs the skill.
+#
+# It was previously INVISIBLE IN THIS REGISTER, and worse than absent: the
+# .pile/manifest.jsonl entry used the bare literal "manifest.jsonl", which
+# matches BOTH files. Five referencers listed under the pile manifest
+# reference only decisions-track (verdicts.py, manifest.py,
+# brief-decisions-track-inventory.py, mayor-math-prime, refine-bead-manifest).
+# Literals are now disambiguated: ".pile" and "decisions-track".
+
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-decisions-track-inventory.py"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Writes decisions-track rows during migration, outside mctl."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/briefs.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/documents.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/fields.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/manifest.py"
+  role = "reader"
+  note = "Read-side source for decisions-track rows."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/materialize_plan.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/mcp_server.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/policy_refs.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/redundant_state.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/schemas.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/verdicts.py"
+  role = "reader"
+  note = "Resolves verdicts from the legacy decisions-track lane."
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_dashboard/render.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/stuck-bead-watch.py"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/adjudicate-brief/SKILL.md"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Writes the decisions-track manifest row IN PLACE after mctl returns -- the fifth representation, which mctl does not write at all (bob, 2026-08-20)."
+
+  [[artifact.referencer]]
+  file = "skills/create-brief/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/mayor-math-prime/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/present-briefs/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/prime-clerk/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/refine-bead-manifest/SKILL.md"
   role = "unaudited"
 
   [[artifact.referencer]]

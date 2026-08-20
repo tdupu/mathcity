@@ -49,7 +49,12 @@ for art in reg.get("artifact", []):
     # segment silently produced "<id>.toml" for decisions/<id>.toml -- a
     # literal matching nothing, which made every referencer look STALE. The
     # check caught it; the assumption was still wrong.
-    literal = art.get("literal") or art["path"].split("/")[-1]
+    # A list, because .pile/manifest.jsonl has NO canonical spelling: the drain
+    # builds it from `PILE_MANIFEST_NAME` and the skills spell out
+    # ".pile/manifest.jsonl" in prose. Each literal finds one known writer and
+    # MISSES the other, so neither alone is sufficient and the union is
+    # known-incomplete -- see the register.
+    lits = art.get("literals") or [art.get("literal") or art["path"].split("/")[-1]]
     registered = {r["file"] for r in art.get("referencer", [])}
     found = set()
     for base in SEARCH:
@@ -59,7 +64,7 @@ for art in reg.get("artifact", []):
             if "/tests/" in str(f):
                 continue
             try:
-                if literal in regions(f):
+                if any(l in regions(f) for l in lits):
                     found.add(str(f.relative_to(root)))
             except OSError:
                 continue
