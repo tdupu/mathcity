@@ -248,6 +248,40 @@ by what adjudication unlocks, not by arrival time.*
   repaired to match. Mechanical check: every lifecycle transition (deposit,
   present, defer, adjudicate, archive) is expressed as a bead operation first;
   file moves are derived.
+- **B2.8a Scope of B2.8: authority, not location.** **The bead is a serial
+  number.** It identifies the brief authoritatively and uniquely, and that is
+  what B2.8 is about — who wins a disagreement about *which* brief this is and
+  what state it is in. A serial number is not the object it identifies, and
+  nobody expects to reconstruct the object from it.
+
+  So B2.8 does NOT assert that the bead holds the data, and its clause "may be
+  regenerated from bead state at any time" is **false as written** for the
+  current corpus. Measured 2026-08-19:
+
+  | field | brief files carrying it | beads carrying it |
+  | --- | --- | --- |
+  | brief body | 203 of 204 decisions-track rows; 89 of 89 stack files | not held |
+  | `unlock_count` | 192 of 293 | not held; a graph traversal returns ~0 because 1 of 264 beads has a blocking edge and 508 of 528 edges are `related` |
+  | `track` | 293 of 293 | not held |
+  | `form` | 253 · `gates` 140 · `priority` 86 · `verdict` 43 | not held |
+
+  Deleting the files would therefore destroy state no bead can reproduce. The
+  bead is the **authoritative** representation and simultaneously the
+  **poorest** one: it carries identity, status, timestamps and labels, and
+  little else.
+
+  **Consequence for readers.** A bead-first read is not a complete read. Any
+  component reporting a field as "not exposed by the core" must first confirm
+  the field is absent from the *file*, not merely from the bead. Two shipped
+  defects came from ignoring this — a `malformed` lane and an `unreadable`
+  lane, each built on the assumption that a bead's silence meant the data did
+  not exist.
+
+  **Consequence for B2.8 itself.** Repairing the filesystem to match the bead
+  store is safe only for fields the bead actually holds. For every field in
+  the table above, "repair" would mean deletion. Until a migration moves that
+  state into beads, B2.8's repair direction is scoped to identity, status,
+  timestamps, labels, and recorded verdict fields.
 - **B2.9 Auto-executed briefs are still adjudicated.** No-brainer
   auto-execution (N-rules) is an adjudication: it records the verdict on the
   brief bead (authorizer = the automation identity + classifier evidence,
