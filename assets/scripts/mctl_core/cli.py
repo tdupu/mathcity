@@ -669,8 +669,16 @@ def _brief_body_lines(brief: dict[str, object]) -> list[str]:
 
 
 def _brief_line(brief: dict[str, object]) -> str:
+    """One brief per line, with its store named when it is not the bead store.
+
+    A manifest-sourced record has no title and no bead; printing it exactly
+    like a bead-backed brief would present a row nothing attests as though a
+    decision bead carried it.
+    """
     state = brief.get("decision_state") or brief.get("status") or "?"
-    return f"{brief.get('brief_id', '?')}  [{state}]  {str(brief.get('title', ''))[:70]}"
+    origin = "" if brief.get("source", "bead") == "bead" else "  (manifest-only)"
+    title = str(brief.get("title") or "")[:70]
+    return f"{brief.get('brief_id', '?')}  [{state}]{origin}  {title}"
 
 
 def _work_line(item: dict[str, object]) -> str:

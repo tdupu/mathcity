@@ -239,9 +239,14 @@ def test_briefs_list_carries_no_body(tmp_path: Path):
         "labels",
         "policy_references",
         "redundant_artifacts",
+        "source",
         "status",
+        "timestamp",
+        "timestamp_field",
         "title",
+        "track",
         "updated_at",
+        "verdict",
     }
 
 

@@ -192,6 +192,31 @@ meaning = "Decision bead records a kill-switch engagement or release, not a brie
 policy_ref = "B2.1"
 module = "verdicts.py"
 
+# MBRF060-MBRF062 belong to the decisions-track manifest read as a third
+# read-side source (manifest.py). The same file is also read strictly, for the
+# B2.10 migration gate, where a single bad line must fail the whole read
+# (MBRF013). These three are the tolerant pass: they cost one row's visibility
+# each and are WARN, because a supplementary source that loses a row must not
+# also take down the listing that 197 bead-backed briefs are in.
+
+[MBRF060]
+severity = "WARN"
+meaning = "Decisions-track manifest could not be read, so its rows are unreachable."
+policy_ref = "B2.10"
+module = "manifest.py"
+
+[MBRF061]
+severity = "WARN"
+meaning = "Decisions-track manifest row is not readable JSON, or is not a JSON object, and was skipped."
+policy_ref = "B2.10"
+module = "manifest.py"
+
+[MBRF062]
+severity = "WARN"
+meaning = "Decisions-track manifest row carries no slug, so it has no identity to show."
+policy_ref = "B2.10"
+module = "manifest.py"
+
 [MCTL_BEAD_UPDATE_RACE_LOST]
 severity = "FATAL"
 meaning = "Another actor changed the bead between plan and apply; the guarded write was skipped."

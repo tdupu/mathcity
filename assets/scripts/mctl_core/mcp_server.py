@@ -715,8 +715,15 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         name="briefs_list",
-        title="List brief beads",
-        description="List canonical decision brief beads, optionally filtered by status or label.",
+        title="List briefs",
+        description=(
+            "List briefs from both stores: canonical decision brief beads, plus "
+            "decisions-track manifest rows that no bead and no stack file represents. "
+            "Every record names its `source` (`bead` or `manifest`); a manifest row is "
+            "attested by nothing else, carries no body, and is `adjudicated` only when "
+            "the row itself holds a verdict -- otherwise `unreadable`, which is not the "
+            "pending queue. Optionally filtered by status or label."
+        ),
         input_schema=request_schema(
             {
                 "status": nullable_string("Filter by raw bead or decision status."),

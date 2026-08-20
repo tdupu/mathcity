@@ -473,10 +473,16 @@ def test_briefs_list_includes_unlabeled_type_decision_and_closed_briefs(tmp_path
     )
 
     assert result.returncode == 0, result.stderr
-    assert [brief["brief_id"] for brief in json.loads(result.stdout)["briefs"]] == [
+    listed = json.loads(result.stdout)["briefs"]
+    # The bead population, then the decisions-track row the fixture manifest
+    # carries and nothing else represents. `legacy-unmapped` is listed rather
+    # than hidden, and says so: `source: manifest`, no bead behind it.
+    assert [brief["brief_id"] for brief in listed] == [
         "mc-unlabeled",
         "mc-closed-real",
+        "legacy-unmapped",
     ]
+    assert [brief["source"] for brief in listed] == ["bead", "bead", "manifest"]
 
 
 def test_list_and_show_surface_matching_legacy_migration_blocker(tmp_path: Path):

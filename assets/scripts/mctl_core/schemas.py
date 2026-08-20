@@ -282,10 +282,37 @@ REDUNDANT_ARTIFACT_SCHEMA: Schema = {
     "additionalProperties": False,
 }
 
+#: A verdict as `verdicts.Verdict.to_dict` reports it: the text as written,
+#: plus where it was read and how much that reading can be trusted. Never
+#: normalised into a controlled vocabulary -- the live corpus records verdicts
+#: as everything from `approve` to
+#: `PER-ITEM-VERBATIM-PASSED-TO-MAYOR-FOR-DECOMPOSITION`.
+VERDICT_SCHEMA: Schema = {
+    "type": ["object", "null"],
+    "title": "Verdict",
+    "description": "A recorded verdict and the provenance of the reading.",
+    "required": ["confidence", "field", "source", "text"],
+    "properties": {
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "field": {"type": "string", "description": "The exact field the text came from."},
+        "source": {
+            "type": "string",
+            "enum": ["typed_field", "close_reason", "notes", "decisions_track"],
+        },
+        "text": {"type": "string", "description": "The verdict verbatim."},
+    },
+    "additionalProperties": False,
+}
+
 BRIEF_RECORD_SCHEMA: Schema = {
     "type": "object",
     "title": "BriefRecord",
-    "description": "A canonical decision brief bead plus its redundant cache artifacts.",
+    "description": (
+        "One brief, from whichever store holds it: a decision bead with its redundant "
+        "cache artifacts, or a decisions-track manifest row that no bead and no file "
+        "represents. `source` says which, and must be read before the record is trusted "
+        "as attested."
+    ),
     "required": [
         "bead_id",
         "brief_id",
@@ -294,15 +321,34 @@ BRIEF_RECORD_SCHEMA: Schema = {
         "labels",
         "policy_references",
         "redundant_artifacts",
+        "source",
         "status",
+        "timestamp",
+        "timestamp_field",
         "title",
+        "track",
+        "verdict",
     ],
     "properties": {
-        "bead_id": {"type": "string"},
+        "bead_id": nullable_string(
+            "The canonical decision bead. Null on a manifest-sourced record: there is no bead."
+        ),
         "brief_id": {"type": "string"},
-        "canonical_source": {"type": "string", "const": "bead_store"},
-        "created_at": nullable_string("Bead creation timestamp."),
-        "decision_state": {"type": "string"},
+        "canonical_source": {
+            "type": "string",
+            "enum": ["bead_store", "decisions_track_manifest"],
+            "description": "Which store is authoritative for this record.",
+        },
+        "created_at": nullable_string("Bead creation timestamp. Null on a manifest record."),
+        "decision_state": {
+            "type": "string",
+            "description": (
+                "adjudicated / deferred / pending / malformed for a bead; adjudicated or "
+                "`unreadable` for a manifest row. `unreadable` means the row was recorded "
+                "and what it said cannot be shown -- it is deliberately not `pending`, "
+                "because a row with no body cannot be decided."
+            ),
+        },
         "labels": STRING_ARRAY,
         "policy_references": {
             "type": "array",
@@ -314,9 +360,31 @@ BRIEF_RECORD_SCHEMA: Schema = {
             },
         },
         "redundant_artifacts": {"type": "array", "items": REDUNDANT_ARTIFACT_SCHEMA},
-        "status": {"type": "string"},
-        "title": {"type": "string"},
-        "updated_at": nullable_string("Bead update timestamp."),
+        "source": {
+            "type": "string",
+            "enum": ["bead", "manifest"],
+            "description": (
+                "Which store this record came from. `manifest` means a decisions-track row "
+                "attested by nothing else -- no bead, no file."
+            ),
+        },
+        "status": nullable_string("Raw bead status, or the manifest row's status string."),
+        "timestamp": nullable_string(
+            "The one date this record can stand behind, or null. Never synthesised: 60 live "
+            "manifest rows carry no date at all, and a surface must render that as 'no "
+            "timestamp' rather than a false age."
+        ),
+        "timestamp_field": nullable_string(
+            "Which field `timestamp` came from. Null exactly when `timestamp` is null."
+        ),
+        "title": nullable_string(
+            "Bead title. Null on a manifest-sourced record, which has no title to report."
+        ),
+        "track": nullable_string(
+            "The decisions-track lane a manifest row declares. Null on a bead record."
+        ),
+        "updated_at": nullable_string("Bead update timestamp. Null on a manifest record."),
+        "verdict": VERDICT_SCHEMA,
     },
 }
 

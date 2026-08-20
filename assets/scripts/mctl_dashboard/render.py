@@ -76,6 +76,7 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 .state-adjudicated { border-color: #b9dfc4; background: #e9f7ee; }
 .state-deferred { border-color: #e3d3a6; background: #fbf3dd; }
 .state-malformed { border-color: #d8c9f0; background: #f2ecfb; }
+.state-unreadable { border-color: #d9d2c7; background: #f3efe9; }
 ul.diagnostics { list-style: none; margin: 0; padding: 0; }
 li.diagnostic {
   border-left: 4px solid var(--line); padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;
@@ -429,12 +430,19 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -
         )
         rig = str(brief.get("rig_id") or "") or None
         rig_cell = f'<td><span class="mono">{_e(rig or "-")}</span></td>' if show_rig else ""
+        # A manifest-sourced row has no bead. Its slug is the only identity it
+        # has, so the identity cell shows the slug and says outright that no
+        # bead is behind it -- an empty cell would read as a lost bead id.
+        identity = brief.get("bead_id") or brief.get("brief_id")
+        origin = (
+            "" if str(brief.get("source") or "bead") == "bead" else ' <span class="badge">manifest-only</span>'
+        )
         rows.append(
             "<tr>"
             + rig_cell
             + f'<td><a href="{brief_href(brief.get("brief_id"), rig)}">'
-            f'<span class="mono">{_e(brief.get("bead_id"))}</span></a></td>'
-            f'<td>{_e(brief.get("title"))}</td>'
+            f'<span class="mono">{_e(identity)}</span></a>{origin}</td>'
+            f'<td>{_e(brief.get("title") or "-")}</td>'
             f'<td>{_state_badge(str(brief.get("decision_state")))}</td>'
             f'<td><span class="mono">{_e(brief.get("status"))}</span></td>'
             f'<td><span class="mono">{_e(", ".join(brief.get("labels") or ()) or "-")}</span></td>'
@@ -474,7 +482,9 @@ def queue_panel(briefs: Sequence[Mapping[str, Any]]) -> str:
     return (
         '<section class="panel" data-region="queue">'
         f"<h2>Decision queue ({len(briefs)} briefs)</h2>"
-        '<p class="lede">Canonical source: <span class="mono">bead_store</span>. '
+        '<p class="lede">Canonical source: <span class="mono">bead_store</span>, plus '
+        'decisions-track rows no bead represents (each record names its own '
+        '<span class="mono">source</span>). '
         'Read through <span class="mono">briefs_list</span>.</p>'
         '<div class="scroll-x"><table><thead><tr><th>State</th><th>Count</th><th>Meaning</th></tr></thead>'
         f"<tbody>{cells}</tbody></table></div>"
@@ -490,6 +500,11 @@ def _state_gloss(state: str) -> str:
         "adjudicated": "Closed with a recorded verdict field.",
         "deferred": "Deferred with a defer window on the bead.",
         "malformed": "Closed with no verdict field. See the caveat below.",
+        "unreadable": (
+            "Recorded in the decisions-track manifest with no verdict, and represented by no "
+            "bead and no file. The row proves a brief existed; it cannot show what it said. "
+            "Deliberately not in the pending queue -- there is nothing here to decide on."
+        ),
     }.get(state, "Reported by the canonical bead store.")
 
 

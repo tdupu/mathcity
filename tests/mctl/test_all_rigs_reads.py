@@ -111,12 +111,23 @@ def test_every_row_carries_the_rig_whose_store_it_came_from(tmp_path: Path):
     city = payload(instance, "briefs_list", {"all_rigs": True})
 
     assert city["briefs"], "nothing to check"
+    bead_rows = [brief for brief in city["briefs"] if brief["source"] == "bead"]
+    assert bead_rows, "nothing to check"
     for brief in city["briefs"]:
         rig = brief["rig_id"]
         assert rig in multi_rig.READABLE_RIGS
+    for brief in bead_rows:
+        rig = brief["rig_id"]
         assert brief["bead_id"].startswith(multi_rig.PREFIXES[rig]), (
             "a row was tagged with a rig that does not own it"
         )
+    # A manifest-sourced row has no bead to carry a prefix, so the rig tag is
+    # the only thing saying which store it came from -- and it is exactly the
+    # rig whose manifest was read, never a shared or defaulted one.
+    for brief in city["briefs"]:
+        if brief["source"] == "manifest":
+            assert brief["bead_id"] is None
+            assert brief["rig_id"] in multi_rig.READABLE_RIGS
 
 
 def test_the_explicit_option_is_required_for_a_cross_rig_read(tmp_path: Path):

@@ -22,7 +22,21 @@ from .redundant_state import (
     orphan_markdown_cache_ids,
     scan_artifacts,
 )
-from .verdicts import NON_BRIEF_MESSAGES, brief_population, non_brief_code, read_verdict
+from .manifest import (
+    CANONICAL_SOURCE_BEAD,
+    CANONICAL_SOURCE_MANIFEST,
+    SOURCE_BEAD,
+    SOURCE_MANIFEST,
+    ManifestRecord,
+    manifest_records,
+)
+from .verdicts import (
+    NON_BRIEF_MESSAGES,
+    Verdict,
+    brief_population,
+    non_brief_code,
+    read_verdict,
+)
 
 
 @dataclass(frozen=True)
@@ -72,20 +86,56 @@ class BriefSection:
 
 @dataclass(frozen=True)
 class BriefRecord:
+    """One brief, from whichever store holds it.
+
+    Two populations reach this type. Most records come from a decision bead.
+    The rest come from a decisions-track manifest row that no bead and no file
+    represents -- 158 of the live city's 204 rows, previously reachable by no
+    reader at all (see `manifest.py`).
+
+    `source` is what separates them, and it is not decoration: a manifest row
+    is a record that a brief existed, with no bead attesting it and, in 36
+    cases, nothing readable in it. Rendering one exactly like a bead-backed
+    brief would assert an attestation that does not exist.
+
+    Which is also why `bead_id` and `title` are nullable. A manifest row has
+    neither. `""` would read as "this brief has no title"; `None` reads as
+    "there is no bead here to have one", which is the true statement.
+    """
+
     brief_id: str
-    bead_id: str
-    title: str
-    status: str
+    bead_id: str | None
+    title: str | None
+    status: str | None
     decision_state: str
     labels: tuple[str, ...]
     created_at: str | None
     updated_at: str | None
     redundant_artifacts: tuple[RedundantArtifact, ...]
     policy_references: tuple[PolicyReference, ...]
+    #: Which store this record came from: `bead` or `manifest`.
+    source: str = SOURCE_BEAD
+    #: The verdict this brief carries, with the field and confidence it was
+    #: read at. Populated for both populations -- a bead record that omitted
+    #: it would report `null` beside a manifest record that reported one, and
+    #: read as "the bead has no verdict" when the bead simply was not asked.
+    verdict: Verdict | None = None
+    #: The decisions-track lane a manifest row declares (33 distinct values
+    #: live, `process-policy` the largest). None on a bead record: beads carry
+    #: no track, and absent means absent.
+    track: str | None = None
+    #: The one timestamp this record can stand behind, or None. A bead reports
+    #: its `updated_at`; a manifest row reports whichever of its own date
+    #: fields it actually has, and 60 live rows have none. Nothing is
+    #: synthesised, so a surface renders "no timestamp" rather than a false Age.
+    timestamp: str | None = None
+    #: Which field `timestamp` came from. None exactly when `timestamp` is.
+    timestamp_field: str | None = None
     #: The canonical bead description, verbatim. None means "not loaded" --
     #: `list_briefs` deliberately leaves it off, because fetching every body
     #: turns a roster read into a city-wide content read. `""` means loaded
-    #: and genuinely empty. Only `show_brief` populates it.
+    #: and genuinely empty. Only `show_brief` populates it. A manifest record
+    #: leaves it None permanently: there is no bead and no file to load.
     body: str | None = None
     sections: tuple[BriefSection, ...] = ()
     #: Why the parse produced what it did. A body that yields no sections
@@ -93,19 +143,34 @@ class BriefRecord:
     #: reads like "this brief has no sections".
     body_diagnostics: tuple[Diagnostic, ...] = ()
 
+    @property
+    def canonical_source(self) -> str:
+        """Which store is authoritative for this record.
+
+        The bead store is canonical for a brief that has a bead. For a
+        manifest-only row it is not merely unavailable -- there is no bead --
+        so claiming `bead_store` would name a store that does not hold it.
+        """
+        return CANONICAL_SOURCE_BEAD if self.source == SOURCE_BEAD else CANONICAL_SOURCE_MANIFEST
+
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
             "bead_id": self.bead_id,
             "brief_id": self.brief_id,
-            "canonical_source": "bead_store",
+            "canonical_source": self.canonical_source,
             "created_at": self.created_at,
             "decision_state": self.decision_state,
             "labels": list(self.labels),
             "policy_references": [reference.to_dict() for reference in self.policy_references],
             "redundant_artifacts": [artifact.to_dict() for artifact in self.redundant_artifacts],
+            "source": self.source,
             "status": self.status,
+            "timestamp": self.timestamp,
+            "timestamp_field": self.timestamp_field,
             "title": self.title,
+            "track": self.track,
             "updated_at": self.updated_at,
+            "verdict": self.verdict.to_dict() if self.verdict is not None else None,
         }
         if self.body is not None:
             payload["body"] = self.body
@@ -233,7 +298,21 @@ class BriefError(Exception):
 
 
 def list_briefs(ctx: MctlContext, filters: BriefFilters) -> tuple[BriefRecord, ...]:
-    records = _records(ctx)
+    """Every brief this rig can show, from both stores.
+
+    The bead population first, then the decisions-track rows nothing else
+    represents. They are concatenated rather than merged: no manifest row
+    joins to a bead (`verdicts` measured that at 0 of 126 by every principled
+    key), so there is nothing to merge, and a merge that never fires is a
+    per-call cost plus a false suggestion that the two lanes overlap.
+
+    Only this roster read carries manifest records. `show`, `options`,
+    `doctor`, `validate`, and dispatch all act on a bead -- adjudicating,
+    deferring, or cross-checking a cache against canonical state -- and a
+    manifest row has no bead to act on. Listing it as decidable in those
+    surfaces would be the `pending`-lane error one level up.
+    """
+    records = _records(ctx) + _manifest_records(ctx)
     return tuple(record for record in records if _matches(record, filters))
 
 
@@ -258,8 +337,11 @@ def show_brief(ctx: MctlContext, brief_id: str) -> BriefRecord:
 def brief_command_diagnostics(ctx: MctlContext, records: Iterable[BriefRecord]) -> tuple[Diagnostic, ...]:
     layout = artifact_layout(ctx)
     legacy_state = legacy_manifest_state(layout)
+    records = tuple(records)
     brief_ids = {record.brief_id for record in records}
-    return _legacy_gate_diagnostics(ctx, layout, legacy_state, brief_ids)
+    return _legacy_gate_diagnostics(ctx, layout, legacy_state, brief_ids) + _manifest_diagnostics(
+        ctx, layout
+    )
 
 
 def legacy_gate_diagnostics(ctx: MctlContext) -> tuple[Diagnostic, ...]:
@@ -1076,20 +1158,105 @@ def _records(
     layout = artifact_layout(ctx) if layout is None else layout
     legacy_state = legacy_manifest_state(layout) if legacy_state is None else legacy_state
     beads = _beads(ctx) if beads is None else beads
+    return tuple(_bead_record(bead, layout, legacy_state) for bead in brief_population(beads))
+
+
+def _bead_record(
+    bead: Bead, layout: ArtifactLayout, legacy_state: LegacyManifestState
+) -> BriefRecord:
+    decision_state = _decision_state(bead)
+    return BriefRecord(
+        brief_id=bead.id,
+        bead_id=bead.id,
+        title=bead.title,
+        status=bead.status,
+        decision_state=decision_state,
+        labels=bead.labels,
+        created_at=bead.created_at,
+        updated_at=bead.updated_at,
+        redundant_artifacts=scan_artifacts(layout, bead.id, decision_state, legacy_state),
+        policy_references=BRIEF_POLICY_REFERENCES,
+        source=SOURCE_BEAD,
+        verdict=read_verdict(bead),
+        # A bead has no decisions-track lane, and `updated_at` is the one date
+        # every bead record can stand behind. Both are stated rather than left
+        # to the reader to infer from `source`.
+        track=None,
+        timestamp=bead.updated_at,
+        timestamp_field="updated_at" if bead.updated_at else None,
+    )
+
+
+def _manifest_records(
+    ctx: MctlContext, layout: ArtifactLayout | None = None
+) -> tuple[BriefRecord, ...]:
+    """The decisions-track rows no bead and no stack file represents.
+
+    Read per rig, from that rig's own manifest and its own stack directory, so
+    a city-wide listing is still exactly the per-rig answers assembled. Most
+    rigs have no manifest at all and contribute nothing.
+    """
+    layout = artifact_layout(ctx) if layout is None else layout
+    reading = manifest_records(layout.legacy_manifest, layout.stack)
+    return tuple(_manifest_record(record) for record in reading.records)
+
+
+def _manifest_record(record: ManifestRecord) -> BriefRecord:
+    """One manifest row as a brief record.
+
+    Everything a manifest row does not have stays empty rather than being
+    filled in: no bead id, no title, no labels, no created/updated stamps, and
+    no redundant artifacts -- an artifact scan would report four `missing`
+    caches for a brief that never had any, which reads as damage rather than
+    as absence.
+
+    The policy references stay, because they are the rules a reader needs to
+    judge what they are looking at, and they do not depend on the store.
+    """
+    return BriefRecord(
+        brief_id=record.slug,
+        bead_id=None,
+        title=None,
+        status=record.status,
+        decision_state=record.decision_state,
+        labels=(),
+        created_at=None,
+        updated_at=None,
+        redundant_artifacts=(),
+        policy_references=BRIEF_POLICY_REFERENCES,
+        source=SOURCE_MANIFEST,
+        verdict=record.verdict,
+        track=record.track,
+        timestamp=record.timestamp,
+        timestamp_field=record.timestamp_field,
+    )
+
+
+def _manifest_diagnostics(
+    ctx: MctlContext, layout: ArtifactLayout | None = None
+) -> tuple[Diagnostic, ...]:
+    """Rows the manifest reader had to skip.
+
+    WARN, not ERROR: the manifest is a supplementary read-side source, and a
+    row it cannot use costs that row's visibility and nothing else. The
+    fail-closed reading of the same file -- `MBRF013` plus the B2.10 migration
+    blocker -- is a separate, stricter pass that still runs.
+    """
+    layout = artifact_layout(ctx) if layout is None else layout
+    reading = manifest_records(layout.legacy_manifest, layout.stack)
     return tuple(
-        BriefRecord(
-            brief_id=bead.id,
-            bead_id=bead.id,
-            title=bead.title,
-            status=bead.status,
-            decision_state=_decision_state(bead),
-            labels=bead.labels,
-            created_at=bead.created_at,
-            updated_at=bead.updated_at,
-            redundant_artifacts=scan_artifacts(layout, bead.id, _decision_state(bead), legacy_state),
-            policy_references=BRIEF_POLICY_REFERENCES,
+        _diagnostic(
+            ctx,
+            Severity.WARN,
+            issue.code,
+            issue.message,
+            data_location=(
+                f"{reading.path}:{issue.line}" if issue.line is not None else str(reading.path)
+            ),
+            detail=issue.detail,
+            policy_ref="B2.10",
         )
-        for bead in brief_population(beads)
+        for issue in reading.issues
     )
 
 

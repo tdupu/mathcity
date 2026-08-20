@@ -202,7 +202,11 @@ def test_every_hq_row_is_tagged_with_the_store_it_came_from(tmp_path: Path):
 
     hq_rows = [brief for brief in city["briefs"] if brief["rig_id"] == HQ_RIG_ID]
     assert hq_rows, "the HQ store contributed no rows"
-    for brief in hq_rows:
+    # Manifest-sourced rows carry no bead id at all; the bead-store rows are
+    # the ones a prefix can identify.
+    bead_rows = [brief for brief in hq_rows if brief["source"] == "bead"]
+    assert bead_rows, "the HQ bead store contributed no rows"
+    for brief in bead_rows:
         assert brief["bead_id"].startswith(HQ_PREFIX)
 
 
