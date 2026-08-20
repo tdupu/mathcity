@@ -266,3 +266,44 @@ Worth a design conversation rather than five more point fixes.
 
 Nothing. Still needed from cozy: `title`/`bead_id` on `briefs_list` rows;
 first-class `no_brainer`; `defer_until` on the read path. Merge still gated.
+
+---
+
+## 11:30 — hourly check, and a correction to my own numbers
+
+**Tests green: 710 passing. 20 commits.** Dolt healthy (234ms), one active query,
+no orphan processes. No reply from cozy since 06:20; `main` unchanged.
+
+### Correcting the rig-scoped performance claim
+
+The commit `a read that failed is not a brief that is absent` says the
+rig-scoped read replaced a 22.5s all-rigs read with "a fraction of it". **That
+was one sample of each, taken minutes apart under different load, and it
+overstates the win.**
+
+Four paired samples, alternating, same minute:
+
+| | median | range |
+|---|---|---|
+| rig-scoped | 7.7s | 4.9 – 11.3 |
+| all-rigs | 11.5s | 5.3 – 22.2 |
+
+Real improvement, roughly 1.5x on median — not the order-of-magnitude the
+commit implies. The ranges overlap heavily and single measurements of this
+system are close to worthless; I had already been burned twice tonight by
+trusting one sample, and did it again in a commit message.
+
+**The architectural argument stands on its own** and is why the change should
+stay: a page showing one rig should not read seventeen, and the degraded-rig
+panel's city-wide honesty claim is false on a rig-scoped page.
+
+**The finding worth passing to cozy:** a rig-scoped `briefs_list` costs within
+noise of an all-rigs one. Filtering to a single rig apparently does not narrow
+the work much in the core — which is the more interesting number than either
+of mine.
+
+### Blocked
+
+Nothing. Outstanding from cozy unchanged: `title`/`bead_id` on `briefs_list`
+rows, first-class `no_brainer`, `defer_until` on the read path. Merge still
+gated and unrequested.
