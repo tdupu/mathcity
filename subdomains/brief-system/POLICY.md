@@ -356,9 +356,40 @@ by what adjudication unlocks, not by arrival time.*
 
 ---
 
-- **B2.11 `mctl` is the sole writer of every brief artifact.** Each artifact
-  named in `assets/brief-pipeline/brief-writers.toml` has exactly one
-  authorized writer: `mctl`. Any other process that writes one — a pack script,
+- **B2.11 `mctl` is the API, and an AGENT reaches it through the MCP.** This
+  rule has two halves and the second was missing from its first draft. Owner's
+  canonical text, quoted rather than paraphrased because three successive
+  restatements drifted:
+
+  > - **mctl is an API for mathcity.**
+  > - users/webpages/etc having agents do something in mathcity should always be
+  >   performed by an **API call**.
+  > - other simple commands should also go through API calls.
+  > - **AGENTS acting on mathcity should always go through an MCP for the API.**
+
+  > *"The idea is that this hardens agent behavior. **If an mctl call fails then
+  > we know where it is.** We know the source of the problem and we don't need to
+  > deal with 100 different ways to try and do the same thing. It also doesn't
+  > expose the whole API to the agents where they can make mistakes like we have
+  > seen before."*
+
+  So a skill whose job is to walk an agent through bash to change brief state is
+  **the deprecated pattern**, not merely an unregistered writer: its capability
+  belongs in the MCP as a typed tool. `skills/adjudicate-brief/SKILL.md` is the
+  worked example — it is a violation twice over, once for writing outside
+  `mctl` and once for being agent-control-by-bash at all.
+
+  **A fix is a change to the MCP, to `mctl`, or to the Python underneath — not a
+  shim, not a wrapper, not a careful bash block.** If the sensible fix is larger
+  than expected, say so; do not shrink it into a workaround. And if `mctl` does
+  not expose what a fix needs, that is an **interface gap to file**, not a
+  licence to reach around it — a violation that turns out to be a gap is more
+  valuable than one that turns out to be laziness, because it says what the
+  interface is missing.
+
+  **The write rule.** Each artifact named in
+  `assets/brief-pipeline/brief-writers.toml` has exactly one authorized writer:
+  `mctl`. Any other process that writes one — a pack script,
   a check, a formula shelling out, a skill with an open bash block — is a
   violation, whatever its result. The reasoning is the point and is not about
   tidiness: work behind one interface fails **loudly, in one place, with an
@@ -956,6 +987,7 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
 | 2026-08-20 | Add B2.14: brief frontmatter is governed by B2.11 but enforced as a JUDGEMENT rule. The mechanical version was built and probed, not assumed unworkable: keying the register's reference scan on `status:`/`verdict:` hit 41 and 20 referencers and flagged all four probe cases, including the two known-clean (`create-brief`, `present-briefs`). Path literals are invented for one purpose and carry signal; field names are ubiquitous vocabulary and do not | reviewer trans set the bar at 3/3 probe cases and accepted the measurement at 2/3: "a green check that misclassifies create-brief is worse than not having the check at all" |
+| 2026-08-20 | Amend B2.11 to carry BOTH halves of the architecture: `mctl` is the API, and an AGENT reaches it through the MCP. The first draft encoded only "repeated work behind mctl" and was incomplete — it did not say that a skill walking an agent through bash is the DEPRECATED PATTERN rather than merely an unregistered writer. Owner's canonical text is quoted verbatim rather than paraphrased, including the rationale, because three successive restatements drifted | the human adjudicator, verbatim: "AGENTS acting on mathcity should always go through an MCP for the API" and "If an mctl call fails then we know where it is... we don't need to deal with 100 different ways to try and do the same thing" |
 | 2026-08-20 | Amend B2.13 to an explicit JUDGEMENT rule (naming what is weighed and the three items a reasoned verdict must cite, per `check-zero`) rather than a mechanical clause; add a paths.toml cross-check to `tests/brief-writer-authority` after `check-zero` found `mctl_core/redundant_state.py::artifact_layout` already models artifact locations | the human adjudicator: "Sometimes we need to defer to agent judgement. That is the power of agents." A bad mechanical proxy for a judgement call passes confidently on cases it cannot see |
 | 2026-08-20 | Add B2.11/B2.12/B2.13: `mctl` is the sole writer of every brief artifact; non-`mctl` writers are violations recorded in a dated register (`assets/brief-pipeline/brief-writers.toml`) that may only shrink; and no write path may report a state it did not verify. Enforced by `tests/brief-writer-authority`, which compares references rather than attempting write-detection (a proximity heuristic was prototyped and rejected for classifying `brief-shuffle-fast-drain.py` as read-only when `append_index()` writes the index) | the human adjudicator, verbatim: "We want to factor repeated work through a single point of failure" and "There is a central failure point which is the mctl commands. Debugging those will fix the whole thing." Five violations registered at adoption rather than fixed, so the burn-down is visible |
 | 2026-08-20 | Add B2.1a: a brief may declare it has no bead subject (`MBRF056`), scoping B2.1 rather than rewriting it; declaration is explicit-only, so an omitting brief still raises `MBRF004` | the human adjudicator ruled YES on the principle (bead `mc-csr`, workflow `mc-sxz`); the explicit-only shape follows the measurement — 30 of a 40-brief sample of the 135 `MBRF004` population are omissions, 27 of them with a still-recoverable subject, so an inferred declaration would be a loophole three times larger than the category it serves |
