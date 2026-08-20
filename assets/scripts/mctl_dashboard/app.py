@@ -699,7 +699,11 @@ class Dashboard:
             render.artifact_trust_panel(shown.artifact_trust, rig=rig),
             render.brief_detail_panel(brief),
             render.options_panel(option_rows) if options else "",
-            render.operation_forms(brief_id, option_rows, rig=rig),
+            # The adjudication panel above supersedes the adjudicate form; two
+            # forms writing the same field is a chance to submit the one you
+            # did not mean. Defer and dispatch have no other home yet, so they
+            # stay.
+            render.operation_forms(brief_id, option_rows, rig=rig, omit=("adjudicate",)),
             render.diagnostics_sections(
                 doctor.diagnostics if doctor else [],
                 doctor.untrusted_diagnostics if doctor else [],

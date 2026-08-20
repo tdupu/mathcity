@@ -860,9 +860,19 @@ def options_panel(options: Sequence[Mapping[str, Any]]) -> str:
 
 
 def operation_forms(
-    brief_id: str, options: Sequence[Mapping[str, Any]], *, rig: str | None = None
+    brief_id: str,
+    options: Sequence[Mapping[str, Any]],
+    *,
+    rig: str | None = None,
+    omit: Sequence[str] = (),
 ) -> str:
     """The mutation forms, each pinned to the rig whose store owns this brief.
+
+    `omit` drops an operation that a better screen already offers. The
+    adjudication panel supersedes the adjudicate form here, and two forms on
+    one page that write the same field is not a fallback -- it is a chance to
+    submit the one you did not mean, from a form that shows less about what it
+    is doing.
 
     The rig travels as a hidden field rather than being inferred at submit
     time. A city-wide dashboard that let the target store be re-derived from
@@ -881,28 +891,37 @@ def operation_forms(
             "a preview will show the blocking diagnostic code.</p>"
         )
 
+    adjudicate_form = (
+        ""
+        if "adjudicate" in set(omit)
+        else (
+            '<form class="operation" method="post" action="/preview">'
+            f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
+            '<input type="hidden" name="operation" value="adjudicate">'
+            "<label>Verdict"
+            '<select name="verdict">'
+            '<option value="approve">approve</option>'
+            '<option value="reject">reject</option>'
+            '<option value="revise">revise</option>'
+            "</select></label>"
+            '<label>Option (required when the brief offers more than one)'
+            '<input type="text" name="option" placeholder="A"></label>'
+            "<label>Reason (recorded on the bead)"
+            '<textarea name="reason" rows="3"></textarea></label>'
+            '<div><button type="submit">Preview adjudication</button></div>'
+            f"{_blocked('adjudicate')}"
+            "</form>"
+        )
+    )
+    heading = "Defer or dispatch" if "adjudicate" in set(omit) else "Record a decision"
     return (
         '<section class="panel" data-region="mutations">'
-        "<h2>Record a decision</h2>"
+        f"<h2>{heading}</h2>"
         '<p class="lede">Every mutation is preview-first. Submitting here runs a '
         "<strong>dry run</strong> through the MCP tool and writes nothing; the confirm control "
         "appears only on the preview, and only while that preview is still true.</p>"
-        '<form class="operation" method="post" action="/preview">'
-        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
-        '<input type="hidden" name="operation" value="adjudicate">'
-        "<label>Verdict"
-        '<select name="verdict">'
-        '<option value="approve">approve</option>'
-        '<option value="reject">reject</option>'
-        '<option value="revise">revise</option>'
-        "</select></label>"
-        '<label>Option (required when the brief offers more than one)'
-        '<input type="text" name="option" placeholder="A"></label>'
-        '<label>Reason (recorded on the bead)<textarea name="reason" rows="3"></textarea></label>'
-        "<div><button type=\"submit\">Preview adjudication</button></div>"
-        f"{_blocked('adjudicate')}"
-        "</form>"
-        '<form class="operation" method="post" action="/preview">'
+        + adjudicate_form
+        + '<form class="operation" method="post" action="/preview">'
         f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
         '<input type="hidden" name="operation" value="defer">'
         '<label>Defer for (days)<input type="text" name="days" value="7"></label>'

@@ -1628,3 +1628,27 @@ def test_the_prefill_does_not_preselect_approve():
     )
     approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
     assert approve and "checked" not in approve.group(0)
+
+
+def test_the_brief_page_has_only_one_adjudication_form():
+    """Two forms writing the same field is a chance to submit the wrong one."""
+    from mctl_dashboard import render
+
+    html = render.operation_forms(
+        "he-1",
+        [{"id": "adjudicate", "enabled": True}, {"id": "defer", "enabled": True}],
+        rig="hq",
+        omit=("adjudicate",),
+    )
+    assert 'value="adjudicate"' not in html
+    assert "Preview adjudication" not in html
+    # Defer and dispatch have no other home yet, so they must survive.
+    assert 'value="defer"' in html
+    assert "Preview deferral" in html
+
+
+def test_omitting_nothing_keeps_the_legacy_form():
+    from mctl_dashboard import render
+
+    html = render.operation_forms("he-1", [{"id": "adjudicate", "enabled": True}], rig="hq")
+    assert "Preview adjudication" in html
