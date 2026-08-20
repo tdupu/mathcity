@@ -1341,12 +1341,17 @@ class Dashboard:
         if changed:
             return self._stale(preview, operation, changed, replanned)
         applied = self.client.call(operation.tool, {**preview.arguments, "dry_run": False})
+        # The brief just adjudicated has left the queue, so "next" is computed
+        # against the queue as it stands *after* the write -- offering the
+        # brief that is now at this position, not the one that used to be.
+        advance = self._advance_after(preview.brief_id or "", preview.rig)
         return self._page(
             f"Applied {operation.title}",
             "/briefs",
             context,
             [
                 render.applied_panel(applied.payload, operation.title),
+                advance,
                 render.effect_plan_panel(
                     dict(applied.payload.get("effect_plan") or {}), title="What was applied"
                 ),
@@ -1358,6 +1363,52 @@ class Dashboard:
                     heading="Apply diagnostics",
                 ),
             ],
+        )
+
+    def _advance_after(self, brief_id: str, rig: str | None) -> str:
+        """Where to go next, offered at the moment the operator is free to go.
+
+        Without this the reward for recording a verdict is a terminal page and
+        a back button, which is what makes a 180-brief queue feel like 180
+        errands rather than one sitting.
+        """
+        suffix = f"?rig={render.esc(rig)}" if rig else ""
+        try:
+            listing = self.client.call("briefs_list", self._args(rig))
+        except ToolFailure:
+            listing = None
+        next_id = None
+        if listing is not None:
+            view = view_state.parse({})
+            rows = stack.sorted_briefs(
+                _scoped(list(listing.payload.get("briefs") or ()), view.scope), view
+            )
+            ids = [str(r.get("bead_id") or r.get("brief_id") or "") for r in rows]
+            ids = [i for i in ids if i and i != brief_id]
+            next_id = ids[0] if ids else None
+
+        buttons = [
+            f'<a class="btn btn-secondary" href="/queue{suffix}" '
+            'style="font-size: 12px; padding: 5px 12px;">Back to queue</a>'
+        ]
+        if next_id:
+            buttons.insert(
+                0,
+                f'<a class="btn btn-primary" href="/briefs/{render.esc(next_id)}{suffix}" '
+                'style="font-size: 12px; padding: 5px 14px;">Next brief &rarr;</a>',
+            )
+        remaining = (
+            f'<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
+            f"{len(ids)} left on this queue</span>"
+            if listing is not None and next_id
+            else ""
+        )
+        return (
+            '<section class="panel" data-region="advance" '
+            'style="display: flex; gap: 9px; align-items: center; margin-top: 4px;">'
+            + "".join(buttons)
+            + remaining
+            + "</section>"
         )
 
     def _stale(
