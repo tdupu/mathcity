@@ -112,7 +112,7 @@ def screen(briefs: Sequence[Mapping[str, Any]]) -> str:
         '<section data-region="priority">'
         + heading
         + f'<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-600);">'
-        f"{len(briefs)} briefs · your own ordering</div>"
+        f"{len(briefs)} brief{'' if len(briefs) == 1 else 's'} · your own ordering</div>"
         '<div style="height: 2px; background: var(--color-neutral-900); '
         'margin: 9px 0 16px;"></div>'
         '<p class="lede" style="max-width: 620px;">This is <strong>your own '
