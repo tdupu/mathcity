@@ -166,8 +166,8 @@ store and the first thing observed to hit the 25s deadline:
 DEGRADED  hq  ->  Rig 'hq' did not answer within 25s and is reported as degraded.
 ```
 
-Treat that as a real degraded rig, not as noise. Do NOT assume an id is
-missing from the roster just because its rig is absent from `city.toml`;
+Treat that as a real degraded rig, not as noise. Do NOT assume an id is missing
+from the roster just because its rig is absent from `city.toml`;
 `city_rig_entries` is the authority, not the config file.
 
 `gt-*` ids are therefore covered by the STATE rows like any other rig when HQ
