@@ -1768,3 +1768,59 @@ def test_the_not_found_code_is_the_only_one_that_claims_absence():
     assert 'MBRF010' in source, "the not-found code must gate the 404"
     assert "unreadable" in source
     assert "status=503" in source
+
+
+# --------------------------------------------------------------------------
+# deferral is written to status, not to decision_state
+# --------------------------------------------------------------------------
+
+
+def _deferred_row():
+    """A brief as `plan_deferral` actually leaves it.
+
+    `effects.py::plan_deferral` writes `status="deferred"` on the bead.
+    `decision_state` is computed separately and never takes that value, so a
+    brief someone deliberately deferred still reads as `pending`.
+    """
+    return {"brief_id": "as-1", "title": "deferred one",
+            "status": "deferred", "decision_state": "pending"}
+
+
+def test_a_deferred_brief_is_deferred():
+    from mctl_dashboard.app import is_deferred
+
+    assert is_deferred(_deferred_row())
+    assert is_deferred({"decision_state": "deferred"})
+    assert not is_deferred({"status": "open", "decision_state": "pending"})
+
+
+def test_a_deferred_brief_leaves_the_stack():
+    """It was sitting in the queue of 115 as if it still needed a verdict."""
+    from mctl_dashboard.app import _scoped
+
+    rows = [_deferred_row(), {"brief_id": "b", "decision_state": "pending"}]
+    stack_rows = _scoped(rows, "stack")
+    assert [r["brief_id"] for r in stack_rows] == ["b"]
+
+
+def test_a_deferred_brief_reaches_the_deferred_lane():
+    from mctl_dashboard.app import _in_lane
+
+    assert _in_lane(_deferred_row(), "deferred")
+    assert not _in_lane({"decision_state": "pending"}, "deferred")
+
+
+def test_the_other_lanes_are_unchanged():
+    from mctl_dashboard.app import _in_lane
+
+    assert _in_lane({"decision_state": "adjudicated"}, "adjudicated")
+    assert _in_lane({"decision_state": "malformed"}, "malformed")
+    assert not _in_lane(_deferred_row(), "adjudicated")
+
+
+def test_one_brief_is_not_one_briefs():
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.deferred([{"brief_id": "a", "status": "deferred"}])
+    assert "1 brief<" in html or "1 brief " in html or ">1 brief" in html
+    assert "1 briefs" not in html

@@ -89,21 +89,30 @@ def pile() -> str:
     )
 
 
+def _count(briefs: Sequence[Mapping[str, Any]]) -> str:
+    """"1 brief", not "1 briefs" -- these lanes now legitimately hold one."""
+    n = len(briefs)
+    return f"{n} brief" if n == 1 else f"{n} briefs"
+
+
 def deferred(briefs: Sequence[Mapping[str, Any]]) -> str:
     """Briefs held out of the stack until their window expires."""
     if not briefs:
         return (
             '<section data-region="deferred">'
             + _heading("Deferred", "held out of the stack until their window expires")
-            + '<p class="lede"><strong>No briefs are deferred.</strong> This is a '
-            "real zero read from the bead store, not a gap: the deferred state is "
-            "reported by <span class=\"mono\">decision_state</span> and no brief "
-            "currently carries it.</p>"
+            + '<p class="lede"><strong>No briefs are deferred.</strong> Read from '
+            "both places deferral is recorded: <span class=\"mono\">status</span>, "
+            "which <span class=\"mono\">plan_deferral</span> writes, and "
+            "<span class=\"mono\">decision_state</span>, which is computed "
+            "separately and does not currently take that value. This screen used to "
+            "consult only the second and reported a confident zero while a brief sat "
+            "deferred in the queue.</p>"
             "</section>"
         )
     return (
         '<section data-region="deferred">'
-        + _heading("Deferred", f"{len(briefs)} briefs")
+        + _heading("Deferred", _count(briefs))
         + _gap(
             "<strong>The defer window is not shown, because it is not readable.</strong> "
             "<span class=\"mono\">effects.py</span> writes "
@@ -166,7 +175,7 @@ def malformed(briefs: Sequence[Mapping[str, Any]]) -> str:
         return ""
     return (
         '<section data-region="malformed">'
-        + _heading("Malformed", f"{len(briefs)} briefs")
+        + _heading("Malformed", _count(briefs))
         + _gap(
             "<strong>Read this count carefully.</strong> "
             "&ldquo;Malformed&rdquo; here means <em>closed with no verdict "

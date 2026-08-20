@@ -147,6 +147,32 @@ SCOPE_STATES: dict[str, frozenset[str]] = {
 }
 
 
+def is_deferred(brief: Mapping[str, Any]) -> bool:
+    """Whether this brief is being held out of the stack.
+
+    Deferral is written to the bead's `status` -- `effects.py::plan_deferral`
+    sets `status="deferred"` -- while `decision_state` is computed separately
+    and never takes that value. Reading only `decision_state`, as every lane
+    did, meant a brief someone deliberately deferred still read as `pending`:
+    it stayed in the queue awaiting a verdict it had already been excused
+    from, and the Deferred screen reported a confident zero about it.
+
+    Both are consulted until the core reconciles them.
+    """
+    return (
+        str(brief.get("decision_state") or "") == "deferred"
+        or str(brief.get("status") or "") == "deferred"
+    )
+
+
+def _in_lane(brief: Mapping[str, Any], lane: str) -> bool:
+    """Whether a brief belongs to one of the pipeline lanes."""
+    if lane == "deferred":
+        return is_deferred(brief)
+    state = str(brief.get("decision_state") or "")
+    return state == lane.rstrip("s") or state == lane
+
+
 def _scoped(
     briefs: Sequence[Mapping[str, Any]], scope: str
 ) -> list[Mapping[str, Any]]:
@@ -162,7 +188,13 @@ def _scoped(
     states = SCOPE_STATES.get(scope)
     if states is None:
         return list(briefs)
-    return [b for b in briefs if str(b.get("decision_state") or "") in states]
+    # A deferred brief is held out of every lane it would otherwise land in --
+    # the whole point of deferring it is that it is not waiting on you.
+    return [
+        b
+        for b in briefs
+        if str(b.get("decision_state") or "") in states and not is_deferred(b)
+    ]
 
 
 def _queued_from(request: "Request") -> list[str]:
@@ -334,12 +366,7 @@ class Dashboard:
             )
 
         briefs, _city, city_extra = self._read_briefs(rig)
-        selected = [
-            brief
-            for brief in briefs
-            if str(brief.get("decision_state") or "") == lane.rstrip("s")
-            or str(brief.get("decision_state") or "") == lane
-        ]
+        selected = [brief for brief in briefs if _in_lane(brief, lane)]
         renderer = {
             "deferred": pipeline_screen.deferred,
             "adjudicated": pipeline_screen.adjudicated,
