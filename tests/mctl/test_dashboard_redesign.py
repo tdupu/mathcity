@@ -1538,3 +1538,39 @@ def test_a_brief_with_no_options_says_so_rather_than_demanding_a_letter():
     html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
     assert "names no options" in html
     assert 'value="other"' in html
+
+
+# --------------------------------------------------------------------------
+# keyboard map
+# --------------------------------------------------------------------------
+
+
+def test_every_advertised_key_is_actually_handled():
+    """The map's docstring claims it cannot drift. Nothing enforced that.
+
+    A key map listing a binding the code does not have teaches the wrong keys,
+    which is worse than no map at all -- and the comment saying so was written
+    without a test behind it.
+    """
+    import re
+
+    from mctl_dashboard import render
+    from mctl_dashboard.assets import SCRIPT
+
+    handled = set(re.findall(r"key === '([a-z]+)'", SCRIPT))
+    advertised = {key for key, _ in render.KEY_BINDINGS}
+    missing = advertised - handled
+    assert not missing, f"advertised but not handled: {sorted(missing)}"
+
+
+def test_every_handled_key_is_advertised():
+    """A working key nobody is told about is a feature that does not exist."""
+    import re
+
+    from mctl_dashboard import render
+    from mctl_dashboard.assets import SCRIPT
+
+    handled = set(re.findall(r"key === '([a-z]+)'", SCRIPT))
+    advertised = {key for key, _ in render.KEY_BINDINGS}
+    undocumented = handled - advertised
+    assert not undocumented, f"handled but undocumented: {sorted(undocumented)}"

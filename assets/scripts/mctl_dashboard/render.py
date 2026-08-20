@@ -141,6 +141,10 @@ KEY_BINDINGS: tuple[tuple[str, str], ...] = (
     ("j", "next row"),
     ("k", "previous row"),
     ("enter", "open the brief under the cursor"),
+    ("n", "next brief"),
+    ("p", "previous brief"),
+    ("q", "back to the queue"),
+    ("a", "jump to the verdict panel"),
 )
 
 
@@ -169,7 +173,7 @@ def key_map() -> str:
         + rows
         + '</div><div style="font-size: 11px; font-style: italic; margin-top: 5px; '
         'color: var(--color-neutral-700);">'
-        "These three are the only part of the dashboard that needs JavaScript, and "
+        "These are the only part of the dashboard that needs JavaScript, and "
         "each one duplicates something you can click. Everything else — sorting, "
         "filtering, opening a brief, recording a verdict — works without it."
         "</div></details>"
