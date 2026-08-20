@@ -1,0 +1,44 @@
+# City-scoped sibling of no-brainer-candidate-curate.
+#
+# THE DEFECT. Gates are constructed either by hand or by no-brainer
+# accumulation. The accumulation half has never run: `no-brainer-candidate-curate`
+# appears in `order.fired` ZERO times across all six .gc/events.jsonl archives
+# (2026-07-18 -> 2026-08-20). Two independent causes, both present since the
+# order was born in 7715c4f (2026-08-10): trigger="manual" (nothing schedules
+# it) and scope="rig" (the candidates are at the city root, which is not a
+# registered rig). This is the same unreachability bug already diagnosed for
+# the pile drain -- see orders/brief-shuffle-fast-drain-city.toml.
+#
+# WHERE THE CANDIDATES ACTUALLY ARE (measured 2026-08-20):
+#   <city-root>/.beads/.gates-candidate-pile          24
+#   <city-root>/.beads/briefs/.gates-candidate-pile    3
+#   lmfdb/.beads/.gates-candidate-pile                 1
+# So the city root holds 27 of 28 -- but one rig does hold a candidate, which
+# is why the rig-scoped order is kept rather than re-scoped. Re-scoping would
+# trade one unreachable pile for another, exactly as it would have for the drain.
+#
+# KNOWN NOT-SUFFICIENT ON ITS OWN. This order makes the loop REACHABLE; it does
+# not yet make it PRODUCTIVE. The formula groups candidates by
+# `pattern_fingerprint` and files a brief only for groups of >= 3 distinct
+# briefs. Measured against the live piles: 23 candidates carry a fingerprint
+# and there are 23 DISTINCT fingerprints -- every one unique, so zero groups
+# reach threshold and this order would file zero briefs. The fingerprints are
+# free text written per brief by the classifier, so collisions are near
+# impossible by construction. A further 4 descriptors carry no
+# `pattern_fingerprint` at all and cannot be grouped on any key. Fixing the
+# fingerprint scheme touches catch-no-brainer, a user-facing skill (G5b), and
+# is a separate adjudicated change.
+[order]
+description = "Curate no-brainer leak/candidate batches from the CITY-ROOT candidate piles, which no rig-scoped order can reach"
+scope = "city"
+formula = "no-brainer-candidate-curate"
+# City-scoped condition checks run with the city root as cwd, so the paths are
+# city-root-relative -- never the $HOME-absolute root retired by gsp-5h17.
+trigger = "condition"
+check = "find .beads/.gates-candidate-pile .beads/briefs/.gates-candidate-pile -maxdepth 1 -type f -name '*-candidate.md' 2>/dev/null | grep -q ."
+pool = "mathcity.brief-operator"
+timeout = "120s"
+idempotent = true
+
+[vars]
+artifact_root = ".beads/briefs"

@@ -10,11 +10,12 @@ import os
 import re
 import socket
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 OWNER = "brief-shuffle-fast-drain"
@@ -46,6 +47,19 @@ CLASSIFIER_STATES = {
     "safety_blocked",
 }
 CLASSIFIER_TIMESTAMP = re.compile(r"classified_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+# gates.toml `kind` for the three safety gates (G5 server-touching, G5b
+# user-skill-touching, G12 kill-switch). A brief tripping one is never
+# auto-repairable, so the kind IS the repairable flag -- no second list.
+STOP_KIND = "stop"
+# The pile manifest is the fourth representation of a pile brief, beside the
+# file, the rejection sidecar and the bead. `manifest` in paths.toml names the
+# STACK index, not this file; the pile manifest has no paths.toml key and no
+# reader in mctl, so it is resolved from --brief-root like every other pile path.
+PILE_MANIFEST_NAME = "manifest.jsonl"
+# flock only serializes writers holding the SAME lock file. `<dir>/.manifest.lock`
+# beside the jsonl is the convention append_index already follows for the stack
+# index, and <pile>/.manifest.lock already exists on the live city.
+MANIFEST_LOCK_NAME = ".manifest.lock"
 
 
 @dataclass(frozen=True)
@@ -53,6 +67,11 @@ class Outcome:
     action: str
     slug: str
     reason: str = ""
+    # Disposition of the pile-manifest row, reported separately from `action`:
+    # the manifest is a cache, so its outcome never changes whether the brief
+    # failed its gates. "" means no manifest write was attempted.
+    manifest: str = ""
+    manifest_detail: str = ""
 
 
 def utc_now() -> str:
@@ -172,41 +191,94 @@ def profile_error(profile: str, metadata: dict[str, str], text: str) -> str | No
     return None
 
 
-def evaluate(path: Path, gate_config: dict[str, Any]) -> tuple[str, str, dict[str, str]]:
+def gate_failure(gate: Mapping[str, Any], statuses: Mapping[str, list[str]]) -> dict[str, Any] | None:
+    """Judge one gate against the evidence. None means it passed.
+
+    `repairable` is derived from the gate's own `kind`, so the repair track
+    never needs a second list of which gates may be auto-repaired, and the
+    gate's `repair_kind`/`repair_skill` routing rides along on the failure.
+    """
+    evidence_key = gate["evidence_key"]
+    evidence_statuses = statuses.get(evidence_key, [])
+    accepted = GATE_ACCEPTED_STATUSES.get(gate["id"], DEFAULT_ACCEPTED_STATUSES)
+    if evidence_statuses and all(status in accepted for status in evidence_statuses):
+        return None
+    failed_status = next((status for status in evidence_statuses if status not in accepted), None)
+    # Carry the gate's own repair routing onto the failure. Before this the
+    # trinity keys were dead metadata -- nothing in the pack read them -- so a
+    # repair pass had no way to learn what a given gate failure needs.
+    # `repair_skill` is copied only when the registry declares one; an
+    # unassigned gate leaves it absent rather than defaulting to a plausible
+    # name that resolves to nothing.
+    failure = {
+        "gate": gate["id"],
+        "evidence_key": evidence_key,
+        "repairable": gate["kind"] != STOP_KIND,
+        "repair_kind": gate.get("repair_kind", "unassigned"),
+    }
+    if gate.get("repair_skill"):
+        failure["repair_skill"] = gate["repair_skill"]
+    if failed_status:
+        return {**failure, "status": failed_status, "reason": f"{evidence_key}: {failed_status}"}
+    return {**failure, "status": "missing", "reason": f"missing required gate {evidence_key}"}
+
+
+def evaluate(path: Path, gate_config: dict[str, Any]) -> tuple[str, str, dict[str, str], list[dict[str, Any]]]:
+    """Return (profile, reason, metadata, failures).
+
+    `failures` lists EVERY quality gate the brief failed, so one repair pass can
+    clear them all. Returning on the first failure meant the sidecar named one
+    gate, and a repair built from it fixes one gate per round trip.
+
+    `reason` still names the first failure verbatim. brief-quality-failure-record
+    derives `failed_gate` and `failure_fingerprint` from it and the producer
+    rollup groups on that fingerprint, so its meaning is load-bearing.
+
+    A frontmatter or profile error yields an EMPTY `failures` list: a malformed
+    brief is not a brief whose gates failed, and recording it as one would
+    invent a gate failure that never happened.
+    """
     text = path.read_text(encoding="utf-8")
     metadata = parse_frontmatter(path)
     if not metadata:
-        return "standard", "invalid or missing frontmatter", metadata
+        return "standard", "invalid or missing frontmatter", metadata, []
     profile = metadata.get("gate_profile", gate_config["registry"].get("default_profile", "standard"))
     profiles = gate_config.get("profiles", {})
     if profile not in profiles:
-        return profile, f"unknown gate profile: {profile}", metadata
+        return profile, f"unknown gate profile: {profile}", metadata, []
     error = profile_error(profile, metadata, text)
     if error:
-        return profile, error, metadata
+        return profile, error, metadata, []
     evidence = gate_evidence_section(text)
     if evidence is None:
-        return profile, "missing Gate Evidence section", metadata
+        return profile, "missing Gate Evidence section", metadata, []
     if "G9" in profiles[profile].get("gates", []):
         error = classifier_error(evidence)
         if error:
-            return profile, error, metadata
+            return profile, error, metadata, []
     statuses = gate_statuses(evidence)
     gates_by_id = {gate["id"]: gate for gate in gate_config.get("gates", [])}
-    for gate_id in profiles[profile].get("gates", []):
-        gate = gates_by_id.get(gate_id)
-        if gate is None:
-            return profile, f"gate profile {profile} references unknown gate {gate_id}", metadata
-        evidence_key = gate["evidence_key"]
-        evidence_statuses = statuses.get(evidence_key, [])
-        accepted = GATE_ACCEPTED_STATUSES.get(gate_id, DEFAULT_ACCEPTED_STATUSES)
-        if evidence_statuses and all(status in accepted for status in evidence_statuses):
+    profile_gates = profiles[profile].get("gates", [])
+    for gate_id in profile_gates:
+        if gate_id not in gates_by_id:
+            return profile, f"gate profile {profile} references unknown gate {gate_id}", metadata, []
+    # Stop gates are judged first, and alone. A server-touching or kill-switched
+    # brief must never be handed to an automated repair, so one tripping
+    # short-circuits before any quality gate is collected. sorted() is stable,
+    # so within each group the profile's own gate order is preserved.
+    ordered = sorted(profile_gates, key=lambda gid: gates_by_id[gid]["kind"] != STOP_KIND)
+    failures: list[dict[str, Any]] = []
+    for gate_id in ordered:
+        gate = gates_by_id[gate_id]
+        failure = gate_failure(gate, statuses)
+        if failure is None:
             continue
-        failed_status = next((status for status in evidence_statuses if status not in accepted), None)
-        if failed_status:
-            return profile, f"{evidence_key}: {failed_status}", metadata
-        return profile, f"missing required gate {evidence_key}", metadata
-    return profile, "", metadata
+        failures.append(failure)
+        if gate["kind"] == STOP_KIND:
+            return profile, failure["reason"], metadata, [failure]
+    if failures:
+        return profile, failures[0]["reason"], metadata, failures
+    return profile, "", metadata, []
 
 
 def selected_pile_items(pile: Path, max_items: int) -> list[Path]:
@@ -238,6 +310,117 @@ def append_index(stack: Path, row: dict[str, Any]) -> None:
             if row["slug"] not in existing:
                 with index.open("a", encoding="utf-8") as handle:
                     handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+        finally:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+
+
+def atomic_write(path: Path, text: str) -> None:
+    """Write via a same-directory temp file and os.replace.
+
+    A rewrite interrupted between truncate and write destroys the file it was
+    updating. os.replace is atomic within a filesystem, so a reader sees either
+    the whole old manifest or the whole new one. Mirrors effects.py::_atomic_write.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def manifest_row_stems(row: Mapping[str, Any]) -> set[str]:
+    """Every pile filename stem the deposit convention could have produced for a row.
+
+    Candidates are generated FORWARD from the row; the stem is never stripped to
+    derive a slug. A strip would have to guess whether a trailing `-brief` is the
+    deposit convention or part of the slug, and on the live city rows n=14/15
+    carry slugs that genuinely end in `-brief` -- so the guess is wrong exactly
+    where it matters. Generating forward keeps the row's slug untouched and makes
+    every comparison an anchored equality.
+
+    Two deposit shapes are attested: `NN-<slug>-brief.md` (decisions-to-briefs
+    TS-3; rows n=13, 17, 19-23) and a bare `<slug>.md` (rows n=1-12, whose slugs
+    carry their own `q28-NN` numbering).
+    """
+    slug = row.get("slug")
+    if not isinstance(slug, str) or not slug:
+        return set()
+    stems = {slug, f"{slug}-brief"}
+    n = row.get("n")
+    if isinstance(n, int) and not isinstance(n, bool):
+        for prefix in (str(n), f"{n:02d}"):
+            stems.add(f"{prefix}-{slug}")
+            stems.add(f"{prefix}-{slug}-brief")
+    return stems
+
+
+def mark_manifest_rejected(brief_root: Path, stem: str, reason: str, rejected_at: str) -> tuple[str, str]:
+    """Splice the pile-manifest row for `stem`; leave every other line byte-identical.
+
+    Returns `(outcome, detail)` rather than raising on a miss: an unmatched or
+    ambiguous row is a fact about the manifest, and inventing a row would assert
+    a pile membership nothing recorded.
+
+    Only the matched row is re-emitted. Pile brief 22
+    (`index-jsonl-two-serialization-producers`) is on file for why: a whole-file
+    rewrite under a second serialization convention is what mangled 38 rows of
+    `stack/.index.jsonl`. The row is re-emitted with a plain `json.dumps` --
+    default separators, insertion key order, no sorting -- the convention all 22
+    live rows round-trip through byte-identically (measured 2026-08-20). That is
+    NOT the stack index's compact sorted convention; different file, different
+    producer.
+    """
+    manifest = brief_root / ".pile" / PILE_MANIFEST_NAME
+    if not manifest.is_file():
+        return "aborted", f"no pile manifest at {manifest}"
+    lock_path = manifest.parent / MANIFEST_LOCK_NAME
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        except OSError:
+            pass
+        try:
+            text = manifest.read_text(encoding="utf-8")
+            lines = text.splitlines()
+            matches: list[tuple[int, dict[str, Any]]] = []
+            for position, line in enumerate(lines):
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(row, dict) and stem in manifest_row_stems(row):
+                    matches.append((position, row))
+            if not matches:
+                return "aborted", f"no manifest row matches {stem}"
+            if len(matches) > 1:
+                return "aborted", f"ambiguous: {len(matches)} manifest rows match {stem}"
+            position, row = matches[0]
+            if row.get("status") == "rejected":
+                return "unchanged", str(row.get("slug", ""))
+            # `requires_taylor_adjudication` is left as it stands: it records what
+            # catch-no-brainer decided at deposit time, and overwriting it would
+            # destroy producer signal the plan's "repair is not rejection"
+            # constraint exists to preserve.
+            row.update({
+                "status": "rejected",
+                "rejection_reason": reason,
+                "rejected_at": rejected_at,
+            })
+            lines[position] = json.dumps(row, ensure_ascii=False)
+            atomic_write(manifest, "\n".join(lines) + ("\n" if text.endswith("\n") else ""))
+            return "updated", str(row.get("slug", ""))
         finally:
             try:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
@@ -330,6 +513,7 @@ def recover_owned_staging(brief_root: Path) -> list[str]:
                     "gate_profile": parse_frontmatter(staged).get("gate_profile", "standard"),
                     "reason": "owned staging recovery found an existing pile entry",
                     "rejection_kind": "operational_recovery_collision",
+                    "failures": [],
                     "feedback_required": False,
                     "source_path": f".pile/{source.name}",
                     "rejected_at": utc_now(),
@@ -349,17 +533,23 @@ def recover_owned_staging(brief_root: Path) -> list[str]:
     return recovered
 
 
-def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, profile: str, reason: str) -> None:
+def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, profile: str, reason: str,
+                  failures: list[dict[str, Any]]) -> tuple[str, str]:
     rejected_dir = brief_root / ".pile" / ".rejected" / slug
     rejected_dir.mkdir(parents=True, exist_ok=False)
     rejected_brief = rejected_dir / "brief.md"
     rejection_path = rejected_dir / "rejection.json"
+    rejected_at = utc_now()
     rejection = {
         "slug": slug,
         "gate_profile": profile,
         "reason": reason,
         "source_path": f".pile/{slug}.md",
-        "rejected_at": utc_now(),
+        "rejected_at": rejected_at,
+        # Every failing quality gate, so one repair pass can clear them all.
+        # A stop-gate failure short-circuits and appears alone, flagged
+        # repairable=false -- it must never be handed to an automated repair.
+        "failures": failures,
     }
     try:
         rejection_path.write_text(json.dumps(rejection, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -370,12 +560,22 @@ def reject_staged(staging_dir: Path, staged: Path, brief_root: Path, slug: str, 
         rejection_path.unlink(missing_ok=True)
         rejected_dir.rmdir()
         raise
+    # Past this point the disposition has happened: the file is out of the pile
+    # and the sidecar records why. The pile manifest is a cache
+    # (assets/brief-pipeline/paths.toml), so its failure is recorded and
+    # reported -- never allowed to unwind a completed disposition, and never
+    # allowed to strand the claim in .staging.
+    try:
+        manifest, manifest_detail = mark_manifest_rejected(brief_root, slug, reason, rejected_at)
+    except OSError as error:
+        manifest, manifest_detail = "aborted", f"pile manifest update failed: {error}"
     cleanup_own_staging(staging_dir)
+    return manifest, manifest_detail
 
 
 def process_item(source: Path, brief_root: Path, gate_config: dict[str, Any], apply: bool) -> Outcome:
     slug = source.stem
-    profile, reason, _metadata = evaluate(source, gate_config)
+    profile, reason, _metadata, failures = evaluate(source, gate_config)
     action = "promote" if not reason else "reject"
     if action == "promote" and (brief_root / "stack" / f"{slug}.md").exists():
         action = "reject"
@@ -412,8 +612,9 @@ def process_item(source: Path, brief_root: Path, gate_config: dict[str, Any], ap
                     raise
                 cleanup_own_staging(staging_dir)
                 return Outcome("promote", slug)
-        reject_staged(staging_dir, staged, brief_root, slug, profile, reason)
-        return Outcome("reject", slug, reason)
+        manifest, manifest_detail = reject_staged(
+            staging_dir, staged, brief_root, slug, profile, reason, failures)
+        return Outcome("reject", slug, reason, manifest, manifest_detail)
     except OSError as error:
         return Outcome("skipped", slug, f"disposition failed; staged for recovery: {error}")
 
@@ -438,6 +639,10 @@ def main() -> int:
         "promoted": [], "rejected": [], "skipped": [], "recovered": [],
         "planned_promoted": [], "planned_rejected": [],
         "reasons": {},
+        # Pile-manifest disposition, reported apart from promoted/rejected: the
+        # manifest is a cache, so a miss here is a fact to surface, not a
+        # different outcome for the brief.
+        "manifest_updated": [], "manifest_aborted": {},
     }
     if args.apply:
         report["recovered"] = recover_owned_staging(brief_root)
@@ -453,6 +658,10 @@ def main() -> int:
             report[f"planned_{key}"].append(outcome.slug)
         if outcome.reason:
             report["reasons"][outcome.slug] = outcome.reason
+        if outcome.manifest == "updated":
+            report["manifest_updated"].append(outcome.slug)
+        elif outcome.manifest == "aborted":
+            report["manifest_aborted"][outcome.slug] = outcome.manifest_detail
     report["remaining_pile"] = len(selected_pile_items(pile, sys.maxsize))
     if args.json:
         print(json.dumps(report, sort_keys=True))
@@ -460,7 +669,9 @@ def main() -> int:
         print(
             "brief-shuffle-fast-drain: "
             f"promoted={len(report['promoted'])} rejected={len(report['rejected'])} "
-            f"skipped={len(report['skipped'])} remaining_pile={report['remaining_pile']}"
+            f"skipped={len(report['skipped'])} remaining_pile={report['remaining_pile']} "
+            f"manifest_updated={len(report['manifest_updated'])} "
+            f"manifest_aborted={len(report['manifest_aborted'])}"
         )
         if not args.apply:
             print("dry-run planned: " + ", ".join(report["planned_promoted"] + report["planned_rejected"]))

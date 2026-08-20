@@ -3,7 +3,18 @@ name = "no-brainer-candidate-curate"
 scope = "rig"
 formula = "no-brainer-candidate-curate"
 pool = "mathcity.brief-operator"
-trigger = "manual"
+# Was trigger = "manual" from birth (7715c4f, 2026-08-10) and never changed,
+# so the accumulation half of gate construction never ran once: the order does
+# not appear in `order.fired` in ANY of the six .gc/events.jsonl archives
+# covering 2026-07-18 -> 2026-08-20. A condition trigger is what every other
+# live pile-watcher uses (brief-shuffle-fast-drain, brief-producer-failure-*).
+trigger = "condition"
+# Rig-relative, like the rig-scoped drain: rig condition checks run with the
+# rig root as cwd. Both candidate roots are checked -- catch-no-brainer's
+# SKILL.md names `.beads/.gates-candidate-pile`, while the formula also
+# resolves the `{{artifact_root}}/.gates-candidate-pile` form. -maxdepth 1
+# never descends; 2>/dev/null absorbs a missing root.
+check = "find .beads/.gates-candidate-pile .beads/briefs/.gates-candidate-pile -maxdepth 1 -type f -name '*-candidate.md' 2>/dev/null | grep -q ."
 description = "Curate no-brainer leak/candidate batches into repair briefs."
 timeout = "120s"
 idempotent = true
