@@ -206,11 +206,19 @@ the authoritative presentation queue. Run the stack-index helper in apply mode
 after the archive move succeeds:
 
 ```bash
-python3 "$PACK_DIR/assets/scripts/brief-stack-index.py" remove-archived-row \
+python3 "<mathcity-pack-root>/assets/scripts/brief-stack-index.py" remove-archived-row \
   --brief-root "{{artifact_root}}" \
   --slug "{{brief_slug}}" \
   --apply
 ```
+
+The helper ships in the mathcity pack, not in any rig; resolve
+`<mathcity-pack-root>` as the parent of the `orders/` directory on the `Source:`
+line of `gc order show brief-review-patrol`. Do NOT substitute `$PACK_DIR` —
+gascity injects it for order dispatch and for `gc` custom commands only, never
+into a formula step's agent session, so it expands to nothing and the command
+runs against `/assets/...`. Your cwd is a per-bead work dir, so a bare
+`assets/...` fails the same way.
 
 The helper is dry-run by default for operator use, but the formula path uses
 `--apply` because the archive move and index removal are one lifecycle action.
