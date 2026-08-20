@@ -544,6 +544,14 @@ skills fails in many ways, quietly and differently each time, while the same
 work behind one interface fails in one place, loudly, with an error code. A
 central failure point is a thing that can be debugged once and fixed once.
 
+**Rule kinds.** P7.1-P7.3 are **factual**: a call site either goes through `mctl`
+or it does not, and a grep can say which. P7.1's *exemption* clause and P7.4 are
+**judgement**: they ask an agent to weigh whether a reach-around is justified and
+whether a group of skills has earned a surface. Judgement rules are enforced by an
+agent reasoning and citing evidence, not by a pattern match — squeezing them into
+a grep would produce a proxy that passes confidently on the cases it cannot see
+(PP/`check-zero`).
+
 - **P7.1 "Repeated work goes behind the interface."** Any operation `mctl`
   exposes must be performed **through** `mctl`. A skill, formula, order, gate,
   or check that shells out to `bd`, `git`, `dolt`, or the filesystem to do
@@ -553,8 +561,11 @@ central failure point is a thing that can be debugged once and fixed once.
   Pass: every write to a canonical or redundant brief artifact — bead,
   decisions cache, pile file, stack index, decisions-track row or body — is made
   by `mctl`; a non-`mctl` writer exists only under a **declared, named
-  exemption** that states which artifact and why `mctl` cannot own it. Fail: a
-  wired skill or formula that writes such an artifact directly (`sed -i`, a
+  exemption**. *Granting one is a judgement call, not a checkbox*: a reasoned
+  verdict must name the artifact, state why `mctl` cannot own it **today**, cite
+  what would have to change for the exemption to lapse, and name who removes it
+  then. An exemption that cites none of these is not declared, it is asserted.
+  Fail: a wired skill or formula that writes such an artifact directly (`sed -i`, a
   shell redirect, a Python `.write()`/`open(...,"w")`, a bare `bd`/`dolt`
   mutation) without a declared exemption → **fail**; an exemption whose
   justification no longer holds → **fail**.
@@ -591,6 +602,31 @@ central failure point is a thing that can be debugged once and fixed once.
   initially carried as a dashboard wishlist rather than as interface
   incompleteness, which is what they were.)
 
+- **P7.4 "Repeated skill work earns a surface."** *(Judgement rule.)* When
+  several skills repeatedly perform the same operation through open bash, that
+  work belongs behind a typed interface — an `mctl` subcommand or an MCP tool —
+  rather than being restated in each skill. There is no threshold that decides
+  this, and inventing one would be a bad proxy: two skills sharing a fragile
+  multi-step `bd` incantation may warrant a surface, while ten sharing a single
+  `ls` do not.
+  **What an agent must weigh:** how many skills perform the operation; whether
+  they perform it *identically* or have already drifted; what breaks silently
+  when one copy is wrong; whether the operation writes or only reads; and whether
+  `mctl` already exposes something adjacent that should simply be extended (run
+  `check-zero` before proposing a new surface — an existing subcommand beats a
+  new one).
+  **What a reasoned verdict must cite:** the call sites by file and line, the
+  observed drift between them if any, and either the `mctl`/MCP surface proposed
+  or the reason the duplication is acceptable. Pass: a verdict citing those.
+  Fail: duplication asserted to be fine with no survey, or a new surface proposed
+  without `check-zero` — **fail**. Both directions are failures; this rule is not
+  a mandate to build surfaces, it is a mandate to decide deliberately.
+  (Origin: 2026-08-20, Taylor — *"groups of repeatedly used agent skills should be
+  factored into an MCP rather than leaving an open bash for agents to mess up."*
+  Written as a judgement rule per the same day's correction: a rule requiring
+  judgement is enforced by an agent exercising it, which is a capability this city
+  has and a grep does not.)
+
 
 ## Non-negotiables (quick checklist)
 
@@ -605,6 +641,8 @@ central failure point is a thing that can be debugged once and fixed once.
 - No consumer reaching `mctl` through another consumer's transport — the
   dashboard and the MCP surface are siblings, not a chain (P7.2).
 - No bypass for a missing `mctl` capability — file the interface gap (P7.3).
+- No repeated skill work left in open bash undecided — survey it and record
+  a reasoned verdict either way (P7.4).
 - No edits under any `vendor/**` tree, ever (P2.2).
 - No edits inside a materialized `.claude/skills/**` / `.codex/skills/**`
   sink (P1.3).
