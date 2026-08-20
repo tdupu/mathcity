@@ -133,15 +133,27 @@ def city_not_active_diagnostic(ctx: "MctlContext") -> Diagnostic:
     )
 
 
-# gc carries seconds of baseline overhead per invocation and has been
-# measured past 10s for a plain `gc status` on a healthy machine. A timeout
-# tighter than the tool turns every slow call into 'cannot tell'.
-CONTROL_PLANE_TIMEOUT_SECONDS = 30
+# NO DEFAULT TIMEOUT, on purpose.
+#
+# The comment that used to sit here said "a timeout tighter than the tool turns
+# every slow call into 'cannot tell'" -- and then set 30 seconds anyway. On
+# 2026-08-20 a supervisor carrying ~111k open file descriptors made a plain
+# `gc status` take 92s. The probe gave up at 30s, returned None, and the caller's
+# gate refused. Every dispatch in the city was blocked, and it presented as "the
+# mayor will not sling work" rather than "the supervisor is sick".
+#
+# A slow answer is still an answer. The only thing a deadline buys here is the
+# ability to convert it into a wrong one, because the caller cannot distinguish
+# "the control plane is down" from "I stopped listening". So the probe waits.
+#
+# Callers who genuinely cannot block may pass an explicit timeout and handle the
+# None themselves -- but that is an opt-in with a known cost, not the default.
+CONTROL_PLANE_TIMEOUT_SECONDS = None
 
 
 def probe_control_plane(
     city_root: Path | str | None = None,
-    timeout: float = CONTROL_PLANE_TIMEOUT_SECONDS,
+    timeout: float | None = CONTROL_PLANE_TIMEOUT_SECONDS,
 ) -> bool | None:
     """Whether THIS city's controller is up and able to route work.
 
@@ -160,6 +172,10 @@ def probe_control_plane(
 
     Returns None when `gc` is unavailable or its answer cannot be parsed, so
     callers can distinguish "not routing" from "cannot tell".
+
+    Waits as long as `gc` takes by default -- see CONTROL_PLANE_TIMEOUT_SECONDS.
+    A deadline here cannot make a sick control plane healthy; it can only turn a
+    slow truth into an unknown, which the caller's gate then treats as a refusal.
     """
     command = ["gc", "status", "--json"]
     if city_root is not None:

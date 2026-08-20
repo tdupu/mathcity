@@ -111,6 +111,22 @@ def test_slow_gc_does_not_silently_open_the_gate(tmp_path, monkeypatch):
     assert liveness.probe_control_plane(city_root=tmp_path, timeout=0.5) is None
 
 
-def test_control_plane_timeout_allows_for_gc_latency():
-    """gc routinely takes >10s. The timeout must not be tighter than the tool."""
-    assert liveness.CONTROL_PLANE_TIMEOUT_SECONDS >= 30
+def test_control_plane_probe_has_no_default_deadline():
+    """A deadline here can only turn a slow truth into a wrong 'cannot tell'.
+
+    This assertion used to read `>= 30`, pinning a 30s ceiling. On 2026-08-20 a
+    supervisor holding ~111k file descriptors made `gc status` take 92s; the
+    probe gave up, returned None, and the caller's gate refused every dispatch
+    in the city. The bug presented as "the mayor will not sling work" rather
+    than "the supervisor is sick".
+
+    The probe cannot make a sick control plane healthy by giving up on it. It
+    waits. Callers who genuinely cannot block pass an explicit timeout and own
+    the None -- which the test below still covers.
+    """
+    assert liveness.CONTROL_PLANE_TIMEOUT_SECONDS is None
+
+    import inspect
+
+    default = inspect.signature(liveness.probe_control_plane).parameters["timeout"].default
+    assert default is None, "the parameter default must track the module constant"
