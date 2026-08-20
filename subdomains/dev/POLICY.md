@@ -518,9 +518,12 @@ inside gascity core); this is the pack-level, plan-time analogue.*
   documentation keeps true forever regardless of behaviour; (c) a **validator
   that claims coverage it does not have**, whose name or description asserts
   agreement across N representations while it compares fewer.
-  Pass: the check's own test suite contains a case that **fails before the fix
-  and passes after**, or the author records an observed failing run
-  (fixture, injection, or reproduction) against the condition; a validator
+  Pass: **for each condition the check claims to detect** — not for each
+  assertion it makes — the check's own suite contains a case that **fails before
+  the fix and passes after**, or the author records an observed failing run
+  (fixture, injection, or reproduction) against that condition. A guard that
+  correctly passes both before and after a fix is not thereby non-compliant; the
+  requirement attaches to the claim, not to the line; a validator
   enumerates exactly the artifacts it compares, and its description claims no
   more. Fail: a check whose passing state is indistinguishable from "could not
   evaluate"; a guard whose condition is satisfied by a comment or by prose; a
@@ -532,9 +535,21 @@ inside gascity core); this is the pack-level, plan-time analogue.*
   stale index; the shim suite's legacy exemption guard, satisfied permanently by
   the twelve prose mentions of `decisions-track` that survive removing every
   write; and `mctl briefs validate`, whose help text promises to "prove
-  canonical and redundant state agree" while comparing two of four
-  representations and possessing no diagnostic code for legacy-manifest
-  divergence at all.)
+  canonical and redundant state agree" and which **exits 0 while reporting 318
+  ERRORs and 1 FATAL** — measured on the `hq` store alone, 2026-08-20. Anything
+  reading its exit code is told the city is clean. Two narrower holes sit under
+  that: `_strict_invariants`' content comparison `MBRF020` fires **zero** times,
+  because the artifact it compares against is absent city-wide and `_read_toml`
+  cannot distinguish absent from corrupt; and a brief with **no index row at
+  all** is invisible, because the stack-index loop branches only on `stale` and
+  `inconsistent`, never on `missing`.
+  An earlier draft of this rule asserted that `validate` had "no diagnostic code
+  for legacy-manifest divergence at all." **That was false** — `MBRF008` and
+  `MBRF013` both exist and `MBRF008` fires 84 times on `hq` alone. The claim came
+  from a case-sensitive `grep "legacy"` against a registry that writes "Legacy",
+  and it was caught in review. It is recorded here rather than quietly deleted
+  because a rule about checks that cannot fail, drafted on the back of a search
+  that could not find, is the most useful worked example this pillar has.)
 
 ## Pillar 7 — Interface discipline
 
@@ -571,7 +586,14 @@ a grep would produce a proxy that passes confidently on the cases it cannot see
   exemption**. *Granting one is a judgement call, not a checkbox*: a reasoned
   verdict must name the artifact, state why `mctl` cannot own it **today**, cite
   what would have to change for the exemption to lapse, and name who removes it
-  then. An exemption that cites none of these is not declared, it is asserted.
+  then. **The lapse condition must be machine-checkable — a date or a testable
+  state, not a narrative intention** — on the model of the no-brainer dry-run pin,
+  which carries `expires=<ISO-8601-utc>` and auto-resumes the safe default when it
+  lapses; an exemption whose expiry depends on someone remembering to revisit it
+  will not expire. **Any check enforcing an exemption is itself bound by P6.2**
+  and must ship an observed failing case: a guard satisfied permanently by prose
+  is not a guard. An exemption that cites none of these is not declared, it is
+  asserted.
   Fail: a wired skill or formula that writes such an artifact directly (`sed -i`, a
   shell redirect, a Python `.write()`/`open(...,"w")`, a bare `bd`/`dolt`
   mutation) without a declared exemption → **fail**; an exemption whose
@@ -624,7 +646,11 @@ a grep would produce a proxy that passes confidently on the cases it cannot see
   new one).
   **What a reasoned verdict must cite:** the call sites by file and line, the
   observed drift between them if any, and either the `mctl`/MCP surface proposed
-  or the reason the duplication is acceptable. Pass: a verdict citing those.
+  or the reason the duplication is acceptable. **For an agent-facing operation,
+  "leave it in open bash" is not an available verdict** — skills-as-agent-control
+  is deprecated, so the judgement there is *which* surface and *when*, never
+  *whether*; "acceptable" remains available only for duplication that is not
+  agent-facing. Pass: a verdict citing those.
   Fail: duplication asserted to be fine with no survey, or a new surface proposed
   without `check-zero` — **fail**. Both directions are failures; this rule is not
   a mandate to build surfaces, it is a mandate to decide deliberately.
