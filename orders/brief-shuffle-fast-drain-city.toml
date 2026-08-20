@@ -1,0 +1,60 @@
+# City-scoped sibling of brief-shuffle-fast-drain (clerk sweep B1).
+#
+# THE DEFECT. Five briefs (n=19-23) sat in <city-root>/.beads/briefs/.pile/
+# from 2026-08-15 with nothing able to reach them. Every brief order was
+# scope="rig"; the city root is not a registered rig in city.toml, so
+# `brief-*:rig:gt` appears ZERO times in .gc/events.jsonl, ever, for any brief
+# order. The drain fired where there was nothing to drain and never where
+# there was.
+#
+# THE CHOICE, AND WHY IT IS (a) NOT (b). Two fixes were candidates: add a
+# city-scoped drain, or stop depositing into the city-root pile. Measured, not
+# tasted:
+#
+#   * The city root is not drift; it is where the live pipeline is. It holds
+#     stack/ (89 markdown files, 88 .index.jsonl rows), decisions/, archive/,
+#     patrol/, watchdog/ and migrations/. Every one of the 15 rig brief roots
+#     has an EMPTY stack. There is exactly one populated stack in the city and
+#     it is this one -- the same stack `mctl briefs list`, `present-briefs`
+#     and the .index.jsonl repair path all read.
+#   * mctl already models the city root as a first-class rig. `city_rig_entries`
+#     (assets/scripts/mctl_core/context.py) synthesises a reserved `hq` entry
+#     with path = "." whenever <city-root>/.beads/config.yaml exists. It does.
+#     So the READ side already enumerates the city root; only the ORDER side
+#     could not reach it.
+#   * The producer deposits here by the same path that produced everything now
+#     in that stack: <pile>/manifest.jsonl carries rows n=19-23 in the identical
+#     shape as n=01-18, which are already promoted. (`deposited_by` is absent
+#     from all five files -- brief 20 measures the key at 38/38 native vs 4/46
+#     migrated -- so the manifest, not frontmatter, is what identifies them.)
+#   * paths.toml's own kill_switch_city / arm_token_city keys are written with
+#     an explicit <city-root> prefix, so the schema already treats the city root
+#     as a real location rather than an error.
+#
+# Option (b) would route briefs into rig piles that drain into rig stacks that
+# are all empty and that no reader consumes -- converting a stalled queue into
+# a silently discarded one. The 7 briefs currently sitting in rig piles
+# (gascity-packs 4, hecke 2, lmfdb 1) are what (b) looks like at scale.
+#
+# WHY A SIBLING ORDER RATHER THAN RE-SCOPING THE EXISTING ONE. Those 7 rig-pile
+# briefs need the rig-scoped drain to keep firing. Re-scoping would trade one
+# unreachable pile for seven.
+#
+# gsp-1pv/gsp-5h17 NOTE: an earlier city-scoped attempt used an absolute
+# $HOME/.gc artifact root and was retired because the pipeline is
+# root-relative. This order does not repeat that: the check below is
+# city-root-relative, exactly like brief-producer-failure-rollup-on-pile.toml,
+# and city-scoped condition checks run with the city root as cwd.
+[order]
+description = "Mechanically drain up to three pending briefs from the CITY-ROOT pile, which no rig-scoped order can reach"
+scope = "city"
+formula = "brief-shuffle-fast-drain"
+trigger = "condition"
+# Depth-1 -type f never descends, so .rejected/, .no-brainer/ and .bak-archive/
+# are excluded structurally; ! -name '.*' skips hidden and partial files. This
+# is the P1.17 invariant shape -- it must keep matching what brief-prep's
+# submit-to-pile step writes (gc.brief.path in formulas/brief-prep.toml).
+check = "find .beads/briefs/.pile -maxdepth 1 -type f -name '*.md' ! -name '.*' 2>/dev/null | grep -q ."
+pool = "mathcity.brief-operator"
+timeout = "60s"
+idempotent = true

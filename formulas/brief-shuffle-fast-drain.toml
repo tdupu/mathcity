@@ -14,7 +14,12 @@ description = "Mechanically promote or reject up to a bounded number of pile bri
 
 [vars]
 [vars.artifact_root]
-description = "Brief pipeline artifact root."
+description = "Brief pipeline artifact root, relative to the dispatching order's scope root."
+# Rig-relative per assets/brief-pipeline/paths.toml when the dispatching order
+# is scope="rig"; city-root-relative when it is scope="city"
+# (orders/brief-shuffle-fast-drain-city.toml). The string is the same either
+# way — only the root it resolves against differs, and the step below says how
+# to find that root.
 default = ".beads/briefs"
 
 [vars.max_items]
@@ -30,7 +35,31 @@ id = "drain-pile"
 title = "Deterministically drain eligible pile briefs"
 metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artifact_root}}" }
 description = """
-Run this deterministic command exactly once:
+Resolve two roots before running anything. Neither is the working directory:
+the ralph runner's cwd is an agent work dir, which is never the pack root and
+never a brief root.
+
+1. `<mathcity-pack-root>` — the pack this formula ships in. Read it from the
+   `Source:` line of `gc order show brief-shuffle-fast-drain` (or
+   `brief-shuffle-fast-drain-city`); it is that path with `/orders/<name>.toml`
+   stripped. A bare `assets/...` literal resolves to nothing in production even
+   though it resolves fine under the test suite, which runs from the pack root
+   — that mismatch is the #73 defect class and this step was its fifth
+   instance. The shell scripts in this pack anchor on their own on-disk
+   location instead (`pack_asset` in `assets/scripts/checks/brief-check.sh`);
+   the difference is deliberate, not drift — a script may run with no `gc` on
+   PATH, while an agent reading this does have it. Do NOT substitute
+   `$PACK_DIR` or `$GC_PACK_DIR`: neither is injected for a formula-step agent,
+   and both expand to empty, silently producing `/assets/...`.
+
+2. `<brief-root>` — `{{artifact_root}}` resolved against the root of the
+   DISPATCHING ORDER'S SCOPE, which you must not assume:
+   - `brief-shuffle-fast-drain` is scope="rig" — resolve against the rig root.
+   - `brief-shuffle-fast-drain-city` is scope="city" — resolve against the city
+     root, `${GC_CITY_PATH:-${GC_CITY:-$HOME/gt}}`, the same idiom
+     `brief-decision-dispatch` and `brief-check.sh` already use.
+
+Then run this deterministic command exactly once, with both roots substituted:
 
 ```bash
 python3 "<mathcity-pack-root>/assets/scripts/brief-shuffle-fast-drain.py" \

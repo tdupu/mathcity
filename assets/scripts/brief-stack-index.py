@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,21 @@ from typing import Any
 
 
 TERMINAL_INDEX_STATUSES = {"archived", "decided", "adjudicated"}
+
+#: Frontmatter keys consulted for a new row's ``source``, in authority order.
+#: ``source_bead`` is the explicit declaration; ``artifact`` is what the
+#: decisions-to-briefs producer writes instead (`gh-38` carries
+#: ``artifact: gh-issue-38`` and no ``source_bead``). Neither present means the
+#: brief declares no subject, and the key is omitted rather than guessed --
+#: whether "no bead subject" is even legitimate is an open policy question
+#: (bead mc-csr), and answering it by inventing a value here would foreclose it.
+SOURCE_FRONTMATTER_KEYS = ("source_bead", "artifact")
+
+#: Frontmatter keys consulted for ``created_at``. ``deposited_at`` is the
+#: producer's own record of when the brief landed. A file mtime is NOT a
+#: fallback: it records when the bytes were last touched, which is a different
+#: claim, and the index has no way to say which of the two it holds.
+CREATED_AT_FRONTMATTER_KEYS = ("deposited_at", "created_at")
 
 
 @dataclass(frozen=True)
@@ -114,6 +130,120 @@ def should_reconcile_remove(brief_root: Path, entry: dict[str, Any]) -> tuple[bo
     return False, "path_absent_no_archive_match", ""
 
 
+def read_frontmatter(text: str) -> dict[str, str]:
+    """The leading ``---`` block, as a line matcher rather than a YAML parse.
+
+    Deliberately tolerant, mirroring `mctl_core.fields.read_frontmatter`: live
+    briefs carry values a YAML loader rejects outright (an unquoted
+    ``needs-revision(...:...;...)`` status, a bare ``[236]``), and a strict
+    parse would drop the whole brief instead of losing one key. Re-implemented
+    here rather than imported because this script ships as a standalone pack
+    asset with no `mctl_core` on its path.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    fields: dict[str, str] = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, sep, value = line.partition(":")
+        if not sep:
+            continue
+        key = key.strip()
+        if not key or key.startswith("#"):
+            continue
+        fields.setdefault(key, _unquote(value.strip()))
+    return fields
+
+
+def _unquote(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
+def index_path_value(brief_root: Path, name: str) -> str:
+    """The ONE path serialization this script emits: root-relative from `.beads`.
+
+    The live index holds three incompatible forms across 88 rows -- 45
+    ``.beads/briefs/stack/x.md``, 40 absolute, 3 bare ``stack/x.md``. Three
+    producers already disagree; this one must not become the fourth, so it
+    emits the 45-row plurality form and nothing else.
+
+    Why the plurality form and not the absolute one, which is a close second at
+    40: an absolute path bakes one machine's `$HOME` into a file that is
+    supposed to be a regenerable cache of a rig-relative layout
+    (`assets/brief-pipeline/paths.toml` declares every path rig-relative), and
+    it is the shape gsp-5h17 already retired once. Relative also makes the
+    reader's root explicit instead of implied.
+
+    One rule, applied deterministically: serialize relative to the directory
+    that CONTAINS `.beads`, i.e. the rig or city root. A `--brief-root` with no
+    `.beads` component -- a fixture -- has no such root, and falls back to
+    ``stack/<name>``, which is the same rule with the root being the brief root
+    itself, not a second convention.
+    """
+    target = Path("stack") / name
+    parts = brief_root.parts
+    if ".beads" in parts:
+        first = parts.index(".beads")
+        return str(Path(*parts[first:]) / target)
+    return str(target)
+
+
+def slug_for(name: str) -> str:
+    """A row's slug: the filename stem, verbatim.
+
+    NOT the stem with ``-brief`` stripped. 46 of the 88 live rows keep the
+    suffix in `slug` (`he-a9cfa-brief.md` -> `he-a9cfa-brief`), so stripping it
+    would make new rows unjoinable with old ones. Where a `-brief` strip IS
+    correct -- deriving a display title -- it is anchored, `re.sub(r'-brief$')`,
+    never `.replace`, which would maul `257-decision-brief-gate-profile-brief`.
+    """
+    return re.sub(r"\.md$", "", name)
+
+
+def new_row(brief_root: Path, path: Path) -> dict[str, Any]:
+    """A row for a stack file that has none, carrying only grounded fields.
+
+    Absent means absent. `gate_profile`, `source` and `created_at` appear only
+    when the brief itself declares them; `unlock_count` never appears at all,
+    because it is a graph measurement this script cannot take and manifest.py
+    is explicit that it is "read, never derived". Consumers already tolerate
+    its absence -- `brief-drain-manifest.sh` reads `(.unlock_count // 0)`.
+    A row that omits a field says "the brief did not declare it"; a row that
+    invents 0 says "the brief declared zero", and those are different claims.
+    """
+    frontmatter = read_frontmatter(path.read_text(errors="replace"))
+    row: dict[str, Any] = {
+        "path": index_path_value(brief_root, path.name),
+        "slug": slug_for(path.name),
+    }
+    for key, sources in (
+        ("gate_profile", ("gate_profile",)),
+        ("source", SOURCE_FRONTMATTER_KEYS),
+        ("created_at", CREATED_AT_FRONTMATTER_KEYS),
+    ):
+        for candidate in sources:
+            value = frontmatter.get(candidate, "").strip()
+            if value:
+                row[key] = value
+                break
+    return row
+
+
+def serialize_row(row: dict[str, Any]) -> str:
+    """Compact and key-sorted, matching 86 of the 88 live rows.
+
+    Appended, never spliced into an existing line. Brief 22's finding was that
+    a whole-file re-serialization is what mangled 38 rows in the first place;
+    the rule that follows from it is rewrite only the line you change, and this
+    command changes none of them.
+    """
+    return json.dumps(row, sort_keys=True, separators=(",", ":"))
+
+
 def build_report(apply: bool, command: str, removed: list[dict[str, Any]], kept: int, malformed: int) -> dict[str, Any]:
     return {
         "apply": apply,
@@ -188,6 +318,57 @@ def command_remove_archived_row(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_add_missing_rows(args: argparse.Namespace) -> int:
+    """Give `stack/*.md` files with no index row one.
+
+    The index had no rebuild path: both existing subcommands only REMOVE, so a
+    file that never got a row could never acquire one, and 89 files sat against
+    88 rows with the difference invisible to every tool.
+
+    Append-only and idempotent: existing lines are never re-read into Python
+    and re-emitted, so a malformed row stays exactly as malformed as it was
+    rather than being silently normalised or dropped.
+    """
+    brief_root = Path(args.brief_root).expanduser()
+    stack = brief_root / "stack"
+    index = stack / ".index.jsonl"
+    lines = load_index(index)
+
+    indexed: set[str] = set()
+    malformed = 0
+    for line in lines:
+        if line.entry is None:
+            malformed += 1
+            continue
+        path = entry_path(line.entry)
+        if path is not None:
+            # Matched on basename, because the three serializations disagree
+            # about everything else. Two rows for one file would otherwise be
+            # the FIRST thing a repair tool produced.
+            indexed.add(path.name)
+
+    missing = sorted(p for p in stack.glob("*.md") if p.name not in indexed)
+    added = [new_row(brief_root, path) for path in missing]
+
+    report = {
+        "apply": args.apply,
+        "command": "add-missing-rows",
+        "added": added,
+        "added_count": len(added),
+        "existing_row_count": len(lines),
+        "malformed_kept_count": malformed,
+        "stack_file_count": len(list(stack.glob("*.md"))),
+    }
+    print(json.dumps(report, indent=2, sort_keys=True))
+
+    if args.apply and added:
+        atomic_write_lines(
+            index,
+            [line.raw for line in lines] + [serialize_row(row) for row in added],
+        )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -202,6 +383,11 @@ def main() -> int:
     remove.add_argument("--slug", required=True)
     remove.add_argument("--apply", action="store_true")
     remove.set_defaults(func=command_remove_archived_row)
+
+    add_missing = sub.add_parser("add-missing-rows")
+    add_missing.add_argument("--brief-root", required=True)
+    add_missing.add_argument("--apply", action="store_true")
+    add_missing.set_defaults(func=command_add_missing_rows)
 
     args = parser.parse_args()
     return args.func(args)
