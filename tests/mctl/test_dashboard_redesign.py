@@ -1574,3 +1574,57 @@ def test_every_handled_key_is_advertised():
     advertised = {key for key, _ in render.KEY_BINDINGS}
     undocumented = handled - advertised
     assert not undocumented, f"handled but undocumented: {sorted(undocumented)}"
+
+
+# --------------------------------------------------------------------------
+# the standing return for an empty brief
+# --------------------------------------------------------------------------
+
+
+def test_an_empty_brief_offers_the_standing_return():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1", "body": ""}, _option(True), state.ViewState())
+    assert 'data-region="prefill-offer"' in html
+    assert "prefill=incomplete" in html
+
+
+def test_a_brief_with_a_body_is_not_offered_it():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1", "body": "a real brief"}, _option(True), state.ViewState()
+    )
+    assert 'data-region="prefill-offer"' not in html
+
+
+def test_the_prefill_fills_the_form_and_records_nothing():
+    """Filled in is not recorded -- every one still needs a human confirm."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1", "body": ""}, _option(True), state.ViewState(),
+        prefill="incomplete",
+    )
+    revise = re.search(r'<input[^>]*value="revise"[^>]*>', html)
+    assert revise and "checked" in revise.group(0)
+    assert "required fields" in html
+    assert 'name="no_brainer" value="1" checked' in html
+    # The offer is gone once taken, and the form is still a form.
+    assert 'data-region="prefill-offer"' not in html
+    assert '<button class="btn btn-primary" type="submit">' in html
+
+
+def test_the_prefill_does_not_preselect_approve():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1", "body": ""}, _option(True), state.ViewState(),
+        prefill="incomplete",
+    )
+    approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
+    assert approve and "checked" not in approve.group(0)

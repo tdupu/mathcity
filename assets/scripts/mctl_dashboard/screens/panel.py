@@ -103,7 +103,7 @@ def panel_state(options: Sequence[Mapping[str, Any]]) -> tuple[str, Mapping[str,
 
 
 def _verdict_control(
-    name: str, label: str, *, state: str, disabled: bool
+    name: str, label: str, *, state: str, disabled: bool, checked: bool = False
 ) -> str:
     struck = state == "held" and disabled
     style = (
@@ -123,6 +123,8 @@ def _verdict_control(
     else:
         style += "var(--color-divider); color: var(--color-neutral-800); cursor: pointer;"
     attrs = ' disabled aria-disabled="true"' if disabled else ""
+    if checked and not disabled:
+        attrs += " checked"
     return (
         f'<label style="{style}">'
         f'<input type="radio" name="verdict" value="{_e(name)}"{attrs} '
@@ -248,7 +250,7 @@ def _disposition_control(brief: Mapping[str, Any]) -> str:
     )
 
 
-def _no_brainer_control() -> str:
+def _no_brainer_control(*, checked: bool = False, reason: str = "") -> str:
     """The no-brainer flag: "this reached me and should not have".
 
     Deliberately NOT a verdict. Ticking it does not change what is recorded as
@@ -264,8 +266,9 @@ def _no_brainer_control() -> str:
         'border-radius: var(--radius-sm); background: var(--color-neutral-050);">'
         '<label style="display: flex; align-items: center; gap: 7px; '
         'font-size: 12.5px; cursor: pointer;">'
-        '<input type="checkbox" name="no_brainer" value="1" '
-        'style="accent-color: var(--color-accent-600); margin: 0;">'
+        '<input type="checkbox" name="no_brainer" value="1"'
+        + (" checked" if checked else "")
+        + ' style="accent-color: var(--color-accent-600); margin: 0;">'
         "<strong>No-brainer</strong> &mdash; this should not have needed me"
         "</label>"
         '<textarea name="no_brainer_reason" rows="2" '
@@ -274,7 +277,50 @@ def _no_brainer_control() -> str:
         'style="width: 100%; margin-top: 7px; font-family: var(--font-body); '
         "font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        "</textarea>"
+        + _e(reason)
+        + "</textarea>"
+        "</div>"
+    )
+
+
+#: The standing verdict for a brief that carries nothing to judge. Taylor's
+#: instruction, 2026-08-19: mark the empty ones revise, flag them no-brainer,
+#: "and send them back saying they need to give more fields".
+INCOMPLETE_REASON = (
+    "Returned as incomplete: this brief carries no body, so there is nothing "
+    "stated for a verdict to be about. Re-file it with the required fields -- "
+    "what is being decided, the options, and what each one commits us to."
+)
+INCOMPLETE_NO_BRAINER = (
+    "An empty brief should not have reached adjudication; the classifier "
+    "should have caught it."
+)
+
+
+def prefill_offer(brief: Mapping[str, Any], *, rig: str | None = None) -> str:
+    """One click to load the standing verdict for an empty brief.
+
+    There are ~90 of these. Adjudicating them one at a time by retyping the
+    same sentence is the kind of work that does not get done, and doing them
+    in a batch means recording ~90 verdicts nobody read. This is the middle:
+    the form arrives filled in, and every one still gets a human confirming it.
+    """
+    has_body = bool(str(brief.get("body") or "").strip()) or bool(brief.get("sections"))
+    if has_body:
+        return ""
+    brief_id = str(brief.get("brief_id") or brief.get("bead_id") or "")
+    query = f"?prefill=incomplete" + (f"&rig={_e(rig)}" if rig else "")
+    return (
+        '<div data-region="prefill-offer" style="margin-bottom: 11px; padding: 8px 11px; '
+        "border: 1px solid var(--color-divider); "
+        "border-left: 3px solid var(--color-accent-600); "
+        'border-radius: var(--radius-sm); background: var(--color-neutral-100);">'
+        '<div style="font-size: 12.5px;">This brief states nothing to judge. '
+        f'<a href="/briefs/{_e(brief_id)}{query}#mc-adjudicate">'
+        "Fill in the standing return &rarr;</a></div>"
+        '<div class="mono" style="font-size: 10.5px; color: var(--color-neutral-600); '
+        'margin-top: 4px;">revise &middot; no-brainer &middot; asks for the required '
+        "fields. Nothing is recorded until you confirm it.</div>"
         "</div>"
     )
 
@@ -285,17 +331,20 @@ def entry(
     view: ViewState,
     *,
     rig: str | None = None,
+    prefill: str | None = None,
 ) -> str:
     """The adjudication form."""
     state, reason = panel_state(options)
     brief_id = str(brief.get("brief_id") or brief.get("bead_id") or "")
 
+    filled = prefill == "incomplete"
     controls = "".join(
         _verdict_control(
             name,
             label,
             state=state,
             disabled=state != "open" and name not in RETURN_VERDICTS,
+            checked=filled and name == "revise",
         )
         for name, label in VERDICTS
     )
@@ -320,6 +369,7 @@ def entry(
         f'letter-spacing: 0.05em; text-transform: uppercase;">{_e(title)}</div>'
         f'<div style="padding: 13px 14px; background: {body_bg};">'
         + (_refusal_notice(state, reason) if locked else "")
+        + ("" if filled else prefill_offer(brief, rig=rig))
         + '<form method="post" action="/preview">'
         f'<input type="hidden" name="operation" value="adjudicate">'
         f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">'
@@ -337,8 +387,11 @@ def entry(
         'style="width: 100%; font-family: var(--font-body); font-size: 13px; '
         "padding: 6px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        "</textarea>"
-        + _no_brainer_control()
+        + (_e(INCOMPLETE_REASON) if filled else "")
+        + "</textarea>"
+        + _no_brainer_control(
+            checked=filled, reason=INCOMPLETE_NO_BRAINER if filled else ""
+        )
         + '<div style="display: flex; gap: 9px; align-items: center; margin-top: 13px;">'
         '<button class="btn btn-primary" type="submit">'
         "Review verdict &rarr;</button>"
