@@ -93,7 +93,7 @@ skills/adjudicate-brief/SKILL.md|mutation|briefs adjudicate,briefs defer,work di
 skills/create-brief/SKILL.md|mutation|briefs create,briefs validate
 skills/brief-prep/SKILL.md|mutation|briefs create,briefs validate
 skills/coordinate-review/SKILL.md|read|briefs doctor,briefs options
-skills/work/SKILL.md|mutation|work ready,work status,work dispatch
+skills/work/SKILL.md|mutation|work ready,work status,work dispatch,work claim,work dispatch-event
 skills/immediate-work/SKILL.md|mutation|work status,work dispatch
 skills/priority-work/SKILL.md|mutation|work ready,work provenance
 skills/present-briefs/SKILL.md|read|briefs list

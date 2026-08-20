@@ -40,7 +40,9 @@ from .work import (
     apply_dispatch_plan,
     dispatch_dry_run_payload,
     plan_dispatch,
+    plan_dispatch_event,
     ready_work,
+    work_claim,
     work_provenance,
     work_status,
 )
@@ -277,6 +279,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_work_status_parser(work_commands)
     _add_work_provenance_parser(work_commands)
     _add_work_dispatch_parser(work_commands)
+    _add_work_claim_parser(work_commands)
+    _add_work_dispatch_event_parser(work_commands)
     return parser
 
 
@@ -443,6 +447,40 @@ def _add_work_dispatch_parser(commands: argparse._SubParsersAction[argparse.Argu
     _add_runtime_arguments(parser)
 
 
+def _add_work_claim_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = commands.add_parser("claim", help="show who holds one bead, from the canonical store")
+    parser.add_argument("bead_id")
+    parser.add_argument(
+        "--window-seconds",
+        type=int,
+        default=None,
+        help="how long the caller waited before reading; names the observation only",
+    )
+    _add_runtime_arguments(parser)
+
+
+def _add_work_dispatch_event_parser(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    parser = commands.add_parser(
+        "dispatch-event",
+        help="record a dispatch-provenance.v1 event bead and attach it to its source bead",
+    )
+    parser.add_argument("bead_id")
+    parser.add_argument(
+        "--dispatch-command", required=True, help="the sling command this event records"
+    )
+    parser.add_argument("--formula", default="work-briefed", help="formula the sling named")
+    parser.add_argument(
+        "--window-seconds",
+        type=int,
+        default=None,
+        help="how long the caller waited for the claim before reading it",
+    )
+    parser.add_argument("--dry-run", action="store_true")
+    _add_runtime_arguments(parser)
+
+
 def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     try:
         if args.brief_command == "list":
@@ -576,6 +614,31 @@ def _work_command(args: argparse.Namespace, context: MctlContext) -> int:
                 "provenance": work_provenance(context, args.brief_id).to_dict(),
                 "trace_id": context.trace_id,
             }
+        elif args.work_command == "claim":
+            payload = {
+                "claim": work_claim(
+                    context, args.bead_id, window_seconds=args.window_seconds
+                ).to_dict(),
+                "diagnostics": _diagnostics_payload(context, ()),
+                "trace_id": context.trace_id,
+            }
+        elif args.work_command == "dispatch-event":
+            event_plan = plan_dispatch_event(
+                context,
+                args.bead_id,
+                dispatch_command=args.dispatch_command,
+                formula=args.formula,
+                window_seconds=args.window_seconds,
+            )
+            payload = (
+                dry_run_payload(event_plan)
+                if args.dry_run
+                else apply_effect_plan(context, event_plan).to_dict()
+            )
+            payload["diagnostics"] = _diagnostics_payload(context, ()) + list(
+                payload.get("diagnostics", [])
+            )
+            payload.setdefault("trace_id", context.trace_id)
         else:
             plan = plan_dispatch(context, args.brief_id)
             payload = (
@@ -583,6 +646,9 @@ def _work_command(args: argparse.Namespace, context: MctlContext) -> int:
                 if args.dry_run
                 else apply_dispatch_plan(context, plan)
             )
+    except MutationError as error:
+        print(render_diagnostic(error.diagnostic), file=sys.stderr)
+        return 1
     except WorkError as error:
         print(render_diagnostic(error.diagnostic), file=sys.stderr)
         return 1
@@ -645,6 +711,15 @@ def _render_brief_payload(payload: dict[str, object]) -> str:
             mark = "+" if option.get("enabled") else "-"
             detail = "" if option.get("enabled") else f"  ({option.get('disabled_reason') or 'disabled'})"
             lines.append(f"  {mark} {option.get('id')}: {option.get('description', '')}{detail}")
+
+    claim = payload.get("claim")
+    if isinstance(claim, dict):
+        lines.append(
+            f"{claim.get('bead_id')} [{claim.get('status')}] "
+            f"assignee={claim.get('assignee') or '(none)'} "
+            f"state={claim.get('assignee_state')} "
+            f"classification={claim.get('classification_hint')}"
+        )
 
     work = payload.get("work")
     if isinstance(work, list):

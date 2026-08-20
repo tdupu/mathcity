@@ -267,3 +267,100 @@ def test_bd_accepts_every_flag_mctl_passes_to_bd_create():
 def test_bd_accepts_every_flag_mctl_passes_to_bd_link():
     advertised = help_flags(["bd", "link", "--help"])
     assert "--type" in advertised, "installed bd link no longer advertises --type"
+
+
+def test_relate_builds_a_bare_positional_bd_dep_relate_argv(tmp_path: Path):
+    """`bd dep relate a b`, and nothing else.
+
+    Pinned separately from `bd dep add`, which mctl deliberately does NOT
+    use: measured against bd 1.1.0 on 2026-08-20, `bd dep add <local-id>
+    <unresolvable-id>` exits 0 and writes a row every hydrating read hides,
+    while `relate` refuses the same id. A future edit that "simplified" this
+    to `dep add` would reintroduce the silent-loss path.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "assets" / "scripts"))
+    from mctl_core.beads import BeadRelate, apply_bead_relate
+
+    _city_root, rig_root, bin_dir, argv_log = recording_bd_runtime(tmp_path)
+    env_path = os.environ["PATH"]
+    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{env_path}"
+    try:
+        apply_bead_relate(rig_root, BeadRelate(source_id="mc-event", target_id=SOURCE_ID))
+    finally:
+        os.environ["PATH"] = env_path
+
+    relates = [argv for argv in recorded_argv(argv_log) if argv[:2] == ["dep", "relate"]]
+    assert relates == [["dep", "relate", "mc-event", SOURCE_ID]]
+
+
+@requires_bd
+def test_bd_still_offers_the_dep_relate_subcommand():
+    result = subprocess.run(
+        ["bd", "dep", "--help"], text=True, capture_output=True, check=False
+    )
+    assert "relate" in result.stdout + result.stderr, (
+        "installed bd no longer advertises `dep relate`"
+    )
+
+
+@requires_bd
+def test_bd_accepts_every_event_flag_mctl_passes_to_bd_create():
+    """The path-B provenance event is a typed `bd create --type event`."""
+    advertised = help_flags(["bd", "create", "--help"])
+    for flag in ("--event-category", "--event-target", "--event-payload"):
+        assert flag in advertised, f"installed bd no longer advertises {flag}"
+
+
+def test_a_dispatch_event_create_carries_the_event_flags(tmp_path: Path):
+    sys.path.insert(0, str(REPO_ROOT / "assets" / "scripts"))
+    from mctl_core.beads import BeadCreate, apply_bead_create
+
+    _city_root, rig_root, bin_dir, argv_log = recording_bd_runtime(tmp_path)
+    env_path = os.environ["PATH"]
+    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{env_path}"
+    try:
+        apply_bead_create(
+            rig_root,
+            BeadCreate(
+                placeholder_id="(pending)",
+                title="dispatch provenance for source-pending",
+                body="{}",
+                issue_type="event",
+                event_category="dispatch.provenance",
+                event_target=SOURCE_ID,
+                event_payload='{"schema": "dispatch-provenance.v1"}',
+            ),
+        )
+    finally:
+        os.environ["PATH"] = env_path
+
+    argv = next(argv for argv in recorded_argv(argv_log) if argv[0] == "create")
+    assert argv[argv.index("--type") + 1] == "event"
+    assert argv[argv.index("--event-category") + 1] == "dispatch.provenance"
+    assert argv[argv.index("--event-target") + 1] == SOURCE_ID
+    assert "dispatch-provenance.v1" in argv[argv.index("--event-payload") + 1]
+
+
+def test_a_non_event_create_passes_no_event_flags(tmp_path: Path):
+    """bd rejects --event-* on every other type, so they are keyed on the type."""
+    sys.path.insert(0, str(REPO_ROOT / "assets" / "scripts"))
+    from mctl_core.beads import BeadCreate, apply_bead_create
+
+    _city_root, rig_root, bin_dir, argv_log = recording_bd_runtime(tmp_path)
+    env_path = os.environ["PATH"]
+    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{env_path}"
+    try:
+        apply_bead_create(
+            rig_root,
+            BeadCreate(
+                placeholder_id="(pending)",
+                title="Decide something",
+                body="body",
+                event_category="dispatch.provenance",
+            ),
+        )
+    finally:
+        os.environ["PATH"] = env_path
+
+    argv = next(argv for argv in recorded_argv(argv_log) if argv[0] == "create")
+    assert not long_flags_in(argv) & {"--event-category", "--event-target", "--event-payload"}

@@ -235,67 +235,70 @@ If you have extra context that must not be lost in translation, pass it through:
 
 ### Verify the commission sling landed
 
-Path B gets no mctl provenance, so this one check stays manual. A sling you did
-not verify may have stranded:
+A sling you did not verify may have stranded. The check is a typed read, not a
+grep:
 
 ```bash
-sleep 5
-bd show "$SOURCE_BEAD" | grep -i assignee
+sleep 60
+"$MCTL" work claim "$SOURCE_BEAD" --window-seconds 60 \
+  --city "$CITY_ROOT" --rig "$RIG" --json
 ```
 
-The assignee must be non-empty. If it is still empty after 30-60 seconds, do not
-assume the fleet is healthy — escalate, or run the appropriate
-`mathcity.check-work` / `mathcity.check-molecules` skill.
+`classification_hint` answers the question directly: `healthy` means the bead is
+held, `immediate_strand` means it is not. A bead id this rig's store cannot
+resolve exits 1 with `MWRK_BEAD_NOT_FOUND` rather than printing nothing — the
+old `bd show … | grep -i assignee` could not tell an unclaimed bead from a
+missing one, from a bead in another store, from a field bd renamed, because it
+was matching lines in a human-readable rendering. Two bugs came out of that
+class of matching.
+
+On `immediate_strand`, do not assume the fleet is healthy — escalate, or run the
+appropriate `mathcity.check-work` / `mathcity.check-molecules` skill.
 
 ### Path-B dispatch provenance event (required — the lost-bead filter reads it)
 
 Path A gets `dispatch-provenance.v1` from `mctl work dispatch`, behind a verified
-claim. **Path B has no mctl route, so this event is still written by hand** — and
-it is not optional: `assets/scripts/lost-bead-filter.py` and the rollup formulas
-key their classification on it, and a commission sling with no provenance event
-is invisible to them.
+claim. Path B has its own mctl route, and it is not optional:
+`assets/scripts/lost-bead-filter.py` and the rollup formulas key their
+classification on this event, and a commission sling with no provenance event is
+invisible to them.
 
-Use `dispatch-provenance.v1` so downstream lost-bead filters can distinguish a
-healthy claim from an immediate strand.
-
-Healthy claim:
-
-```toml
-schema = "dispatch-provenance.v1"
-source_bead = "<bead>"
-dispatch_command = "gc sling <rig>/gc.run-operator <bead> --on work-briefed ..."
-formula = "work-briefed"
-verified_assignee = true
-assignee_state = "non_empty"
-classification_hint = "healthy"
-fingerprint = "verified_sling_claimed"
-observed_at = "YYYY-MM-DDTHH:MM:SSZ"
-```
-
-Empty assignee after the verification window:
-
-```toml
-schema = "dispatch-provenance.v1"
-source_bead = "<bead>"
-dispatch_command = "gc sling <rig>/gc.run-operator <bead> --on work-briefed ..."
-formula = "work-briefed"
-verified_assignee = false
-assignee_state = "empty_after_60s"
-classification_hint = "immediate_strand"
-fingerprint = "empty_assignee_after_verified_sling"
-observed_at = "YYYY-MM-DDTHH:MM:SSZ"
-```
-
-Create and relate the event before escalating:
+Write it before escalating:
 
 ```bash
-event_bead="$(bd create "dispatch provenance for <bead>" --type event --event-category dispatch.provenance --event-target <bead> --event-payload '<dispatch-provenance.v1 TOML or JSON>' --silent)"
-bd dep relate "$event_bead" <bead>
+"$MCTL" work dispatch-event "$SOURCE_BEAD" \
+  --dispatch-command "gc sling $RIG/gc.run-operator $SOURCE_BEAD --on work-briefed" \
+  --formula work-briefed --window-seconds 60 \
+  --city "$CITY_ROOT" --rig "$RIG" --json
 ```
 
+One command, because the event bead and its edge to the source bead are only
+meaningful together — an event created and left unattached is invisible to the
+lost-bead filter in exactly the way an unwritten one is. It creates the
+`type=event` bead carrying the `dispatch-provenance.v1` payload, attaches it with
+`bd dep relate`, and then **proves from the store that the edge is there**.
+
+Three things it does that the hand-written pair did not:
+
+- **The classification is derived, not retyped.** `verified_assignee`,
+  `assignee_state`, `classification_hint` and `fingerprint` come from the same
+  canonical claim read `work claim` performs. Typed out by hand beside a grep,
+  they could — and did — say `healthy` about a bead nobody held.
+- **A bead this rig cannot resolve is refused before anything is written.**
+  `MWRK_BEAD_NOT_FOUND`, with no orphan event bead left behind. This is the
+  cross-store guard: `bd dep add <local-id> <foreign-id>` exits 0 and leaves a
+  row `bd show` counts and hides, so the edge has to be refused rather than
+  attempted.
+- **The edge is verified after the write.** `MCTL_BEAD_RELATION_DANGLING` if it
+  names a bead this store cannot resolve, `MCTL_BEAD_RELATION_UNVERIFIED` if the
+  store records no edge at all. A relate that did not land is a FATAL abort with
+  an `aborted` trace row, not a success message.
+
+Preview first with `--dry-run` if you want to see the payload before it lands.
+
 **Do not write one on path A.** There, `mctl work dispatch` has already written
-the record after re-reading the bead; a hand-authored second one asserts a claim
-nobody checked and double-counts the dispatch.
+the record after re-reading the bead; a second one asserts a claim nobody checked
+and double-counts the dispatch.
 
 ### Direct `build-basic-briefed` dispatch (outside both paths)
 

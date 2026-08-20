@@ -650,6 +650,43 @@ WORK_ITEM_SCHEMA: Schema = {
     },
 }
 
+CLAIM_STATE_SCHEMA: Schema = {
+    "type": "object",
+    "title": "ClaimState",
+    "description": (
+        "Who holds one bead, read from the canonical store. The four "
+        "dispatch-provenance.v1 classification fields are derived here rather "
+        "than restated by the caller, so an event bead cannot claim a healthy "
+        "handoff the store does not show."
+    ),
+    "required": [
+        "assignee",
+        "assignee_state",
+        "bead_id",
+        "classification_hint",
+        "fingerprint",
+        "observed_at",
+        "status",
+        "title",
+        "verified_assignee",
+    ],
+    "properties": {
+        "assignee": nullable_string("Raw assignee column; null when nobody holds the bead."),
+        "assignee_state": {
+            "type": "string",
+            "description": "non_empty, empty, or empty_after_<window>s.",
+        },
+        "bead_id": {"type": "string"},
+        "classification_hint": {"type": "string", "enum": ["healthy", "immediate_strand"]},
+        "fingerprint": {"type": "string"},
+        "observed_at": {"type": "string", "description": "When the store was read."},
+        "status": {"type": "string"},
+        "title": {"type": "string"},
+        "verified_assignee": {"type": "boolean"},
+        "window_seconds": {"type": ["integer", "null"]},
+    },
+}
+
 EFFECT_PLAN_SCHEMA: Schema = {
     "type": "object",
     "title": "EffectPlan",
@@ -658,6 +695,7 @@ EFFECT_PLAN_SCHEMA: Schema = {
     "properties": {
         "advisories": DIAGNOSTIC_ARRAY,
         "bead_creates": {"type": "array"},
+        "bead_relates": {"type": "array"},
         "bead_updates": {"type": "array"},
         "cache_updates": {"type": "array"},
         "event_writes": {"type": "array"},

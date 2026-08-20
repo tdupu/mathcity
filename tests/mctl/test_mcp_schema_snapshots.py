@@ -117,6 +117,7 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "briefs_create",
         "briefs_defer",
         "work_dispatch",
+        "work_dispatch_event",
     ]
     for name in mutating:
         dry_run = snapshot[name]["inputSchema"]["properties"]["dry_run"]

@@ -8,10 +8,16 @@ client of it.
 
 `ALLOWED_TOOLS` is spelled out rather than derived from the server's registry.
 Deriving it would make the dashboard call whatever the server happened to
-expose next, including something shell-shaped; naming the sixteen makes the
+expose next, including something shell-shaped; naming them makes the
 constraint reviewable, and `test_dashboard_views.py` cross-checks the list
 against `mcp_server.TOOLS_BY_NAME` and `FORBIDDEN_TOOL_NAMES` so it cannot rot
 into a lie.
+
+That it is a *subset* is the point, and the subset is now proper: the server
+registers eighteen tools and the dashboard may call sixteen of them.
+`work_claim` and `work_dispatch_event` serve the path-B commission flow in
+`skills/work/SKILL.md`, which has no dashboard surface, so adding them here
+would widen the boundary for nothing.
 
 A city-wide page is still ONE call: `mctl_core/city.py` does the cross-rig
 fan-out behind the declared `all_rigs` option, so the dashboard asks for a
@@ -36,7 +42,7 @@ MCTL = SCRIPTS_ROOT / "mctl.py"
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT_INFO = {"name": "mctl-dashboard", "version": "0.8.0"}
 
-#: The sixteen typed domain tools Slice 6 registered. Nothing else is callable.
+#: The sixteen typed domain tools the dashboard may call. Nothing else is.
 ALLOWED_TOOLS = frozenset(
     {
         "context_resolve",

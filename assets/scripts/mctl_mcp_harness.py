@@ -61,6 +61,8 @@ EXPECTED_TOOLS = (
     "work_status",
     "work_dispatch",
     "work_provenance",
+    "work_claim",
+    "work_dispatch_event",
     "trace_show",
     "trace_replay_preview",
 )

@@ -44,7 +44,9 @@ DECLARED_TOOLS = (
     "context_rigs",
     "trace_replay_preview",
     "trace_show",
+    "work_claim",
     "work_dispatch",
+    "work_dispatch_event",
     "work_provenance",
     "work_ready",
     "work_status",
@@ -202,6 +204,9 @@ def test_targeted_read_tools_round_trip_their_declared_output_schema(tmp_path: P
         "briefs_options": {"brief_id": "mc-open"},
         "briefs_validate": {"brief_id": "mc-open"},
         "work_status": {"brief_id": "mc-open"},
+        # Takes a bead id, not a brief id: its call site is the path-B
+        # commission flow, which has no brief to name.
+        "work_claim": {"bead_id": "mc-work", "window_seconds": 60},
     }
 
     for name, arguments in targeted.items():
@@ -405,6 +410,66 @@ def test_mutating_tools_default_to_dry_run(tmp_path: Path):
     assert tree_digest(rig_root) == before
 
 
+def test_work_dispatch_event_defaults_to_dry_run_and_writes_nothing(tmp_path: Path):
+    city_root, rig_root = runtime_fixture(tmp_path)
+    before = tree_digest(rig_root)
+
+    structured = call(
+        server(city_root, rig_root),
+        "work_dispatch_event",
+        {"bead_id": "mc-work", "dispatch_command": "gc sling mathcity/gc.run-operator mc-work"},
+    )["result"]["structuredContent"]
+
+    assert structured["applied"] is False
+    assert structured["effect_plan"]["bead_relates"][0]["target_id"] == "mc-work"
+    assert tree_digest(rig_root) == before
+
+
+def test_work_dispatch_event_refuses_a_bead_this_rig_cannot_resolve(tmp_path: Path):
+    """The cross-store refusal reaches the MCP surface as a typed error."""
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    response = call(
+        server(city_root, rig_root),
+        "work_dispatch_event",
+        {"bead_id": "hq-foreign", "dispatch_command": "gc sling mathcity/gc.run-operator hq"},
+    )
+
+    assert response["result"]["isError"] is True
+    blocked = next(
+        diagnostic
+        for diagnostic in response["result"]["structuredContent"]["diagnostics"]
+        if diagnostic["code"] == "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS"
+    )
+    # The wrapper is the shared precondition gate; the precondition that fired
+    # is named, so a client can tell a cross-store id from any other blocker.
+    assert blocked["facts"]["blocking_code"] == "MWRK_BEAD_NOT_FOUND"
+
+
+def test_work_claim_reports_an_unclaimed_bead_rather_than_an_empty_answer(tmp_path: Path):
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    structured = call(server(city_root, rig_root), "work_claim", {"bead_id": "mc-work"})[
+        "result"
+    ]["structuredContent"]
+
+    assert structured["claim"]["verified_assignee"] is False
+    assert structured["claim"]["classification_hint"] == "immediate_strand"
+
+
+def test_work_claim_on_a_missing_bead_is_a_typed_error(tmp_path: Path):
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    response = call(server(city_root, rig_root), "work_claim", {"bead_id": "mc-nope"})
+
+    assert response["result"]["isError"] is True
+    codes = {
+        diagnostic["code"]
+        for diagnostic in response["result"]["structuredContent"]["diagnostics"]
+    }
+    assert "MWRK_BEAD_NOT_FOUND" in codes
+
+
 def test_work_dispatch_returns_the_same_effect_plan_shape_as_the_cli(tmp_path: Path):
     city_root, rig_root = work_fixture(tmp_path)
     env = os.environ.copy()
@@ -470,7 +535,13 @@ def test_armed_external_clients_still_cannot_reach_mutating_tools(tmp_path: Path
     response = call(armed, "briefs_adjudicate", {"brief_id": "mc-open", "verdict": "approve"})
 
     assert "briefs_list" in names
-    assert not names & {"briefs_adjudicate", "briefs_defer", "briefs_create", "work_dispatch"}
+    assert not names & {
+        "briefs_adjudicate",
+        "briefs_defer",
+        "briefs_create",
+        "work_dispatch",
+        "work_dispatch_event",
+    }
     assert response["error"]["data"]["diagnostic"]["code"] == "MCTL_MCP_TOOL_DISABLED"
 
 

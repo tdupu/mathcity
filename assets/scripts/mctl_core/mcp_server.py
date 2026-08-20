@@ -81,6 +81,7 @@ from .schemas import (
     BRIEF_DETAIL_SCHEMA,
     BRIEF_OPTION_SCHEMA,
     BRIEF_RECORD_SCHEMA,
+    CLAIM_STATE_SCHEMA,
     DRY_RUN_PROPERTY,
     EFFECT_PLAN_SCHEMA,
     SEVERITY_COUNTS_SCHEMA,
@@ -99,7 +100,9 @@ from .work import (
     apply_dispatch_plan,
     dispatch_dry_run_payload,
     plan_dispatch,
+    plan_dispatch_event,
     ready_work,
+    work_claim,
     work_provenance,
     work_status,
 )
@@ -597,6 +600,26 @@ def _handle_work_dispatch(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
     return payload
 
 
+def _handle_work_claim(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    claim = work_claim(
+        ctx, arguments["bead_id"], window_seconds=arguments.get("window_seconds")
+    )
+    return {"claim": claim.to_dict(), "diagnostics": _diagnostics(ctx, ())}
+
+
+def _handle_work_dispatch_event(
+    ctx: MctlContext, arguments: Mapping[str, Any]
+) -> dict[str, object]:
+    plan = plan_dispatch_event(
+        ctx,
+        arguments["bead_id"],
+        dispatch_command=arguments["dispatch_command"],
+        formula=arguments.get("formula") or "work-briefed",
+        window_seconds=arguments.get("window_seconds"),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
 def _handle_trace_show(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     return {"diagnostics": _diagnostics(ctx, ()), "trace": _require_trace(ctx, arguments["trace_id"])}
 
@@ -982,6 +1005,78 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         output_schema=response_schema(_EFFECT_RESPONSE, ["applied", "effect_plan"]),
         handler=_handle_work_dispatch,
+        mutating=True,
+        external_ready=False,
+    ),
+    ToolSpec(
+        name="work_claim",
+        title="Show who holds a bead",
+        description=(
+            "Report one bead's claim state -- assignee, status, and the four "
+            "`dispatch-provenance.v1` classification fields derived from it "
+            "(`verified_assignee`, `assignee_state`, `classification_hint`, "
+            "`fingerprint`). Takes a BEAD id, not a brief id: the caller this "
+            "exists for commissioned work that has no brief yet. It replaces "
+            "`bd show <id> | grep -i assignee`, which answered 'some rendered "
+            "line mentioned assignee' and could not tell an unclaimed bead "
+            "from a missing one. `window_seconds` names how long the caller "
+            "already waited and only labels the observation -- nothing here "
+            "sleeps or polls."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {"type": "string", "description": "Canonical bead id to read."},
+                "window_seconds": {
+                    "type": ["integer", "null"],
+                    "description": (
+                        "Seconds the caller waited before reading. Reported as "
+                        "`empty_after_<n>s`; omit when no wait was involved."
+                    ),
+                },
+            },
+            ["bead_id"],
+        ),
+        output_schema=response_schema({"claim": CLAIM_STATE_SCHEMA}, ["claim"]),
+        handler=_handle_work_claim,
+    ),
+    ToolSpec(
+        name="work_dispatch_event",
+        title="Record a dispatch provenance event",
+        description=(
+            "Create the `dispatch-provenance.v1` event bead for a commission "
+            "sling and attach it to its source bead, as ONE operation -- an "
+            "event that is created but not attached is invisible to the "
+            "lost-bead filter in exactly the way an unwritten one is. The "
+            "classification fields come from a canonical claim read, not from "
+            "the caller. The edge is written with `bd dep relate` and then "
+            "PROVEN from the store: `bd dep add` exits 0 on an edge whose "
+            "target it cannot resolve, leaving a row `bd show` counts and "
+            "hides, and `bd dep relate` resolves ids fuzzily, so a clean exit "
+            "does not say which beads were linked. An unresolvable source "
+            "bead is refused as a precondition, before anything is created. "
+            "Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {
+                    "type": "string",
+                    "description": "Source bead the sling commissioned work on.",
+                },
+                "dispatch_command": {
+                    "type": "string",
+                    "description": "The sling command this event records, verbatim.",
+                },
+                "formula": nullable_string("Formula the sling named; defaults to work-briefed."),
+                "window_seconds": {
+                    "type": ["integer", "null"],
+                    "description": "Seconds waited before reading the claim.",
+                },
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["bead_id", "dispatch_command"],
+        ),
+        output_schema=response_schema(_EFFECT_RESPONSE, ["applied", "effect_plan"]),
+        handler=_handle_work_dispatch_event,
         mutating=True,
         external_ready=False,
     ),
