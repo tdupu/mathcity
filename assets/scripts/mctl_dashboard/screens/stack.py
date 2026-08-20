@@ -7,9 +7,11 @@ needs script, and it duplicates clicking.
 
 A note on honesty, because it shapes most of this module: `briefs_list`
 supplies bead identity, title, status, decision state, labels, timestamps and
-redundant-artifact state. It does **not** supply unlock_count, priority,
-producing formula, option count, or a recommendation -- the design assumes all
-five and the core exposes none of them (issue #66, and `CHANGELOG.md` §G).
+redundant-artifact state. It does **not** supply unlock_count, priority, brief
+type, option count, or a recommendation -- the design assumes all five and the
+core exposes none of them yet (issue #66). All five are agreed to be worth
+building; `Producer` was the sixth and is dropped, because nothing records
+which formula filed a brief.
 Rather than inventing plausible values or quietly dropping the columns, an
 unfed cell renders an em dash and the table footnote names what is missing and
 where it is tracked. A column that silently showed zero would be read as "this
@@ -39,7 +41,6 @@ UNFED_COLUMNS: dict[str, str] = {
     "unlock": "unlock_count",
     "prio": "priority",
     "kind": "brief type",
-    "formula": "producing formula",
     "nopts": "decision options",
     "rec": "recommendation",
 }
@@ -231,8 +232,6 @@ def cell_text(brief: Mapping[str, Any], key: str) -> str:
         return str(brief.get("priority") or _DASH)
     if key == "kind":
         return str(brief.get("kind") or brief.get("decision_state") or _DASH)
-    if key == "formula":
-        return str(brief.get("producing_formula") or _DASH)
     if key == "nopts":
         options = brief.get("decision_options")
         return str(len(options)) if options else _DASH

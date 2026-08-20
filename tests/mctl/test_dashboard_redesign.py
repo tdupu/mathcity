@@ -791,3 +791,68 @@ def test_reorder_ignores_an_unknown_id():
     from mctl_dashboard.screens import priority
 
     assert priority.reorder(["a", "b"], "zzz", "up") == ["a", "b"]
+
+
+# --------------------------------------------------------------------------
+# finishing the surface
+# --------------------------------------------------------------------------
+
+
+def test_the_keys_chip_has_something_to_open():
+    """The header links to #mc-keys; that anchor has to exist."""
+    from mctl_dashboard import render
+
+    html = render.page("x", "/queue", [], counts={}, context={})
+    assert 'href="#mc-keys"' in html
+    assert 'id="mc-keys"' in html
+
+
+def test_the_key_map_lists_every_binding_the_script_implements():
+    """A key map that disagrees with the code teaches the wrong keys."""
+    from mctl_dashboard import assets, render
+
+    html = render.page("x", "/queue", [], counts={}, context={})
+    for key in ("j", "k", "enter"):
+        assert f">{key}<" in html or f"<b>{key}" in html, key
+    # Anything the script binds must appear in the map.
+    for bound in ("'j'", "'k'", "'enter'"):
+        assert bound in assets.SCRIPT
+
+
+def test_producing_formula_is_no_longer_a_column():
+    """cozy: no verified source for which formula filed a brief.
+
+    provenance.py is wired to work_provenance -- dispatch provenance -- not to
+    brief production. A sixth em dash helps nobody, so the column is dropped
+    until a producer actually records one.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import stack
+
+    assert "formula" not in state.COLUMN_KEYS
+    assert "formula" not in stack.UNFED_COLUMNS
+
+
+def test_the_mbrf004_copy_reports_the_shrink_as_done():
+    """It happened: 120 -> 71 blocked, brief population 280 -> 197.
+
+    Copy that still says "expect this to shrink" would be describing a future
+    that has already arrived.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    options = [
+        {
+            "id": "adjudicate",
+            "enabled": False,
+            "disabled_reason": {
+                "code": "MBRF004",
+                "severity": "ERROR",
+                "message": "Brief bead has no source dependency.",
+            },
+        }
+    ]
+    html = panel.entry({"bead_id": "he-1"}, options, state.ViewState())
+    assert "expect this population to shrink" not in html.lower()
+    assert "49" in html or "71" in html, "cite the measured outcome"

@@ -160,10 +160,11 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
         "</div>"
         '<div style="font-size: 12px; margin-top: 7px; color: var(--color-neutral-600); '
         'font-style: italic;">'
-        "This check is under review and currently fires on most of the pending queue. "
-        "Some of what it flags are not briefs at all — push authorisations and "
-        "kill-switch receipts are decision beads that decide about no other bead, and "
-        "cannot have a source dependency. Expect this population to shrink."
+        "This check is under review. It used to fire on most of the queue; "
+        "implementing B2.1's discriminator removed 49 beads that were never briefs "
+        "— push authorisations and kill-switch receipts, which decide about no other "
+        "bead and so cannot have a source dependency — taking the blocked population "
+        "from 120 to 71. Of that residue only about 30 are real open briefs."
         "</div>"
         "</div>"
     )

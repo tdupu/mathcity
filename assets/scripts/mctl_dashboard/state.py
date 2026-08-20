@@ -23,9 +23,13 @@ SCOPES = ("stack", "errors", "nobrainer")
 
 #: key, label, width px, numeric, on-by-default.
 #:
-#: Thirteen columns, nine on by default. The design README says twelve and
-#: eight, then lists thirteen labels; the prototype's COLS array is
-#: authoritative and has thirteen with nine defaulted.
+#: Twelve columns, nine on by default.
+#:
+#: The prototype defines thirteen. `Producer` -- which formula filed the brief
+#: -- is not among them here: `provenance.py` is wired to work_provenance,
+#: which is dispatch provenance, and nothing records brief production. There
+#: is no source to render, and a column that can only ever be an em dash is
+#: worse than an absent one, so it is dropped until a producer writes one.
 COLUMNS: tuple[tuple[str, str, int, bool, bool], ...] = (
     ("slug", "Brief", 300, False, True),
     ("rig", "Rig", 86, False, True),
@@ -35,7 +39,6 @@ COLUMNS: tuple[tuple[str, str, int, bool, bool], ...] = (
     ("age", "Age", 64, True, True),
     ("prio", "Priority", 82, False, True),
     ("kind", "Type", 96, False, False),
-    ("formula", "Producer", 156, False, False),
     ("nopts", "Opts", 62, True, True),
     ("sev", "Health", 78, False, True),
     ("source", "Source", 82, False, False),

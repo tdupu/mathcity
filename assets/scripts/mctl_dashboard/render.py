@@ -134,6 +134,48 @@ def _chip(
     )
 
 
+#: The keyboard bindings, in one place, so the map cannot drift from the
+#: script that implements them. A key map listing a binding the code does not
+#: have teaches the wrong keys, which is worse than no map at all.
+KEY_BINDINGS: tuple[tuple[str, str], ...] = (
+    ("j", "next row"),
+    ("k", "previous row"),
+    ("enter", "open the brief under the cursor"),
+)
+
+
+def key_map() -> str:
+    """The keyboard map the header's `keys` chip opens.
+
+    A `<details>` rather than a script-toggled panel, so it opens with
+    scripting disabled -- which matters here more than elsewhere, because a
+    reader with JavaScript off should be told plainly that these three keys
+    are the part that will not work for them.
+    """
+    rows = "".join(
+        f'<span style="display: inline-flex; gap: 6px; align-items: baseline;">'
+        f'<b class="mono" style="font-size: 11px; color: var(--color-accent-800);">'
+        f"{_e(key)}</b> {_e(label)}</span>"
+        for key, label in KEY_BINDINGS
+    )
+    return (
+        '<details id="mc-keys" data-region="key-map" '
+        'style="border-bottom: 1px solid var(--color-divider); '
+        'background: var(--color-accent-100); padding: 6px 20px;">'
+        '<summary class="mono" style="font-size: 11px; cursor: pointer; '
+        'color: var(--color-accent-900);">keyboard</summary>'
+        '<div style="display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; '
+        'font-size: 11.5px; color: var(--color-accent-900);">'
+        + rows
+        + '</div><div style="font-size: 11px; font-style: italic; margin-top: 5px; '
+        'color: var(--color-neutral-700);">'
+        "These three are the only part of the dashboard that needs JavaScript, and "
+        "each one duplicates something you can click. Everything else — sorting, "
+        "filtering, opening a brief, recording a verdict — works without it."
+        "</div></details>"
+    )
+
+
 def masthead(counts: Mapping[str, Any], context: Mapping[str, Any]) -> str:
     """Brand, resolved runtime context, and the clickable counts.
 
@@ -258,6 +300,7 @@ def page(
             "</head>",
             "<body>",
             masthead(counts, context),
+            key_map(),
             '<div class="mc-shell">',
             sidebar(current, counts),
             '<main class="mc-main">',
