@@ -172,20 +172,72 @@ from the roster just because its rig is absent from `city.toml`;
 
 `gt-*` ids are therefore covered by the STATE rows like any other rig when HQ
 answers. The direct probe below remains the fallback for when HQ is degraded,
-and for any id whose prefix is in no registered rig at all:
+and for any id whose prefix is in no registered rig at all.
+
+Collect every target id that got **no** STATE row into `$FALLBACK_IDS_FILE`,
+one id per line, then resolve them all in ONE `bd show` call — `bd show` takes
+many ids at once and resolves each independently, so the batch costs one
+process no matter how many briefs fall through:
 
 ```bash
-bead_status=$(cd "$CITY_ROOT" && bd show "$TARGET" 2>/dev/null \
-  | grep -m1 "^Status:" | awk '{print $2}')
+FALLBACK_TSV="$(mktemp)"
+if [ -s "$FALLBACK_IDS_FILE" ]; then
+  # `xargs`, NOT `bd show $IDS`. These blocks are run under zsh as often as
+  # bash, and zsh does not word-split an unquoted parameter: `bd show $IDS`
+  # there passes ONE argument "gt-a gt-b gt-c", which is a single unresolvable
+  # id, which returns the all-missing error object, which marks every fallback
+  # brief unknown. That failure is silent and looks exactly like a healthy
+  # empty result.
+  xargs bd -C "$CITY_ROOT" show --json < "$FALLBACK_IDS_FILE" 2>/dev/null \
+    | python3 -c '
+import json, sys
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    payload = None
+# A resolved read is a JSON LIST of issue objects. A read that resolved NOTHING
+# is a JSON OBJECT {"error": ..., "schema_version": 1} on stdout with exit 1.
+# Branch on the payload TYPE, never on the exit code: a partial read (some ids
+# resolved, some not) exits 0 and prints the list, so the exit code cannot tell
+# "nothing resolved" from "everything resolved".
+if isinstance(payload, list):
+    for issue in payload:
+        print("%s\t%s" % (issue.get("id"), issue.get("status")))
+' > "$FALLBACK_TSV"
+fi
 ```
 
-> **Known-dead probe (verified 2026-08-18, bd 1.1.0).** `bd show` no longer
-> emits a `^Status:` line — status is rendered inline in the header
-> (`○ gsp-nq3ut1 · … [● P2 · OPEN]`). This grep has therefore been returning
-> empty for every brief, making this fallback a silent no-op. Routing decision
-> beads through `mctl` fixes the registered rigs; `gt-*` stays unfiltered until
-> the parse is repaired. Do not "fix" it by guessing the format — confirm
-> against the installed `bd` first.
+Apply the STATE-row rule unchanged to the `id -> status` pairs in
+`$FALLBACK_TSV`: **skip** the brief if its status is `closed` or `deferred`,
+**keep** it for every other status, and **keep** any id absent from the file.
+Absence is the normal partial-read outcome, not an error — see the contract
+below.
+
+#### The `bd show --json` contract (verified 2026-08-20, bd 1.1.0 `d0e612eaf`)
+
+Confirmed against the installed binary, not inferred:
+
+| Input | Exit | stdout | Read as |
+|-------|------|--------|---------|
+| every id resolves | `0` | JSON **array** of issue objects | status per id |
+| some ids resolve | `0` | JSON **array** of the resolved ones only; `Error fetching <id>: …` per missing id on **stderr** | resolved ids get a status, the rest are unknown → kept |
+| no id resolves | `1` | JSON **object** `{"error": "no issues found matching the provided IDs", "schema_version": 1}` | all unknown → all kept |
+
+The `status` value is a lowercase string. The vocabulary observed live is
+`open`, `in_progress`, `blocked`, `hooked`, `closed`, `deferred` — so match the
+two terminal states explicitly and default to keep, rather than listing the
+live states and defaulting to skip. A status this skill has never seen must
+leave the brief visible.
+
+> **Why this is not a `bd show` text scrape (retired 2026-08-20).** This
+> fallback used to be `bd show "$TARGET" | grep -m1 "^Status:" | awk '{print
+> $2}'`. `bd show` emits no `^Status:` line at all — status is rendered inline
+> in the header, `○ gsp-nq3ut1 · … [● P2 · OPEN]` — so the grep returned empty
+> for every brief and the filter was a silent no-op: closed and deferred
+> `gt-*` briefs were never skipped. Do not reintroduce a header parse. Note
+> also that `^Status:` *does* match in `bd list` output, where it is the
+> trailing glyph **legend** (`Status: ○ open ◐ in_progress …`), not a bead's
+> state — which is exactly how a scrape like this survives review.
 
 ### 4. Compute age
 
