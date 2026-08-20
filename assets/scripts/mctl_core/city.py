@@ -59,6 +59,8 @@ no other.
 """
 from __future__ import annotations
 
+import os
+
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -75,7 +77,22 @@ from .liveness import city_not_active_diagnostic
 #: expires is reported degraded rather than allowed to hold the whole answer:
 #: an operator who cannot see fifteen rigs because the sixteenth is wedged has
 #: been given nothing.
-ALL_RIGS_DEADLINE_SECONDS = 25.0
+#:
+#: Overridable via MCTL_ALL_RIGS_DEADLINE_SECONDS. The default is deliberate and
+#: should usually stand -- but on 2026-08-20 a degraded Dolt made every `bd list`
+#: exceed 25s, so EVERY rig reported degraded and the bead lane collapsed from 197
+#: rows to 8. The documented remedy, MCTL_BD_TIMEOUT_SECONDS, could not help:
+#: `bd_timeout_within` bounds the subprocess DOWN to `remaining - 2` and never up,
+#: so the fan-out deadline always won. An operator diagnosing a slow store had no
+#: way to read the full population at all.
+#:
+#: This is the third deadline in this codebase to convert a slow truth into a
+#: wrong answer (the others: the control-plane probe, and bd's own 30s default
+#: sitting above this 25s ceiling). Where a deadline is genuinely load-bearing,
+#: as here, it must at least be adjustable by the person watching it fail.
+ALL_RIGS_DEADLINE_SECONDS = float(
+    os.environ.get("MCTL_ALL_RIGS_DEADLINE_SECONDS", "") or 25.0
+)
 
 #: Concurrency for the fan-out. Eight was the measured knee on the live city:
 #: four left the two large rigs queued behind small ones, sixteen bought

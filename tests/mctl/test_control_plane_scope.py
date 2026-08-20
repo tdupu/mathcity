@@ -130,3 +130,25 @@ def test_control_plane_probe_has_no_default_deadline():
 
     default = inspect.signature(liveness.probe_control_plane).parameters["timeout"].default
     assert default is None, "the parameter default must track the module constant"
+
+
+def test_all_rigs_deadline_is_overridable(monkeypatch):
+    """A load-bearing deadline must be adjustable by whoever is watching it fail.
+
+    On 2026-08-20 a degraded Dolt made every `bd list` exceed the hardcoded 25s
+    fan-out deadline, so every rig reported degraded and the bead lane collapsed
+    from 197 rows to 8. MCTL_BD_TIMEOUT_SECONDS could not help: bd_timeout_within
+    bounds the subprocess DOWN to `remaining - 2`, never up, so the fan-out
+    deadline always won and the full population was unreadable.
+    """
+    import importlib
+
+    monkeypatch.setenv("MCTL_ALL_RIGS_DEADLINE_SECONDS", "180")
+    from mctl_core import city as _city
+
+    reloaded = importlib.reload(_city)
+    assert reloaded.ALL_RIGS_DEADLINE_SECONDS == 180.0
+
+    monkeypatch.delenv("MCTL_ALL_RIGS_DEADLINE_SECONDS", raising=False)
+    reloaded = importlib.reload(_city)
+    assert reloaded.ALL_RIGS_DEADLINE_SECONDS == 25.0, "default must survive"

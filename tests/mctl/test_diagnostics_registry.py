@@ -25,6 +25,7 @@ REGISTRY = REPO_ROOT / "assets" / "mctl" / "diagnostics.toml"
 # Names matching the code pattern that are environment variables, not codes.
 NOT_CODES = {
     "MCTL_BEADS_FIXTURE",
+    "MCTL_ALL_RIGS_DEADLINE_SECONDS",
     "MCTL_BD_TIMEOUT_SECONDS",
     "MCTL_ENABLE_LIVE_DISPATCH",
     "MCTL_MCP_CLIENT_CLASS",
