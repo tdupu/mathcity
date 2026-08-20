@@ -650,7 +650,9 @@ a grep would produce a proxy that passes confidently on the cases it cannot see
   "leave it in open bash" is not an available verdict** — skills-as-agent-control
   is deprecated, so the judgement there is *which* surface and *when*, never
   *whether*; "acceptable" remains available only for duplication that is not
-  agent-facing. Pass: a verdict citing those.
+  agent-facing. **A survey that finds no repeated work must say so explicitly,
+  naming the surfaces searched** — a verdict that produces nothing is
+  indistinguishable from a survey never run (P6.2). Pass: a verdict citing those.
   Fail: duplication asserted to be fine with no survey, or a new surface proposed
   without `check-zero` — **fail**. Both directions are failures; this rule is not
   a mandate to build surfaces, it is a mandate to decide deliberately.
