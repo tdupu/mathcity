@@ -45,7 +45,11 @@ def regions(f):
 total_arts = 0
 for art in reg.get("artifact", []):
     total_arts += 1
-    literal = art["path"].split("/")[-1]
+    # Declared explicitly, not derived. Deriving it from the path's last
+    # segment silently produced "<id>.toml" for decisions/<id>.toml -- a
+    # literal matching nothing, which made every referencer look STALE. The
+    # check caught it; the assumption was still wrong.
+    literal = art.get("literal") or art["path"].split("/")[-1]
     registered = {r["file"] for r in art.get("referencer", [])}
     found = set()
     for base in SEARCH:

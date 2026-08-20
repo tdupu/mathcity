@@ -178,3 +178,88 @@ sole_writer = "mctl"
   since = "2026-08-20"
   note = "Instructs direct appends to .pile/manifest.jsonl; zero mctl mentions. Found by trans's sweep 2026-08-20."
 
+
+[[artifact]]
+path = "decisions/<id>.toml"
+literal = "decisions/"
+sole_writer = "mctl"
+
+  [[artifact.referencer]]
+  file = "assets/brief-pipeline/gates.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/checks/brief-check.sh"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/checks/decision-alignment-check.sh"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/checks/decision-record-exists.sh"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/effects.py"
+  role = "authorized"
+  note = "Writes decisions/<id>.toml via the EffectPlan."
+
+  [[artifact.referencer]]
+  file = "formulas/brief-archive-sweep.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/brief-decision-dispatch.toml"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Writes decision records / follow-up state outside mctl."
+
+  [[artifact.referencer]]
+  file = "formulas/brief-record-decision.toml"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Agent-executed decision record writes outside mctl."
+
+  [[artifact.referencer]]
+  file = "formulas/decision-enforce.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/file-or-sendback-route.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "formulas/no-brainer-classify.toml"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/adjudicate-brief/SKILL.md"
+  role = "violation"
+  since = "2026-08-20"
+  note = "Founding violation: reach-around write behind mctl."
+
+  [[artifact.referencer]]
+  file = "skills/brief-prep/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/catch-no-brainer/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/create-brief/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "skills/gate-test-execution-silent/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "subdomains/brief-system/skills/check-brief-policy/SKILL.md"
+  role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "subdomains/brief-system/skills/decisions-to-briefs/SKILL.md"
+  role = "unaudited"
+
