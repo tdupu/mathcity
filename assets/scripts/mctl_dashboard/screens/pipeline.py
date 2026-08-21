@@ -164,7 +164,14 @@ def deferred(briefs: Sequence[Mapping[str, Any]]) -> str:
 
 
 def adjudicated(briefs: Sequence[Mapping[str, Any]]) -> str:
-    """Closed decision beads. Immutable -- no reopen affordance (B3.8)."""
+    """Closed decision beads. Immutable -- no reopen affordance (B3.8).
+
+    The heading promises "newest first", so the rows must actually be sorted
+    by `updated_at` -- the same field the Updated column shows. A brief
+    missing the field sorts last rather than raising or being dropped: a
+    row with an unreadable date is still a row the operator needs to see,
+    just not one that can be placed relative to the ones that have a date.
+    """
     if not briefs:
         return (
             '<section data-region="adjudicated">'
@@ -172,6 +179,7 @@ def adjudicated(briefs: Sequence[Mapping[str, Any]]) -> str:
             + '<p class="lede">Nothing has been adjudicated in this rig yet.</p>'
             "</section>"
         )
+    briefs = sorted(briefs, key=lambda brief: brief.get("updated_at") or "", reverse=True)
     return (
         '<section data-region="adjudicated">'
         + _heading("Adjudicated", f"{len(briefs)} closed · newest first · immutable")
