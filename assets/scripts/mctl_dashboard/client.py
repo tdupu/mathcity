@@ -48,6 +48,8 @@ ALLOWED_TOOLS = frozenset(
     {
         "context_resolve",
         "context_rigs",
+        "fleet_sessions",
+        "city_health",
         "briefs_list",
         "briefs_show",
         "briefs_options",

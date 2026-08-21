@@ -81,6 +81,8 @@ from .effects import (
     plan_deferral,
 )
 from .fields import read_frontmatter
+from .fleet import build_fleet_sessions
+from .health import build_city_health
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
 from .redundant_state import artifact_layout
@@ -470,6 +472,18 @@ def _handle_context_rigs(scope: CityScope, arguments: Mapping[str, Any]) -> dict
     }
 
 
+def _handle_fleet_sessions(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Dashboard handoff #112: every configured slot, occupied or empty."""
+    report = build_fleet_sessions(scope)
+    return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
+
+
+def _handle_city_health(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Dashboard handoff #114: three-valued data-plane health and resource pressure."""
+    report = build_city_health(scope)
+    return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
+
+
 def _handle_briefs_list(
     ctx: MctlContext, arguments: Mapping[str, Any], progress: RigProgress | None = None
 ) -> dict[str, object]:
@@ -785,6 +799,154 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["city_root", "discovery_path", "rigs"],
         ),
         handler=_handle_context_rigs,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="fleet_sessions",
+        title="List fleet slots, occupied and empty",
+        description=(
+            "Every configured agent slot for this city, joined against the live session "
+            "list: occupied slots carry the session's state, template, and idle time; "
+            "empty slots are rows too, so absence renders the same as presence rather than "
+            "shrinking the roster. `limit_state` is always 'unknown' -- no quota/usage-window "
+            "recording exists yet; see the MCTL_FLEET_LIMIT_STATE_UNRECORDED diagnostic."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "slots": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "qualified_name": {"type": "string"},
+                            "template": nullable_string("Agent template name."),
+                            "occupied": {"type": "boolean"},
+                            "state": nullable_string("Session state, null when the slot is empty."),
+                            "holds": nullable_string("Session id this slot currently carries."),
+                            "model": nullable_string("Model/provider, when recorded."),
+                            "account": nullable_string("Not recorded today; always null."),
+                            "limit_state": {
+                                "type": "string",
+                                "description": "Always 'unknown' -- see tool description.",
+                            },
+                            "idle_for_seconds": {"type": ["number", "null"]},
+                            "idle_reason": nullable_string(
+                                "Why idle_for_seconds is null, when it is."
+                            ),
+                        },
+                        "required": [
+                            "qualified_name",
+                            "template",
+                            "occupied",
+                            "state",
+                            "holds",
+                            "model",
+                            "account",
+                            "limit_state",
+                            "idle_for_seconds",
+                            "idle_reason",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ["slots"],
+        ),
+        handler=_handle_fleet_sessions,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="city_health",
+        title="City-wide data-plane health and resource pressure",
+        description=(
+            "Three-valued data-plane health (`healthy` / `reachable_quarantined` / "
+            "`unreachable`) read from `gc dolt health`, never collapsed to a boolean -- a "
+            "reachable-but-quarantined database is a real, distinct state, not a degraded "
+            "'healthy'. Resource pressure covers file descriptors against the OS-level "
+            "`kern.maxfilesperproc` ceiling (not `ulimit -n`, which is not the binding "
+            "constraint) and per-rig Dolt directory size. `fds_trend` is always 'unknown': no "
+            "time-series sample store exists yet."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "data_plane": {
+                    "type": "string",
+                    "enum": ["healthy", "reachable_quarantined", "unreachable"],
+                },
+                "probe_results": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "outcome": {
+                                "type": "string",
+                                "enum": ["succeeded", "timed_out", "refused"],
+                            },
+                            "timeout_seconds": {"type": ["number", "null"]},
+                            "latency_ms": {"type": ["number", "null"]},
+                            "detail": {"type": "string"},
+                        },
+                        "required": ["name", "outcome", "timeout_seconds", "latency_ms", "detail"],
+                        "additionalProperties": False,
+                    },
+                },
+                "resources": {
+                    "type": "object",
+                    "properties": {
+                        "fds_used": {"type": ["integer", "null"]},
+                        "fds_limit": {"type": ["integer", "null"]},
+                        "fds_trend": {"type": "string"},
+                        "disk_per_rig": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "rig_id": {"type": "string"},
+                                    "bytes_used": {"type": ["integer", "null"]},
+                                    "reason": nullable_string("Why bytes_used is null, when it is."),
+                                },
+                                "required": ["rig_id", "bytes_used", "reason"],
+                                "additionalProperties": False,
+                            },
+                        },
+                        "flood_conditions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "resource": {"type": "string"},
+                                    "detail": {"type": "string"},
+                                    "growth": {"type": "string"},
+                                    "since": nullable_string("When this condition started, if known."),
+                                },
+                                "required": ["resource", "detail", "growth", "since"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "required": ["fds_used", "fds_limit", "fds_trend", "disk_per_rig", "flood_conditions"],
+                    "additionalProperties": False,
+                },
+                "per_rig": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "rig_id": {"type": "string"},
+                            "state": {"type": "string", "enum": ["healthy", "degraded", "unreachable"]},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["rig_id", "state", "reason"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ["data_plane", "probe_results", "resources", "per_rig"],
+        ),
+        handler=_handle_city_health,
         scope=CITY_SCOPE,
     ),
     ToolSpec(

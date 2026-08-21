@@ -329,7 +329,7 @@ def test_under_review_diagnostics_are_excluded_from_the_actionable_count(tmp_pat
 def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     assert ALLOWED_TOOLS & mcp_server.FORBIDDEN_TOOL_NAMES == frozenset()
     assert ALLOWED_TOOLS <= frozenset(mcp_server.TOOLS_BY_NAME)
-    assert len(ALLOWED_TOOLS) == 16
+    assert len(ALLOWED_TOOLS) == 18
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):
