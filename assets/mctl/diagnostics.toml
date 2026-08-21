@@ -436,6 +436,11 @@ severity = "FATAL"
 meaning = "Mutation blocked because brief doctor reported ERROR or FATAL diagnostics."
 module = "effects.py"
 
+[MCTL_BRIEFS_SCOPE_EMPTY]
+severity = "INFO"
+meaning = "A single-rig briefs_list or briefs_doctor call returned zero briefs; names that this could mean nothing exists in this rig OR the caller asked the wrong scope, and points at all_rigs=true as the way to tell them apart (#103)."
+module = "mcp_server.py"
+
 [MCTL_HEALTH_FD_PROBE_FAILED]
 severity = "WARN"
 meaning = "Could not measure the supervisor's file-descriptor usage (pgrep/lsof/sysctl failed or found no single supervisor process)."

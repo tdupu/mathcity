@@ -76,6 +76,23 @@ def runtime_fixture(tmp_path: Path) -> tuple[Path, Path]:
     return city_root, rig_root
 
 
+def empty_rig_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """A rig with a working bead store and zero briefs -- #103's exact shape."""
+    city_root = tmp_path / "city_root"
+    source_checkout = tmp_path / "source_checkout"
+    rig_root = city_root / "mathcity"
+    shutil.copytree(CITY_ROOT, city_root)
+    shutil.copytree(SOURCE_CHECKOUT, source_checkout)
+    beads = rig_root / ".beads"
+    (beads / "briefs" / "decisions").mkdir(parents=True)
+    (beads / "briefs" / "stack").mkdir(parents=True)
+    (beads / "briefs" / "stack" / ".index.jsonl").write_text("", encoding="utf-8")
+    (beads / "decisions-track").mkdir(parents=True)
+    (beads / "decisions-track" / "manifest.jsonl").write_text("", encoding="utf-8")
+    (beads / "issues.jsonl").write_text("", encoding="utf-8")
+    return city_root, rig_root
+
+
 def work_fixture(tmp_path: Path) -> tuple[Path, Path]:
     """The Slice 4 work fixture: the only one with a dispatchable brief."""
     city_root = tmp_path / "city_root"
@@ -733,3 +750,60 @@ def test_frontmatter_artifact_id_finds_a_key_past_the_old_64_line_cap(tmp_path: 
     path.write_text("\n".join(lines), encoding="utf-8")
 
     assert mcp_server._frontmatter_artifact_id(path) == "gh-issue-77"
+
+
+def test_briefs_list_names_the_empty_scope_rather_than_leaving_it_silent(tmp_path: Path):
+    """#103: `briefs: []` for a rig with nothing indistinguishable from `briefs:
+    []` for the wrong rig. The finder was three minutes from filing a report
+    that mctl was blind before running the discriminator (all_rigs) themselves.
+    """
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    instance = server(city_root, rig_root)
+
+    response = call(instance, "briefs_list", {})
+
+    result = response["result"]["structuredContent"]
+    assert result["briefs"] == []
+    codes = [d["code"] for d in result["diagnostics"]]
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" in codes
+    hint = next(d["hint"] for d in result["diagnostics"] if d["code"] == "MCTL_BRIEFS_SCOPE_EMPTY")
+    assert "all_rigs" in hint
+
+
+def test_briefs_doctor_names_the_empty_scope_for_a_whole_rig_check(tmp_path: Path):
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    instance = server(city_root, rig_root)
+
+    response = call(instance, "briefs_doctor", {})
+
+    result = response["result"]["structuredContent"]
+    assert result["briefs"] == []
+    codes = [d["code"] for d in result["diagnostics"]]
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" in codes
+
+
+def test_briefs_doctor_on_one_missing_id_does_not_claim_the_scope_is_empty(tmp_path: Path):
+    """A doctor check on a specific, nonexistent id is a different question
+    than "does this rig have any briefs" -- the empty-scope hint would be
+    misleading here (all_rigs would not resolve a bad id either).
+    """
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    instance = server(city_root, rig_root)
+
+    response = call(instance, "briefs_doctor", {"brief_id": "mc-does-not-exist"})
+
+    result = response["result"]["structuredContent"]
+    codes = [d["code"] for d in result["diagnostics"]]
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" not in codes
+
+
+def test_briefs_list_with_results_does_not_get_the_empty_scope_hint(tmp_path: Path):
+    city_root, rig_root = runtime_fixture(tmp_path)
+    instance = server(city_root, rig_root)
+
+    response = call(instance, "briefs_list", {})
+
+    result = response["result"]["structuredContent"]
+    assert result["briefs"], "fixture must be non-empty for this to be a meaningful check"
+    codes = [d["code"] for d in result["diagnostics"]]
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" not in codes
