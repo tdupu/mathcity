@@ -405,6 +405,37 @@ def footer(trace_id: str = "") -> str:
     )
 
 
+def provenance_banner(provenance: "DataProvenance | None" = None) -> str:
+    """Say where this page's data came from. Loud when it is not real.
+
+    Defaults to resolving from the environment rather than assuming live: a
+    caller that forgets to pass provenance gets the true answer, not an
+    optimistic one.
+    """
+    from .provenance import DataProvenance, resolve
+
+    if provenance is None:
+        provenance = resolve()
+    if provenance.is_live:
+        return (
+            '<div data-region="data-provenance" data-live="true" '
+            'style="padding: 3px 12px; font-family: var(--font-mono); '
+            'font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; '
+            'color: var(--color-neutral-600); border-bottom: 1px solid var(--color-divider);">'
+            "live data &middot; read from the city's bead stores</div>"
+        )
+    named = ", ".join(f"{_e(rig)} &larr; {_e(path)}" for rig, path in provenance.fixtures)
+    return (
+        '<div data-region="data-provenance" data-live="false" role="alert" '
+        'style="padding: 7px 12px; font-family: var(--font-mono); font-size: 11px; '
+        'letter-spacing: 0.04em; background: var(--color-accent-200); '
+        'color: var(--color-accent-900); border-bottom: 2px solid var(--color-accent-600);">'
+        "<strong>FIXTURES &middot; NOT LIVE DATA</strong> &mdash; "
+        "nothing on this page is a measurement of the city. "
+        f"{named}</div>"
+    )
+
+
 def page(
     title: str,
     current: str,
@@ -418,6 +449,7 @@ def page(
     weights: Mapping[str, int] | None = None,
     rig_ids: Sequence[str] = (),
     selected_rig: str | None = None,
+    provenance: "DataProvenance | None" = None,
 ) -> str:
     """The document shell.
 
@@ -449,6 +481,11 @@ def page(
             f"<style>{STYLESHEET}</style>",
             "</head>",
             "<body>",
+            # Emitted here, unconditionally, because every screen renders
+            # through this shell -- which is what makes it structurally
+            # impossible for a page to show fixture data without saying so.
+            # A screen cannot forget it; a screen does not build its own shell.
+            provenance_banner(provenance),
             masthead(counts, context, rig_ids=rig_ids, selected_rig=selected_rig),
             key_map(),
             '<div class="mc-shell">',
