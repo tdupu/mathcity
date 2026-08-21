@@ -151,6 +151,16 @@ def test_control_a_a_brief_with_a_source_dependency_can_be_adjudicated(tmp_path:
 
 
 # --- THE ISSUE: red today --------------------------------------------------
+#: `strict=True` is load-bearing and not a default. A plain `xfail` reports
+#: XPASS and stays GREEN when the bug is fixed, so the marker would outlive the
+#: defect silently and this file would become a test that cannot fail -- the
+#: exact P6.2 shape it was written to demonstrate. Strict turns the day #137 is
+#: fixed into a loud failure whose remedy is deleting this marker, which is how
+#: the fix and the test that named the defect stay attached to each other.
+@pytest.mark.xfail(
+    reason="#137: MBRF004 blocks adjudication of a silently-omitted source link",
+    strict=True,
+)
 def test_a_verdict_can_be_recorded_when_the_producer_omitted_the_source_dependency(
     tmp_path: Path,
 ):
