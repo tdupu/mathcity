@@ -1,0 +1,48 @@
+# Derived aggregate of lsof -p 64396, captured 2026-08-20 23:47 EDT (uptime 53m)
+# Raw dump was 37,975 lines and is NOT committed: it is reproducible while the
+# process lives (lsof -p <supervisor-pid>) and is 900KB of machine output.
+# Re-take with: lsof -p $(pgrep -f 'gc supervisor run') > census.txt
+
+## totals
+handles: 37975
+deleted: 0    <-- ZERO
+distinct paths: 18987
+
+## by fd type
+29175 REG
+8770 DIR
+  13 PIPE
+  11 IPv4
+   2 unix
+   2 KQUEUE
+   1 CHR
+
+## by top-level tree
+24708 /Users/tdupuy/repos/mathcity/.claude
+9392 /Users/tdupuy/repos/mathcity/.git
+ 598 /Users/tdupuy/repos/mathcity/subdomains
+ 592 /Users/tdupuy/repos/mathcity/tests
+ 588 /Users/tdupuy/repos/gascity-packs/gascity
+ 378 /Users/tdupuy/repos/mathcity/assets
+ 366 /Users/tdupuy/repos/gascity-packs/superpowers
+ 324 /Users/tdupuy/repos/mathcity/skills
+ 110 /Users/tdupuy/repos/mathcity/.superpowers
+  92 /Users/tdupuy/repos/gascity-packs/contributing
+  76 /Users/tdupuy/.gc/cache/repos
+  72 /Users/tdupuy/repos/mathcity/formulas
+
+## per agent worktree
+2162 /Users/tdupuy/repos/mathcity/.claude/worktrees/pink-dashboard-slices
+2158 /Users/tdupuy/repos/mathcity/.claude/worktrees/mutt
+2154 /Users/tdupuy/repos/mathcity/.claude/worktrees/sally-119
+2144 /Users/tdupuy/repos/mathcity/.claude/worktrees/brad-pathfix
+2132 /Users/tdupuy/repos/mathcity/.claude/worktrees/dashboard-adjudication
+2120 /Users/tdupuy/repos/mathcity/.claude/worktrees/stick-dog-hygiene
+2094 /Users/tdupuy/repos/mathcity/.claude/worktrees/trans
+2040 /Users/tdupuy/repos/mathcity/.claude/worktrees/agent-ad4eddd4daeccb56d
+2012 /Users/tdupuy/repos/mathcity/.claude/worktrees/stick-dog-findgap
+1952 /Users/tdupuy/repos/mathcity/.claude/worktrees/brad-fdplan
+1906 /Users/tdupuy/repos/mathcity/.claude/worktrees/eloquent-meitner-8646a3
+1784 /Users/tdupuy/repos/mathcity/.claude/worktrees/angry-goldwasser-4e9988
+  24 /Users/tdupuy/repos/mathcity/.claude/worktrees/sally-main
+  20 /Users/tdupuy/repos/mathcity/.claude/worktrees/sally-pre
