@@ -68,12 +68,36 @@ NO_BRAINER_MARKER = "[no-brainer] surfacing this was a pipeline regression."
 PROPOSED_OPTION_MARKER = "[proposed-option] not one of the options as filed:"
 
 
+def _disagreeing_fields(
+    *parsed: Mapping[str, list[str]]
+) -> dict[str, tuple[str, ...]]:
+    """Fields that arrived more than once carrying DIFFERENT values.
+
+    Repetition alone is not the defect -- two identical values express one
+    intent. Disagreement is: there is no correct way to guess which of
+    `approve` and `reject` an operator meant, so the caller must refuse rather
+    than repair.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for source in parsed:
+        for key, values in source.items():
+            if len(set(values)) > 1:
+                found[key] = tuple(values)
+    return found
+
+
 @dataclass(frozen=True)
 class Request:
     method: str
     path: str
     query: dict[str, str] = field(default_factory=dict)
     form: dict[str, str] = field(default_factory=dict)
+    #: Fields that arrived more than once with DIFFERENT values, and every value
+    #: they arrived with. `parse_qs` keeps them all; taking `[0]` and discarding
+    #: the rest resolved contradictory input by wire order -- so a request
+    #: carrying `verdict=approve&verdict=reject` planned whichever came first,
+    #: silently. Recorded here so the mutation path can refuse instead of guess.
+    duplicated: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     @classmethod
     def get(cls, path: str, **query: str) -> "Request":
@@ -86,11 +110,14 @@ class Request:
     @classmethod
     def from_wire(cls, method: str, raw_path: str, body: str = "") -> "Request":
         path, _, query = raw_path.partition("?")
+        parsed_query = parse_qs(query)
+        parsed_form = parse_qs(body)
         return cls(
             method=method.upper(),
             path=unquote(path) or "/",
-            query={key: values[0] for key, values in parse_qs(query).items()},
-            form={key: values[0] for key, values in parse_qs(body).items()},
+            query={key: values[0] for key, values in parsed_query.items()},
+            form={key: values[0] for key, values in parsed_form.items()},
+            duplicated=_disagreeing_fields(parsed_query, parsed_form),
         )
 
 
@@ -1188,8 +1215,49 @@ class Dashboard:
 
     # -- dispatch --
 
+    def _refuse_disagreement(self, request: Request) -> Response | None:
+        """400 when one field arrived with two different values.
+
+        Refuse, do not repair: there is no correct way to guess which of two
+        opposite verdicts was meant, and picking one records a decision the
+        operator did not make. Applies to every mutation route rather than to
+        `verdict` alone -- the same silent-first-wins resolution would apply to
+        `reason`, `option` or `brief_id`, and a wrong `brief_id` writes a real
+        verdict onto the wrong brief.
+        """
+        if not request.duplicated:
+            return None
+        named = "; ".join(
+            f"{render.esc(key)} = " + " and ".join(render.esc(v) for v in values)
+            for key, values in sorted(request.duplicated.items())
+        )
+        return Response(
+            400,
+            render.page(
+                "Contradictory submission",
+                "queue",
+                [
+                    '<section class="panel" data-region="contradictory-input">'
+                    "<h2>Nothing was written</h2>"
+                    '<p class="lede">This submission carried more than one value '
+                    "for the same field, and the two disagree. There is no correct "
+                    "way to choose between them, so nothing was planned and nothing "
+                    "was written.</p>"
+                    f'<p class="mono">{named}</p>'
+                    '<p class="lede">Go back, pick one, and submit again.</p>'
+                    "</section>"
+                ],
+            ),
+        )
+
     def handle(self, request: Request) -> Response:
         if request.method == "POST":
+            # Refuse contradictory input before planning anything. Taylor:
+            # "You can apparently simultaneously accept and reject. That is not
+            # good." Resolving it by wire order plans a verdict nobody chose.
+            refusal = self._refuse_disagreement(request)
+            if refusal is not None:
+                return refusal
             if request.path == "/preview":
                 return self._preview(request)
             if request.path == "/apply":
