@@ -503,12 +503,181 @@ inside gascity core); this is the pack-level, plan-time analogue.*
   only a passive `gc doctor` flag; the one loud signal — the dolt-health
   firehose `gt-5xh` — was noise. Observability was inverted.)
 
+- **P6.2 "A check must be able to fail."** Every check, gate, validator, or test
+  must be **falsifiable against the condition it claims to detect**: there must
+  exist a state of the world in which it reports failure, and its author must
+  have observed it do so. A check that passes because it could not look is
+  **worse than an absent one** — an absent check is a known gap, while a check
+  that cannot fail is a false assurance that stops anyone looking again. This is
+  the inverse of P6.1: P6.1 forbids failing silently, P6.2 forbids **passing
+  blindly**.
+  Three recurring shapes, all prohibited: (a) a **scan whose operand may not
+  resolve**, where an empty result is read as "no violations" — a cwd-relative
+  `find`/`grep`/`ls` in a script whose working directory is not guaranteed;
+  (b) a **guard satisfied by prose**, where the check greps for a string that
+  documentation keeps true forever regardless of behaviour; (c) a **validator
+  that claims coverage it does not have**, whose name or description asserts
+  agreement across N representations while it compares fewer.
+  Pass: **for each condition the check claims to detect** — not for each
+  assertion it makes — the check's own suite contains a case that **fails before
+  the fix and passes after**, or the author records an observed failing run
+  (fixture, injection, or reproduction) against that condition. A guard that
+  correctly passes both before and after a fix is not thereby non-compliant; the
+  requirement attaches to the claim, not to the line; a validator
+  enumerates exactly the artifacts it compares, and its description claims no
+  more. Fail: a check whose passing state is indistinguishable from "could not
+  evaluate"; a guard whose condition is satisfied by a comment or by prose; a
+  validator whose stated scope exceeds its compared set; any check shipped
+  without an observed failing case → **fail**.
+  (Origin: 2026-08-20, four instances in one file-family in one day —
+  `brief-check.sh` running `find formulas` cwd-relative, matching nothing off
+  the pack root and reporting PASS; `brief-manifest-current` unable to detect a
+  stale index; the shim suite's legacy exemption guard, satisfied permanently by
+  the twelve prose mentions of `decisions-track` that survive removing every
+  write; and `mctl briefs validate`, whose help text promises to "prove
+  canonical and redundant state agree" and which **exits 0 while reporting 318
+  ERRORs and 1 FATAL** — measured on the `hq` store alone, 2026-08-20. Anything
+  reading its exit code is told the city is clean. Two narrower holes sit under
+  that: `_strict_invariants`' content comparison `MBRF020` fires **zero** times,
+  because the artifact it compares against is absent city-wide and `_read_toml`
+  cannot distinguish absent from corrupt; and a brief with **no index row at
+  all** is invisible, because the stack-index loop branches only on `stale` and
+  `inconsistent`, never on `missing`.
+  An earlier draft of this rule asserted that `validate` had "no diagnostic code
+  for legacy-manifest divergence at all." **That was false** — `MBRF008` and
+  `MBRF013` both exist and `MBRF008` fires 84 times on `hq` alone. The claim came
+  from a case-sensitive `grep "legacy"` against a registry that writes "Legacy",
+  and it was caught in review. It is recorded here rather than quietly deleted
+  because a rule about checks that cannot fail, drafted on the back of a search
+  that could not find, is the most useful worked example this pillar has.)
+
+## Pillar 7 — Interface discipline
+
+The city has one interface. `mctl` is where repeated work lives, and it is the
+**single point of failure by design**: work scattered across open bash in many
+skills fails in many ways, quietly and differently each time, while the same
+work behind one interface fails in one place, loudly, with an error code. A
+central failure point is a thing that can be debugged once and fixed once.
+
+**Rule kinds.** P7.1-P7.3 are **factual**: a call site either goes through `mctl`
+or it does not, and a grep can say which. P7.1's *exemption* clause and P7.4 are
+**judgement**: they ask an agent to weigh whether a reach-around is justified and
+whether a group of skills has earned a surface. Judgement rules are enforced by an
+agent reasoning and citing evidence, not by a pattern match — squeezing them into
+a grep would produce a proxy that passes confidently on the cases it cannot see
+(PP/`check-zero`).
+
+- **P7.1 "Repeated work goes behind the interface."** Any operation `mctl`
+  exposes must be performed **through** `mctl`. A skill, formula, order, gate,
+  or check that shells out to `bd`, `git`, `dolt`, or the filesystem to do
+  something `mctl` already does is a **violation, not a shortcut** — including
+  when it is faster, when the caller "only reads", and when it runs *after* the
+  canonical write to patch an artifact `mctl` did not update.
+  Pass: every write to a canonical or redundant brief artifact is made by
+  `mctl`. **There are five representations of a verdict, and a spec built on four
+  is short one** (measured 2026-08-20): (1) the **bead**; (2) `decisions/<id>.toml`
+  on the stack track; (3) `stack/.index.jsonl`; (4) the **brief file
+  frontmatter**; (5) the **decisions-track manifest row** — which `mctl` does not
+  write at all today, so it is the one that cannot agree by construction. (2) and
+  (5) are the same decision record split across two tracks; count them separately,
+  because checking one has never implied the other. The pile `.md` is `mctl`'s
+  too, exemption or not.
+  A non-`mctl` writer exists only under a **declared, named
+  exemption**. *Granting one is a judgement call, not a checkbox*: a reasoned
+  verdict must name the artifact, state why `mctl` cannot own it **today**, cite
+  what would have to change for the exemption to lapse, and name who removes it
+  then. **The lapse condition must be machine-checkable — a date or a testable
+  state, not a narrative intention** — on the model of the no-brainer dry-run pin,
+  which carries `expires=<ISO-8601-utc>` and auto-resumes the safe default when it
+  lapses; an exemption whose expiry depends on someone remembering to revisit it
+  will not expire. **Any check enforcing an exemption is itself bound by P6.2**
+  and must ship an observed failing case: a guard satisfied permanently by prose
+  is not a guard. An exemption that cites none of these is not declared, it is
+  asserted.
+  Fail: a wired skill or formula that writes such an artifact directly (`sed -i`, a
+  shell redirect, a Python `.write()`/`open(...,"w")`, a bare `bd`/`dolt`
+  mutation) without a declared exemption → **fail**; an exemption whose
+  justification no longer holds → **fail**.
+  (Origin: 2026-08-20 — `adjudicate-brief` declared `mctl` the canonical writer
+  and then performed a second write of its own to the brief frontmatter and the
+  decisions-track manifest. The consequence is that a verdict entered anywhere
+  other than that skill leaves two representations stale; the same divergence
+  was measured on 2026-08-04 across 17 briefs, whose manifest read `adjudicated`
+  while their files read `ready-for-adjudication`, causing decided decisions to
+  be re-presented.)
+
+- **P7.2 "Consumers are siblings, never chains."** Every consumer of the city —
+  the dashboard, the MCP surface, a skill, a human at a terminal — talks to
+  `mctl` **directly**. A consumer must not reach the interface *through* another
+  consumer's transport.
+  Pass: each consumer's call path terminates in `mctl`; removing any one
+  consumer leaves the others functioning unchanged. Fail: a consumer whose only
+  path to `mctl` runs through a second consumer's protocol or process → **fail**.
+  (Origin: 2026-08-20 — the dashboard reached `mctl` exclusively over the MCP
+  stdio transport, with no direct path in existence: both of its clients,
+  including the "in-process" one, construct `MctlMcpServer` and speak the full
+  JSON-RPC protocol. A dashboard defect and an MCP defect were therefore
+  indistinguishable from the outside.)
+
+- **P7.3 "An interface gap is filed, never routed around."** When `mctl` cannot
+  do what a caller needs, the deficiency is **the finding**. File it against
+  `mctl`; do not implement the capability somewhere else.
+  Pass: a capability `mctl` lacks is recorded as a tracked `mctl` gap, and the
+  caller waits or is unblocked through `mctl`. Fail: any new direct store,
+  filesystem, or `bd`/`dolt` access added because `mctl` did not expose it,
+  without a filed gap it cites → **fail**; a "temporary" bypass with no tracked
+  removal → **fail**.
+  (Origin: 2026-08-20 — front-end requirements that `mctl` did not expose were
+  initially carried as a dashboard wishlist rather than as interface
+  incompleteness, which is what they were.)
+
+- **P7.4 "Repeated skill work earns a surface."** *(Judgement rule.)* When
+  several skills repeatedly perform the same operation through open bash, that
+  work belongs behind a typed interface — an `mctl` subcommand or an MCP tool —
+  rather than being restated in each skill. There is no threshold that decides
+  this, and inventing one would be a bad proxy: two skills sharing a fragile
+  multi-step `bd` incantation may warrant a surface, while ten sharing a single
+  `ls` do not.
+  **What an agent must weigh:** how many skills perform the operation; whether
+  they perform it *identically* or have already drifted; what breaks silently
+  when one copy is wrong; whether the operation writes or only reads; and whether
+  `mctl` already exposes something adjacent that should simply be extended (run
+  `check-zero` before proposing a new surface — an existing subcommand beats a
+  new one).
+  **What a reasoned verdict must cite:** the call sites by file and line, the
+  observed drift between them if any, and either the `mctl`/MCP surface proposed
+  or the reason the duplication is acceptable. **For an agent-facing operation,
+  "leave it in open bash" is not an available verdict** — skills-as-agent-control
+  is deprecated, so the judgement there is *which* surface and *when*, never
+  *whether*; "acceptable" remains available only for duplication that is not
+  agent-facing. **A survey that finds no repeated work must say so explicitly,
+  naming the surfaces searched** — a verdict that produces nothing is
+  indistinguishable from a survey never run (P6.2). Pass: a verdict citing those.
+  Fail: duplication asserted to be fine with no survey, or a new surface proposed
+  without `check-zero` — **fail**. Both directions are failures; this rule is not
+  a mandate to build surfaces, it is a mandate to decide deliberately.
+  (Origin: 2026-08-20, Taylor — *"groups of repeatedly used agent skills should be
+  factored into an MCP rather than leaving an open bash for agents to mess up."*
+  Written as a judgement rule per the same day's correction: a rule requiring
+  judgement is enforced by an agent exercising it, which is a capability this city
+  has and a grep does not.)
+
+
 ## Non-negotiables (quick checklist)
 
 - No hand-edited `city.toml`, and no hand-edited `pack.toml` outside the
   owned set (P1.2).
 - No silent failures — every error / timeout / degradation path surfaces
   loudly at the point of failure, never only via a passive diagnostic (P6.1).
+- No check that cannot fail — every gate/validator ships with an observed
+  failing case, and claims no coverage beyond the artifacts it compares (P6.2).
+- No writer but `mctl` for a canonical or redundant brief artifact, absent a
+  declared and still-valid exemption (P7.1).
+- No consumer reaching `mctl` through another consumer's transport — the
+  dashboard and the MCP surface are siblings, not a chain (P7.2).
+- No bypass for a missing `mctl` capability — file the interface gap (P7.3).
+- No repeated skill work left in open bash undecided — survey it and record
+  a reasoned verdict either way (P7.4).
 - No edits under any `vendor/**` tree, ever (P2.2).
 - No edits inside a materialized `.claude/skills/**` / `.codex/skills/**`
   sink (P1.3).
