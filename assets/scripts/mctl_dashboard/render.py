@@ -1171,12 +1171,35 @@ def city_queue_panel(view: Any) -> str:
     header = "".join(f"<th>{_state_badge(state)}</th>" for state in states)
     rows = []
     for rig in view.rigs:
-        if not rig.ok:
+        # `ok` is false for two different things. A rig that contributed nothing
+        # has no numbers to print; a *partial* rig answered from the stores that
+        # did respond, and those rows are already inside the city total below.
+        # Blanking both made the visible rows sum to 135 against a city row of
+        # 355, under a caption promising the total is the sum of the rows.
+        if not rig.ok and not rig.partial:
             rows.append(
                 f'<tr data-rig="{_e(rig.rig_id)}" data-degraded="true">'
                 f'<td><span class="mono">{_e(rig.rig_id)}</span></td>'
                 f'<td colspan="{len(states) + 1}">{_e(rig.rig_id)}: could not be read '
                 f"({_e(rig.reason)})</td></tr>"
+            )
+            continue
+        if not rig.ok:
+            counts = view.state_counts(rig.rig_id)
+            cells = "".join(f'<td class="mono">{counts.get(state, 0)}</td>' for state in states)
+            rows.append(
+                f'<tr data-rig="{_e(rig.rig_id)}" data-degraded="true" data-partial="true">'
+                f'<td><a href="/briefs?rig={quote(rig.rig_id, safe="")}">'
+                f'<span class="mono">{_e(rig.rig_id)}</span></a> '
+                f'<span class="badge state-malformed">partial</span></td>'
+                + cells
+                + f'<td class="mono">{sum(counts.values())}</td></tr>'
+            )
+            rows.append(
+                f'<tr data-rig="{_e(rig.rig_id)}" data-partial-note="true">'
+                f'<td></td><td colspan="{len(states) + 1}">{_e(rig.rig_id)}: '
+                f"counted from the stores that answered; more remain behind the one that "
+                f"did not ({_e(rig.reason)})</td></tr>"
             )
             continue
         counts = view.state_counts(rig.rig_id)
