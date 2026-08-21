@@ -201,6 +201,34 @@ def _in_lane(brief: Mapping[str, Any], lane: str) -> bool:
     return state == lane.rstrip("s") or state == lane
 
 
+def rulable(brief: Mapping[str, Any]) -> bool:
+    """Whether a verdict can actually be recorded on this brief.
+
+    The discriminator is **a bead**, not a clean bill of health. `adjudicate`
+    writes to the bead; a document brief without one is refused outright with
+    `MBRF010`, so offering it spends a decision that cannot land.
+
+    `MBRF004` deliberately does NOT disqualify. It gates *approve* while
+    leaving *revise* and *reject* live -- verified against `mctl`, all three
+    verdicts, on a real brief. Filtering those out would hide briefs that can
+    legitimately be sent back, which is the same error pointed the other way.
+    """
+    return bool(attr(brief, "bead_id")) and str(attr(brief, "decision_state") or "") == "pending"
+
+
+def unrulable_reason(brief: Mapping[str, Any]) -> str | None:
+    """Why this brief is being held back, or None if it is not.
+
+    Excluded is not dropped: whatever holds a brief out of the stack has to be
+    sayable, so the screen can name it rather than the row simply being absent.
+    """
+    if rulable(brief):
+        return None
+    if not attr(brief, "bead_id"):
+        return "no canonical brief bead — adjudicate refuses it (MBRF010)"
+    return f"not open — decision state is {attr(brief, 'decision_state') or 'unknown'}"
+
+
 def _scoped(
     briefs: Sequence[Mapping[str, Any]], scope: str
 ) -> list[Mapping[str, Any]]:
@@ -563,6 +591,15 @@ class Dashboard:
         context = self._scope_context(rig)
         all_briefs, _city, city_extra = self._read_briefs(rig)
         briefs = _scoped(all_briefs, view.scope)
+        # Lane membership and rulability are different questions, so they are
+        # answered in different places: `_scoped` says which lane a brief is
+        # in, and this says whether a verdict could actually land on it. The
+        # stack is the one lane that is a work queue rather than a record, so
+        # it is the only one that filters.
+        held_back: list[Mapping[str, Any]] = []
+        if view.scope == "stack":
+            held_back = [b for b in briefs if not rulable(b)]
+            briefs = [b for b in briefs if rulable(b)]
         # A rig-scoped page with nothing on it is indistinguishable from a
         # broken one. If the rig is empty, find out whether the *city* is --
         # one extra read, only on the empty path, so the page can say which
@@ -617,6 +654,7 @@ class Dashboard:
             'margin: 8px 0 0;"></div>',
             stack.column_picker(view) if columns_open else "",
             stack.table(briefs, view, queued=(), elsewhere=elsewhere),
+            stack.held_back_note(held_back),
             stack.empty_sort_note(briefs, view),
             stack.key_legend(),
             stack.unfed_note(briefs),
