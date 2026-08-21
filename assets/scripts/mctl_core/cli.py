@@ -167,6 +167,8 @@ def _all_rigs_command(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(_render_all_rigs_payload(payload))
+    if getattr(args, "strict", False) and payload.get("valid") is False:
+        return 1
     return 1 if any(not outcome.ok for outcome in outcomes) else 0
 
 
@@ -464,6 +466,11 @@ def _add_brief_validate_parser(commands: argparse._SubParsersAction[argparse.Arg
     _add_all_rigs_argument(parser)
     parser.add_argument("brief_id", nargs="?")
     parser.add_argument("--all", action="store_true", help="validate every canonical brief")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit non-zero when the report is not valid (for gates and pipelines)",
+    )
     _add_runtime_arguments(parser)
 
 
@@ -606,6 +613,15 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     # when the canonical write landed. Read commands still exit 0 with
     # diagnostics -- reporting drift is what they are for.
     if "applied" in payload and _has_blocking_diagnostic(payload):
+        return 1
+    # `validate` is the exception a caller has to ask for. It is described as a
+    # gate, and it publishes its own verdict, but it exited 0 while reporting
+    # `valid: false` with 159 ERRORs and a FATAL -- so a CI step or a shell `&&`
+    # read the city as clean. `--strict` puts that verdict in the exit status
+    # without changing what the read does by default. It reuses the payload's
+    # own `valid` rather than re-deriving the severity test, so the flag and the
+    # report cannot drift apart.
+    if getattr(args, "strict", False) and payload.get("valid") is False:
         return 1
     return 0
 
