@@ -201,6 +201,31 @@ def _in_lane(brief: Mapping[str, Any], lane: str) -> bool:
     return state == lane.rstrip("s") or state == lane
 
 
+def rig_for_apply(requested: str | None, preview: Any) -> str | None:
+    """Which rig a confirm targets: what it named, else what the plan pinned.
+
+    The apply form posts only the token, so in city scope `_rig_for` finds no
+    rig and context resolution used to raise `MCTL_CONTEXT_RIG_REQUIRED` -- out
+    of the handler, into a dropped connection. A request that names no rig is
+    not a rig *switch*; it is a form that does not carry one, and the plan
+    already records the rig it was taken against.
+
+    An explicitly named rig still wins, so a confirm arriving for a different
+    rig is still caught by `Preview.matches`. Echoing the preview's rig back
+    through the form instead would make that comparison compare a value to
+    itself -- a check that cannot fail.
+
+    Returns None when neither names one. **The caller must refuse**: a verdict
+    that cannot be routed must never be written to a default, because losing
+    the rig means it goes nowhere or somewhere wrong.
+    """
+    named = (requested or "").strip()
+    if named:
+        return named
+    pinned = getattr(preview, "rig", None)
+    return (pinned or "").strip() or None
+
+
 def rulable(brief: Mapping[str, Any]) -> bool:
     """Whether a verdict can actually be recorded on this brief.
 
@@ -1289,6 +1314,31 @@ class Dashboard:
         )
 
     def handle(self, request: Request) -> Response:
+        try:
+            return self._handle(request)
+        except Exception as error:  # noqa: BLE001
+            # A mutation route that raises becomes a dropped connection: no
+            # status, no page, nothing in the browser. The operator learns
+            # that clicking did nothing, when it might have done anything.
+            # Whatever went wrong, it comes back as a page.
+            return self._page(
+                "Something went wrong",
+                "/briefs",
+                None,
+                [
+                    render.notice_panel(
+                        "The request failed",
+                        "This is a defect in the dashboard, not a refusal by policy. "
+                        "Nothing here should be read as a statement about the brief. "
+                        f"({type(error).__name__}: {render.esc(str(error)[:200])})",
+                        [],
+                        region="unhandled",
+                    )
+                ],
+                status=500,
+            )
+
+    def _handle(self, request: Request) -> Response:
         if request.method == "POST":
             # Refuse contradictory input before planning anything. Taylor:
             # "You can apparently simultaneously accept and reject. That is not
@@ -1544,7 +1594,27 @@ class Dashboard:
         # this one so a rig switch shows up as a change; the mutation itself
         # still runs against `preview.arguments`, which pin the rig recorded at
         # preview time, so an unnoticed switch could never retarget the write.
-        requested_rig = self._rig_for(request)
+        requested_rig = rig_for_apply(self._rig_for(request), preview)
+        if requested_rig is None and self.city_wide:
+            # No rig on the request and none pinned on the plan. Refuse rather
+            # than resolve to a default -- an unroutable verdict must not be
+            # written somewhere convenient.
+            return self._page(
+                "Cannot route this verdict",
+                "/briefs",
+                None,
+                [
+                    render.notice_panel(
+                        "Nothing was written",
+                        "This confirmation does not say which rig the brief lives in, "
+                        "and the plan it refers to does not either. A verdict that "
+                        "cannot be routed is refused rather than written to a default.",
+                        [],
+                        region="unroutable",
+                    )
+                ],
+                status=400,
+            )
         context = self._context(requested_rig)
         target = self._target(preview.brief_id, requested_rig)
         try:
