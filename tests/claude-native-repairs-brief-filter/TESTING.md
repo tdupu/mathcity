@@ -28,7 +28,7 @@ failed.
   fixtures.
 - No fixed working directory required — the smoke test resolves the artifact
   path relative to its own script location
-  (`$SCRIPT_DIR/../../../mathcity/assets/scripts/checks/brief-check.sh`).
+  (`$SCRIPT_DIR/../../assets/scripts/checks/brief-check.sh`).
 
 **Commands:**
 ```bash

@@ -1,13 +1,13 @@
 #!/bin/bash
-# Smoke test for mathcity/assets/scripts/checks/brief-check.sh.
+# Smoke test for assets/scripts/checks/brief-check.sh.
 # Read-only: does not modify the artifact under test and creates no files
 # of its own, so there is nothing to clean up (F2.1 satisfied by construction).
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-ARTIFACT="$REPO_ROOT/mathcity/assets/scripts/checks/brief-check.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ARTIFACT="$REPO_ROOT/assets/scripts/checks/brief-check.sh"
 
 FAILURES=""
 
