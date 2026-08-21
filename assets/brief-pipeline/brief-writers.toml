@@ -173,6 +173,18 @@ sole_writer = "mctl"
   note = "Writes decisions/<id>.toml via the EffectPlan."
 
   [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/gates.py"
+  role = "reader"
+  note = """Neither reads nor writes this artifact. Its module docstring cites
+.beads/briefs/decisions/no-brainer-execution.jsonl as the model to generalize for
+#119b's missing gate-evaluation record, and the "decisions/" literal matches that
+prose. Registered rather than reworded: the check compares REFERENCES on purpose
+(see this register's header -- two write-detectors were discarded for missing real
+writers), so editing the docstring to dodge the literal would defeat a deliberate
+over-approximation. "reader" is the closest of the four roles; none of them means
+"names it in prose only", which is a gap worth a role rather than a workaround."""
+
+  [[artifact.referencer]]
   file = "formulas/brief-archive-sweep.toml"
   role = "unaudited"
 
@@ -260,6 +272,17 @@ sole_writer = "mctl"
   [[artifact.referencer]]
   file = "assets/scripts/mctl_core/documents.py"
   role = "unaudited"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/effects.py"
+  role = "authorized"
+  note = """Writes the decisions-track row through the EffectPlan, so every
+caller produces it rather than only the one that runs adjudicate-brief. Arrived
+with 34d6be8 ("adjudication writes the legacy decisions-track row, so every
+caller does") -- which is the fix for the fifth-representation defect this
+artifact block documents, and is why this register started failing: the writer
+appeared before its authorization did. Settled with cozy; mutt wrote the same
+entry in 989bd8e, which has not merged."""
 
   [[artifact.referencer]]
   file = "assets/scripts/mctl_core/fields.py"
