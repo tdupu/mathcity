@@ -113,3 +113,49 @@ def test_dry_run_refuses_without_writing(brief_root: Path) -> None:
 
     assert result.returncode != 0
     assert [r["slug"] for r in read_rows(index)] == ["not-archived"]
+
+
+def test_reconcile_archive_keeps_a_terminal_row_that_was_never_archived(brief_root: Path) -> None:
+    """B2.15: ANY removal path must verify the archive, not just remove-archived-row.
+
+    `should_reconcile_remove` returned True on the index row's own
+    `terminal_index_status` before any archive lookup. Measured on a fixture
+    with no archive directory: the row was removed with
+    `reason: terminal_index_status`, `archived_at: ''`, and the brief was left
+    in `stack/` -- structurally identical to the defect `remove-archived-row`
+    had, under a different name.
+
+    This was carved out of B2.15 as "a semantics change rather than a bug fix".
+    Reviewer trans pushed back that the justification was asserted rather than
+    shown, and the fixture showed it did not hold.
+    """
+    stack = brief_root / "stack"
+    (stack / "never-archived.md").write_text("---\nstatus: adjudicated\n---\nbody\n")
+    (stack / ".index.jsonl").write_text(
+        json.dumps({"slug": "never-archived", "path": "stack/never-archived.md",
+                    "status": "adjudicated"}) + "\n"
+    )
+
+    result = run_index_tool("reconcile-archive", "--brief-root", str(brief_root), "--apply")
+
+    assert result.returncode == 0, result.stderr
+    rows = read_rows(stack / ".index.jsonl")
+    assert [r["slug"] for r in rows] == ["never-archived"], (
+        "a terminal row whose brief was never archived must be kept, not de-indexed"
+    )
+
+
+def test_reconcile_archive_still_removes_a_row_whose_brief_is_archived(brief_root: Path) -> None:
+    # The guard must not break reconcile's actual job.
+    stack = brief_root / "stack"
+    archive = brief_root / ".adjudicated-archive"
+    archive.mkdir(parents=True)
+    (archive / "gone.md").write_text("---\nstatus: adjudicated\n---\nbody\n")
+    (stack / ".index.jsonl").write_text(
+        json.dumps({"slug": "gone", "path": "stack/gone.md", "status": "adjudicated"}) + "\n"
+    )
+
+    result = run_index_tool("reconcile-archive", "--brief-root", str(brief_root), "--apply")
+
+    assert result.returncode == 0, result.stderr
+    assert read_rows(stack / ".index.jsonl") == []

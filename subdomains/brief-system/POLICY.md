@@ -496,6 +496,14 @@ by what adjudication unlocks, not by arrival time.*
   nothing; whoever ran the 35-row drain made an unrecorded choice, and the owner
   has now made it deliberately (decision bead `mc-g4k`, 2026-08-20).
 
+  **The code's own history points the same way** (trans). `remove-archived-row`
+  *computed* `archive_hit` and then ignored it — the variable existed and was
+  populated. Whoever wrote it already meant *verify archived, then remove*; the
+  bug decoupled behaviour from that intent rather than reflecting an
+  intent-free function. So B2.15 **confirms** a design intent visible in the
+  brief-pile domain itself rather than picking one of two equally live
+  options.
+
   **Why archiving won.** De-indexing is the path that had already produced a
   lying write: `remove-archived-row` computed `archive_hit`, never tested it,
   removed the row unconditionally, and reported
@@ -503,9 +511,10 @@ by what adjudication unlocks, not by arrival time.*
   the brief findable; de-indexing strands it on disk with nothing pointing at
   it. Mechanical check: a removal path must verify an archive copy exists before
   removing the row and must fail loudly when it does not (shipped in
-  `brief-stack-index.py`; `reconcile-archive` still removes on
-  `terminal_index_status` alone and is **known-unfixed**, pending its own
-  ruling, because changing it is a semantics change rather than a bug fix).
+  `brief-stack-index.py` for **both** removal paths). The rule binds every
+  removal path, and it was tested against each: `reconcile-archive` also
+  returned True on the row's own `terminal_index_status` before any archive
+  lookup, which is the same lying write under a different name.
 
   **`drained` is an overloaded word and must not become one knowl entry.** The
   fleet-event `drained`/`drain-acked` is gascity's session sense and is

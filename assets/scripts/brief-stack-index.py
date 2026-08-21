@@ -120,7 +120,24 @@ def archive_hit(brief_root: Path, entry: dict[str, Any]) -> Path | None:
 def should_reconcile_remove(brief_root: Path, entry: dict[str, Any]) -> tuple[bool, str, str]:
     status = entry.get("status")
     if isinstance(status, str) and status.strip().lower() in TERMINAL_INDEX_STATUSES:
-        return True, "terminal_index_status", ""
+        # POLICY B2.15: de-indexing without archiving is not draining, and the
+        # rule binds EVERY removal path -- not just remove-archived-row.
+        #
+        # This branch used to return True here, on the row's own claim about
+        # itself, before any archive lookup. Measured on a fixture with no
+        # archive directory: the row was removed with
+        # reason="terminal_index_status", archived_at="", and the brief was left
+        # sitting in stack/ -- structurally the same lying write the sibling
+        # subcommand had, under a different name.
+        #
+        # It was originally carved out of B2.15 as "a semantics change rather
+        # than a bug fix". Reviewer trans pushed back that the justification was
+        # asserted and not shown; the fixture showed it did not hold. A row
+        # saying "adjudicated" is a claim, and a claim is not an archive.
+        hit = archive_hit(brief_root, entry)
+        if hit is not None:
+            return True, "terminal_index_status_archive_present", str(hit)
+        return False, "terminal_index_status_no_archive_match", ""
     path = entry_path(entry)
     if path is not None and path.exists():
         return False, "path_exists", ""
