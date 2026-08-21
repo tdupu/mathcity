@@ -20,6 +20,7 @@
 - **The leak rate is NOT constant.** The amplifier makes it rise as exhaustion nears. **Any bound must be driven by a measured level, never by a timer.**
 - **Do not blame `reconnect()`.** stick-dog cleared it: handles are closed on all four exit paths (`:553-578`).
 - **`[SYN]` values are invented; never cite one as a measurement.**
+- **`ratio > 1.0` is legitimate.** The fd count can exceed the cap (C3). **Never bound a ratio assertion at 1.0** — it inverts at real exhaustion and reports a working measurement as broken.
 
 ---
 
@@ -197,8 +198,14 @@ FD_PRESSURE_FORCE_RATIO=0.01 "$PRESSURE" $$ >/dev/null 2>&1
 # be deleted and this suite would still print PASS.
 ratio="$("$PRESSURE" $$ 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["ratio"])')" \
   || { echo "FAIL: census path did not produce a ratio"; exit 1; }
-python3 -c "import sys; r=float(sys.argv[1]); sys.exit(0 if 0.0 < r < 1.0 else 1)" "$ratio" \
-  || { echo "FAIL: census ratio $ratio is not in (0,1) -- measurement is broken"; exit 1; }
+# Upper bound is deliberately NOT 1.0. C3 establishes that the -Fn name-record
+# count can exceed the cap (138,244 vs a 138,240 cap), so ratio > 1 is REACHABLE
+# at genuine exhaustion. Asserting < 1.0 would report "measurement is broken" at
+# exactly the moment the measurement is correct -- and the obvious reuse of this
+# assertion is against the supervisor, where it would invert. 10x cap is chosen
+# as "no plausible measurement, broken parser".
+python3 -c "import sys; r=float(sys.argv[1]); sys.exit(0 if 0.0 < r < 10.0 else 1)" "$ratio" \
+  || { echo "FAIL: census ratio $ratio is not in (0,10) -- measurement is broken"; exit 1; }
 echo "PASS: fd-pressure is three-valued, fires at the threshold, and its census path measures"
 ```
 
