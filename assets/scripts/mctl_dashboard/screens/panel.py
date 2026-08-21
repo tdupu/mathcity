@@ -54,12 +54,15 @@ from mctl_dashboard.theme import LOCKED_BODY, LOCKED_RULE, STOP
 #: enum: 12 of 86 closed briefs carry a compound verdict, and at least one
 #: records two different verdicts in a single submission
 #: (`PASSED-TO-MAYOR-...-PLUS-DEPENDENCY-GRAPH-REJECTED`). Nothing here may
-#: assume four is the final number.
+#: assume three is the final number.
+#:
+#: `defer` is deliberately absent (D6): it is a separate operation with its
+#: own form further down this page (`render.operation_forms`), not a fourth
+#: verdict. Offering it twice is two controls disagreeing about one action.
 VERDICTS: tuple[tuple[str, str], ...] = (
     ("approve", "approve"),
     ("revise", "revise"),
     ("reject", "reject"),
-    ("defer", "defer"),
 )
 
 #: The one verdict that stays available under a HELD lock. Rejecting a brief
