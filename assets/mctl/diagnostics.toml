@@ -467,6 +467,12 @@ meaning = "Brief document has no rewritable frontmatter block, so its own status
 policy_ref = "B2.8a"
 module = "effects.py"
 
+[MCTL_DECISIONS_TRACK_ROW_UNWRITABLE]
+severity = "WARN"
+meaning = "The legacy decisions-track row a brief was migrated from could not be synced with its verdict."
+policy_ref = "B2.10"
+module = "effects.py"
+
 [MCTL_REDUNDANT_CACHE_ROLLED_BACK]
 severity = "ERROR"
 meaning = "Redundant cache writes failed after bead creation and were rolled back; the canonical bead is intact."

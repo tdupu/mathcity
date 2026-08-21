@@ -153,19 +153,26 @@ echo "=== 6. no wired skill writes redundant brief artifacts directly ==="
 # (assets/scripts/mctl_core/effects.py). A skill that still rewrites the stack
 # index, the legacy decisions-track manifest, or a brief's frontmatter in place
 # has not been refactored -- it has been annotated.
-# ONE declared exemption, declared here so it cannot spread silently.
-# adjudicate-brief still syncs the LEGACY decisions-track brief file and its
-# manifest (step 2b): mctl models neither, #38 owns that tree, bulk migration is
-# HELD, and removing the sync re-opens the #18 re-presentation bug that
-# tests/present-briefs-defer-filter/test_defer_filter.sh guards by executing the
-# writer. The exemption covers decisions-track ONLY -- the pile and
-# stack/.index.jsonl checks below still apply to it in full.
-LEGACY_DTRACK_EXEMPT="skills/adjudicate-brief/SKILL.md"
+# NO exemptions. adjudicate-brief held the last one -- it hand-synced the legacy
+# decisions-track brief file and manifest in step 2b, because mctl modelled
+# neither. mctl now plans both as cache updates
+# (effects.py::_cache_updates, kind `decisions_track_row`), so every caller --
+# dashboard, CLI, MCP, skill -- performs the complete act and the skill performs
+# none of it. Leave this list EMPTY: the exemption's own retirement condition
+# ("no longer writes decisions-track at all") is now met.
+#
+# The scoping below matters even with the list empty. The exemption used to be
+# read as all-or-nothing -- an exempt file skipped the `sed -i` check entirely,
+# though the comment said "decisions-track ONLY" -- so a NON-decisions-track
+# `sed -i` added to an exempt file would have passed unnoticed. The check now
+# always runs and only the decisions-track lines are excused, so re-adding an
+# exemption cannot re-open that hole.
+LEGACY_DTRACK_EXEMPT=""
 
 printf '%s\n' "$WIRED" | while IFS='|' read -r rel class fragments; do
   [ -n "$rel" ] || continue
   f="$PACK/$rel"
-  if [ "$rel" = "$LEGACY_DTRACK_EXEMPT" ]; then
+  if [ -n "$LEGACY_DTRACK_EXEMPT" ] && [ "$rel" = "$LEGACY_DTRACK_EXEMPT" ]; then
     # The exemption is conditional on the skill saying so, in the block that
     # uses it, so an unexplained in-place write cannot hide behind the name.
     grep -q 'LEGACY-DECISIONS-TRACK' "$f" \
@@ -174,19 +181,31 @@ mark the block LEGACY-DECISIONS-TRACK or explain why mctl cannot own it"
     grep -q 'decisions-track' "$f" \
       || fail "$rel holds the legacy decisions-track exemption but no longer
 writes decisions-track at all -- drop it from LEGACY_DTRACK_EXEMPT"
+    # Scoped, as the exemption always claimed to be: only lines that name the
+    # decisions-track tree are excused. Anything else this file rewrites in
+    # place is still a failure.
+    inplace=$(grep -n 'sed -i' "$f" | grep -v 'decisions-track\|DTRACK\|BRIEF_FILE' || true)
   else
     inplace=$(grep -n 'sed -i' "$f" || true)
-    [ -z "$inplace" ] || fail "$rel rewrites a brief artifact in place with sed -i:
-$inplace"
   fi
+  [ -z "$inplace" ] || fail "$rel rewrites a brief artifact in place with sed -i:
+$inplace"
   # Write shapes only: a shell redirect, a Python .write(), or open(..., "w"/"a").
   # A bare open()/read of the index is fine -- present-briefs legitimately reads
   # the stack index to build its queue.
   # The pile and the stack index are mctl's alone, exemption or not; only the
-  # legacy decisions-track manifest is excused, and only for the one skill.
+  # legacy decisions-track manifest is excused, and only for a listed skill.
   PATTERN='(\.index\.jsonl|manifest\.jsonl)'
-  [ "$rel" != "$LEGACY_DTRACK_EXEMPT" ] || PATTERN='\.index\.jsonl'
+  if [ -n "$LEGACY_DTRACK_EXEMPT" ] && [ "$rel" = "$LEGACY_DTRACK_EXEMPT" ]; then
+    PATTERN='\.index\.jsonl'
+  fi
+  # Markdown blockquotes are not shell redirects. A struck-through record of a
+  # write that was REMOVED (`> ~~...manifest.jsonl...~~`) begins with `> `, and
+  # matching it as a redirect reports the documentation of a deleted write as
+  # the write itself. A real redirect never starts the line -- it always has a
+  # command in front of it -- so dropping quote lines costs no coverage.
   cachewrite=$(grep -nE "$PATTERN" "$f" \
+               | grep -vE '^[0-9]+:[[:space:]]*>' \
                | grep -E "(>>?[[:space:]]|\.write\(|open\([^)]*[\"'][wa])" || true)
   [ -z "$cachewrite" ] || fail "$rel writes a redundant brief cache artifact directly:
 $cachewrite"

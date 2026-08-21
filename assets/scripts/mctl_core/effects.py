@@ -8,6 +8,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import tempfile
 import tomllib
 from pathlib import Path
@@ -75,14 +76,35 @@ class CacheUpdate:
     path: Path
     target_brief_id: str
     fields: Mapping[str, str]
+    #: `decisions_track_row` only: the `n` of the legacy manifest row this
+    #: update rewrites, resolved at plan time from the brief's stack index row
+    #: (`legacy_n`, or the `NNN-` prefix of `legacy_source`).
+    #:
+    #: Resolved in the plan rather than at apply time so a dry run names the
+    #: exact row it would touch. The legacy inventory is append-shaped and read
+    #: by other tools; "some row matching this brief" is not a decision to
+    #: leave to a writer that already has the file open.
+    row_key: str = ""
+    #: Keys this update REMOVES from the row. A terminal verdict clears
+    #: `defer_until`, or a brief deferred and then approved keeps a defer
+    #: window that outlived the decision it belonged to.
+    drop_fields: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "fields": dict(sorted(self.fields.items())),
             "kind": self.kind,
             "path": str(self.path),
             "target_brief_id": self.target_brief_id,
         }
+        # Absent unless they carry something: every existing consumer of this
+        # payload was written against the four keys above, and a `row_key: ""`
+        # on every decision-TOML update would be noise in the trace.
+        if self.row_key:
+            payload["row_key"] = self.row_key
+        if self.drop_fields:
+            payload["drop_fields"] = list(self.drop_fields)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -176,6 +198,22 @@ class MutationError(Exception):
     def __init__(self, diagnostic: Diagnostic):
         super().__init__(diagnostic.message)
         self.diagnostic = diagnostic
+
+
+class DecisionsTrackRowUnwritable(OSError):
+    """The legacy manifest row this verdict should sync cannot be rewritten.
+
+    An `OSError` subclass for the same reason `BriefFrontmatterUnwritable` is:
+    every cache path already degrades per-brief on `OSError`, so a caller that
+    has not learned about this case still fails per-brief rather than taking
+    the adjudication down with it.
+
+    Raised only when a row was *expected* -- the stack index named a
+    `legacy_n` -- and the manifest cannot honour it: the row is gone, two rows
+    claim the same `n`, or the file cannot be read. A brief with no legacy row
+    at all is the ordinary stack-track case and plans no update, so it never
+    reaches this exception.
+    """
 
 
 class BriefFrontmatterUnwritable(OSError):
@@ -427,6 +465,29 @@ def plan_adjudication(
         # colon cannot be represented in it. Both the reason and the timestamp
         # are already in `decisions/<id>.toml`, which can hold them.
         frontmatter_fields={"status": "adjudicated", "verdict": normalized},
+        # The legacy lane's decision record. `decisions/<id>.toml` holds the
+        # decision for a stack-track brief; a decisions-track brief's decision
+        # has always lived in its manifest row, and until now the only writer
+        # was a `sed`/heredoc pair inside adjudicate-brief -- so adjudicating
+        # from the dashboard, the CLI or the MCP left the row saying
+        # `ready-for-adjudication` while the bead said closed. Measured
+        # 2026-08-04: 17 briefs read `adjudicated` in the manifest while their
+        # files read otherwise.
+        #
+        # Four keys here where the frontmatter takes two, because a JSON row
+        # can hold what a `key: value` line cannot: `verdict_note` carries the
+        # operator's reason verbatim, newlines and colons included.
+        manifest_row_fields={
+            "status": "adjudicated",
+            "verdict": normalized,
+            "verdict_note": reason,
+            # A date, not a timestamp: 99 of the 101 timestamped live rows are
+            # `YYYY-MM-DD`, and this writer joins a corpus rather than starting
+            # one. The full-precision instant is on the bead and in the
+            # decision TOML.
+            "adjudicated_at": date.today().isoformat(),
+        },
+        manifest_drop_fields=("defer_until",),
     )
 
 
@@ -465,6 +526,12 @@ def plan_deferral(
             if_status=observed.status,
         ),
         cache_fields=cache_fields,
+        # Deferral is the non-terminal verdict, so the legacy row stays `ready`
+        # and gains the un-defer date. Both halves are load-bearing for #18:
+        # present-briefs' legacy selector filters on `status` and skips a ready
+        # brief whose `defer_until` is in the future, so writing the status
+        # without the date resurfaces the brief on the next run.
+        manifest_row_fields={"status": "ready", "defer_until": defer_until},
     )
 
 
@@ -564,6 +631,40 @@ def _apply_effects(
         for update in plan.cache_updates:
             try:
                 _apply_cache_update(update)
+            except DecisionsTrackRowUnwritable as error:
+                # Per-brief, and a WARN, for the same reason the frontmatter
+                # case is: the legacy row this brief's stack index pointed at
+                # is not there to be synced, which is a fact about that one
+                # brief's migration record rather than a failed adjudication.
+                # The bead, the decision TOML, the index row and the brief's
+                # own frontmatter all landed; the operator is told which row
+                # still disagrees.
+                #
+                # A brief with NO legacy row never reaches here -- it plans no
+                # manifest update at all. That is the ordinary stack-track
+                # case, and warning on it would put a WARN on the majority
+                # path.
+                diagnostics.append(
+                    _diagnostic(
+                        ctx,
+                        Severity.WARN,
+                        "MCTL_DECISIONS_TRACK_ROW_UNWRITABLE",
+                        (
+                            "The legacy decisions-track row this brief was "
+                            "migrated from was not updated; the manifest does "
+                            "not hold exactly one row with that number."
+                        ),
+                        brief_id=plan.target_brief_id,
+                        data_location=str(update.path),
+                        detail=str(error),
+                        policy_ref="B2.10",
+                        suggested_next_command=(
+                            "mctl briefs doctor "
+                            f"{plan.target_brief_id} --json"
+                        ),
+                    )
+                )
+                continue
             except BriefFrontmatterUnwritable as error:
                 # Per-brief, and a WARN rather than an ERROR: the document is
                 # shaped in a way this writer will not rewrite, which is a
@@ -847,9 +948,16 @@ def _plan(
     cache_fields: Mapping[str, str],
     extra_advisories: tuple[Diagnostic, ...] = (),
     frontmatter_fields: Mapping[str, str] | None = None,
+    manifest_row_fields: Mapping[str, str] | None = None,
+    manifest_drop_fields: tuple[str, ...] = (),
 ) -> EffectPlan:
     cache_updates = _cache_updates(
-        ctx, brief_id, cache_fields, frontmatter_fields=frontmatter_fields
+        ctx,
+        brief_id,
+        cache_fields,
+        frontmatter_fields=frontmatter_fields,
+        manifest_row_fields=manifest_row_fields,
+        manifest_drop_fields=manifest_drop_fields,
     )
     event_row = {
         "brief_id": brief_id,
@@ -885,6 +993,8 @@ def _cache_updates(
     fields: Mapping[str, str],
     *,
     frontmatter_fields: Mapping[str, str] | None = None,
+    manifest_row_fields: Mapping[str, str] | None = None,
+    manifest_drop_fields: tuple[str, ...] = (),
 ) -> tuple[CacheUpdate, ...]:
     updates: list[CacheUpdate] = []
     decision_toml = ctx.rig_root / ".beads" / "briefs" / "decisions" / f"{brief_id}.toml"
@@ -901,7 +1011,111 @@ def _cache_updates(
             updates.append(
                 CacheUpdate("brief_frontmatter", path, brief_id, frontmatter_fields)
             )
+    if manifest_row_fields:
+        # The decision record is split by track. A stack-track brief's decision
+        # lives in `decisions/<id>.toml`; the legacy decisions-track lane keeps
+        # its own row, and only that lane has one. So this plans a write ONLY
+        # for a brief that already carries a legacy row -- absence is the
+        # ordinary majority path, not a fault, and it is silent for the same
+        # reason an absent decision TOML is. Minting a row for a stack-track
+        # brief would invent a representation rather than sync an existing one.
+        legacy_manifest = artifact_layout(ctx).legacy_manifest
+        row_key = _decisions_track_row_key(ctx, brief_id)
+        if row_key and legacy_manifest.is_file():
+            updates.append(
+                CacheUpdate(
+                    "decisions_track_row",
+                    legacy_manifest,
+                    brief_id,
+                    manifest_row_fields,
+                    row_key=row_key,
+                    drop_fields=manifest_drop_fields,
+                )
+            )
     return tuple(updates)
+
+
+#: The `NNN-` ordering prefix a `legacy_source` path carries, anchored at the
+#: start of the basename. `decisions-track/08-sigma18-done-vs-residual-brief.md`
+#: names row 8. Anchored because an unanchored digit run would match the `18`
+#: inside the slug and rewrite an unrelated row.
+_LEGACY_SOURCE_N = re.compile(r"^0*(\d+)-")
+
+
+def _decisions_track_row_key(ctx: MctlContext, brief_id: str) -> str:
+    """The legacy manifest row this brief is the migrated form of, or "".
+
+    The join is **read off the migration's own record**, never inferred from
+    slugs. `brief-decisions-track-inventory.py` wrote `legacy_n` and
+    `legacy_source` onto the stack index row when it copied a decisions-track
+    brief forward, so the index already states which row a brief came from.
+    Re-deriving that by matching slugs would be a second identity rule, and
+    the two would drift the moment a slug was edited.
+
+    Two lookups, because the index names a brief two ways: the row-identity
+    keys `_update_stack_index` already matches on, and the `path` of a document
+    `cached_brief_documents` resolves for this brief. The second is what
+    catches the live shape `{"slug": "he-ckilh-dispatch-gate", "source":
+    "he-ckilh", "path": ".../he-ckilh-dispatch-gate.md"}`, where the row's slug
+    is the legacy slug and only the filename carries the bead id.
+
+    Returns "" when this brief has no legacy row -- the ordinary case for a
+    stack-track brief -- and also when two index rows name *different* legacy
+    rows. Rewriting the wrong row of an append-shaped legacy inventory is
+    worse than leaving it stale, so an ambiguous join writes nothing.
+    """
+    layout = artifact_layout(ctx)
+    if not layout.stack_index.is_file():
+        return ""
+    try:
+        lines = layout.stack_index.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ""
+    documents = {path.name for _lane, path in cached_brief_documents(ctx, brief_id)}
+    keys: set[str] = set()
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        if not _row_targets_brief(row, brief_id) and not _row_names_document(row, documents):
+            continue
+        key = _legacy_row_key(row)
+        if key:
+            keys.add(key)
+    return keys.pop() if len(keys) == 1 else ""
+
+
+def _row_names_document(row: Mapping[str, object], documents: set[str]) -> bool:
+    path = row.get("path")
+    return isinstance(path, str) and Path(path).name in documents
+
+
+def _legacy_row_key(row: Mapping[str, object]) -> str:
+    """The manifest `n` a stack index row declares, as a string.
+
+    `legacy_n` first because it is the key itself; `legacy_source` second
+    because the migration wrote both and a hand-repaired row may carry only
+    the path. `legacy_source: null` is the recorded way of saying "this brief
+    has no legacy origin", so it resolves to nothing rather than to a guess.
+    """
+    n = row.get("legacy_n")
+    if isinstance(n, bool):
+        return ""
+    if isinstance(n, int):
+        return str(n)
+    if isinstance(n, str) and n.strip().isdigit():
+        return str(int(n.strip()))
+    source = row.get("legacy_source")
+    if isinstance(source, str) and source.strip():
+        match = _LEGACY_SOURCE_N.match(Path(source.strip()).name)
+        if match:
+            return str(int(match.group(1)))
+    return ""
 
 
 def _blocking_preconditions(diagnostics: tuple[Diagnostic, ...]) -> tuple[Diagnostic, ...]:
@@ -1006,7 +1220,93 @@ def _apply_cache_update(update: CacheUpdate) -> None:
     if update.kind == "brief_frontmatter":
         _update_brief_frontmatter(update.path, update.fields)
         return
+    if update.kind == "decisions_track_row":
+        _update_decisions_track_row(
+            update.path, update.row_key, update.fields, update.drop_fields
+        )
+        return
     raise OSError(f"unknown cache update kind: {update.kind}")
+
+
+def _update_decisions_track_row(
+    path: Path,
+    row_key: str,
+    fields: Mapping[str, str],
+    drop_fields: tuple[str, ...] = (),
+) -> None:
+    """Rewrite one legacy manifest row; leave every other line byte-identical.
+
+    The same discipline as `_update_stack_index`, held harder. The skill this
+    replaces re-serialised **every** row and dropped blank lines, so one
+    adjudication rewrote all 204 lines of an append-shaped inventory that other
+    tools read -- and a line those tools could parse but `json` could not would
+    have been silently deleted. Here the file is split on newlines, exactly one
+    element of that list is replaced, and the list is rejoined: every other
+    line survives byte for byte, including malformed ones, blank ones, and the
+    trailing newline.
+
+    A malformed line is never a *match*, only a survivor. Matching on a line we
+    could not parse would mean guessing which row it is.
+
+    The rewritten row keeps the file's own convention -- insertion order, and
+    `json.dumps` defaults, which is how the corpus came to hold `\\u2014`
+    escapes. Sorting keys or widening to UTF-8 here would make the file's
+    convention "whoever wrote last wins".
+
+    Idempotent. A row that already carries these values is not rewritten and
+    the file is not touched.
+    """
+    text = path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    matches: list[int] = []
+    parsed: dict[int, dict[str, object]] = {}
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and _manifest_row_key(row) == row_key:
+            matches.append(index)
+            parsed[index] = row
+    if not matches:
+        raise DecisionsTrackRowUnwritable(
+            f"{path}: no decisions-track row n={row_key}"
+        )
+    if len(matches) > 1:
+        # Two rows claiming one `n` is a corrupt inventory, not a choice to
+        # make quietly: picking one would record the verdict against a brief
+        # nobody named.
+        raise DecisionsTrackRowUnwritable(
+            f"{path}: {len(matches)} rows claim n={row_key}"
+        )
+    index = matches[0]
+    original = parsed[index]
+    updated = dict(original)
+    updated.update(fields)
+    for key in drop_fields:
+        updated.pop(key, None)
+    if updated == original:
+        return
+    lines[index] = json.dumps(updated)
+    _atomic_write(path, "\n".join(lines))
+
+
+def _manifest_row_key(row: Mapping[str, object]) -> str:
+    """A manifest row's `n`, normalised to the string form the plan carries.
+
+    `bool` is excluded before `int`: `True` is an `int` in Python, and a row
+    carrying `"n": true` would otherwise answer to key `1`.
+    """
+    n = row.get("n")
+    if isinstance(n, bool):
+        return ""
+    if isinstance(n, int):
+        return str(n)
+    if isinstance(n, str) and n.strip().isdigit():
+        return str(int(n.strip()))
+    return ""
 
 
 def _update_brief_frontmatter(path: Path, fields: Mapping[str, str]) -> None:
@@ -1180,7 +1480,21 @@ def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, s
 
 
 def _row_targets_brief(row: Mapping[str, object], target_brief_id: str) -> bool:
-    for key in ("brief_id", "bead_id", "slug", "id"):
+    # `source` is in the tuple because of the migrated legacy shape, where the
+    # row's `slug` is the LEGACY slug and the bead id appears nowhere else:
+    #   {"slug": "he-ckilh-dispatch-gate", "source": "he-ckilh",
+    #    "path": ".../he-ckilh-dispatch-gate.md", "legacy_n": 79}
+    # Without it, adjudicating `he-ckilh` updated the bead, the decision TOML
+    # and the brief's frontmatter while its own index row kept the pre-verdict
+    # status -- the same class of drift #77 fixed, one representation over.
+    #
+    # Safe because `source` is the index's own record of which bead the row is
+    # for. Measured across the live index: 53 of 53 rows carry a string
+    # `source`, and NO row's `source` equals a different row's `slug`, so the
+    # key cannot pull one brief's verdict onto another's row. The non-bead
+    # spellings it also holds (`decisions-track`, `72-...-brief.md`) match no
+    # bead id and are therefore inert here.
+    for key in ("brief_id", "bead_id", "slug", "id", "source"):
         value = row.get(key)
         if value == target_brief_id:
             return True

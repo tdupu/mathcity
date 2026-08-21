@@ -130,74 +130,83 @@ the diagnostic verbatim and stop. In particular:
 > Do **not** branch on `MBRF004`, `MBRF005`, or `MBRF021` — see
 > `template-fragments/mctl-entry-point.md`.
 
-### 2b. LEGACY-DECISIONS-TRACK sync (only when a decisions-track file exists)
+### 2b. LEGACY-DECISIONS-TRACK sync — `mctl` does this now; do nothing here
 
-**This is the one cache write this skill still performs by hand, and it is a
-declared exemption rather than an oversight.** Run it only when this verdict
-resolves a `decisions-to-briefs` file-brief — a `<NN>-<slug>-brief.md` under
-`<city-root>/.beads/decisions-track/` with a `manifest.jsonl` row. If the brief
-has no decisions-track file, **skip 2b entirely**; the modern lane is finished
-at step 2.
+**Step 2 is the whole write.** `mctl briefs adjudicate|defer` updates the bead,
+`decisions/<id>.toml`, `stack/.index.jsonl`, the brief document's own
+frontmatter, **and** the legacy `decisions-track/manifest.jsonl` row when the
+brief has one. There is no hand-written cache sync left in this skill, and no
+declared exemption. Run step 2 and go to step 3.
 
-Why it survives the Slice 7 refactor:
+The manifest row is written only for a brief that **already has** one — the
+decision record is split by track:
 
-- `mctl briefs adjudicate|defer` writes the bead, `decisions/<id>.toml`, and
-  `stack/.index.jsonl`. It does **not** touch the legacy decisions-track
-  inventory, and it should not: `#38` is actively changing how that tree's
-  non-terminal statuses are classified, and the plan holds bulk live migration
-  until proof 5 is green and authorized.
-- Dropping the sync here does not hand the job to `mctl`; it hands it to nobody.
-  The divergence this step fixes is real and was measured: on 2026-08-04, 17
-  briefs read `adjudicated` in the manifest while their files still read
-  `status: ready-for-adjudication`, so `present-briefs` re-presented decided
-  decisions. `tests/present-briefs-defer-filter/test_defer_filter.sh` extracts
-  and executes the writer below to prove the defer half still holds.
+| track | where the decision is recorded |
+| --- | --- |
+| stack-track brief | `.beads/briefs/decisions/<bead_id>.toml` |
+| legacy decisions-track brief | a row in `.beads/decisions-track/manifest.jsonl` |
 
-So: `mctl` is the canonical writer, this runs **after** it, and it touches only
-the decisions-track tree — never the pile, never `stack/.index.jsonl`.
+A stack-track brief has no manifest row and is never given one; `mctl` resolves
+the join from the migration's own record (`legacy_n` / `legacy_source` on the
+stack index row), so absence is silent rather than an error. A brief whose index
+row points at a manifest row that is missing or duplicated degrades to a
+per-brief `MCTL_DECISIONS_TRACK_ROW_UNWRITABLE` **WARN**; the bead, the decision
+TOML, the index row and the frontmatter still land.
 
-`BRIEF_FILE` = the decisions-track path this verdict resolves (the clerk /
-present-briefs passes it; empty means skip).
+The invariant is unchanged and is now enforced by one writer instead of two:
+after a verdict, the brief document's `status:` and its manifest `status` agree.
+Never `ready`/`ready-for-adjudication` on one and `adjudicated` on the other.
 
-```bash
-DTRACK="$HOME/gt/.beads/decisions-track"
-BRIEF_FILE="<path to NN-slug-brief.md, or empty>"
-if [ -n "$BRIEF_FILE" ] && [ -f "$BRIEF_FILE" ]; then
-  N=$(basename "$BRIEF_FILE" | sed -E 's/^0*([0-9]+)-.*/\1/')
-  # defer keeps it ripe (resurfaces after its interval); every other verdict is terminal
-  if [ "$VERDICT" = "defer" ]; then FS="ready-for-adjudication"; MS="ready"; else FS="adjudicated"; MS="adjudicated"; fi
-  # (1) file frontmatter status: line (macOS BSD sed needs the '' arg)
-  sed -i '' -E "s/^status:.*/status: $FS/" "$BRIEF_FILE"
-  # (2) manifest entry: status (+ verdict/rationale/date when terminal), rewritten in place
-  python3 - "$DTRACK/manifest.jsonl" "$N" "$MS" "$VERDICT" "$RATIONALE" "$(date +%Y-%m-%d)" "${DEFER_UNTIL:-}" <<'PY'
-import json, sys
-path, n, ms, verdict, rat, today = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
-defer_until = sys.argv[7] if len(sys.argv) > 7 else ""
-out = []
-for line in open(path):
-    s = line.strip()
-    if not s: continue
-    d = json.loads(s)
-    if d.get("n") == n:
-        d["status"] = ms
-        if ms != "ready":
-            d["verdict"] = verdict; d["verdict_note"] = rat; d["adjudicated_at"] = today
-            d.pop("defer_until", None)      # terminal verdict: clear any prior defer window
-        elif defer_until:
-            d["defer_until"] = defer_until  # defer: record the un-defer date so present-briefs
-                                            # can skip this brief until then (#18); ISO YYYY-MM-DD
-    out.append(json.dumps(d))
-open(path, "w").write("\n".join(out) + "\n")
-PY
-fi
-```
+#### Superseded — the hand-written sync this step used to perform
 
-Invariant: after 2b, the decisions-track file's `status:` and its manifest
-`status` for this brief are equal. Never leave one `ready`/`ready-for-adjudication`
-while the other is `adjudicated`.
+**The reasoning below was correct about the divergence and wrong about who
+should fix it. Kept for the record, struck rather than deleted.**
 
-**Do not generalise this exemption.** It covers the legacy decisions-track tree
-and nothing else. Retire it when #38 lands and the legacy lane is migrated.
+The measured problem is real and is why the write exists at all: on 2026-08-04,
+17 briefs read `adjudicated` in the manifest while their files still read
+`status: ready-for-adjudication`, so `present-briefs` re-presented decided
+decisions.
+
+What the argument missed is that **the skill is not the only caller.** When the
+owner adjudicates from the dashboard, `mctl` runs and this skill does not — so a
+write placed *after* `mctl` runs on exactly one of the four routes into the same
+act, and the other three leave the row stale. A second writer behind the
+canonical writer does not close the gap; it relocates it. Both writes are now in
+`mctl_core/effects.py::plan_adjudication`, which every caller goes through.
+
+> ~~**This is the one cache write this skill still performs by hand, and it is a
+> declared exemption rather than an oversight.** Run it only when this verdict
+> resolves a `decisions-to-briefs` file-brief — a `<NN>-<slug>-brief.md` under
+> `<city-root>/.beads/decisions-track/` with a `manifest.jsonl` row. If the brief
+> has no decisions-track file, **skip 2b entirely**; the modern lane is finished
+> at step 2.~~
+>
+> ~~Why it survives the Slice 7 refactor:~~
+>
+> - ~~`mctl briefs adjudicate|defer` writes the bead, `decisions/<id>.toml`, and
+>   `stack/.index.jsonl`. It does **not** touch the legacy decisions-track
+>   inventory, and it should not: `#38` is actively changing how that tree's
+>   non-terminal statuses are classified, and the plan holds bulk live migration
+>   until proof 5 is green and authorized.~~
+> - ~~Dropping the sync here does not hand the job to `mctl`; it hands it to
+>   nobody.~~
+>
+> ~~So: `mctl` is the canonical writer, this runs **after** it, and it touches
+> only the decisions-track tree — never the pile, never `stack/.index.jsonl`.~~
+>
+> ~~`BRIEF_FILE` = the decisions-track path this verdict resolves (the clerk /
+> present-briefs passes it; empty means skip).~~
+>
+> ~~(1) rewrote the brief file's `status:` line with an in-place `sed`, and (2)
+> re-serialised every row of `manifest.jsonl` to set `status`, `verdict`,
+> `verdict_note` and `adjudicated_at` on the row whose `n` matched the brief
+> file's `NN-` prefix. `mctl` now performs both — and rewrites only the target
+> row, leaving every other line byte-identical, which the re-serialising loop
+> did not.~~
+
+**Do not restore a hand-written sync here.** `#38` still owns the legacy tree
+and bulk migration is still held; that is a reason for `mctl` to write one row
+in place when a verdict lands, not a reason for a second writer to exist.
 
 ### 3. If verdict = approve → dispatch through `mctl work dispatch`
 
@@ -269,12 +278,11 @@ audited afterwards with `mctl trace show <id>`:
   adjudicate|defer` performs the canonical bead update through a checked
   `EffectPlan` with an `if_status` guard, so a concurrent writer loses the race
   loudly (`MCTL_BEAD_UPDATE_RACE_LOST`) instead of silently overwriting.
-- **No pile or stack-index writes.** `mctl_core/effects.py::_cache_updates`
-  moves `decisions/<brief>.toml` and `stack/.index.jsonl` with the bead, so the
-  skill no longer rewrites either. The one hand-written cache sync that
-  remains is step 2b, confined to the legacy decisions-track tree — see the
-  exemption stated there, and the `blocked-by-policy` row for it in
-  `SKILL-IMPACT-REGISTER.md`.
+- **No cache writes of any kind.** `mctl_core/effects.py::_cache_updates` moves
+  `decisions/<brief>.toml`, `stack/.index.jsonl`, the brief document's own
+  frontmatter, and the legacy `decisions-track/manifest.jsonl` row with the
+  bead, so the skill rewrites none of them. The step 2b exemption is retired —
+  see the struck block there.
 - **No hand-written `dispatch-provenance.v1` TOML on the approve path.**
   `mctl work dispatch` writes it, and only after the claim is verified.
 
