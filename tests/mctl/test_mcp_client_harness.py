@@ -92,7 +92,7 @@ def test_the_harness_asserts_the_expected_tool_names(tmp_path: Path):
 
     listing = next(check for check in report["checks"] if check["name"] == "tools_list")
     assert listing["passed"] is True
-    assert len(listing["evidence"]["tools"]) == 20
+    assert len(listing["evidence"]["tools"]) == 22
     assert "briefs_list" in listing["evidence"]["tools"]
     assert listing["evidence"]["missing"] == []
 
@@ -135,7 +135,7 @@ def test_the_harness_exercises_the_rollout_gate_rather_than_bypassing_it(tmp_pat
 
     check = next(check for check in report["checks"] if check["name"] == "rollout_gate")
     assert check["passed"] is True
-    assert check["evidence"]["internal_tool_count"] == 20
+    assert check["evidence"]["internal_tool_count"] == 22
     assert check["evidence"]["external_tool_count"] == 0
     assert check["evidence"]["external_call_diagnostic"] == "MCTL_MCP_TOOL_DISABLED"
 
