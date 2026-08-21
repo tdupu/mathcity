@@ -483,6 +483,43 @@ by what adjudication unlocks, not by arrival time.*
   with no shell command at all, which is why command-syntax detection cannot
   reach it.
 
+- **B2.15 "Drained" means de-indexed AND archived.** Removing a brief's row
+  from `stack/.index.jsonl` without moving the file to
+  `.adjudicated-archive/` is **not** draining. Both halves, or neither.
+
+  **This was decided, not inherited from the word.** gascity defines `drain`
+  twice and **neither sense implies archiving**: a session lifecycle state
+  (`draining` → `drained` → stopped) and a compiler construct in
+  `internal/dispatch/drain.go`. The session sense explicitly models draining
+  *with work unfinished* — `internal/api/event_payloads.go:449` drain-acks while
+  still holding the assignee on an open work bead. So the vocabulary settled
+  nothing; whoever ran the 35-row drain made an unrecorded choice, and the owner
+  has now made it deliberately (decision bead `mc-g4k`, 2026-08-20).
+
+  **The code's own history points the same way** (trans). `remove-archived-row`
+  *computed* `archive_hit` and then ignored it — the variable existed and was
+  populated. Whoever wrote it already meant *verify archived, then remove*; the
+  bug decoupled behaviour from that intent rather than reflecting an
+  intent-free function. So B2.15 **confirms** a design intent visible in the
+  brief-pile domain itself rather than picking one of two equally live
+  options.
+
+  **Why archiving won.** De-indexing is the path that had already produced a
+  lying write: `remove-archived-row` computed `archive_hit`, never tested it,
+  removed the row unconditionally, and reported
+  `reason: "explicit_slug_archived_row"` with `archived_at: ""`. Archiving keeps
+  the brief findable; de-indexing strands it on disk with nothing pointing at
+  it. Mechanical check: a removal path must verify an archive copy exists before
+  removing the row and must fail loudly when it does not (shipped in
+  `brief-stack-index.py` for **both** removal paths). The rule binds every
+  removal path, and it was tested against each: `reconcile-archive` also
+  returned True on the row's own `terminal_index_status` before any archive
+  lookup, which is the same lying write under a different name.
+
+  **`drained` is an overloaded word and must not become one knowl entry.** The
+  fleet-event `drained`/`drain-acked` is gascity's session sense and is
+  unrelated to the brief pile. Separate entries, always.
+
 
 ## Pillar 3 — Work closure discipline (B3.x)
 
@@ -987,6 +1024,7 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
 | 2026-08-20 | Add B2.14: brief frontmatter is governed by B2.11 but enforced as a JUDGEMENT rule. The mechanical version was built and probed, not assumed unworkable: keying the register's reference scan on `status:`/`verdict:` hit 41 and 20 referencers and flagged all four probe cases, including the two known-clean (`create-brief`, `present-briefs`). Path literals are invented for one purpose and carry signal; field names are ubiquitous vocabulary and do not | reviewer trans set the bar at 3/3 probe cases and accepted the measurement at 2/3: "a green check that misclassifies create-brief is worse than not having the check at all" |
+| 2026-08-20 | Add B2.15: "drained" means de-indexed AND archived; de-indexing alone is not draining. Recorded as a DECISION rather than a clarification — gascity defines `drain` twice and neither sense implies archiving, so the term settled nothing and the choice made during the 35-row drain had never been recorded | the human adjudicator: "Let's ratify then" (decision bead `mc-g4k`). Archiving won because de-indexing is the path that had already produced a lying write (`remove-archived-row` asserting an archive it never checked); the 35 drained rows were measured 35/35 archived, so the rule codifies observed practice rather than requiring repair |
 | 2026-08-20 | Amend B2.11 to carry BOTH halves of the architecture: `mctl` is the API, and an AGENT reaches it through the MCP. The first draft encoded only "repeated work behind mctl" and was incomplete — it did not say that a skill walking an agent through bash is the DEPRECATED PATTERN rather than merely an unregistered writer. Owner's canonical text is quoted verbatim rather than paraphrased, including the rationale, because three successive restatements drifted | the human adjudicator, verbatim: "AGENTS acting on mathcity should always go through an MCP for the API" and "If an mctl call fails then we know where it is... we don't need to deal with 100 different ways to try and do the same thing" |
 | 2026-08-20 | Amend B2.13 to an explicit JUDGEMENT rule (naming what is weighed and the three items a reasoned verdict must cite, per `check-zero`) rather than a mechanical clause; add a paths.toml cross-check to `tests/brief-writer-authority` after `check-zero` found `mctl_core/redundant_state.py::artifact_layout` already models artifact locations | the human adjudicator: "Sometimes we need to defer to agent judgement. That is the power of agents." A bad mechanical proxy for a judgement call passes confidently on cases it cannot see |
 | 2026-08-20 | Add B2.11/B2.12/B2.13: `mctl` is the sole writer of every brief artifact; non-`mctl` writers are violations recorded in a dated register (`assets/brief-pipeline/brief-writers.toml`) that may only shrink; and no write path may report a state it did not verify. Enforced by `tests/brief-writer-authority`, which compares references rather than attempting write-detection (a proximity heuristic was prototyped and rejected for classifying `brief-shuffle-fast-drain.py` as read-only when `append_index()` writes the index) | the human adjudicator, verbatim: "We want to factor repeated work through a single point of failure" and "There is a central failure point which is the mctl commands. Debugging those will fix the whole thing." Five violations registered at adoption rather than fixed, so the burn-down is visible |

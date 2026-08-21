@@ -260,6 +260,45 @@ sole_writer = "mctl"
 # Literals are now disambiguated: ".pile" and "decisions-track".
 
   [[artifact.referencer]]
+  file = "assets/scripts/mctl_core/effects.py"
+  role = "authorized"
+  note = """_update_decisions_track_row: rewrites one row in place under the
+EffectPlan; non-target lines byte-identical.
+
+WHY THE REGISTER PERMITS IT. This is the FIFTH representation moving INTO the
+interface. The row was previously written by adjudicate-brief in place AFTER
+mctl returned, so it agreed only when a human ran the skill. B2.11 is satisfied
+by this writer existing, not breached: it does not add a writer, it replaces the
+reach-around B2.11 exists to eliminate. Refusing it would not leave the artifact
+unwritten -- it would leave it written by the worse writer.
+
+BOUNDED, and the bound is the point (cozy). Track-conditional: it plans a write
+ONLY for a brief that already carries a legacy row. This authorizes effects.py
+as the writer WHEN THE LEGACY LANE OWNS THE BRIEF, not as a general writer of
+this artifact. Without that line, `authorized` reads as unconditional and the
+next person to widen the write has no line to have crossed.
+
+THE GATE IS `row_key`, NOT `is_file()` (cozy, answering directly). `row_key`
+resolves the brief's own row from the migration record (`legacy_n` /
+`legacy_source` on the stack index row) and is None for any brief the legacy
+lane does not own:
+    stack-track brief, manifest present  -> row_key None  -> NO write
+    legacy brief,      manifest present  -> row_key set   -> ONE row written
+    legacy brief,      manifest absent   -> is_file False -> no write, AND WARNS
+On this corpus the manifest always exists, so `is_file()` never discriminates
+and `row_key` does all the work. Note the third case WARNS -- so this is NOT the
+silent-no-op shape of #92, where a row-less brief is neither written nor
+reported.
+
+VERIFIED by cozy replaying the writer over copies of all 204 live rows: 202
+written, one line changed per write, non-target lines byte-identical, 2
+principled refusals, live file untouched. One refusal is load-bearing -- the
+replaced heredoc matched rows on `n`, and the live manifest has a DUPLICATE `n`
+(row 19 claimed by both he-rg5r-cascade-close and
+hecke-history-rewrite-vs-tip-cleanup), so it would have stamped a verdict onto a
+brief nobody adjudicated. The new writer refuses and warns."""
+
+  [[artifact.referencer]]
   file = "assets/scripts/brief-decisions-track-inventory.py"
   role = "violation"
   since = "2026-08-20"

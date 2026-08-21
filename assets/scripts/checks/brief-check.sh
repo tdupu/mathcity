@@ -706,6 +706,19 @@ nb_resolve_mode() {
     # BRIEF_ROOT is <rig_root>/.beads/briefs, so the rig root is two up.
     NB_RIG_ROOT="$(cd "$ROOT/../.." 2>/dev/null && pwd || true)"
   fi
+  # Whether the rig root is REAL, tracked separately from whether it is set.
+  # The fallback above cannot fail loudly -- `|| true` and a relative `.` both
+  # yield a plausible-looking value -- so the kill-switch path then composed
+  # against a non-rig directory, found no file, and read absence as "brake
+  # off". An operator-engaged control was skipped while the gate reported
+  # armed_and_gates_clear: a positive claim that it had been read.
+  #
+  # An unresolvable environment is NOT evidence that the brake is off, so
+  # callers fail closed on this flag rather than inferring from the flag file.
+  NB_RIG_ROOT_RESOLVED=yes
+  if [ -z "$NB_RIG_ROOT" ] || [ ! -d "$NB_RIG_ROOT/.beads" ]; then
+    NB_RIG_ROOT_RESOLVED=no
+  fi
   NB_ARM_CITY_PATH="$NB_CITY_ROOT/.beads/no_brainer_auto_execute_armed"
   NB_ARM_RIG_PATH="$NB_RIG_ROOT/.beads/no_brainer_auto_execute_armed"
   NB_KS_CITY="$(nb_flag_state "$NB_CITY_ROOT/.beads/auto_merge_enabled")"
@@ -722,6 +735,14 @@ nb_resolve_mode() {
   case "$NB_ARM_CITY" in disarmed | invalid) NB_MODE="dry-run" ;; esac
   case "$NB_ARM_RIG" in disarmed | invalid) NB_MODE="dry-run" ;; esac
   if [ "$NB_KS_CITY" = "false" ] || [ "$NB_KS_RIG" = "false" ]; then
+    NB_MODE="dry-run"
+  fi
+  # Same treatment when the rig brake could not be READ at all. The report
+  # answers "will something auto-execute here", and the answer is no -- the
+  # gate refuses with kill_switch_unreadable. Reporting ARMED would be the
+  # requirement-2 failure on its own: a banner asserting a cleared brake,
+  # printed immediately before a refusal saying the brake was never read.
+  if [ "$NB_RIG_ROOT_RESOLVED" != "yes" ]; then
     NB_MODE="dry-run"
   fi
 }
@@ -775,7 +796,21 @@ report_no_brainer_mode() {
 # the easy direction is always the safe one.
 disarm_no_brainer() {
   nb_resolve_mode
-  for nb_token in "$NB_ARM_CITY_PATH" "$NB_ARM_RIG_PATH"; do
+  # #94, and the SAME root cause as the fail-permissive kill switch: when the
+  # rig root does not resolve, NB_ARM_RIG_PATH composes against whatever the
+  # cwd happens to be (or filesystem root), and disarm cheerfully writes a
+  # token there. The operator is then told dry-run is pinned while the rig
+  # token sits in an unrelated directory -- a phantom brake, which is worse
+  # than no brake because it reads as one.
+  #
+  # The CITY token is still written: its path is well-defined from GC_CITY,
+  # it pins dry-run globally, and keeping the safe direction easy matters more
+  # than symmetry. Only the rig token is withheld, and it is said out loud.
+  nb_disarm_tokens="$NB_ARM_CITY_PATH"
+  if [ "$NB_RIG_ROOT_RESOLVED" = "yes" ]; then
+    nb_disarm_tokens="$nb_disarm_tokens $NB_ARM_RIG_PATH"
+  fi
+  for nb_token in $nb_disarm_tokens; do
     nb_token_dir="$(dirname "$nb_token")"
     if ! mkdir -p "$nb_token_dir" 2>/dev/null; then
       fail "cannot create $nb_token_dir to pin dry-run"
@@ -784,9 +819,16 @@ disarm_no_brainer() {
       fail "cannot write $nb_token to pin dry-run"
     fi
   done
-  echo "no-brainer auto-execution pinned to DRY-RUN (both tokens now read false)."
-  echo "  $NB_ARM_CITY_PATH"
-  echo "  $NB_ARM_RIG_PATH"
+  if [ "$NB_RIG_ROOT_RESOLVED" = "yes" ]; then
+    echo "no-brainer auto-execution pinned to DRY-RUN (both tokens now read false)."
+    echo "  $NB_ARM_CITY_PATH"
+    echo "  $NB_ARM_RIG_PATH"
+  else
+    echo "no-brainer auto-execution pinned to DRY-RUN via the CITY token only."
+    echo "  $NB_ARM_CITY_PATH"
+    echo "  rig token NOT written: the rig root did not resolve, so there is no"
+    echo "  rig to pin. Set GC_RIG_ROOT or run from inside the rig to pin it too."
+  fi
   echo "verify with: brief-check.sh no-brainer-mode"
 }
 
@@ -866,6 +908,13 @@ check_no_brainer_execute_safety() {
   fi
 
   # --- 4. N5 kill-switch hierarchy (retained brakes) ---------------------
+  # Fail CLOSED when the rig-level brake could not be read at all. Permitting
+  # here would treat "I could not look" as "I looked and it was off", and the
+  # reason string would assert a read that never happened.
+  if [ "$NB_RIG_ROOT_RESOLVED" != "yes" ]; then
+    nb_refuse "kill_switch_unreadable" \
+      "rig root could not be resolved (GC_RIG_ROOT and BRIEF_ROOT unset, and '${NB_RIG_ROOT:-<empty>}' is not a rig) — the rig kill switch was NOT read, so auto-execution is refused; set GC_RIG_ROOT or run from inside the rig"
+  fi
   if [ "$NB_KS_CITY" = "false" ] || [ "$NB_KS_RIG" = "false" ]; then
     nb_refuse "kill_switch_engaged" \
       "kill switch ENGAGED (city=$NB_KS_CITY rig=$NB_KS_RIG) — auto-execution halted (N5); route brief to the pile in compact form"
