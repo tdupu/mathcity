@@ -325,6 +325,28 @@ def test_a_mutation_with_no_rig_is_refused_rather_than_guessed(tmp_path: Path):
     assert bead(fixture, "gascity_packs", "gs-open")["status"] == "open"
 
 
+def test_open_top_brief_carries_the_rig_on_a_city_wide_queue(tmp_path: Path):
+    """The per-row links have always carried `rig=`, so a click never hits
+    MCTL_DASH_RIG_REQUIRED -- the "Open top brief" shortcut did not, and a
+    click on it landed on the disambiguation page instead of the brief.
+    Found driving the page in a browser, not by reading the code.
+    """
+    dashboard, _, _ = city_dashboard(tmp_path)
+
+    html = body(dashboard, "/queue")
+
+    href_match = re.search(r'href="(/briefs/[^"]+)">Open top brief', html)
+    assert href_match, "no 'Open top brief' link found on a queue that should be non-empty"
+    href = href_match.group(1)
+    assert "rig=" in href, f"Open top brief link is missing rig=, would 400: {href}"
+
+    # And the link must actually resolve, not just look right.
+    follow_up = dashboard.handle(Request.get(href.split("?", 1)[0], **dict(
+        pair.split("=", 1) for pair in href.split("?", 1)[1].split("&")
+    )))
+    assert follow_up.status == 200, strip_tags(follow_up.body)
+
+
 def test_a_brief_url_without_a_rig_refuses_and_names_the_rigs(tmp_path: Path):
     dashboard, _, _ = city_dashboard(tmp_path)
 

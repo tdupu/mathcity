@@ -595,7 +595,7 @@ class Dashboard:
             # would imply a choice the deployment already made.
             + (render.rig_picker(self._rig_ids(), selected=(rig,) if rig else ()) if self.city_wide else "")
             + (
-                f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(attr(briefs[0], "brief_id"))))}">'
+                f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(attr(briefs[0], "brief_id") or ""), rig=str(attr(briefs[0], "rig_id") or "") or view.rig))}">'
                 "Open top brief &rarr;</a>"
                 if briefs
                 else ""
