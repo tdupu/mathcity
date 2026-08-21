@@ -107,9 +107,9 @@ def test_the_dashboard_speaks_stdio_to_a_real_mctl_mcp_serve_subprocess(tmp_path
     assert "--client-class" in command
     assert command[command.index("--client-class") + 1] == "internal"
     # The server's full internal surface, not the dashboard's own narrower
-    # `ALLOWED_TOOLS` (16): this asserts the subprocess was launched as an
+    # `ALLOWED_TOOLS` (18): this asserts the subprocess was launched as an
     # internal client, which is what makes any tool visible at all.
-    assert len(tools) == 18, "an external client would see zero tools here"
+    assert len(tools) == 22, "an external client would see zero tools here"
     assert "briefs_adjudicate" in tools
 
 

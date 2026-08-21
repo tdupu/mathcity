@@ -436,6 +436,36 @@ severity = "FATAL"
 meaning = "Mutation blocked because brief doctor reported ERROR or FATAL diagnostics."
 module = "effects.py"
 
+[MCTL_HEALTH_FD_PROBE_FAILED]
+severity = "WARN"
+meaning = "Could not measure the supervisor's file-descriptor usage (pgrep/lsof/sysctl failed or found no single supervisor process)."
+module = "health.py"
+
+[MCTL_HEALTH_NO_FD_HISTORY]
+severity = "INFO"
+meaning = "File-descriptor trend is unknown: no time-series sample store exists yet, so city_health reads one point in time and cannot say whether usage is rising."
+module = "health.py"
+
+[MCTL_FLEET_STATUS_PROBE_FAILED]
+severity = "ERROR"
+meaning = "Could not read the configured agent roster from `gc status --json`."
+module = "fleet.py"
+
+[MCTL_FLEET_SESSION_LIST_FAILED]
+severity = "ERROR"
+meaning = "Could not read the live session list from `gc session list --json`."
+module = "fleet.py"
+
+[MCTL_FLEET_JOIN_KEY_UNVERIFIED]
+severity = "INFO"
+meaning = "fleet_sessions joins `gc status` slots to `gc session list` sessions by an inferred '<rig>/<agent_name>' key, not a documented contract; a slot reporting occupied=false while a matching session visibly exists is this join failing."
+module = "fleet.py"
+
+[MCTL_FLEET_LIMIT_STATE_UNRECORDED]
+severity = "INFO"
+meaning = "limit_state is always 'unknown': no per-agent quota/usage-window recording exists yet (dashboard handoff §4.5)."
+module = "fleet.py"
+
 [MCTL_MUTATION_DEFER_UNTIL_REQUIRED]
 severity = "FATAL"
 meaning = "Deferral requires --until YYYY-MM-DD or --days N."

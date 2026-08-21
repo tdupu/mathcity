@@ -65,6 +65,10 @@ EXPECTED_TOOLS = (
     "work_dispatch_event",
     "trace_show",
     "trace_replay_preview",
+    "mayor_city_state",
+    "mayor_conservation",
+    "fleet_sessions",
+    "city_health",
 )
 
 CLIENT_INFO = {"name": "mctl-mcp-harness", "version": "0.6.0"}

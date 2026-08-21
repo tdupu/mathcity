@@ -81,6 +81,8 @@ from .effects import (
     plan_deferral,
 )
 from .fields import read_frontmatter
+from .fleet import build_fleet_sessions
+from .health import build_city_health
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
 from .redundant_state import artifact_layout
@@ -102,6 +104,8 @@ from .schemas import (
     response_schema,
     schema_errors,
 )
+from .mayor import city_state as mayor_city_state
+from .mayor import conservation_report as mayor_conservation_report
 from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
 from .work import (
     WorkError,
@@ -468,6 +472,18 @@ def _handle_context_rigs(scope: CityScope, arguments: Mapping[str, Any]) -> dict
     }
 
 
+def _handle_fleet_sessions(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Dashboard handoff #112: every configured slot, occupied or empty."""
+    report = build_fleet_sessions(scope)
+    return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
+
+
+def _handle_city_health(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Dashboard handoff #114: three-valued data-plane health and resource pressure."""
+    report = build_city_health(scope)
+    return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
+
+
 def _handle_briefs_list(
     ctx: MctlContext, arguments: Mapping[str, Any], progress: RigProgress | None = None
 ) -> dict[str, object]:
@@ -672,6 +688,49 @@ _EFFECT_RESPONSE = {
     "effect_plan": EFFECT_PLAN_SCHEMA,
 }
 
+def _handle_mayor_city_state(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Four-valued city state. `unknown` is a real answer, not a soft `down`.
+
+    The probes are reported individually so a client can see WHICH instrument
+    said what. Collapsing them is how three commands gave three different
+    answers about the same city in QUIMBY 44.
+    """
+    state = mayor_city_state(ctx.city_root)
+    payload = state.to_dict()
+    payload["diagnostics"] = _diagnostics(ctx, state.diagnostics)
+    return payload
+
+
+def _handle_mayor_conservation(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Referential-integrity conservation check for one rig's store.
+
+    Enumerates POINTERS, not beads. The lost-bead reclaim chain enumerates
+    beads that exist, so a deleted root is outside its domain by construction
+    -- arming more of that chain cannot reach it (issue #123).
+    """
+    report = mayor_conservation_report(ctx)
+    payload = report.to_dict()
+    payload["diagnostics"] = _diagnostics(ctx, report.diagnostics)
+    return payload
+
+
+_PROBE_SCHEMA: Schema = {
+    "type": "object",
+    "description": "One instrument's answer, carrying whether it actually looked.",
+    "properties": {
+        "name": {"type": "string"},
+        "ok": {
+            "type": ["boolean", "null"],
+            "description": "null means the probe did NOT complete. That is not 'false'.",
+        },
+        "detail": {"type": "string"},
+        "value": {"type": ["integer", "null"]},
+    },
+    "required": ["detail", "name", "ok", "value"],
+    "additionalProperties": False,
+}
+
+
 TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="context_resolve",
@@ -740,6 +799,154 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["city_root", "discovery_path", "rigs"],
         ),
         handler=_handle_context_rigs,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="fleet_sessions",
+        title="List fleet slots, occupied and empty",
+        description=(
+            "Every configured agent slot for this city, joined against the live session "
+            "list: occupied slots carry the session's state, template, and idle time; "
+            "empty slots are rows too, so absence renders the same as presence rather than "
+            "shrinking the roster. `limit_state` is always 'unknown' -- no quota/usage-window "
+            "recording exists yet; see the MCTL_FLEET_LIMIT_STATE_UNRECORDED diagnostic."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "slots": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "qualified_name": {"type": "string"},
+                            "template": nullable_string("Agent template name."),
+                            "occupied": {"type": "boolean"},
+                            "state": nullable_string("Session state, null when the slot is empty."),
+                            "holds": nullable_string("Session id this slot currently carries."),
+                            "model": nullable_string("Model/provider, when recorded."),
+                            "account": nullable_string("Not recorded today; always null."),
+                            "limit_state": {
+                                "type": "string",
+                                "description": "Always 'unknown' -- see tool description.",
+                            },
+                            "idle_for_seconds": {"type": ["number", "null"]},
+                            "idle_reason": nullable_string(
+                                "Why idle_for_seconds is null, when it is."
+                            ),
+                        },
+                        "required": [
+                            "qualified_name",
+                            "template",
+                            "occupied",
+                            "state",
+                            "holds",
+                            "model",
+                            "account",
+                            "limit_state",
+                            "idle_for_seconds",
+                            "idle_reason",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ["slots"],
+        ),
+        handler=_handle_fleet_sessions,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="city_health",
+        title="City-wide data-plane health and resource pressure",
+        description=(
+            "Three-valued data-plane health (`healthy` / `reachable_quarantined` / "
+            "`unreachable`) read from `gc dolt health`, never collapsed to a boolean -- a "
+            "reachable-but-quarantined database is a real, distinct state, not a degraded "
+            "'healthy'. Resource pressure covers file descriptors against the OS-level "
+            "`kern.maxfilesperproc` ceiling (not `ulimit -n`, which is not the binding "
+            "constraint) and per-rig Dolt directory size. `fds_trend` is always 'unknown': no "
+            "time-series sample store exists yet."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "data_plane": {
+                    "type": "string",
+                    "enum": ["healthy", "reachable_quarantined", "unreachable"],
+                },
+                "probe_results": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "outcome": {
+                                "type": "string",
+                                "enum": ["succeeded", "timed_out", "refused"],
+                            },
+                            "timeout_seconds": {"type": ["number", "null"]},
+                            "latency_ms": {"type": ["number", "null"]},
+                            "detail": {"type": "string"},
+                        },
+                        "required": ["name", "outcome", "timeout_seconds", "latency_ms", "detail"],
+                        "additionalProperties": False,
+                    },
+                },
+                "resources": {
+                    "type": "object",
+                    "properties": {
+                        "fds_used": {"type": ["integer", "null"]},
+                        "fds_limit": {"type": ["integer", "null"]},
+                        "fds_trend": {"type": "string"},
+                        "disk_per_rig": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "rig_id": {"type": "string"},
+                                    "bytes_used": {"type": ["integer", "null"]},
+                                    "reason": nullable_string("Why bytes_used is null, when it is."),
+                                },
+                                "required": ["rig_id", "bytes_used", "reason"],
+                                "additionalProperties": False,
+                            },
+                        },
+                        "flood_conditions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "resource": {"type": "string"},
+                                    "detail": {"type": "string"},
+                                    "growth": {"type": "string"},
+                                    "since": nullable_string("When this condition started, if known."),
+                                },
+                                "required": ["resource", "detail", "growth", "since"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "required": ["fds_used", "fds_limit", "fds_trend", "disk_per_rig", "flood_conditions"],
+                    "additionalProperties": False,
+                },
+                "per_rig": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "rig_id": {"type": "string"},
+                            "state": {"type": "string", "enum": ["healthy", "degraded", "unreachable"]},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["rig_id", "state", "reason"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ["data_plane", "probe_results", "resources", "per_rig"],
+        ),
+        handler=_handle_city_health,
         scope=CITY_SCOPE,
     ),
     ToolSpec(
@@ -1068,6 +1275,76 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["applied", "planned_effects", "replay_blockers", "source_trace_id"],
         ),
         handler=_handle_trace_replay_preview,
+    ),
+    ToolSpec(
+        name="mayor_city_state",
+        title="Mayor: city state",
+        description=(
+            "Four-valued city state (up/idle/down/unknown) assembled from probes that each "
+            "report whether they completed. 'unknown' means a load-bearing probe did not "
+            "answer and MUST NOT be read as 'down'."
+        ),
+        input_schema=request_schema({}, []),
+        output_schema=response_schema(
+            {
+                "state": {
+                    "type": "string",
+                    "enum": ["up", "idle", "down", "unknown"],
+                    "description": "unknown outranks the rest; a partial answer is not a whole one.",
+                },
+                "pane_count": {"type": ["integer", "null"]},
+                "probes": {"type": "array", "items": _PROBE_SCHEMA},
+                "active_rigs": STRING_ARRAY,
+                "suspended_rigs": dict(
+                    STRING_ARRAY,
+                    description="The reconciler skips these rigs' agents; their ready work never dispatches.",
+                ),
+            },
+            ["active_rigs", "pane_count", "probes", "state", "suspended_rigs"],
+        ),
+        handler=_handle_mayor_city_state,
+    ),
+    ToolSpec(
+        name="mayor_conservation",
+        title="Mayor: conservation check",
+        description=(
+            "Referential-integrity check for unaccounted exits: live beads whose "
+            "gc.root_bead_id resolves to no bead. Enumerates pointers, not beads, so it "
+            "detects the deleted-root class the idleness-based lost-bead filter cannot. "
+            "DO NOT prune the pointers it reports -- they are the only surviving evidence "
+            "those workflows existed."
+        ),
+        input_schema=request_schema({}, []),
+        output_schema=response_schema(
+            {
+                "clean": {
+                    "type": ["boolean", "null"],
+                    "description": "null when the store was unreadable. Unreadable is UNKNOWN, not clean.",
+                },
+                "readable": {"type": "boolean"},
+                "molecules": {"type": "integer"},
+                "roots_resolving": {"type": "integer"},
+                "roots_dangling": {"type": "integer"},
+                "orphaned_members": {"type": "integer"},
+                "dangling_root_ids": STRING_ARRAY,
+                "window_earliest": nullable_string("Earliest created_at among orphaned members."),
+                "window_latest": nullable_string("Latest created_at among orphaned members."),
+                "store_refs": {
+                    "type": "object",
+                    "description": "gc.root_store_ref counts for orphaned members; shows whether they are cross-store or simply gone.",
+                },
+            },
+            [
+                "clean",
+                "readable",
+                "dangling_root_ids",
+                "molecules",
+                "orphaned_members",
+                "roots_dangling",
+                "roots_resolving",
+            ],
+        ),
+        handler=_handle_mayor_conservation,
     ),
 )
 
