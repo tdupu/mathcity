@@ -98,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
         return _briefs_command(args, context)
     if args.command == "trace":
         return _trace_command(args, context)
+    if args.command == "mayor":
+        return _mayor_command(args, context)
     return _work_command(args, context)
 
 
@@ -247,6 +249,39 @@ def _trace_command(args: argparse.Namespace, context: MctlContext) -> int:
     return 0
 
 
+def _mayor_command(args: argparse.Namespace, context: MctlContext) -> int:
+    """Mayor reads. Exit status carries the finding so a script can branch on it.
+
+    `city-state` exits 0 for up/idle, 1 for down, **2 for unknown**. Two is a
+    distinct status on purpose: a caller that treated "I could not determine
+    this" as "down" would restart a healthy city, and that exact conflation is
+    what this surface exists to prevent (issue #100).
+
+    `conservation` exits 0 clean, 1 when a dangling root exists, **2 when the
+    store could not be read** -- unreadable is not clean.
+    """
+    from .mayor import city_state, conservation_report
+
+    if args.mayor_command == "city-state":
+        state = city_state(context.city_root)
+        payload: dict[str, object] = {**state.to_dict(), "trace_id": context.trace_id}
+        payload["diagnostics"] = [d.to_dict() for d in state.diagnostics]
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        for diagnostic in state.diagnostics:
+            print(render_diagnostic(diagnostic), file=sys.stderr)
+        return {"up": 0, "idle": 0, "down": 1, "unknown": 2}[state.state]
+
+    report = conservation_report(context)
+    payload = {**report.to_dict(), "trace_id": context.trace_id}
+    payload["diagnostics"] = [d.to_dict() for d in report.diagnostics]
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    for diagnostic in report.diagnostics:
+        print(render_diagnostic(diagnostic), file=sys.stderr)
+    if not report.readable:
+        return 2
+    return 0 if report.clean else 1
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mctl")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -271,6 +306,16 @@ def _build_parser() -> argparse.ArgumentParser:
     trace_show = trace_commands.add_parser("show", help="fold every phase row for one trace id")
     trace_show.add_argument("trace_id")
     _add_runtime_arguments(trace_show)
+    mayor = commands.add_parser("mayor", help="Mayor reads: city state and conservation")
+    mayor_commands = mayor.add_subparsers(dest="mayor_command", required=True)
+    mayor_city = mayor_commands.add_parser(
+        "city-state", help="four-valued city state; 'unknown' is never rendered as 'down'"
+    )
+    _add_runtime_arguments(mayor_city)
+    mayor_cons = mayor_commands.add_parser(
+        "conservation", help="referential-integrity check for unaccounted exits (dangling roots)"
+    )
+    _add_runtime_arguments(mayor_cons)
     _add_mcp_parser(commands)
     _add_dashboard_parser(commands)
     work = commands.add_parser("work", help="inspect and dispatch brief-backed work")

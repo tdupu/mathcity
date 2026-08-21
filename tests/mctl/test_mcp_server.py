@@ -42,6 +42,8 @@ DECLARED_TOOLS = (
     "briefs_validate",
     "context_resolve",
     "context_rigs",
+    "mayor_city_state",
+    "mayor_conservation",
     "trace_replay_preview",
     "trace_show",
     "work_claim",

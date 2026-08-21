@@ -102,6 +102,8 @@ from .schemas import (
     response_schema,
     schema_errors,
 )
+from .mayor import city_state as mayor_city_state
+from .mayor import conservation_report as mayor_conservation_report
 from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
 from .work import (
     WorkError,
@@ -672,6 +674,49 @@ _EFFECT_RESPONSE = {
     "effect_plan": EFFECT_PLAN_SCHEMA,
 }
 
+def _handle_mayor_city_state(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Four-valued city state. `unknown` is a real answer, not a soft `down`.
+
+    The probes are reported individually so a client can see WHICH instrument
+    said what. Collapsing them is how three commands gave three different
+    answers about the same city in QUIMBY 44.
+    """
+    state = mayor_city_state(ctx.city_root)
+    payload = state.to_dict()
+    payload["diagnostics"] = _diagnostics(ctx, state.diagnostics)
+    return payload
+
+
+def _handle_mayor_conservation(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Referential-integrity conservation check for one rig's store.
+
+    Enumerates POINTERS, not beads. The lost-bead reclaim chain enumerates
+    beads that exist, so a deleted root is outside its domain by construction
+    -- arming more of that chain cannot reach it (issue #123).
+    """
+    report = mayor_conservation_report(ctx)
+    payload = report.to_dict()
+    payload["diagnostics"] = _diagnostics(ctx, report.diagnostics)
+    return payload
+
+
+_PROBE_SCHEMA: Schema = {
+    "type": "object",
+    "description": "One instrument's answer, carrying whether it actually looked.",
+    "properties": {
+        "name": {"type": "string"},
+        "ok": {
+            "type": ["boolean", "null"],
+            "description": "null means the probe did NOT complete. That is not 'false'.",
+        },
+        "detail": {"type": "string"},
+        "value": {"type": ["integer", "null"]},
+    },
+    "required": ["detail", "name", "ok", "value"],
+    "additionalProperties": False,
+}
+
+
 TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="context_resolve",
@@ -1068,6 +1113,76 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["applied", "planned_effects", "replay_blockers", "source_trace_id"],
         ),
         handler=_handle_trace_replay_preview,
+    ),
+    ToolSpec(
+        name="mayor_city_state",
+        title="Mayor: city state",
+        description=(
+            "Four-valued city state (up/idle/down/unknown) assembled from probes that each "
+            "report whether they completed. 'unknown' means a load-bearing probe did not "
+            "answer and MUST NOT be read as 'down'."
+        ),
+        input_schema=request_schema({}, []),
+        output_schema=response_schema(
+            {
+                "state": {
+                    "type": "string",
+                    "enum": ["up", "idle", "down", "unknown"],
+                    "description": "unknown outranks the rest; a partial answer is not a whole one.",
+                },
+                "pane_count": {"type": ["integer", "null"]},
+                "probes": {"type": "array", "items": _PROBE_SCHEMA},
+                "active_rigs": STRING_ARRAY,
+                "suspended_rigs": dict(
+                    STRING_ARRAY,
+                    description="The reconciler skips these rigs' agents; their ready work never dispatches.",
+                ),
+            },
+            ["active_rigs", "pane_count", "probes", "state", "suspended_rigs"],
+        ),
+        handler=_handle_mayor_city_state,
+    ),
+    ToolSpec(
+        name="mayor_conservation",
+        title="Mayor: conservation check",
+        description=(
+            "Referential-integrity check for unaccounted exits: live beads whose "
+            "gc.root_bead_id resolves to no bead. Enumerates pointers, not beads, so it "
+            "detects the deleted-root class the idleness-based lost-bead filter cannot. "
+            "DO NOT prune the pointers it reports -- they are the only surviving evidence "
+            "those workflows existed."
+        ),
+        input_schema=request_schema({}, []),
+        output_schema=response_schema(
+            {
+                "clean": {
+                    "type": ["boolean", "null"],
+                    "description": "null when the store was unreadable. Unreadable is UNKNOWN, not clean.",
+                },
+                "readable": {"type": "boolean"},
+                "molecules": {"type": "integer"},
+                "roots_resolving": {"type": "integer"},
+                "roots_dangling": {"type": "integer"},
+                "orphaned_members": {"type": "integer"},
+                "dangling_root_ids": STRING_ARRAY,
+                "window_earliest": nullable_string("Earliest created_at among orphaned members."),
+                "window_latest": nullable_string("Latest created_at among orphaned members."),
+                "store_refs": {
+                    "type": "object",
+                    "description": "gc.root_store_ref counts for orphaned members; shows whether they are cross-store or simply gone.",
+                },
+            },
+            [
+                "clean",
+                "readable",
+                "dangling_root_ids",
+                "molecules",
+                "orphaned_members",
+                "roots_dangling",
+                "roots_resolving",
+            ],
+        ),
+        handler=_handle_mayor_conservation,
     ),
 )
 
