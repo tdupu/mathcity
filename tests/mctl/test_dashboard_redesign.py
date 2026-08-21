@@ -640,13 +640,28 @@ def test_a_reason_is_required():
     assert 'name="reason"' in html
 
 
-def test_the_verdict_set_is_not_a_closed_four():
-    """12 of 86 closed briefs carry a compound verdict; leave room."""
+def test_the_verdict_set_stays_an_open_tuple_not_a_closed_enum():
+    """12 of 86 closed briefs carry a compound verdict; leave room.
+
+    This used to assert `len(VERDICTS) >= 4`, back when defer was counted
+    as a verdict. D6 removed defer (2026-08-21) -- it is a separate
+    operation, not a fourth verdict -- which makes that count 3, not a
+    violation of "leave room". The `>= 4` was always a proxy for "this
+    collection is not closed off from growing", and pinning today's count
+    tested the wrong thing: a plain tuple literal is extensible by
+    construction, regardless of how many entries it currently holds. What
+    actually needs protecting is that VERDICTS stays a plain tuple (a
+    one-line edit to add a verdict) rather than becoming a closed Enum or
+    Literal type (a schema migration to add one).
+    """
     from mctl_dashboard.screens import panel
 
     names = {name for name, _label in panel.VERDICTS}
-    assert len(panel.VERDICTS) >= 4
-    assert {"approve", "reject"} <= names
+    assert isinstance(panel.VERDICTS, tuple)
+    assert {"approve", "reject", "revise"} <= names
+    # Extensibility, proven rather than assumed: appending a new verdict
+    # is a plain tuple concatenation, not a type error.
+    panel.VERDICTS + (("supersede", "supersede"),)
 
 
 # --------------------------------------------------------------------------
@@ -1513,6 +1528,57 @@ def test_a_real_option_letter_still_goes_through_as_an_option():
     )
     assert args["option"] == "B"
     assert "proposed-option" not in args["reason"]
+
+
+def test_choosing_other_forces_the_verdict_to_revise():
+    """D8: "Other" is a disposition in the UI and a REVISE in the backend.
+
+    Measured live 2026-08-20: an operator could submit disposition=Other
+    together with verdict=approve in the same request, and the core
+    accepted it -- Other silently coexisted with any verdict instead of
+    forcing revise. The disposition alone must decide the outcome here,
+    the same way a HELD gate overrides whatever verdict the radios show.
+    """
+    from mctl_dashboard.app import _arguments_for
+
+    class _Op:
+        name = "adjudicate"
+
+    args = _arguments_for(
+        _Op(), "he-1",
+        {"verdict": "approve", "reason": "see below", "option": "other",
+         "option_other": "Split it into two briefs and re-file."},
+        None,
+    )
+    assert args["verdict"] == "revise"
+
+
+def test_choosing_other_with_revise_already_selected_stays_revise():
+    from mctl_dashboard.app import _arguments_for
+
+    class _Op:
+        name = "adjudicate"
+
+    args = _arguments_for(
+        _Op(), "he-1",
+        {"verdict": "revise", "reason": "see below", "option": "other",
+         "option_other": "Split it into two briefs and re-file."},
+        None,
+    )
+    assert args["verdict"] == "revise"
+
+
+def test_defer_is_not_offered_as_a_verdict():
+    """D6: verdicts are approve/reject/revise -- defer is a SEPARATE
+    operation. The panel already renders a standalone "Defer for (days)"
+    form (render.operation_forms); offering defer a second time, as a
+    fourth verdict radio, is two controls disagreeing about the same
+    action on one page.
+    """
+    from mctl_dashboard.screens import panel
+
+    names = [name for name, _label in panel.VERDICTS]
+    assert "defer" not in names
 
 
 def test_the_disposition_control_offers_the_briefs_own_options():

@@ -1731,6 +1731,11 @@ def _arguments_for(
                 existing = arguments["reason"]
                 marker = f"{PROPOSED_OPTION_MARKER} {proposed}"
                 arguments["reason"] = f"{existing}\n\n{marker}" if existing else marker
+            # D8: "Other" is a disposition in the UI and a REVISE in the
+            # backend. The radios cannot express this on their own -- an
+            # operator could otherwise submit Other alongside Approve --
+            # so the disposition, not the verdict control, decides here.
+            arguments["verdict"] = "revise"
         # The no-brainer flag is a classifier signal, not a disposition, and the
         # core has no field for it yet. Rather than drop it -- which would make
         # the checkbox decorative -- it is folded into the reason that is
