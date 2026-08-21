@@ -524,3 +524,145 @@ def conservation_report(ctx: "MctlContext") -> ConservationReport:
             ),
         )
     return conservation_from_rows(rows)
+
+
+# --------------------------------------------------------------------------
+# boot state -- the handoff, factored into queries
+# --------------------------------------------------------------------------
+
+#: What a Mayor reboot needs that NOTHING can answer as a query.
+#:
+#: Taylor's framing: the handoff being "crazy long" is the symptom and the API
+#: is the cure. That is true of state -- open work, blocked work, the session
+#: chain, city health, conservation -- and it is NOT true of intent. A charge
+#: is a decision about what should happen next; no read of the store produces
+#: it, because it does not exist there until a human puts it there.
+#:
+#: Naming the residue is the honest half of this design. A boot tool that
+#: silently returned only the queryable parts would present a partial handoff
+#: as a whole one -- the same defect as a timed-out probe rendering as an
+#: answer. So the residue ships IN the payload, as data.
+PROSE_RESIDUE = (
+    "charge: what the next Mayor should do first, and why. Intent, not state.",
+    "rationale: why the previous Mayor chose an approach over its alternatives.",
+    "retractions: which earlier claims were overturned, and by what evidence.",
+    "standing policy: rules that live in POLICY docs, not in the bead graph.",
+)
+
+#: Titles of handoff beads follow "S<N> handoff" / "S<N> (NAME) handoff".
+_HANDOFF_MARKERS = ("handoff —", "handoff -", "handoff:")
+
+
+@dataclass(frozen=True)
+class BootState:
+    """Everything a Mayor reboot can LEARN BY QUERY, plus what it cannot.
+
+    `prose_residue` is not documentation of a limitation -- it is the
+    limitation, carried as data so a consumer cannot miss it. The test of done
+    Taylor set is "you can reboot from the API alone"; this field is the honest
+    answer to how close that is, and it shrinks as gaps are closed.
+    """
+
+    city: CityState
+    conservation: ConservationReport
+    open_beads: int
+    blocked_beads: int
+    recent_handoffs: Sequence[Mapping[str, object]]
+    escalations_queryable: bool
+    prose_residue: Sequence[str]
+    diagnostics: Sequence[Diagnostic] = field(default_factory=tuple)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "blocked_beads": self.blocked_beads,
+            "city": self.city.to_dict(),
+            "conservation": self.conservation.to_dict(),
+            "escalations_queryable": self.escalations_queryable,
+            "open_beads": self.open_beads,
+            "prose_residue": list(self.prose_residue),
+            "recent_handoffs": [dict(item) for item in self.recent_handoffs],
+        }
+
+
+def _handoff_chain(rows: Sequence[Mapping[str, object]], limit: int = 5) -> list[dict[str, object]]:
+    """The session chain, newest last. This replaces the prose 'work done by
+    previous sessions' block -- it is a query, and it was always a query."""
+    found = []
+    for row in rows:
+        title = str(row.get("title") or "")
+        if any(marker in title.lower() for marker in _HANDOFF_MARKERS):
+            found.append(
+                {
+                    "id": str(row.get("id") or ""),
+                    "created_at": str(row.get("created_at") or ""),
+                    "status": str(row.get("status") or ""),
+                    "title": title,
+                }
+            )
+    found.sort(key=lambda item: item["created_at"])
+    return found[-limit:]
+
+
+def boot_state(ctx: "MctlContext", handoff_limit: int = 5) -> BootState:
+    """Assemble a Mayor's boot state from queries, and declare what is not one."""
+    rows, error = load_rows(ctx.rig_root)
+    diagnostics: list[Diagnostic] = []
+
+    if error is not None:
+        diagnostics.append(
+            Diagnostic(
+                severity=Severity.FATAL,
+                code="MAYOR_BOOT_STORE_UNREADABLE",
+                message=f"Could not read the bead store: {error}",
+                hint="Counts below are NOT zero; they are unmeasured.",
+                facts={
+                    "city_path": str(ctx.city_root),
+                    "implementation_provenance": "mctl mayor boot",
+                    "rig_name": ctx.rig_id,
+                },
+                trace_id=ctx.trace_id,
+            )
+        )
+        conservation = conservation_report(ctx)
+        return BootState(
+            city=city_state(ctx.city_root),
+            conservation=conservation,
+            open_beads=-1,
+            blocked_beads=-1,
+            recent_handoffs=(),
+            escalations_queryable=False,
+            prose_residue=PROSE_RESIDUE,
+            diagnostics=tuple(diagnostics),
+        )
+
+    open_beads = sum(1 for row in rows if row.get("status") == "open")
+    blocked_beads = sum(1 for row in rows if row.get("status") == "blocked")
+    wisps = [row for row in rows if str(row.get("id") or "").startswith("gt-wisp-")]
+
+    if not wisps:
+        # Measured 2026-08-21: zero wisp-prefixed beads in hq while escalations
+        # were demonstrably arriving through `gc mail`. Two surfaces, one of
+        # them unqueryable, so "what is escalated" cannot be answered here.
+        diagnostics.append(
+            Diagnostic(
+                severity=Severity.WARN,
+                code="MAYOR_ESCALATIONS_NOT_QUERYABLE",
+                message="No escalation beads in this store; escalations arrive via `gc mail`.",
+                hint="Boot state cannot answer 'what is escalated'. Check `gc mail` by hand.",
+                facts={
+                    "implementation_provenance": "mctl mayor boot",
+                    "suggested_next_command": "gc mail inbox",
+                },
+            )
+        )
+
+    return BootState(
+        city=city_state(ctx.city_root),
+        conservation=conservation_from_rows(rows),
+        open_beads=open_beads,
+        blocked_beads=blocked_beads,
+        recent_handoffs=_handoff_chain(rows, handoff_limit),
+        escalations_queryable=bool(wisps),
+        prose_residue=PROSE_RESIDUE,
+        diagnostics=tuple(diagnostics),
+    )

@@ -260,7 +260,7 @@ def _mayor_command(args: argparse.Namespace, context: MctlContext) -> int:
     `conservation` exits 0 clean, 1 when a dangling root exists, **2 when the
     store could not be read** -- unreadable is not clean.
     """
-    from .mayor import city_state, conservation_report
+    from .mayor import boot_state, city_state, conservation_report
 
     if args.mayor_command == "city-state":
         state = city_state(context.city_root)
@@ -270,6 +270,16 @@ def _mayor_command(args: argparse.Namespace, context: MctlContext) -> int:
         for diagnostic in state.diagnostics:
             print(render_diagnostic(diagnostic), file=sys.stderr)
         return {"up": 0, "idle": 0, "down": 1, "unknown": 2}[state.state]
+
+    if args.mayor_command == "boot":
+        state = boot_state(context)
+        payload = {**state.to_dict(), "trace_id": context.trace_id}
+        payload["diagnostics"] = [d.to_dict() for d in state.diagnostics]
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        for diagnostic in state.diagnostics:
+            print(render_diagnostic(diagnostic), file=sys.stderr)
+        # 2 when the store could not be read: the counts are unmeasured, not zero.
+        return 2 if state.open_beads < 0 else 0
 
     report = conservation_report(context)
     payload = {**report.to_dict(), "trace_id": context.trace_id}
@@ -316,6 +326,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "conservation", help="referential-integrity check for unaccounted exits (dangling roots)"
     )
     _add_runtime_arguments(mayor_cons)
+    mayor_boot = mayor_commands.add_parser(
+        "boot", help="everything a Mayor reboot can learn by query, plus what it cannot"
+    )
+    _add_runtime_arguments(mayor_boot)
     _add_mcp_parser(commands)
     _add_dashboard_parser(commands)
     work = commands.add_parser("work", help="inspect and dispatch brief-backed work")
