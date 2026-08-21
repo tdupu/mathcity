@@ -97,8 +97,12 @@ def classify(operation: str, *, plan_contents: Mapping[str, Any] | None = None,
 
     if entry is None:
         return {
-            "blast_radius": "high",
-            "blast_radius_floor": "high",
+            # None, not a tier: a gated operation genuinely HAS no tier, and a
+            # consumer reading only `blast_radius` must not see a value that
+            # looks meaningful. Principle 5 picks which null -- "there is none",
+            # not "we did not look".
+            "blast_radius": None,
+            "blast_radius_floor": None,
             "gate": UNCLASSIFIED,
             "blast_radius_reason": (
                 f"operation {operation!r} is not in the blast-radius registry, so it is "
@@ -112,12 +116,12 @@ def classify(operation: str, *, plan_contents: Mapping[str, Any] | None = None,
         # populated so the payload shape is uniform for the renderer, but the
         # reason says plainly that the gate is what decides.
         return {
-            "blast_radius": "high",
-            "blast_radius_floor": "high",
+            "blast_radius": None,
+            "blast_radius_floor": None,
             "gate": str(gate),
             "blast_radius_reason": (
                 f"{entry.get('reason', '').strip()} — the {gate} gate owns this operation, "
-                f"so the confirmation tier is not consulted"
+                f"so there is no confirmation tier: it is refused here regardless"
             ),
         }
 
@@ -139,3 +143,17 @@ def classify(operation: str, *, plan_contents: Mapping[str, Any] | None = None,
 def refuses(verdict: Mapping[str, Any]) -> bool:
     """Whether `apply` must refuse. True iff a gate owns the operation."""
     return verdict.get("gate") is not None
+
+
+def awaiting_emitter(registry: Mapping[str, Any] | None = None) -> list[str]:
+    """Registry entries marked `aspirational` -- classified, but nothing emits them.
+
+    stripes asked for this: the proposed lint checks live-operation -> has-entry,
+    and these are the reverse case. Without the marker, a later lint finds
+    entries matching nothing and either deletes them or -- worse -- reads the
+    registry as evidence those operations are classified and safe when nothing
+    emits them yet. Reporting "N entries await an emitter" is a fact; reporting
+    "N orphans" is a warning about the wrong thing.
+    """
+    reg = registry if registry is not None else load_registry()
+    return sorted(op for op, entry in reg.items() if entry.get("aspirational"))

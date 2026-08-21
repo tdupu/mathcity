@@ -41,6 +41,8 @@ def test_an_unregistered_operation_is_GATED_not_low():
     verdict = br.classify("some.operation.nobody.classified", plan_contents={})
     assert verdict["gate"] == "unclassified"
     assert verdict["blast_radius"] != "low"
+    # Gated by the same rule as any other gate: no tier, because there is none.
+    assert verdict["blast_radius"] is None
 
 
 def test_an_unregistered_operation_refuses_at_apply():
@@ -55,6 +57,25 @@ def test_a_gated_operation_refuses_and_names_its_gate():
     assert verdict["gate"] == "artifact-harvest"
     assert br.refuses(verdict) is True
     assert "artifact-harvest" in verdict["blast_radius_reason"]
+
+
+def test_a_gated_operation_reports_blast_radius_None_not_a_tier():
+    """stripes' ruling, and the reasoning is theirs.
+
+    A consumer that reads only `blast_radius` and sees "high" renders a
+    typed-confirmation form -- for an operation that must be REFUSED outright.
+    A value that looks meaningful and is not is the same family as a plausible
+    empty result. `null` is still uniform: the key is present, the value absent,
+    exactly as city_health does with `bytes_used: null` plus a reason.
+
+    Object-model principle 5 picks WHICH null: None = "there is none",
+    Unknown = "we did not look". A gated operation genuinely HAS no tier.
+    """
+    verdict = br.classify("worktree.remove", plan_contents={})
+    assert verdict["blast_radius"] is None
+    assert verdict["blast_radius"] != "unknown"
+    assert verdict["blast_radius_floor"] is None
+    assert verdict["blast_radius_reason"].strip()      # the reason carries the why
 
 
 def test_escalation_can_never_produce_a_gated_plan():
@@ -130,3 +151,49 @@ def test_every_operation_effects_py_can_emit_is_registered_or_deliberately_not()
     for op in ("briefs.create", "briefs.adjudicate", "briefs.defer"):
         v = br.classify(op, plan_contents={})
         assert v["gate"] != "unclassified", f"{op} is emitted by effects.py but unclassified"
+
+
+# --- aspirational entries must be marked, or a later lint eats them ----------
+
+def test_entries_with_no_emitter_are_marked_aspirational():
+    """stripes' ruling. The proposed lint checks live-operation -> has-entry.
+    These are the REVERSE case: entries no live operation emits.
+
+    Unmarked, someone runs that lint later, finds entries matching nothing, and
+    either deletes them or -- worse -- reads the registry as evidence those
+    operations are classified and safe when nothing emits them yet.
+    """
+    reg = br.load_registry()
+    emitted_today = {"briefs.create", "briefs.adjudicate", "briefs.defer"}
+    for op, entry in reg.items():
+        if op in emitted_today:
+            assert not entry.get("aspirational"), f"{op} IS emitted; drop the marker"
+        else:
+            assert entry.get("aspirational") is True, (
+                f"{op} has no emitter and is not marked aspirational"
+            )
+
+
+def test_the_registry_can_report_what_awaits_an_emitter():
+    awaiting = br.awaiting_emitter()
+    assert "worktree.remove" in awaiting
+    assert "briefs.adjudicate" not in awaiting
+
+
+# --- the empty `low` category has a consequence, and it is testable ---------
+
+def test_nothing_classifies_as_low_today_which_makes_medium_the_floor():
+    """stripes: if nothing is `low`, every mutation requires a confirmation
+    token -- there is no one-click mutation. That turns sally's question 3 from
+    a preference into a constraint: either adjudication supplies the token
+    invisibly, or someone carves a `low` hole in the ladder for UX convenience.
+
+    This test FAILS THE DAY someone adds a `low` entry, which is the point --
+    that is a decision that should not pass silently.
+    """
+    reg = br.load_registry()
+    lows = [op for op, e in reg.items() if e.get("floor") == "low"]
+    assert lows == [], (
+        f"{lows} classify as low; sally's question-3 constraint no longer holds "
+        f"and the one-click path needs re-examining"
+    )
