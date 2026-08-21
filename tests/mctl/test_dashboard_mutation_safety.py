@@ -379,3 +379,29 @@ def test_two_previews_of_the_same_operation_agree_on_the_digest(tmp_path: Path):
         return json.loads(re.search(r'data-plan-json="([^"]*)"', html).group(1).replace("&quot;", '"'))
 
     assert stable_digest(plan(first)) == stable_digest(plan(second))
+
+
+# --- #135: a plan that did not fully land must not read as a past-tense report
+
+
+def test_the_applied_page_does_not_claim_a_refused_write_as_past_tense(tmp_path: Path):
+    """`mc-open`'s pile file has no frontmatter block, so the frontmatter
+    write in its adjudication plan is refused (MCTL_BRIEF_FRONTMATTER_UNWRITABLE)
+    -- it never lands. The page must not have a section titled in the past
+    tense ("What was applied") that lists it as if it had.
+    """
+    dashboard, _, _ = dashboard_for(tmp_path)
+    token = token_in(preview(dashboard).body)
+
+    response = dashboard.handle(Request.post("/apply", token=token))
+
+    text = strip_tags(response.body)
+    assert "What was applied" not in text, (
+        "a past-tense heading over the pre-write plan is what made #135 misleading"
+    )
+    assert "MCTL_BRIEF_FRONTMATTER_UNWRITABLE" in text, (
+        "the refusal must still be visible on the same page, not just accurate underneath a bad title"
+    )
+    assert "brief_frontmatter" in response.body, (
+        "the plan panel itself should still be there, honestly titled -- not removed"
+    )

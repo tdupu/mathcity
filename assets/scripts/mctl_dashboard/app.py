@@ -1547,8 +1547,18 @@ class Dashboard:
             [
                 render.applied_panel(applied.payload, operation.title),
                 advance,
+                # This renders the PLAN this operation executed from -- every
+                # cache update it intended, not the subset that actually
+                # landed (that is `applied_panel`'s "Effects that landed"
+                # above, from `actual_effects`). #135: titling this "What was
+                # applied" reads as a past-tense report, so a target this
+                # writer refused (redundant-artifact writes silently no-op
+                # per-target, e.g. a header-less frontmatter block) still
+                # shows up here as if it happened, right above the
+                # diagnostic that says it did not.
                 render.effect_plan_panel(
-                    dict(applied.payload.get("effect_plan") or {}), title="What was applied"
+                    dict(applied.payload.get("effect_plan") or {}),
+                    title="The plan this executed",
                 ),
                 render.artifact_trust_panel(applied.artifact_trust, rig=preview.rig),
                 render.diagnostics_sections(
