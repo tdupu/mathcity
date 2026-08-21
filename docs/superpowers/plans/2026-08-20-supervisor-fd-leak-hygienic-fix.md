@@ -10,13 +10,13 @@
 
 **Spec:** This plan's inputs are three measurements, each attributed:
 - Amplifier confirmed at source — stick-dog (`deadpath-agent`), re-verified independently by brad before writing.
-- fd counts and leak rate — QUIMBY, superseded by pink's evidence bundle where they disagree.
+- fd counts and leak rate — QUIMBY and pink. **They disagree, and this plan does NOT resolve it by precedence.** QUIMBY raised the objection against its own number: ranking one measurement over another without stating the counting method is a judgement dressed as a fact. **PID 20711 is dead, so the disagreement is now unresolvable on the original evidence.** `fd-census.sh` defines the method; restate prior figures in it or leave them marked method-unknown.
 - Consequence chain — lumby's brief of 2026-08-20 22:33.
 
 ## Global Constraints
 
 - **P3.1: no direct edits to gascity core.** `internal/beads/native_dolt_store.go` is upstream. Any change there is an issue against `gastownhall/gascity`, never a local patch.
-- **`kern.maxfilesperproc` = 138,240.** Measured at 138,244 — four over, not approaching.
+- **`kern.maxfilesperproc` = 138,240.** **Do not cite a single "measured" fd count in this plan.** Three methods produced three values — 138,244 (`-Fn` name records, four *over* a cap a process cannot exceed, so it counts non-descriptors), 138,234 (`lsof | wc -l`, six *under*), and whatever `fd-census.sh` will produce. **All pre-census figures are method-unknown and are marked so.** Every conclusion here needs only "at the wall", which all three support.
 - **The leak rate is NOT constant.** The amplifier makes it rise as exhaustion nears. **Any bound must be driven by a measured level, never by a timer.**
 - **Do not blame `reconnect()`.** stick-dog cleared it: handles are closed on all four exit paths (`:553-578`).
 - **`[SYN]` values are invented; never cite one as a measurement.**
@@ -58,12 +58,15 @@ EMFILE surfaces as `dial tcp 127.0.0.1:58506: socket: too many open files`. It *
 
 ### Task 1: Recover the opener under instrumentation
 
+> **EXTERNAL PRECONDITION — not a step anyone here can take.** Tasks 1 and 5 need a **live supervisor pid**. PID 20711 is dead and the city's lifecycle is Taylor's. **If no supervisor is running, stop and report — do not improvise a substitute pid.** Flagged by QUIMBY; without it a worker picks this up, finds nothing to measure, and invents something.
+
 **Files:**
 - Create: `assets/scripts/checks/fd-census.sh`
 - Test: `tests/fd-pressure/smoke_test.sh`
 
 **Interfaces:**
-- Produces: `fd-census.sh <pid>` → JSON `{"pid":N,"total":N,"by_prefix":{path:count},"cap":N,"sampled_at":"ISO8601"}`
+- Produces: `fd-census.sh <pid>` → JSON `{"pid":N,"total":N,"cap":N,"by_prefix":{path:count},"classified_count":N,"unclassified_count":N,"sampled_at":"ISO8601"}`
+  where `classified_count + unclassified_count == total` — see C2.
 - Consumes: nothing. This task is first precisely because nothing downstream can be written without its output.
 
 - [ ] **Step 1: Write the failing test**
@@ -94,22 +97,25 @@ Expected: `FAIL: fd-census.sh missing or not executable`
 set -euo pipefail
 PID="${1:?usage: fd-census.sh <pid>}"
 CAP="$(sysctl -n kern.maxfilesperproc)"
-lsof -p "$PID" -Fn 2>/dev/null | sed -n 's/^n//p' > /tmp/fd-census.$$ || true
-TOTAL="$(wc -l < /tmp/fd-census.$$ | tr -d ' ')"
-python3 - "$TOTAL" "$CAP" "$PID" <<'PY'
+TMP="$(mktemp -t fd-census)"; trap 'rm -f "$TMP"' EXIT INT TERM
+lsof -p "$PID" -Fn 2>/dev/null | sed -n 's/^n//p' > "$TMP" || true
+TOTAL="$(wc -l < "$TMP" | tr -d ' ')"
+python3 - "$TOTAL" "$CAP" "$PID" "$TMP" <<'PY'
 import sys, json, collections, datetime
-total, cap, pid = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+total, cap, pid, src = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
 counts = collections.Counter()
-for line in open(f"/tmp/fd-census.{__import__('os').getppid()}", errors="replace"):
+for line in open(src, errors="replace"):
     p = line.strip()
     if not p.startswith("/"):
         continue
     counts["/".join(p.split("/")[:5])] += 1
+classified = sum(counts.values())
 print(json.dumps({"pid": pid, "total": total, "cap": cap,
                   "by_prefix": dict(counts.most_common(20)),
+                  "classified_count": classified,
+                  "unclassified_count": total - classified,
                   "sampled_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}))
 PY
-rm -f /tmp/fd-census.$$
 ```
 
 - [ ] **Step 4: Run it to verify it passes**
@@ -185,7 +191,15 @@ FD_PRESSURE_FORCE_RATIO=0.01 "$PRESSURE" $$ >/dev/null 2>&1
 [ $? -eq 0 ] || { echo "FAIL: 1% of cap did not report healthy"; exit 1; }
 "$PRESSURE" 999999 >/dev/null 2>&1
 [ $? -eq 2 ] || { echo "FAIL: a dead pid did not report unreachable"; exit 1; }
-echo "PASS: fd-pressure is three-valued and fires at the threshold"
+# C1: every assertion above forces the ratio, so the CENSUS path is never run.
+# This one must NOT force it -- it is the only assertion that can detect a
+# broken measurement, which is the entire risk. Without it fd-census.sh could
+# be deleted and this suite would still print PASS.
+ratio="$("$PRESSURE" $$ 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["ratio"])')" \
+  || { echo "FAIL: census path did not produce a ratio"; exit 1; }
+python3 -c "import sys; r=float(sys.argv[1]); sys.exit(0 if 0.0 < r < 1.0 else 1)" "$ratio" \
+  || { echo "FAIL: census ratio $ratio is not in (0,1) -- measurement is broken"; exit 1; }
+echo "PASS: fd-pressure is three-valued, fires at the threshold, and its census path measures"
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -222,7 +236,17 @@ PY
 Run: `bash tests/fd-pressure/smoke_test.sh`
 Expected: `PASS: fd-pressure is three-valued and fires at the threshold`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: State how the check could have failed** — REQUIRED, and its absence is what let C1 through
+
+```bash
+mv assets/scripts/checks/fd-census.sh /tmp/   # break the measurement
+bash tests/fd-pressure/smoke_test.sh          # expect: FAIL: census path did not produce a ratio
+mv /tmp/fd-census.sh assets/scripts/checks/   # restore
+```
+
+**Record both runs in the commit.** If deleting `fd-census.sh` does not turn this suite red, the suite is testing arithmetic nobody doubted and not the measurement that is actually at risk.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add assets/scripts/checks/fd-pressure.sh tests/fd-pressure/smoke_test.sh
