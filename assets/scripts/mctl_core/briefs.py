@@ -1807,7 +1807,14 @@ def _beads(ctx: MctlContext, *, timeout: int | None = None) -> tuple[Bead, ...]:
     caller got "the rig did not answer" instead of "the bead store did not".
     """
     try:
-        return read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture, timeout=timeout)
+        return read_beads(
+            ctx.rig_root,
+            fixture_path=ctx.beads_fixture,
+            timeout=timeout,
+            # B2.1: only a decision bead can be a brief, so the other 99.7% of
+            # the store was fetched, parsed, and thrown away. See read_beads.
+            issue_type="decision",
+        )
     except BeadReadError as error:
         raise BriefError(_diagnostic(ctx, Severity.FATAL, "MBRF012", str(error))) from error
 

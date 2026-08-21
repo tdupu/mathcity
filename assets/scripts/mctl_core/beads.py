@@ -294,11 +294,34 @@ def read_beads(
     *,
     fixture_path: Path | None = None,
     timeout: int | None = None,
+    issue_type: str | None = None,
 ) -> tuple[Bead, ...]:
-    """Query the canonical bead store, or read an explicitly injected fixture."""
+    """Query the canonical bead store, or read an explicitly injected fixture.
+
+    `issue_type` narrows the read to one kind of bead. The brief surfaces pass
+    `"decision"`, because `Bead.is_brief` is exactly `issue_type == "decision"`
+    and every other row was fetched, parsed, and discarded. On the live city that
+    was 30,364 rows for `hq` to use 80 -- 83% of them agent session bookkeeping,
+    and it cost every dashboard view 9-11s.
+
+    Deliberately a parameter and not a new default: `work.py` shares this
+    function and needs the other types, since it resolves source beads and child
+    workflow beads that are tasks, not decisions. Narrowing the default would
+    leave every brief test green and break work dispatch.
+
+    The filter applies to the fixture path as well as to `bd`. It is a property
+    of the read, not of the transport -- if fixtures ignored it, every
+    fixture-based test would be blind to a mistake in it.
+    """
     if fixture_path is not None:
-        return tuple(_bead_from_mapping(row) for row in _read_jsonl(fixture_path))
-    return tuple(_bead_from_mapping(row) for row in _read_bd(rig_root, timeout or bd_timeout_seconds()))
+        rows: Iterable[Mapping[str, object]] = _read_jsonl(fixture_path)
+        if issue_type is not None:
+            rows = [row for row in rows if row.get("issue_type") == issue_type]
+        return tuple(_bead_from_mapping(row) for row in rows)
+    return tuple(
+        _bead_from_mapping(row)
+        for row in _read_bd(rig_root, timeout or bd_timeout_seconds(), issue_type=issue_type)
+    )
 
 
 def apply_bead_update(
@@ -361,10 +384,12 @@ def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
         raise BeadReadError(f"Could not read bead export {path}: {error}") from error
 
 
-def _read_bd(rig_root: Path, timeout: int) -> Iterable[Mapping[str, object]]:
+def _read_bd(
+    rig_root: Path, timeout: int, *, issue_type: str | None = None
+) -> Iterable[Mapping[str, object]]:
     try:
         result = subprocess.run(
-            list(BD_LIST_ARGS),
+            [*BD_LIST_ARGS, *(("--type", issue_type) if issue_type else ())],
             cwd=rig_root,
             text=True,
             capture_output=True,
