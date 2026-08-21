@@ -438,6 +438,33 @@ def _hidden_note(dropped: Sequence[str]) -> str:
     )
 
 
+def held_back_note(held: Sequence[Mapping[str, Any]]) -> str:
+    """Name the briefs the stack is not showing, and why.
+
+    Excluded is not dropped. A queue that quietly shrinks is indistinguishable
+    from a city that quietly emptied, which is the defect this dashboard exists
+    to not commit. So the count is stated, the reason is stated, and the rows
+    remain reachable in the lane that owns them.
+    """
+    if not held:
+        return ""
+    reasons: dict[str, int] = {}
+    for brief in held:
+        why = str(attr(brief, "bead_id") and "not open" or "no canonical brief bead")
+        reasons[why] = reasons.get(why, 0) + 1
+    named = " · ".join(f"{count} {_e(why)}" for why, count in sorted(reasons.items()))
+    total = len(held)
+    return (
+        '<p class="review-note" data-region="held-back" style="margin-top: 10px;">'
+        f"<strong>{total} open brief{'' if total == 1 else 's'} "
+        f"{'is' if total == 1 else 'are'} not shown here.</strong> "
+        f"{named}. A brief with no canonical bead is refused by the write path "
+        "(<span class=\"mono\">MBRF010</span>), so a verdict on it cannot land — "
+        "it is held out of the stack rather than offered and then refused. "
+        "Nothing is deleted; these remain in the lanes that own them.</p>"
+    )
+
+
 def empty_notice(elsewhere: Mapping[str, Any] | None = None) -> str:
     """Say why the stack is empty, not merely that it is.
 
