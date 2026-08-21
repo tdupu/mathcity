@@ -1,0 +1,54 @@
+# Operation -> control-safety classification (D2 / #110).
+#
+# Design: stripes, `<city-root>/docs/D2-blast-radius-proposal.md`, amended to a
+# two-field shape. Reviewer: sally.
+#
+# TWO FIELDS, DELIBERATELY:
+#   floor  -- low | medium | high. How much confirmation the page demands. A
+#             FLOOR: plan contents may raise it and may never lower it (CT9.2's
+#             shape, reused rather than reinvented).
+#   gate   -- the human gate that owns this operation. Set INSTEAD of `floor`.
+#             `apply` refuses and names it; the tier is never consulted.
+#
+# `gate` is a property of the OPERATION CLASS, not of a plan's contents, so
+# escalation cannot reach it. "It's only one branch" cannot de-gate a branch
+# deletion: a small instance of an irreversible operation is still irreversible.
+#
+# AN OPERATION ABSENT FROM THIS FILE RESOLVES TO gate="unclassified" -- refused,
+# not permitted. Adding a mutation without classifying it fails SAFE. That is
+# the single most important line in the proposal.
+#
+# `reason` is mandatory on every entry: a tier with no stated reason is an
+# assertion, and the object model requires a derived claim to carry its evidence.
+
+["briefs.create"]
+floor  = "medium"
+reason = "creates a canonical decision bead and its cache artifacts; reversible by closing the bead"
+
+["briefs.adjudicate"]
+floor  = "medium"
+reason = "records a verdict across five representations; adjudication is a one-way door per B2.x"
+
+["briefs.defer"]
+floor  = "medium"
+reason = "moves a brief out of the queue with a defer-until date; reversible by re-listing"
+
+["capacity.set_target"]
+aspirational = true   # no emitter yet; exercised by tests only
+floor  = "medium"
+reason = "changes concurrency; reversible by setting it back. set_target(0) STOPS the rig and escalates on contents"
+
+["rig.suspend"]
+aspirational = true   # no emitter yet; exercised by tests only
+floor  = "high"
+reason = "stops all dispatch on a rig"
+
+["worktree.remove"]
+aspirational = true   # no emitter yet; exercised by tests only
+gate   = "artifact-harvest"
+reason = "irreversible; the artifact-harvest gate owns this"
+
+["branch.delete"]
+aspirational = true   # no emitter yet; exercised by tests only
+gate   = "authorize-git-operation"
+reason = "irreversible history operation; the git authorization gate owns this"
