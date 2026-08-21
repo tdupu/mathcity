@@ -238,3 +238,55 @@ def test_clean_and_unreadable_are_distinguishable_in_the_payload() -> None:
         store_refs={}, readable=False,
     ).to_dict()
     assert empty["clean"] != unreadable["clean"]
+
+
+# --------------------------------------------------------------------------
+# boot state: the handoff factored into queries
+# --------------------------------------------------------------------------
+
+
+def test_prose_residue_is_never_empty() -> None:
+    """The residue is the honest half of the design.
+
+    An empty residue would claim the API can answer everything a handoff
+    carries, which is false: a charge is intent, and no read of the store
+    produces intent. If a future change empties this, that change is asserting
+    something much stronger than it probably means to.
+    """
+    assert mayor.PROSE_RESIDUE
+    assert any("charge" in item for item in mayor.PROSE_RESIDUE)
+
+
+def test_handoff_chain_is_ordered_oldest_to_newest_and_limited() -> None:
+    rows = [
+        {"id": "gt-a", "created_at": "2026-08-01", "status": "open", "title": "S40 handoff — first"},
+        {"id": "gt-c", "created_at": "2026-08-03", "status": "open", "title": "S42 handoff — third"},
+        {"id": "gt-b", "created_at": "2026-08-02", "status": "open", "title": "S41 handoff — second"},
+        {"id": "gt-x", "created_at": "2026-08-04", "status": "open", "title": "not a session record"},
+    ]
+    chain = mayor._handoff_chain(rows, limit=2)
+    assert [item["id"] for item in chain] == ["gt-b", "gt-c"]
+    assert all("handoff" in item["title"].lower() for item in chain)
+
+
+def test_boot_counts_are_negative_when_unmeasured_not_zero(monkeypatch, tmp_path) -> None:
+    """-1 means 'not measured'. Zero would be a claim about the store."""
+
+    class _Ctx:
+        rig_root = tmp_path
+        city_root = tmp_path
+        rig_id = "test"
+        trace_id = "t"
+
+    monkeypatch.setattr(mayor, "load_rows", lambda *_a, **_k: ([], "bd exploded"))
+    monkeypatch.setattr(mayor, "city_state", lambda *_a, **_k: mayor.CityState(
+        state="unknown", probes=(), suspended_rigs=(), active_rigs=(), pane_count=None))
+    monkeypatch.setattr(mayor, "conservation_report", lambda *_a, **_k: mayor.ConservationReport(
+        molecules=0, roots_resolving=0, roots_dangling=0, orphaned_members=0,
+        dangling_root_ids=(), window_earliest=None, window_latest=None,
+        store_refs={}, readable=False))
+    state = mayor.boot_state(_Ctx())
+    assert state.open_beads == -1
+    assert state.blocked_beads == -1
+    assert state.open_beads != 0
+    assert "MAYOR_BOOT_STORE_UNREADABLE" in {d.code for d in state.diagnostics}

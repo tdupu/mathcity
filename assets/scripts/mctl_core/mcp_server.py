@@ -102,6 +102,7 @@ from .schemas import (
     response_schema,
     schema_errors,
 )
+from .mayor import boot_state as mayor_boot_state
 from .mayor import city_state as mayor_city_state
 from .mayor import conservation_report as mayor_conservation_report
 from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
@@ -687,6 +688,19 @@ def _handle_mayor_city_state(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
     return payload
 
 
+def _handle_mayor_boot(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Mayor boot state: the handoff, factored into queries.
+
+    `prose_residue` names what NO query can answer -- charge, rationale,
+    retractions, standing policy. It ships in the payload rather than in a
+    docstring so a consumer cannot mistake a partial handoff for a whole one.
+    """
+    state = mayor_boot_state(ctx)
+    payload = state.to_dict()
+    payload["diagnostics"] = _diagnostics(ctx, state.diagnostics)
+    return payload
+
+
 def _handle_mayor_conservation(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     """Referential-integrity conservation check for one rig's store.
 
@@ -1141,6 +1155,37 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["active_rigs", "pane_count", "probes", "state", "suspended_rigs"],
         ),
         handler=_handle_mayor_city_state,
+    ),
+    ToolSpec(
+        name="mayor_boot",
+        title="Mayor: boot state",
+        description=(
+            "Everything a Mayor reboot can learn by query -- city state, conservation, open "
+            "and blocked counts, the handoff chain -- plus `prose_residue`, the facts no "
+            "query can answer. Negative counts mean UNMEASURED, never zero."
+        ),
+        input_schema=request_schema({}, []),
+        output_schema=response_schema(
+            {
+                "city": {"type": "object"},
+                "conservation": {"type": "object"},
+                "open_beads": {"type": "integer", "description": "-1 when the store was unreadable."},
+                "blocked_beads": {"type": "integer", "description": "-1 when the store was unreadable."},
+                "recent_handoffs": {"type": "array", "items": {"type": "object"}},
+                "escalations_queryable": {"type": "boolean"},
+                "prose_residue": dict(STRING_ARRAY, description="Facts no query answers. Shrinks as gaps close."),
+            },
+            [
+                "blocked_beads",
+                "city",
+                "conservation",
+                "escalations_queryable",
+                "open_beads",
+                "prose_residue",
+                "recent_handoffs",
+            ],
+        ),
+        handler=_handle_mayor_boot,
     ),
     ToolSpec(
         name="mayor_conservation",
