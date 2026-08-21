@@ -127,3 +127,60 @@ def test_no_note_when_nothing_was_held_back():
     from mctl_dashboard.screens import stack as stack_screen
 
     assert stack_screen.held_back_note([]) == ""
+
+
+# ---------------------------------------------------------------------------
+# the other direction, which nothing pinned
+# ---------------------------------------------------------------------------
+
+
+def test_an_unrulable_brief_renders_no_row(tmp_path):
+    """The feature's whole point, asserted positively for the first time.
+
+    `test_a_brief_link_carries_its_rig_city_wide` asserts rows DO render, and
+    it went red when the filter arrived -- but nothing asserted the converse,
+    so a filter that quietly stopped filtering would have gone unnoticed.
+
+    Built city-wide off the shared fixture, which carries both shapes: bead-
+    backed briefs and a decisions-track row with no bead.
+    """
+    import re
+
+    import multi_rig
+    from mctl_dashboard.app import Dashboard, Request
+    from mctl_dashboard.client import InProcessMcpClient
+
+    fixture = multi_rig.build(tmp_path)
+    client = InProcessMcpClient(city=fixture.city_root, env=fixture.env)
+    app = Dashboard(client, city_wide=True, rig=None)
+
+    body = app.handle(Request.get("/queue")).body
+    hrefs = re.findall(r'data-href="([^"]+)"', body)
+    assert hrefs, "fixture rendered no rows at all; this test cannot fail"
+
+    # `legacy-unmapped` is the fixture's decisions-track row with no bead.
+    assert not any("legacy-unmapped" in href for href in hrefs), (
+        "an unrulable brief reached the queue"
+    )
+
+
+def test_the_held_back_count_matches_what_was_withheld(tmp_path):
+    """The count must come from the same set the filter removed.
+
+    A hand-maintained number would drift from the filter silently, which is
+    the shape this dashboard keeps finding elsewhere.
+    """
+    import re
+
+    import multi_rig
+    from mctl_dashboard.app import Dashboard, Request
+    from mctl_dashboard.client import InProcessMcpClient
+
+    fixture = multi_rig.build(tmp_path)
+    client = InProcessMcpClient(city=fixture.city_root, env=fixture.env)
+    app = Dashboard(client, city_wide=True, rig=None)
+
+    body = app.handle(Request.get("/queue")).body
+    note = re.search(r'data-region="held-back".*?</p>', body, re.S)
+    assert note, "briefs were withheld but the page did not say so"
+    assert re.search(r"\d+", note.group(0)), "the notice names no count"

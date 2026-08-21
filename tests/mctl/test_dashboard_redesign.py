@@ -1019,7 +1019,14 @@ def _city_dashboard(tmp_path):
     from mctl_dashboard.client import InProcessMcpClient
 
     fixture = multi_rig.build(tmp_path)
-    client = InProcessMcpClient(city=fixture.city_root)
+    # `env` carries the per-rig MCTL_BEADS_FIXTURE paths. Without it no bead
+    # store is readable, so every brief resolves from documents alone and
+    # arrives with `bead_id: None`. That was invisible while nothing depended
+    # on bead identity; the rulable filter depends on it, so the helper's
+    # omission surfaced as "no brief rows rendered".
+    # `test_dashboard_city_wide.py` has always passed it -- this helper is the
+    # one that drifted.
+    client = InProcessMcpClient(city=fixture.city_root, env=fixture.env)
     return Dashboard(client, city_wide=True, rig=None)
 
 
