@@ -44,6 +44,7 @@ DECLARED_TOOLS = (
     "context_resolve",
     "context_rigs",
     "fleet_sessions",
+    "mayor_boot",
     "mayor_city_state",
     "mayor_conservation",
     "trace_replay_preview",
