@@ -102,30 +102,24 @@ def test_the_legacy_lane_adjudication_reaches_the_adjudicated_tier(legacy):
     )
 
 
-# --- CAUSE 2: the document has no frontmatter to classify ------------------
-@pytest.mark.xfail(
-    reason="#155 cause 2: briefs_create emits no frontmatter block for classify_tier to read",
-    strict=True,
-)
-def test_a_document_with_no_frontmatter_block_cannot_reach_the_tier():
-    """What `briefs_create` produces, classified.
-
-    Not a hypothetical: `effects.py:220` documents that the created document has
-    no frontmatter block a writer can rewrite, and a real MCP adjudication
-    (`gsp-4xwync`) left exactly this state behind.
-
-    This test asserts the CONSEQUENCE rather than the mechanism, so it stays
-    meaningful whichever way the fix goes: if `briefs_create` starts emitting a
-    block, or if `classify_tier` starts reading the bead, this goes green.
-    """
-    # A document with no `---` block parses to no frontmatter fields at all.
-    front: dict[str, str] = {}
-    tier = classify_tier(front)
-
-    assert tier == TIER_ADJUDICATED, (
-        "an MCP-created, MCP-adjudicated brief classifies as "
-        f"{tier!r} because its document carries no frontmatter for the "
-        "classifier to read. Either briefs_create must emit a frontmatter block "
-        "or classify_tier must read the canonical bead (B2.8)."
-    )
-    assert tier != TIER_OPEN
+# --- CAUSE 2 lives in a different file, deliberately -------------------------
+# There WAS a cause-2 test here and it was VACUOUS. It read:
+#
+#     front: dict[str, str] = {}
+#     assert classify_tier(front) == TIER_ADJUDICATED
+#
+# A hardcoded empty mapping. True forever, whatever `briefs_create` does, so it
+# could not detect a fix and could not fail -- a test that could not pass, in the
+# file written to catch tests that cannot fail. Its docstring claimed it "asserts
+# the CONSEQUENCE rather than the mechanism, so it stays meaningful whichever way
+# the fix goes"; it stayed MEANINGLESS whichever way the fix goes.
+#
+# I found it only by applying the cause-2 fix and watching this file not notice.
+# Reading it twice had not been enough; exercising it was.
+#
+# The real coverage drives the actual create path through the CLI and reads the
+# document off disk:
+#
+#     tests/mctl/test_created_brief_carries_frontmatter.py   (fix/155-create-emits-frontmatter)
+#
+# It is red before that fix and green after, which is what this one could never be.
