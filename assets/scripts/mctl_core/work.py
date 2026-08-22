@@ -16,7 +16,7 @@ from .diagnostics import Diagnostic, Severity
 from .effects import EffectPlan, JsonlWrite
 from .events import append_jsonl
 from .liveness import probe_control_plane
-from .verdicts import brief_population, is_brief_bead
+from .verdicts import brief_population, is_brief_bead, read_verdict
 from .trace import append_applied, append_planned
 from .provenance import (
     DispatchProvenance,
@@ -829,17 +829,26 @@ def _approved_for_dispatch(bead: Bead) -> bool:
 
 
 def _verdict(bead: Bead) -> str | None:
-    for key in ("verdict", "decision", "recorded_verdict"):
-        value = bead.raw.get(key)
-        if isinstance(value, str) and value:
-            return value.strip().lower()
-    metadata = bead.raw.get("metadata")
-    if isinstance(metadata, dict):
-        for key in ("verdict", "decision", "recorded_verdict"):
-            value = metadata.get(key)
-            if isinstance(value, str) and value:
-                return value.strip().lower()
-    return None
+    """The verdict this bead carries, read the ONE canonical way (#160).
+
+    This function used to be a second, older reader: it checked
+    `raw["verdict"|"decision"|"recorded_verdict"]` and `metadata.*` and never
+    consulted `close_reason` -- the field `bd close` actually writes, non-empty
+    on 138 of the 139 closed decision beads in the live city -- nor the
+    canonical `VERDICT: ... | AUTHORIZER: ...` block in `notes`.
+
+    `briefs.py` had already moved to `verdicts.read_verdict`. The two readers
+    then disagreed about the same bead: `briefs_list` reported a brief approved
+    while `work_status` reported MWRK010 "no approving verdict", and because
+    almost every real brief records its verdict via `close_reason`, the gap
+    swallowed the entire dispatch queue.
+
+    Fixed by DELETING the second reader rather than teaching it the missing
+    fields (P1.9, one real copy): a second copy taught three new fields is a
+    second copy that will diverge again on the fourth.
+    """
+    verdict = read_verdict(bead)
+    return verdict.text.strip().lower() if verdict is not None else None
 
 
 def _canonical_bead_location(ctx: MctlContext) -> str:
