@@ -53,6 +53,8 @@ CLIENT_INFO = {"name": "mctl-dashboard", "version": "0.8.0"}
 #: below -- see tests/mctl/test_dashboard_tool_reachability.py for why.
 ALLOWED_TOOLS = frozenset(
     {
+        "orders_status",
+        "formulas_catalog",
         "context_resolve",
         "context_rigs",
         "fleet_sessions",

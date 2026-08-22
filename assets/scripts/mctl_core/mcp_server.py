@@ -453,6 +453,27 @@ class ToolSpec:
         }
 
 
+def _handle_orders_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Every registered order with the outcome of its last run (#156).
+
+    The outcome comes from `<city-root>/.gc/events.jsonl`, not from
+    `gc order history` (which logs that an order ran, never how it ended) and
+    not from `gc order check` (whose `last_run_outcome` is declared and never
+    populated). Without this tool the projection existed in `mctl_core` and no
+    MCP caller could reach it.
+    """
+    from .orders import city_reader, orders_status
+
+    return orders_status(city_reader(ctx.city_root))
+
+
+def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Every formula the city knows about (#117 / #156)."""
+    from .orders import city_reader, formulas_catalog
+
+    return formulas_catalog(city_reader(ctx.city_root))
+
+
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     payload = dict(ctx.to_dict())
     payload["diagnostics"] = [warning.to_dict() for warning in ctx.warnings]
@@ -832,6 +853,56 @@ _PROBE_SCHEMA: Schema = {
 
 
 TOOLS: tuple[ToolSpec, ...] = (
+    ToolSpec(
+        name="orders_status",
+        title="Order status with outcomes",
+        description=(
+            "Every registered order with the outcome of its last run. The outcome is "
+            "folded from the city event log; `healthy` is the outcome and never the "
+            "recency, because an order can fire punctually and fail every time."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total": {"type": ["integer", "null"]},
+                "failing": {"type": "integer"},
+                "outcome_recorded": {"type": "integer"},
+                "ran_at_least_once": {"type": "integer"},
+                "orders": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": ["string", "null"]},
+                            "trigger": {"type": ["string", "null"]},
+                            "enabled": {"type": ["boolean", "null"]},
+                            "last_executed": {"type": ["string", "null"]},
+                            "last_outcome": {"type": "string"},
+                            "healthy": {"type": "boolean"},
+                        },
+                    },
+                },
+            },
+            ["state", "total", "orders", "failing", "outcome_recorded"],
+        ),
+        handler=_handle_orders_status,
+    ),
+    ToolSpec(
+        name="formulas_catalog",
+        title="Formula catalog",
+        description="Every formula the city knows about.",
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total": {"type": ["integer", "null"]},
+                "formulas": {"type": "array", "items": {"type": "object"}},
+            },
+            ["state", "total", "formulas"],
+        ),
+        handler=_handle_formulas_catalog,
+    ),
     ToolSpec(
         name="context_resolve",
         title="Resolve runtime context",
