@@ -3,17 +3,27 @@
 Two of the three nouns the project owner asked for by name: *"The dashboard I
 want has Formulas, Orders, Molecules etc"*.
 
-WHY EVERY OUTCOME IS `unknown`. `gc order history` records THAT an order ran
-and never WHETHER it succeeded -- there is no outcome, result, status or exit
-field on any order or any history entry (#156, measured across 127 orders and
-50 history entries). So this module reports `last_outcome="unknown"` for every
-order, including the 24 that have run.
+WHERE OUTCOMES COME FROM. `<city-root>/.gc/events.jsonl` -- `order.fired`,
+`order.completed`, `order.failed`, 6,593 events across 74 subjects. NOT from
+`gc order history`, which logs that an order ran and never how it ended, and
+not from `gc order check`, whose `last_run_outcome` is declared and never
+populated (#156).
 
-That will look wrong on screen, and it is the true reading. Mapping "it
-executed" to "it succeeded" would render a check that could not have failed as
-a check that passed (P6.2) -- in the exact noun the owner asked for. When the
-city starts recording outcomes, `last_outcome` is where they land and nothing
-else here changes.
+An earlier version of this module reported `unknown` for all 127 orders, on a
+measurement that probed those two surfaces and read their silence as the city's
+(#156, corrected). `unknown` now means only what it says: the event log has
+never seen this order. 43 of 127 today.
+
+HEALTH IS THE OUTCOME, NEVER THE RECENCY. `mol-dog-compactor` has fired 61 times
+and completed zero; `orphan-sweep` 161 and one. They fire punctually, so a
+signal keyed on "did it run lately" paints them green -- a fresh canary in front
+of broken machinery. `healthy` is `outcome == "completed"` and nothing else.
+
+THE OUTCOME AND ITS TIMESTAMP ARE ONE FACT. `fold_outcomes` returns both from
+the same event. History and the event log disagree for every order present in
+both (24 of 24, history hours behind) and do not share a timestamp format, so
+pairing an outcome from one with a time from the other renders a reading
+neither source supports.
 
 WHY A READER IS INJECTED. `gc order list` takes ~33s and `gc order history`
 ~57s. A view that shells out per render reproduces the sluggishness complaint
