@@ -50,6 +50,7 @@ from .screens import brief as brief_screen
 from .screens import panel as panel_screen
 from .screens import pipeline as pipeline_screen
 from .screens import priority as priority_screen
+from .screens import city as city_screen
 from .screens import stack
 from .aggregate import CityView
 from .client import McpClient, ToolFailure, ToolResponse
@@ -1118,6 +1119,54 @@ class Dashboard:
             + "</tbody></table></div></section>"
         )
 
+    def _city_operations(self, request: Request) -> Response:
+        """City operations: what the city is doing, not what it decided.
+
+        Named `_city_operations`, not `_city`: `_city()` is already the city
+        registry reader on this class, and shadowing it broke three call sites
+        that read the registry. The error page caught it -- which is the guard
+        from the apply fix earning its keep on the very next feature.
+
+        Each surface is read independently and a failure in one does not take
+        the page down -- a city screen that 500s because one probe is sulking
+        is a screen nobody can use to find out why the probe is sulking.
+        """
+        rig = self._rig_for(request)
+        context = self._scope_context(rig)
+
+        sections: list[str] = []
+        for tool, renderer in (
+            ("fleet_sessions", city_screen.fleet),
+            ("city_health", city_screen.health),
+            ("gates_status", city_screen.gates),
+        ):
+            try:
+                payload = self.client.call(tool, self._args(rig)).payload
+            except ToolFailure as failure:
+                sections.append(
+                    render.notice_panel(
+                        f"{tool} did not answer",
+                        "This surface has an MCP tool and the call failed. That is a "
+                        "different thing from the surfaces below, which have no tool "
+                        "at all -- and it is not a statement about the city.",
+                        failure.diagnostics,
+                        region=f"city-failed-{tool}",
+                    )
+                )
+            else:
+                sections.append(renderer(payload))
+
+        # Built, tested, and unreachable: no MCP tool exists, so no page can
+        # call them. Named rather than omitted -- an absent panel reads as
+        # "the city has none of these", which is false.
+        for tool, module, issue in (
+            ("blast_radius", "mctl_core/blast_radius.py", 110),
+            ("events_list", "mctl_core/ticker.py", 116),
+        ):
+            sections.append(city_screen.unwired(tool, module=module, issue=issue))
+
+        return self._page("City", "/city", context, sections, context_bar="")
+
     def _diagnostics(self, request: Request) -> Response:
         if self.city_wide:
             view = CityView.from_payload(
@@ -1443,6 +1492,8 @@ class Dashboard:
             return self._briefs(request)
         if request.path.startswith("/briefs/"):
             return self._brief(request.path[len("/briefs/") :], request)
+        if request.path == "/city":
+            return self._city_operations(request)
         if request.path == "/diagnostics":
             return self._diagnostics(request)
         if request.path == "/work":

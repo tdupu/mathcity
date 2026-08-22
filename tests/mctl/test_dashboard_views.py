@@ -327,9 +327,24 @@ def test_under_review_diagnostics_are_excluded_from_the_actionable_count(tmp_pat
 
 
 def test_the_dashboard_allowlist_contains_no_command_execution_tool():
+    """The boundary, and a tripwire on its size.
+
+    The count is pinned so that widening the dashboard's reach is a deliberate,
+    reviewable act rather than something that happens by accident. It did its
+    job: adding `gates_status` tripped it.
+
+    19 since `gates_status` was added. `mctl_core/gates.py` shipped with #119
+    and had no MCP tool, so no page could call it -- #153's deeper shape, where
+    a merged and tested surface is unreachable rather than merely unrendered.
+    A read-only city surface, on the same footing as `fleet_sessions` and
+    `city_health`.
+
+    Raise this number only alongside the tool that justifies it, and say which
+    tool in the docstring.
+    """
     assert ALLOWED_TOOLS & mcp_server.FORBIDDEN_TOOL_NAMES == frozenset()
     assert ALLOWED_TOOLS <= frozenset(mcp_server.TOOLS_BY_NAME)
-    assert len(ALLOWED_TOOLS) == 18
+    assert len(ALLOWED_TOOLS) == 19
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

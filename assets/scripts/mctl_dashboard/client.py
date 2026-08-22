@@ -13,8 +13,13 @@ constraint reviewable, and `test_dashboard_views.py` cross-checks the list
 against `mcp_server.TOOLS_BY_NAME` and `FORBIDDEN_TOOL_NAMES` so it cannot rot
 into a lie.
 
-That it is a *subset* is the point, and the subset is now proper: the server
-registers eighteen tools and the dashboard may call sixteen of them.
+That it is a *subset* is the point, and the subset is proper. The counts are
+deliberately NOT written here as prose any more: this paragraph claimed
+"eighteen tools and the dashboard may call sixteen" long after the server had
+grown to twenty-four, and a stale count in a docstring is the same defect this
+codebase keeps finding in its own checks -- a statement that reads as verified
+and is not. `test_dashboard_views.py` cross-checks the membership against
+`mcp_server.TOOLS_BY_NAME`, which is the assertion that cannot rot.
 `work_claim` and `work_dispatch_event` serve the path-B commission flow in
 `skills/work/SKILL.md`, which has no dashboard surface, so adding them here
 would widen the boundary for nothing.
@@ -50,6 +55,7 @@ ALLOWED_TOOLS = frozenset(
         "context_rigs",
         "fleet_sessions",
         "city_health",
+        "gates_status",
         "briefs_list",
         "briefs_show",
         "briefs_options",

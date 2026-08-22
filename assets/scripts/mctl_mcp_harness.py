@@ -69,6 +69,9 @@ EXPECTED_TOOLS = (
     "mayor_city_state",
     "mayor_conservation",
     "fleet_sessions",
+    # `gates_status` exposes `mctl_core/gates.py`, which shipped with #119 and
+    # had no MCP tool -- so no page could reach it. See #153.
+    "gates_status",
     "city_health",
 )
 

@@ -44,6 +44,10 @@ DECLARED_TOOLS = (
     "context_resolve",
     "context_rigs",
     "fleet_sessions",
+    # Added when `gates_status` was exposed: `mctl_core/gates.py` shipped with
+    # #119 and had no MCP tool, so no page could reach it -- #153's deeper
+    # shape, a merged surface that is unreachable rather than merely unrendered.
+    "gates_status",
     "mayor_boot",
     "mayor_city_state",
     "mayor_conservation",
