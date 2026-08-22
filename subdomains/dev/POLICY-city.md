@@ -5,7 +5,7 @@ Parent: [README.md](./README.md)
 | Field | Value |
 | --- | --- |
 | Status | **Draft** — compiled 2026-07-23 from the human adjudicator's city-behavior directives; rules marked **PROPOSED** are Claude suggestions not yet adopted and require a grilling pass |
-| Date | 2026-07-28 |
+| Date | 2026-08-22 |
 | Decided | the pack owner (directives, 2026-07-23 session); PROPOSED rules pending |
 | Applies to | The running Gas City instance: dispatch, scheduling, molecules, formulas, and every rig the city manages |
 | Rule prefix | **CT** (City Operations) — reserved in [rule-prefix-registry.md](../../docs/rule-prefix-registry.md); distinct from the Computing domain's `C` prefix |
@@ -599,6 +599,52 @@ ground, not a restatement of an existing rule under different vocabulary.
   immediately before execution. Fail: a destructive op fires against an
   unconfirmed or wrong target → **fail**.
 
+## Pillar CT13 — Control-surface completeness (the Mayor's operating set)
+
+*If the Mayor cannot do it through the MCP, the city does not really support it.*
+
+- **CT13.1 The Mayor's essential operations are all performable through the
+  MCP.** Every operation the Mayor must perform to run the city is reachable
+  as a typed MCP tool and **completes end to end through that tool**:
+  **adjudicating a brief**, **creating a brief**, **reading a brief**,
+  **commissioning work**, **slinging work with briefed endings**, and
+  **checking the progress of work in flight**. The list is extensible, not
+  exhaustive; an operation the Mayor performs routinely belongs on it. A tool
+  that exists but does not carry the operation to its recorded conclusion does
+  **not** satisfy this rule — presence is not performance, and a rule
+  satisfiable by an inert tool certifies a surface that does nothing (P6.2).
+  Shelling out, driving a CLI, or invoking a bash-bearing skill is a
+  **workaround, not a control surface**, and does not satisfy the rule.
+  Allowed exception: **bootstrap** — work that implements or repairs the MCP
+  itself is exempt while the surface it needs is the surface under repair,
+  provided the exemption is stated in the work item. Pass: each named
+  operation resolves to a typed MCP tool, and a live invocation of that tool
+  reaches the operation's own recorded terminal state (e.g. an adjudication
+  reaching `TIER_ADJUDICATED`). Fail: a named operation has no typed tool, or
+  its tool returns success without reaching that terminal state → **fail**
+  (an unblocked path that silently discards its result is worse than a blocked
+  one, because a blocked one tells you).
+
+- **CT13.2 (PROPOSED) A capability in the core with no typed tool is a gap,
+  not a feature.** Where `mctl_core` implements a capability the Mayor's
+  operating set needs but no typed tool exposes it, that asymmetry is a
+  defect: it is invisible to every MCP caller while appearing complete to
+  anyone reading the core. Pass: every `mctl_core` capability in the CT13.1
+  set has a typed tool, or a filed issue recording the gap and its reason.
+  Fail: capability present in core, absent from the typed surface, no issue
+  → **revise**. Origin: `blast_radius` exists in `mctl_core` and is absent
+  from the typed surface (measured 2026-08-22).
+
+- **CT13.3 (PROPOSED) The tool roster cannot go stale silently.** Any
+  document, skill, or prompt that states the number or names of the MCP tools
+  must agree with a live enumeration of the surface. A stale roster is not a
+  cosmetic docs defect: it tells an agent a capability does not exist, and the
+  agent then builds the workaround CT13.1 forbids. Pass: every stated count or
+  tool list matches the live surface, or the document defers to a live
+  enumeration instead of naming one. Fail: a stated roster disagrees with the
+  live surface → **revise**. Origin: the Mayor handoff skill claimed "16 real
+  tools" against a measured 23 (2026-08-22).
+
 ---
 
 ## Non-negotiables (quick checklist)
@@ -711,6 +757,9 @@ test-outcome labels, not artifact or review verdicts.
   reliability-as-a-dial (already reflected in CT9.2)
 
 ## Change log
+
+### 2026-08-22 — Pillar CT13 opened; CT13.1 added (Adopted), CT13.2/CT13.3 (PROPOSED): the Mayor's operating set must be performable through the MCP
+Codifies the standing architecture ruling that `mctl` is the API and agents reach it through an MCP, as an enforceable completeness requirement on the typed surface: adjudicating, creating and reading briefs, commissioning work, slinging with briefed endings, and checking progress must each resolve to a typed tool that carries the operation to its recorded terminal state — presence is not performance. Triggered by: the pack owner's directive, 2026-08-22, after four of the six named operations were measured broken or missing in one session (no typed commissioning tool; `briefs_adjudicate` never reaching `TIER_ADJUDICATED`; `briefs_create` blocked for two rigs by MBRF035; `work_ready` reporting closed beads as ready).
 
 ### 2026-08-15 — CT7.5 added: hygienic issues for lifecycle blockers
 Added a durable-issue requirement for substrate, lifecycle, deployment, and
