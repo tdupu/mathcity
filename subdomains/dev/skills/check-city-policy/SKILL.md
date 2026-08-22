@@ -2,8 +2,9 @@
 name: check-city-policy
 description: >-
   Audit a plan, a diff, or the live running-city state against the City
-  Operations Policy (mathcity/subdomains/dev/POLICY-city.md, CT1.x–CT12.x
-  rules). Use when the user says "check city policy", "check-city-policy",
+  Operations Policy (mathcity/subdomains/dev/POLICY-city.md, all CT-rules —
+  the pillar set is read live from the policy, not pinned to a range here).
+  Use when the user says "check city policy", "check-city-policy",
   "is the city living up to city-policy", "audit the city runtime", "does
   this dispatch obey the city rules", before slinging a convoy that mutates
   a live rig, or when a capacity/queueing/observability concern is raised.
@@ -80,11 +81,35 @@ Missing any leg → PP1.1 finding (note: file a trinity-gap bead).
 
 ## Step 2 — Per-pillar audit
 
-Apply every rule in every pillar. For each CT-rule, ask: does the plan/diff,
-or the live city, violate this rule's stated pass criterion? Cite the CT-rule
-ID and the triggering evidence (file+line, bead ID, or the observed runtime
-fact) for every finding. Key signals per pillar (read POLICY-city.md for the
-authoritative pass/fail text):
+**Derive the pillar list from POLICY-city.md itself — never from memory or
+from this skill's own prose.** A pillar list copied into this skill goes
+stale the moment POLICY-city.md opens a new one (CT13 was Adopted and
+invisible to this exact procedure for the length of a session before this
+paragraph existed — #161). Enumerate the live set before auditing:
+
+```bash
+grep -oE '^## Pillar CT[0-9]+' <mathcity-pack-root>/subdomains/dev/POLICY-city.md
+```
+
+Apply every rule in every pillar returned by that enumeration, in numeric
+order — not the "key signals" list below, which is guidance for pillars this
+skill happens to have hand-written prose for, not the source of truth for
+which pillars exist. For each CT-rule, ask: does the plan/diff, or the live
+city, violate this rule's stated pass criterion? Cite the CT-rule ID and the
+triggering evidence (file+line, bead ID, or the observed runtime fact) for
+every finding.
+
+**A pillar with no key-signals entry below is audited anyway, directly from
+POLICY-city.md's own pass/fail text, and its roll-up row reads `unaudited (no
+guidance)` rather than being silently skipped or silently passed** — an
+enumerated-but-unguided pillar is a visible gap, not a hidden one (P6.1).
+When you audit a pillar this way, add its key signals to this list afterward
+so the next run has guidance; do not leave the gap for the next auditor to
+rediscover.
+
+Key signals for the pillars this skill currently has prose for (read
+POLICY-city.md for the authoritative pass/fail text — this is a reading aid,
+not the enumeration):
 
 - **CT1 — Capacity & queueing.** Is N(R) respected (never exceeded, never
   idling a slot while eligible work queues)? Is every sling either running or
@@ -134,10 +159,24 @@ authoritative pass/fail text):
   before acting (CT12.1); no mutating action outside the boundary without
   stop-and-ask (CT12.2); boundary violations fail loud, never silent-succeed
   (CT12.3); destructive ops verify the target against the boundary (CT12.4).
+- **CT13 — Control-surface completeness (the Mayor's operating set).** Every
+  operation the Mayor must perform is reachable as a typed MCP tool AND
+  completes end to end through it — presence without performance fails
+  (CT13.1); a core capability the Mayor's set needs with no typed tool is a
+  gap, not a feature, unless a filed issue records it (CT13.2, PROPOSED); any
+  document/skill/prompt stating a tool count or roster must match a live
+  enumeration (CT13.3, PROPOSED); a tool that cannot complete an operation
+  must refuse with a named code + severity + `suggested_next_command` where
+  one exists — that refusal SATISFIES the rule, and the defect is *silence*,
+  not the refusal; a refusal must never be routed around or branched on
+  (CT13.4).
+  *Live check:* for each operation named in CT13.1, invoke its typed MCP tool
+  live and confirm it reaches the operation's own recorded terminal state
+  (e.g. `TIER_ADJUDICATED`), not merely a success-shaped return.
 
 Silent-failure paths (CT1.2, CT1.3, CT1.8, CT5.3, CT8.3, CT10.2, CT11.1,
-CT12.3) inherit P6.1 (fail loud) — a silently dropped/hidden state is a hard
-finding even under a Draft policy.
+CT12.3, CT13.1, CT13.4) inherit P6.1 (fail loud) — a silently dropped/hidden
+state is a hard finding even under a Draft policy.
 
 ## Step 3 — gitleaks (always blocking)
 
@@ -169,7 +208,12 @@ FAIL findings (blocking):
 WARN findings (PASS-WITH-NOTES; PROPOSED-rule or advisory):
   CT<N.M> — <evidence> — <one-line concern>
 
-Per-pillar roll-up:
+Per-pillar roll-up: one row per pillar returned by Step 2's live
+`grep -oE '^## Pillar CT[0-9]+'` enumeration, in numeric order — NOT a fixed
+list. A pillar with no key-signals prose still gets a row, marked
+`unaudited (no guidance)` rather than omitted. The pillars below are today's
+enumeration (CT1-CT13); a future pillar adds a row automatically, it does not
+require editing this template:
   CT1 Capacity ........ pass | notes | fail
   CT2 Dispatch ........ ...
   CT3 Planning ........ ...
@@ -182,6 +226,7 @@ Per-pillar roll-up:
   CT10 Hygiene ........ ...
   CT11 Resilience ..... ...
   CT12 Sandboxing ..... ...
+  CT13 Control-surface  ...
 
 Remediation:
 | Rule | Violation | Fix |
