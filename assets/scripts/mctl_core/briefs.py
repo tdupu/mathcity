@@ -43,6 +43,7 @@ from .verdicts import (
     Verdict,
     brief_population,
     declares_no_subject,
+    is_approved_for_dispatch,
     non_brief_code,
     read_verdict,
 )
@@ -1876,15 +1877,7 @@ def _verdict(bead: Bead) -> str | None:
 
 
 def _approved_for_dispatch(bead: Bead) -> bool:
-    verdict = _verdict(bead)
-    if verdict is None:
-        return False
-    return bead.status.lower() in {"closed", "done"} and verdict.strip().lower() in {
-        "accept",
-        "accepted",
-        "approve",
-        "approved",
-    }
+    return is_approved_for_dispatch(bead)
 
 
 def _defer_until(bead: Bead) -> bool:

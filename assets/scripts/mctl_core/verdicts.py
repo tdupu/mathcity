@@ -694,6 +694,29 @@ def read_verdict_reading(bead: Bead, *, track: DecisionsTrack | None = None) -> 
     )
 
 
+#: The verdict texts that count as an approval, wherever `read_verdict` found them.
+APPROVING_VERDICT_TEXTS = frozenset({"accept", "accepted", "approve", "approved"})
+
+
+def is_approved_for_dispatch(bead: Bead, *, track: DecisionsTrack | None = None) -> bool:
+    """Whether this bead carries a closed, approving verdict.
+
+    The single definition of "approved for dispatch" (#160). `work.py` and
+    `briefs.py` each grew their own copy of this check and it drifted: the
+    `work.py` copy only read the typed `metadata.verdict` / `decision` /
+    `recorded_verdict` fields, which resolved 10 of 139 closed decision beads
+    city-wide, while `close_reason` -- the field `bd close` actually writes,
+    non-empty on 138 of those 139 -- was never consulted. `briefs_list` and
+    `work_status` disagreed on the same bead as a result. Both now call this.
+    """
+    if bead.status.lower() not in {"closed", "done"}:
+        return False
+    verdict = read_verdict(bead, track=track)
+    if verdict is None:
+        return False
+    return verdict.text.strip().lower() in APPROVING_VERDICT_TEXTS
+
+
 def _typed_verdict(bead: Bead) -> tuple[str, str] | None:
     for key in TYPED_VERDICT_KEYS:
         value = bead.raw.get(key)

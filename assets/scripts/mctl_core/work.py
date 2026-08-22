@@ -16,7 +16,7 @@ from .diagnostics import Diagnostic, Severity
 from .effects import EffectPlan, JsonlWrite
 from .events import append_jsonl
 from .liveness import probe_control_plane
-from .verdicts import brief_population, is_brief_bead
+from .verdicts import brief_population, is_approved_for_dispatch, is_brief_bead
 from .trace import append_applied, append_planned
 from .provenance import (
     DispatchProvenance,
@@ -648,7 +648,7 @@ def _work_item(
             )
         )
     blockers.extend(_closed_source_blockers(ctx, brief_id=brief_id, source=source))
-    if not _approved_for_dispatch(brief):
+    if not is_approved_for_dispatch(brief):
         blockers.append(
             _diagnostic(
                 ctx,
@@ -821,25 +821,6 @@ def _formula_invocation(ctx: MctlContext, item: WorkItem) -> dict[str, object]:
         "target": f"{ctx.rig_id}/gc.run-operator",
         "work_bead": item.bead_id,
     }
-
-
-def _approved_for_dispatch(bead: Bead) -> bool:
-    verdict = _verdict(bead)
-    return bead.status.lower() in {"closed", "done"} and verdict in {"approve", "approved", "accept", "accepted"}
-
-
-def _verdict(bead: Bead) -> str | None:
-    for key in ("verdict", "decision", "recorded_verdict"):
-        value = bead.raw.get(key)
-        if isinstance(value, str) and value:
-            return value.strip().lower()
-    metadata = bead.raw.get("metadata")
-    if isinstance(metadata, dict):
-        for key in ("verdict", "decision", "recorded_verdict"):
-            value = metadata.get(key)
-            if isinstance(value, str) and value:
-                return value.strip().lower()
-    return None
 
 
 def _canonical_bead_location(ctx: MctlContext) -> str:
