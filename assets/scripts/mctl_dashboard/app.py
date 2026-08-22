@@ -535,6 +535,30 @@ class Dashboard:
             context_bar="",
         )
 
+    #: Injected in tests; in production this shells out to `gc`, which is slow
+    #: (~33s orders, ~57s history, ~32s formulas -- measured). Nothing here
+    #: calls it per render without a cache in front.
+    orders_reader = None
+
+    def _orders(self, request):
+        """Orders and formulas (#117). Two of the three nouns asked for."""
+        from mctl_core.orders import formulas_catalog, orders_status
+
+        from .screens import orders as orders_screen
+
+        reader = self.orders_reader
+        if reader is None:
+            def reader(_what):  # noqa: ANN001
+                raise RuntimeError(
+                    "no orders reader configured -- gc is not wired to this dashboard yet"
+                )
+
+        sections = [
+            orders_screen.orders_table(orders_status(reader)),
+            orders_screen.formulas_list(formulas_catalog(reader)),
+        ]
+        return self._page("Orders & Formulas", "/orders", None, sections)
+
     def _priority(self, request: Request) -> Response:
         """The operator's own ordering over the stack.
 
@@ -1514,6 +1538,8 @@ class Dashboard:
             return self._queue(request)
         if request.path in ("/pile", "/deferred", "/adjudicated", "/malformed", "/junk"):
             return self._lane(request.path[1:], request)
+        if request.path == "/orders":
+            return self._orders(request)
         if request.path == "/priority":
             return self._priority(request)
         if request.path == "/briefs":
