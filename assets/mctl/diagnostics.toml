@@ -379,6 +379,11 @@ severity = "FATAL"
 meaning = "Pass a store shown in the city roster: city.toml's rigs plus the reserved `hq` city-root store."
 module = "context.py"
 
+[MCTL_LIVE_DISPATCH_DISARMED]
+severity = "ERROR"
+meaning = "Live dispatch is not armed, so the plan was not slung and nothing ran."
+module = "work.py"
+
 [MCTL_CONTROL_PLANE_NOT_ACTIVE]
 severity = "FATAL"
 meaning = "The Gas City supervisor is not running, so dispatched work has nothing to route to."

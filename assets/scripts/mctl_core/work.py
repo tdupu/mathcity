@@ -258,12 +258,53 @@ def live_dispatch_enabled(env: Mapping[str, str] | None = None) -> bool:
     return str(source.get(LIVE_DISPATCH_ENV, "")).strip() in {"1", "true", "yes"}
 
 
+def dispatch_disarmed_payload(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, object]:
+    """The dry-run payload plus the reason it is one.
+
+    A disarmed dispatch used to return `dispatch_dry_run_payload` unchanged:
+    `applied: false`, a complete plan reading `preflight_result: passed`, a trace
+    id, and no diagnostics. That is substantively identical to a dry run the
+    caller did not ask for, so every dispatch in a run would be recorded as
+    dispatched and never happen. The only signal was one boolean.
+
+    The refusal is correct and unchanged -- writing provenance would flip
+    readiness to `dispatched` and block every future attempt. Only the silence
+    was wrong. Both neighbouring refusals below already name themselves
+    (`MCTL_CONTROL_PLANE_NOT_ACTIVE`, `MWRK_DISPATCH_COMMAND_FAILED`); this was
+    the one branch that refused without saying so.
+
+    Emitted into the payload rather than raised: the CLI's disarmed path is
+    covered by kill-switch tests that pin `returncode == 0` while asserting no
+    `gc sling` occurred, and the security property those defend is the absence of
+    the side effect, not the exit status. Raising here would rewrite those
+    assertions in the same change that fixes the silence.
+
+    This does NOT arm dispatch. Arming is a separate decision.
+    """
+    payload = dispatch_dry_run_payload(plan)
+    payload["diagnostics"] = [
+        _diagnostic(
+            ctx,
+            Severity.ERROR,
+            "MCTL_LIVE_DISPATCH_DISARMED",
+            "Live dispatch is not armed, so this plan was not slung and nothing ran.",
+            brief_id=plan.target_brief_id,
+            bead_id=plan.bead_id,
+            suggested_next_command=(
+                f"set {LIVE_DISPATCH_ENV}=1 in the environment of the process "
+                "running mctl, then dispatch again"
+            ),
+        ).to_dict()
+    ]
+    return payload
+
+
 def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, object]:
     if not live_dispatch_enabled():
-        # Not armed: behave exactly like a dry run. Writing provenance here
-        # would flip readiness to `dispatched` and block every future attempt,
+        # Not armed: no side effect, and say so. Writing provenance here would
+        # flip readiness to `dispatched` and block every future attempt,
         # recording a handoff that never happened.
-        return dispatch_dry_run_payload(plan)
+        return dispatch_disarmed_payload(ctx, plan)
 
     # The data-plane probe cannot see this: `gc stop` leaves Dolt listening, so
     # reads keep working while there is no supervisor to route a sling to.
