@@ -287,6 +287,30 @@ formula, through the front door.*
   named, indexed formula. Fail: the same multi-step job hand-assembled from
   scratch a second time with no formula created → **revise**.
 
+- **CT4.5 No formula dispatch without a hygienic brief filed first.** Before
+  work is dispatched to the city as a formula, a **hygienic brief** for that
+  work already exists — filed, not merely intended, and filed **strictly
+  before** the dispatch, never concurrently with it. *Hygienic* is defined by
+  the brief-system rules and is not redefined here: the brief is a
+  `type=decision` bead with a source link (B2.1), every applicable gate
+  carries evidence or an explicit N/A (B1.4), and its verdict is recorded on
+  the brief bead (B2.2). **The verdict MAY be rendered automatically** —
+  auto-adjudication is permitted and remains subject to B2.9 (auto-executed
+  briefs are still adjudicated); an automatic verdict is a verdict, an absent
+  one is not. The brief is what makes the work **trackable**: it is the
+  durable handle by which progress is followed and completion is detected, so
+  a brief that exists but is not linked from the dispatched bead does not
+  satisfy this rule. Allowed exception: **bootstrap** — work repairing the
+  brief-intake path itself is exempt while that path is the surface under
+  repair, provided the exemption is stated in the work item (without this,
+  a rig that cannot accept briefs can never be repaired, cf. MBRF035).
+  Pass: every formula dispatch links a brief bead that was filed before the
+  dispatch timestamp and carries a recorded verdict, or states a bootstrap
+  exemption. Fail: work dispatched with no brief, with a brief created at or
+  after dispatch, with a brief carrying no verdict, or with an unstated
+  bootstrap claim → **fail** (untracked dispatch is CT1.2 and CT5.1 waiting
+  to happen — you cannot see whether it finished).
+
 ## Pillar CT5 — Observability
 
 *The user can always see what is and is not being worked on.*
@@ -350,7 +374,8 @@ formula, through the front door.*
 - **CT7.1 Every dispatch returns an artifact and a judging brief.** All work
   dispatched returns (a) an **artifact** — the deliverable itself — and (b) a
   **brief** stating the criteria on which that artifact is judged. The
-  brief's acceptance criteria are fixed at (or before) dispatch, not
+  brief's acceptance criteria are fixed **before** dispatch (amended
+  2026-08-22 from "at (or before)", which contradicted CT4.5), not
   invented after the artifact exists. A molecule is not done until both
   exist and the judgment has been rendered. Pass: every closed work bead
   links an artifact and a brief with a recorded verdict against the brief's
@@ -757,6 +782,9 @@ test-outcome labels, not artifact or review verdicts.
   reliability-as-a-dial (already reflected in CT9.2)
 
 ## Change log
+
+### 2026-08-22 — CT4.5 added (Adopted); CT7.1 amended: a hygienic brief must be filed BEFORE formula dispatch
+Work may not be dispatched to the city as a formula until a hygienic brief for it has been filed — strictly before the dispatch, defined by the brief-system rules (B2.1 source-linked decision bead, B1.4 gates evidenced or N/A, B2.2 verdict recorded) rather than redefined here, with automatic adjudication explicitly permitted under B2.9 and a stated bootstrap exemption for work repairing the brief-intake path itself. CT7.1's "fixed at (or before) dispatch" was amended to "before" in the same pass, because a brief fixed exactly AT dispatch satisfied CT7.1 while failing CT4.5 and the two rules would have contradicted each other. Triggered by: the pack owner's directive, 2026-08-22 — the brief is the durable handle by which work is tracked and completion is detected.
 
 ### 2026-08-22 — Pillar CT13 opened; CT13.1 added (Adopted), CT13.2/CT13.3 (PROPOSED): the Mayor's operating set must be performable through the MCP
 Codifies the standing architecture ruling that `mctl` is the API and agents reach it through an MCP, as an enforceable completeness requirement on the typed surface: adjudicating, creating and reading briefs, commissioning work, slinging with briefed endings, and checking progress must each resolve to a typed tool that carries the operation to its recorded terminal state — presence is not performance. Triggered by: the pack owner's directive, 2026-08-22, after four of the six named operations were measured broken or missing in one session (no typed commissioning tool; `briefs_adjudicate` never reaching `TIER_ADJUDICATED`; `briefs_create` blocked for two rigs by MBRF035; `work_ready` reporting closed beads as ready).
