@@ -157,17 +157,15 @@ def test_control_a_a_brief_with_a_source_dependency_can_be_adjudicated(tmp_path:
 #: exact P6.2 shape it was written to demonstrate. Strict turns the day #137 is
 #: fixed into a loud failure whose remedy is deleting this marker, which is how
 #: the fix and the test that named the defect stay attached to each other.
-@pytest.mark.xfail(
-    reason="#137: MBRF004 blocks adjudication of a silently-omitted source link",
-    strict=True,
-)
 def test_a_verdict_can_be_recorded_when_the_producer_omitted_the_source_dependency(
     tmp_path: Path,
 ):
     """#137. Differs from control A by ONE field: no `dependencies`.
 
-    Red today: MBRF004 is ERROR, the mutation path blocks on ERROR, and the
-    verdict is refused. A producer's omission makes the brief unadjudicable.
+    GREEN since #137: MBRF004 is WARNING, so the mutation path no longer blocks
+    on it and the verdict records. The diagnostic still fires -- see
+    test_mbrf004_still_fires_after_the_downgrade, which is what separates
+    "stopped gating" from "stopped reporting".
     """
     city_root, rig_root = _seed(tmp_path, "mc-omitted", OMITTED)
     result = _adjudicate(city_root, rig_root, "mc-omitted")
@@ -189,6 +187,42 @@ def test_a_verdict_can_be_recorded_when_the_producer_omitted_the_source_dependen
 
 
 # --- CONTROL B -------------------------------------------------------------
+def test_mbrf004_still_fires_after_the_downgrade(tmp_path: Path):
+    """The control separating "stopped gating" from "stopped reporting".
+
+    Downgrading MBRF004 to WARN is indistinguishable from deleting the check
+    unless something asserts it still fires. Without this test the #137 fix
+    could be implemented by removing the diagnostic entirely and every other
+    test in this file would still pass -- a fix that cannot be told apart from
+    a deletion, which is the P6.2 shape one level up.
+
+    B2.1a is deliberately NOT satisfied here: this bead is SILENT, not
+    declaring. Silence must keep raising MBRF004, or the diagnostic becomes a
+    no-op for the omissions it exists to surface.
+    """
+    city_root, rig_root = _seed(tmp_path, "mc-still-fires", OMITTED)
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["MCTL_BEADS_FIXTURE"] = str(rig_root / ".beads" / "issues.jsonl")
+    result = subprocess.run(
+        [
+            sys.executable, str(MCTL), "briefs", "doctor",
+            "--brief", "mc-still-fires",
+            "--city", str(city_root), "--rig", "mathcity", "--json",
+        ],
+        capture_output=True, text=True, env=env, cwd=str(REPO_ROOT), check=False,
+    )
+    assert result.returncode != 2, (
+        f"usage error, not a finding: {result.stderr[:200]}. A failing test that "
+        "cannot say WHY it failed is the same defect class as one that cannot fail."
+    )
+    blob = f"{result.stdout}{result.stderr}"
+    assert "MBRF004" in blob, (
+        "MBRF004 no longer fires on a silent omission. The downgrade was meant "
+        "to stop it BLOCKING, not stop it REPORTING."
+    )
+
+
 def test_control_b_a_brief_declaring_no_subject_can_be_adjudicated(tmp_path: Path):
     """B2.1a's escape hatch already works, and the fix should not reinvent it.
 

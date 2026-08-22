@@ -170,13 +170,22 @@ def test_defer_dry_run_requires_non_empty_reason(tmp_path: Path):
 
 
 def test_mutation_fails_when_doctor_reports_blocking_diagnostics(tmp_path: Path):
+    """RE-POINTED by #137: the blocker is MBRF005, no longer MBRF004.
+
+    This test names the general behaviour -- a blocking diagnostic refuses the
+    mutation -- so it needs a diagnostic that actually blocks. MBRF004 stopped
+    being one when #137 downgraded it to WARN, on the grounds that a producer's
+    omission must not refuse a human's verdict. `mc-closed` (closed with no
+    recorded verdict) still raises MBRF005/ERROR through the same gate, so the
+    behaviour under test is unchanged and still genuinely exercised.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
 
     result = run_mctl(
         *brief_command(
             city_root,
             "adjudicate",
-            "mc-broken",
+            "mc-closed",
             "--verdict",
             "approve",
             "--reason",
@@ -190,7 +199,7 @@ def test_mutation_fails_when_doctor_reports_blocking_diagnostics(tmp_path: Path)
 
     assert result.returncode != 0
     assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" in result.stderr
-    assert "MBRF004" in result.stderr
+    assert "MBRF005" in result.stderr
 
 
 def test_mutation_fails_when_legacy_decisions_track_proof_is_required(tmp_path: Path):
@@ -294,12 +303,30 @@ def test_a_blocked_brief_can_still_be_rejected(tmp_path: Path):
 
 
 def test_approving_a_blocked_brief_is_still_refused(tmp_path: Path):
-    """The half of the gate that must survive: no ratifying an unreadable brief."""
+    """The half of the gate that must survive: no ratifying an unreadable brief.
+
+    RE-POINTED by #137 from `mc-broken` to `mc-closed`, and the guarantee is the
+    point rather than the fixture. `mc-broken`'s only defect was MBRF004 -- a
+    producer omitting a source link -- which #137 downgraded to WARN precisely
+    because a producer's omission must not stop a human's verdict from being
+    recorded. Keeping this test on `mc-broken` would have asserted the defect.
+
+    `mc-closed` (closed with no recorded verdict, MBRF005/ERROR) still blocks
+    through the same gate, so the assertion below is unchanged and the guarantee
+    -- some briefs cannot be ratified -- is still genuinely exercised.
+
+    NOTE for whoever touches MBRF005 next: it is itself under review, and it is
+    self-sealing (the gate refuses to record a verdict on a brief whose defect is
+    a missing verdict). When that is resolved this test needs re-pointing again,
+    most likely at MBRF010 -- no canonical bead -- which is the durable version of
+    "unreadable" because there is nothing to write to. Do not resolve it by
+    deleting this test; the guarantee outlives every particular blocker.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
 
     result = run_mctl(
         *brief_command(
-            city_root, "adjudicate", "mc-broken",
+            city_root, "adjudicate", "mc-closed",
             "--verdict", "approve",
             "--reason", "looks fine",
             "--dry-run", "--json",

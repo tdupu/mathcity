@@ -393,12 +393,25 @@ def plan_adjudication(
     normalized = _normalize_verdict(ctx, verdict, brief_id)
     reason = _require_reason(ctx, reason, brief_id)
     observed = show_brief(ctx, brief_id)
-    diagnostics = list(_blocking_preconditions(doctor_briefs(ctx, brief_id).diagnostics))
+    observed_diagnostics = tuple(doctor_briefs(ctx, brief_id).diagnostics)
+    diagnostics = list(_blocking_preconditions(observed_diagnostics))
     # A return verdict ratifies nothing, so nothing about the brief's own
     # state can make it wrong. Keep the findings, drop the veto.
+    #
+    # The advisories are drawn from ALL observed diagnostics, not from the
+    # blocking subset. Drawing them from `diagnostics` assumed findings and
+    # blockers were the same set -- true only while every finding worth
+    # reporting happened to be ERROR. #137 downgraded MBRF004 to WARN and the
+    # finding vanished from the payload entirely: demoted to advisory became
+    # suppressed outright, which is the "don't block -- record" rule failing in
+    # the recording half. INFO is excluded because it is not a finding.
     returned_advisories: list[Diagnostic] = []
     if normalized in RETURN_VERDICTS:
-        returned_advisories = diagnostics
+        returned_advisories = [
+            diagnostic
+            for diagnostic in observed_diagnostics
+            if diagnostic.severity is not Severity.INFO
+        ]
         diagnostics = []
     # Plan §4 MOPT001/MOPT002: a verdict on a multi-option brief has to say
     # which option it is approving, or it records a decision against nothing.

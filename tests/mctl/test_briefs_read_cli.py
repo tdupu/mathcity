@@ -128,10 +128,22 @@ def test_briefs_show_reports_canonical_bead_redundant_artifacts_and_policy_refs(
 
 
 def test_briefs_options_disables_mutations_when_doctor_reports_errors(tmp_path: Path):
+    """RE-POINTED by #137 from `mc-broken` to `mc-closed`.
+
+    The behaviour under test -- a blocking diagnostic disables the mutation
+    options -- is unchanged and still real. What changed is which diagnostic
+    blocks: MBRF004 became WARN so that a producer's omission cannot disable
+    Taylor's verdict. `mc-closed` still raises MBRF005/ERROR.
+
+    Its companion below pins the other half: `mc-broken` now ENABLES the
+    mutations while still reporting MBRF004. Both are needed -- this one alone
+    would pass against a build that disabled everything, and that one alone
+    would pass against a build that reported nothing.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
 
     result = run_mctl(
-        *brief_command(city_root, "options", "mc-broken", "--json"),
+        *brief_command(city_root, "options", "mc-closed", "--json"),
         cwd=REPO_ROOT,
         beads_fixture=beads_fixture(rig_root),
     )
@@ -146,10 +158,47 @@ def test_briefs_options_disables_mutations_when_doctor_reports_errors(tmp_path: 
     assert mutation_options
     assert all(not option["enabled"] for option in mutation_options)
     assert {option["disabled_reason"]["code"] for option in mutation_options} >= {
-        "MBRF004"
+        "MBRF005"
     }
-    assert "MBRF004" in {diagnostic["code"] for diagnostic in payload["diagnostics"]}
+    assert "MBRF005" in {diagnostic["code"] for diagnostic in payload["diagnostics"]}
     assert payload["trace_id"]
+
+
+def test_briefs_options_allows_adjudication_over_a_warning_but_still_reports_it(
+    tmp_path: Path,
+):
+    """#137's whole point, at the options surface: don't block -- record.
+
+    `mc-broken`'s only defect is a missing source link (MBRF004, WARN). The
+    human's verdict must be available, AND the defect must still be visible, so
+    a later reader can tell a verdict recorded over a known gap from one
+    recorded on a clean brief.
+
+    Asserting both directions is load-bearing. Enablement alone would pass
+    against a build that silently dropped the diagnostic -- which is exactly how
+    the fix for #137 first went wrong: demoting MBRF004 removed it from the
+    mutation payload entirely, because the advisories were drawn from the
+    blocking subset rather than from all findings.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(city_root, "options", "mc-broken", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    adjudicate = next(
+        option for option in payload["options"] if option["id"] == "adjudicate"
+    )
+    assert adjudicate["enabled"], (
+        "a producer's omission must not disable the human's verdict (#137)"
+    )
+    assert "MBRF004" in {diagnostic["code"] for diagnostic in payload["diagnostics"]}, (
+        "the finding must still be reported -- unblocking is not unreporting"
+    )
 
 
 def test_briefs_doctor_reports_inconsistent_cache_without_rewriting_fixture_state(tmp_path: Path):

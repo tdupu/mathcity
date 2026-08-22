@@ -26,7 +26,7 @@ policy_ref = "B2.1"
 module = "briefs.py"
 
 [MBRF004]
-severity = "ERROR"
+severity = "WARN"
 meaning = "Brief bead has no source dependency."
 policy_ref = "B2.1"
 module = "briefs.py"
