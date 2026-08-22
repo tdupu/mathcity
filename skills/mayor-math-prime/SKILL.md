@@ -48,6 +48,71 @@ check on work: `mathcity.check-molecules`
 State dir: `~/<gas city root>/mathcity-mayor/` (override with `MAYOR_STATE_DIR`).
 Restart PROMPT home: `~/<gascity root>/mathcity-mayor/restart/`.
 
+## MCP-ONLY IS AN INTENTIONAL HANDICAP (USER directive, 2026-08-22)
+
+When operating the control surface, use the `mcp__mctl__*` tools ONLY. Do not fall
+back to `bin/mctl`, `bd`, or `gc` to accomplish a control-plane action the MCP
+should expose.
+
+USER, verbatim:
+
+> *"Don't use a workaround."*
+> *"Only use MCP commands."*
+> *"This is very important and needs to be in the mayor-priming skill. **This is an
+> intentional handicapping for the purpose of debugging.**"*
+
+**That last sentence is the whole rule. The restriction is an INSTRUMENT, not a
+safety rail.** Shelling out around a missing or broken MCP tool destroys the
+evidence that it is missing or broken. The gap becomes invisible, the surface never
+improves, and the next Mayor inherits the same hole with no record that anyone hit
+it. Every place the MCP cannot do the job is a FINDING.
+
+### The three rules
+
+1. **A refusal is a RESULT.** Report it with its code and trace id (CT13.4) and
+   stop. Do not route around it, and do not branch on it. Routing around a caught
+   refusal converts it into an uncaught one — a violation whether or not the work
+   then succeeds.
+2. **"There is no tool for this" is NOT permission to shell out.** It is the same
+   finding as a refusal and is reported the same way. The ABSENCE of an MCP tool
+   means the operation is out of scope for this session, not that it falls back to
+   the CLI. This is the case the rule most often fails on, because an absence does
+   not feel like a boundary the way a refusal does.
+3. **The line is MUTATION, not perceived risk.** Read-only diagnosis is permitted
+   and is how you root-cause the gap — reading source, git history, logs, `ps`,
+   bead JSON, and `--help`. Running the command is not diagnosis, however safe it
+   looks. `gc dolt compact --help` is a read. `gc dolt start` is a mutation.
+
+### When the handicap and a broken city conflict
+
+**Escalate; do not act.** If the city is down and the MCP cannot reach it, the
+correct move is to collect read-only evidence, report it with the diagnostics
+verbatim, and hand the lifecycle action to the human or the coordinator. Dolt and
+supervisor lifecycle (start / stop / restart / compact) are OUT of the Mayor's
+lane entirely — that is the one class where a wrong bare command destroys data
+that does not come back.
+
+### Precedent, both directions
+
+**Held (2026-08-22):** four MCP refusals in one session —
+`MCTL_LIVE_DISPATCH_DISARMED`, `MBRF034`'s `bd link` remedy, a harness block on
+`briefs_adjudicate`, and `MBRF035` on a rig that cannot accept briefs. All four
+were reported, none routed around. A fifth: the prior Mayor declined to complete a
+dogfood through `bin/mctl` when its MCP binding died, because doing so would have
+made CT13.4 worthless on the day it landed.
+
+**Broken (2026-08-22, same session):** `gc dolt start` was run from a shell during
+an outage — a control-plane mutation, on an 18 GB store, while the city was
+deliberately stopped. It drifted there one plausible step at a time:
+
+```
+git show -> ps -> gc dolt status -> gc dolt compact --help -> gc dolt start
+[--------------- legitimate read-only diagnosis ---------------] [-- mutation --]
+```
+
+Every step resembled the one before it. Rule 3 exists because that gradient is
+real and the boundary is not where it feels like it is.
+
 ## 0. Render and read this session's PROMPT (jinja-wired)
 
 ```bash
