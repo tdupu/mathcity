@@ -344,7 +344,11 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     """
     assert ALLOWED_TOOLS & mcp_server.FORBIDDEN_TOOL_NAMES == frozenset()
     assert ALLOWED_TOOLS <= frozenset(mcp_server.TOOLS_BY_NAME)
-    assert len(ALLOWED_TOOLS) == 19
+    # A drift alarm on a security-relevant list: the allowlist must stay
+    # NARROWER than the server surface, so this stays a literal deliberately.
+    # Registry-relative would assert allowlist == tools, which is the opposite
+    # of what this guards. Bumped for molecules_list/_show (#111).
+    assert len(ALLOWED_TOOLS) == 21
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

@@ -48,7 +48,9 @@ MCTL = SCRIPTS_ROOT / "mctl.py"
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT_INFO = {"name": "mctl-dashboard", "version": "0.8.0"}
 
-#: The sixteen typed domain tools the dashboard may call. Nothing else is.
+#: The typed domain tools the dashboard may call. Nothing else is.
+#: Every tool the server registers must appear here or in DELIBERATELY_UNREACHABLE
+#: below -- see tests/mctl/test_dashboard_tool_reachability.py for why.
 ALLOWED_TOOLS = frozenset(
     {
         "context_resolve",
@@ -56,6 +58,8 @@ ALLOWED_TOOLS = frozenset(
         "fleet_sessions",
         "city_health",
         "gates_status",
+        "molecules_list",
+        "molecules_show",
         "briefs_list",
         "briefs_show",
         "briefs_options",
