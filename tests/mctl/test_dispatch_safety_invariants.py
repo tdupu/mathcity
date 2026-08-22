@@ -243,3 +243,44 @@ def test_readiness_checks_moved_out_of_the_reserved_range(tmp_path: Path):
     codes = status_codes(city_root, bin_dir, fixture)
     assert "MWRK010" in codes, f"no-approving-verdict should be MWRK010 now: {codes}"
     assert "MWRK001" not in codes
+
+
+def test_mwrk010_does_not_fire_on_a_real_compound_approval(tmp_path: Path):
+    """#160: `work.py` gates on a private reader that only recognises the
+    four bare words `approve`/`approved`/`accept`/`accepted`.
+
+    Measured live against `he-8hoo` (rig hecke, 2026-08-22): its recorded
+    verdict is the typed field `metadata.verdict = "APPROVE-OPTION-A"` --
+    a real approval, sourced exactly the way `briefs_list` (which already
+    uses `verdicts.read_verdict`) reads it. `work_status` disagrees on the
+    same bead: MWRK010, "no approving verdict". Every real approving brief
+    census'd for #160 carried a compound verdict shaped like this one, not
+    a bare word -- so this fixture is not a corner case, it is the
+    population the fix has to serve.
+    """
+    rows = approved_pair()
+    rows[0]["metadata"] = {"verdict": "APPROVE-OPTION-A"}
+    city_root, _rig, bin_dir, fixture = runtime(tmp_path, rows)
+
+    codes = status_codes(city_root, bin_dir, fixture)
+    assert "MWRK010" not in codes, (
+        f"a real compound approval must not read as no-verdict: {codes}"
+    )
+
+
+def test_mwrk010_still_fires_on_reject_and_revise(tmp_path: Path):
+    """The safety-critical control for #160's fix: widening the match from
+    an exact set to a prefix check must not widen it far enough to catch the
+    opposite polarity. A brief whose recorded verdict rejects or asks for
+    revision must still be refused for dispatch.
+    """
+    for verdict_text in ("reject: not ready", "revise: needs more work"):
+        rows = approved_pair()
+        rows[0]["metadata"] = {"verdict": verdict_text}
+        city_root, _rig, bin_dir, fixture = runtime(tmp_path, rows)
+
+        codes = status_codes(city_root, bin_dir, fixture)
+        assert "MWRK010" in codes, (
+            f"{verdict_text!r} must still block dispatch, got: {codes}"
+        )
+        tmp_path = tmp_path / "next"  # fresh tree per iteration

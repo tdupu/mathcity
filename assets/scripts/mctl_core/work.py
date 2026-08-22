@@ -16,7 +16,7 @@ from .diagnostics import Diagnostic, Severity
 from .effects import EffectPlan, JsonlWrite
 from .events import append_jsonl
 from .liveness import probe_control_plane
-from .verdicts import brief_population, is_brief_bead
+from .verdicts import brief_population, is_brief_bead, read_verdict
 from .trace import append_applied, append_planned
 from .provenance import (
     DispatchProvenance,
@@ -824,22 +824,36 @@ def _formula_invocation(ctx: MctlContext, item: WorkItem) -> dict[str, object]:
 
 
 def _approved_for_dispatch(bead: Bead) -> bool:
-    verdict = _verdict(bead)
-    return bead.status.lower() in {"closed", "done"} and verdict in {"approve", "approved", "accept", "accepted"}
+    """#160: this used to read three fixed metadata keys directly and compare
+    the value against an exact set of four bare words. Real verdicts are not
+    bare words -- `briefs_list` (which reads through `verdicts.read_verdict`)
+    reports live verdicts like `APPROVE-OPTION-A` and
+    `APPROVE-BRIEF-AS-RECOMMENDED-3A-5C-1NORELITIGATE-...` -- so the exact-set
+    check rejected every real approval it was ever handed and only a bare,
+    literal "approve" ever passed.
 
+    Delegating to `read_verdict` fixes the reader half: `briefs_list` and
+    `work_status` now agree about what a bead's recorded verdict text *is*.
+    The prefix check (rather than an exact match) fixes the classification
+    half for the population this was measured against -- verdict text that
+    names its polarity up front.
 
-def _verdict(bead: Bead) -> str | None:
-    for key in ("verdict", "decision", "recorded_verdict"):
-        value = bead.raw.get(key)
-        if isinstance(value, str) and value:
-            return value.strip().lower()
-    metadata = bead.raw.get("metadata")
-    if isinstance(metadata, dict):
-        for key in ("verdict", "decision", "recorded_verdict"):
-            value = metadata.get(key)
-            if isinstance(value, str) and value:
-                return value.strip().lower()
-    return None
+    NOT fixed here, named rather than silently missed: a verdict recorded as
+    a bare option letter with a human-readable parenthetical, e.g.
+    `"A (implicit approval)"` (measured live: `he-hbyr`, a legacy-backfilled
+    close_reason) carries no "approve"/"accept" prefix at all and is not
+    recognised by this check. Classifying an arbitrary option letter as an
+    approval is a genuine judgement call -- it would require knowing what
+    "A" meant on the specific brief that offered it -- and is out of this
+    fix's scope on purpose rather than guessed at.
+    """
+    if bead.status.lower() not in {"closed", "done"}:
+        return False
+    verdict = read_verdict(bead)
+    if verdict is None:
+        return False
+    normalized = "".join(ch for ch in verdict.text.lower() if ch.isalnum())
+    return normalized.startswith("approve") or normalized.startswith("accept")
 
 
 def _canonical_bead_location(ctx: MctlContext) -> str:
