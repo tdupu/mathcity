@@ -570,6 +570,27 @@ def _closed_source_blockers(
     """
     if source is None or source.is_open:
         return []
+    if source.id == brief_id:
+        # #173, and the regression is mine: I added this check in #157 without
+        # considering that a SOURCELESS brief is made its own source bead
+        # (work.py:636, the `source_id = brief_id` fallback). `briefs_adjudicate`
+        # then closes it -- closing the brief is what adjudication IS -- so the
+        # brief became its own closed source and could never be dispatched.
+        # CT4.5 mandates adjudicating before dispatch, so the prescribed
+        # workflow walked straight into it.
+        #
+        # When the brief IS its own source, "is the source closed?" reduces to
+        # "is the brief closed?", which adjudication guarantees. The question is
+        # not merely inconvenient here; it is MEANINGLESS, and answering it
+        # produces MWRK013 sitting beside MWRK011 -- "the source is closed" next
+        # to "there is no source" -- two blockers describing incompatible
+        # worlds.
+        #
+        # The fallback is NOT the defect and I checked before assuming it was:
+        # `source_id` feeds `WorkItem.bead_id` (work.py:708) and nine other
+        # readers, so removing it would empty that field in every payload for a
+        # sourceless brief. MWRK011 already reports the real problem.
+        return []
     return [
         _diagnostic(
             ctx,
