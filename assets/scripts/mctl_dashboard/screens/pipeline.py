@@ -205,6 +205,63 @@ def adjudicated(briefs: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
+def junk(briefs: Sequence[Mapping[str, Any]]) -> str:
+    """Briefs no verdict can land on, with the reason stated per row.
+
+    Taylor asked for these to be *separated out*, not hidden -- "it is a good
+    signal for debugging". The first version filtered them away entirely,
+    which is the failure this dashboard exists to not commit: the page looked
+    healthy because the unhealthy rows were gone.
+
+    One lane rather than four, because the population's value is being seen at
+    once. The reason column carries the distinction that four lanes would have
+    carried structurally, and it is derived from what the write path refuses
+    rather than from a taxonomy maintained by hand.
+    """
+    from ..app import junk_reason
+
+    if not briefs:
+        return (
+            '<section data-region="junk">'
+            + _heading("Junk", 0)
+            + _gap(
+                "No brief in scope is unusable. Every open brief here can take "
+                "a verdict of some kind."
+            )
+            + "</section>"
+        )
+    return (
+        '<section data-region="junk">'
+        + _heading("Junk", _count(briefs))
+        + _gap(
+            "Briefs <strong>no verdict can land on</strong>. They are here rather "
+            "than hidden, because the size and shape of this population is a "
+            "signal worth reading — a brief nobody can see is a brief nobody "
+            "debugs. Nothing here is deleted, and nothing here is a judgement "
+            "about the brief's content. "
+            "<strong>A brief whose <span class=\"mono\">approve</span> is gated "
+            "but which can still be sent back is NOT here</strong> — it stays in "
+            "the stack with that one control switched off. "
+            "<strong>This lane spans every decision state</strong> — open, "
+            "adjudicated and malformed alike — so it is larger than the junk "
+            "count on the stack, which counts only the open ones that would "
+            "otherwise be queued for a verdict."
+        )
+        + '<ul class="reason-list" data-region="junk-reasons">'
+        + "".join(
+            f'<li><span class="mono">{_e(str(attr(b, "brief_id") or "?"))}</span> — '
+            f"{_e(junk_reason(b) or '')}</li>"
+            for b in briefs
+        )
+        + "</ul>"
+        + _rows(
+            briefs,
+            cell=lambda b: f'<td style="white-space: normal;">{_e(junk_reason(b) or "")}</td>',
+        )
+        + "</section>"
+    )
+
+
 def malformed(briefs: Sequence[Mapping[str, Any]]) -> str:
     """Closed briefs carrying no verdict field.
 

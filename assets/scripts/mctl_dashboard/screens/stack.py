@@ -438,6 +438,34 @@ def _hidden_note(dropped: Sequence[str]) -> str:
     )
 
 
+def junk_count_note(held: Sequence[Mapping[str, Any]], total: int) -> str:
+    """`N briefs · M junk`, on the stack, before the lane is opened.
+
+    Taylor asked for the *size of the problem* to be visible without a click:
+    "it is a good signal for debugging". A count he has to go looking for is
+    a count he will not see.
+    """
+    junk = len(held)
+    return (
+        '<p class="review-note" data-region="junk-count" style="margin-top: 10px;">'
+        f"<strong>{total} brief{'' if total == 1 else 's'} in scope · "
+        f"{junk} junk.</strong> "
+        + (
+            'No brief here is unusable — every one can take a verdict.'
+            if not junk
+            else f'{junk} of them can take no verdict at all and '
+            f'{"is" if junk == 1 else "are"} separated into the '
+            '<a href="/junk">Junk</a> lane, with the reason for each. '
+            "They are separated rather than hidden: a brief nobody can see is "
+            "a brief nobody debugs. "
+            "<em>The Junk lane lists more than this number</em> — it shows every "
+            "brief no verdict can land on, in any state, while this count is "
+            "only the ones that would otherwise be sitting in this queue."
+        )
+        + "</p>"
+    )
+
+
 def held_back_note(held: Sequence[Mapping[str, Any]]) -> str:
     """Name the briefs the stack is not showing, and why.
 
