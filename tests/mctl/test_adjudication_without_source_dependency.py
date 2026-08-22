@@ -222,6 +222,26 @@ def test_mbrf004_still_fires_after_the_downgrade(tmp_path: Path):
         "to stop it BLOCKING, not stop it REPORTING."
     )
 
+    # Firing is not enough: it must reach a caller. sally caught that the
+    # assertion above passes with the severity demoted one further step, to
+    # INFO -- and INFO is excluded from the advisories that effects.py puts in
+    # the adjudication payload. So the exact regression the effects.py change
+    # exists to prevent ("demoted to advisory became suppressed outright") was
+    # reintroducible in one word with this file still green.
+    #
+    # Pinning the severity is what closes it. WARN is the floor: quiet enough
+    # not to gate, loud enough to travel with the verdict.
+    payload = json.loads(result.stdout)
+    reported = {
+        diagnostic["code"]: diagnostic["severity"]
+        for diagnostic in payload.get("diagnostics") or ()
+    }
+    assert reported.get("MBRF004") == "WARN", (
+        f"MBRF004 must be reported at WARN, got {reported.get('MBRF004')!r}. "
+        "INFO is filtered out of the adjudication advisories, so demoting it "
+        "further silently restores the bug #137 fixed."
+    )
+
 
 def test_control_b_a_brief_declaring_no_subject_can_be_adjudicated(tmp_path: Path):
     """B2.1a's escape hatch already works, and the fix should not reinvent it.
