@@ -436,6 +436,20 @@ def provenance_banner(provenance: "DataProvenance | None" = None) -> str:
     )
 
 
+def staleness_banner(served_code: Any = None) -> str:
+    """The served-code line. A caller that passes nothing gets `unknown`.
+
+    Deliberately NOT "assume current when not told". The default path is the
+    one a forgetful caller takes, so it must be the honest one -- the same
+    choice `provenance.fixture_sources` makes for an unknown rig list.
+    """
+    from .staleness import Staleness, banner
+
+    if served_code is None:
+        return banner(Staleness(served=None, current=None))
+    return banner(served_code)
+
+
 def page(
     title: str,
     current: str,
@@ -450,6 +464,7 @@ def page(
     rig_ids: Sequence[str] = (),
     selected_rig: str | None = None,
     provenance: "DataProvenance | None" = None,
+    served_code: Any = None,
 ) -> str:
     """The document shell.
 
@@ -486,6 +501,11 @@ def page(
             # impossible for a page to show fixture data without saying so.
             # A screen cannot forget it; a screen does not build its own shell.
             provenance_banner(provenance),
+            # #164, same reasoning one line up: Taylor's server ran seven hours
+            # stale across four merges, and the page rendered
+            # merged-and-absent features identically to never-built ones.
+            # Emitted by the shell so a screen cannot omit it.
+            staleness_banner(served_code),
             masthead(counts, context, rig_ids=rig_ids, selected_rig=selected_rig),
             key_map(),
             '<div class="mc-shell">',

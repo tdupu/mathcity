@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote
 
@@ -422,6 +423,32 @@ class Dashboard:
                 region="context",
             )
 
+    #: The commit this PROCESS loaded, captured once. #164: a long-running
+    #: dashboard served seven-hour-old code across four merges while rendering
+    #: merged-and-absent features identically to never-built ones.
+    _SERVED_COMMIT: str | None = None
+
+    def _served_code(self) -> Any:
+        """Staleness of the running process against its checkout.
+
+        The served commit is read once and cached for the process lifetime --
+        it cannot change without a restart, which is the entire point. The
+        checkout's HEAD is re-read per render, because that is the value that
+        moves underneath us.
+
+        Any failure resolves to `unknown` rather than to `current`: this runs
+        on every page, and a banner that claims freshness from a check that did
+        not run would be the defect it exists to report.
+        """
+        from . import staleness
+
+        repo = Path(__file__).resolve().parents[3]
+        if type(self)._SERVED_COMMIT is None:
+            type(self)._SERVED_COMMIT = staleness.read_head(repo)
+        return staleness.compare(
+            served=type(self)._SERVED_COMMIT, current=staleness.read_head(repo)
+        )
+
     def _page(
         self,
         title: str,
@@ -451,6 +478,7 @@ class Dashboard:
                 context=context or {},
                 queued=queued,
                 weights=weights,
+                served_code=self._served_code(),
             ),
         )
 
