@@ -145,6 +145,43 @@ def refuses(verdict: Mapping[str, Any]) -> bool:
     return verdict.get("gate") is not None
 
 
+def registry_report(path: Path | None = None) -> dict[str, Any]:
+    """The registry as a reportable surface, with presence stated.
+
+    `load_registry` collapses "file absent" into "empty registry" on purpose:
+    every lookup then misses and resolves to UNCLASSIFIED, which is the safe
+    direction for a *gate*. That collapse is wrong for a *report*. Rendered,
+    the two states are both `0 operations classified` -- and an operator
+    reading that concludes the city has nothing dangerous, rather than that we
+    failed to look.
+
+    So this carries `registry_present` and leaves `load_registry` alone: its
+    collapse is correct for its own caller, and reporting is a different job.
+
+    `awaiting_emitter` is passed through unrenamed. Its own docstring is
+    emphatic that "N entries await an emitter" is a fact and "N orphans" is a
+    warning about the wrong thing -- classified-but-unemitted is a normal
+    state, not a defect.
+    """
+    target = path or REGISTRY_PATH
+    present = Path(target).is_file()
+    registry = load_registry(target)
+    return {
+        "registry_present": present,
+        "registry_path": str(target),
+        "operations": [
+            {
+                "operation": operation,
+                "floor": entry.get("floor"),
+                "reason": entry.get("reason"),
+                "aspirational": bool(entry.get("aspirational", False)),
+            }
+            for operation, entry in sorted(registry.items())
+        ],
+        "awaiting_emitter": awaiting_emitter(registry),
+    }
+
+
 def awaiting_emitter(registry: Mapping[str, Any] | None = None) -> list[str]:
     """Registry entries marked `aspirational` -- classified, but nothing emits them.
 
