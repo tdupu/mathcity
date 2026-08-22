@@ -241,6 +241,55 @@ def test_clean_and_unreadable_are_distinguishable_in_the_payload() -> None:
 
 
 # --------------------------------------------------------------------------
+# #150 G1: conservation is ONE rig, and the payload must say which one.
+# --------------------------------------------------------------------------
+
+
+def test_conservation_report_names_its_own_rig(monkeypatch, tmp_path) -> None:
+    """`boot --rig hq` returned molecules/roots_dangling with nothing marking
+    the payload as hq-scoped rather than city-wide. A consumer reading the
+    field names alone would have no way to tell -- measured live: every
+    dangling root in the city (143 of 143) is in hq, 0 of the other ~1,200
+    molecules, and the payload gave no reason to expect that split."""
+
+    class _Ctx:
+        rig_root = tmp_path
+        city_root = tmp_path
+        rig_id = "hq"
+        trace_id = "t"
+
+    monkeypatch.setattr(mayor, "load_rows", lambda *_a, **_k: (CLEAN_ROWS, None))
+    report = mayor.conservation_report(_Ctx())
+    assert report.rig == "hq"
+    assert report.to_dict()["rig"] == "hq"
+
+
+def test_an_unreadable_store_still_names_its_rig(monkeypatch, tmp_path) -> None:
+    """The failure path constructs its own `ConservationReport` directly
+    rather than going through `conservation_from_rows` -- confirm it was not
+    missed."""
+
+    class _Ctx:
+        rig_root = tmp_path
+        city_root = tmp_path
+        rig_id = "hecke"
+        trace_id = "t"
+
+    monkeypatch.setattr(mayor, "load_rows", lambda *_a, **_k: ([], "bd exploded"))
+    report = mayor.conservation_report(_Ctx())
+    assert report.readable is False
+    assert report.rig == "hecke"
+
+
+def test_conservation_from_rows_defaults_to_an_empty_rig_when_called_bare() -> None:
+    """Every direct caller in this file constructs `conservation_from_rows`
+    without a rig, because the pure function is meant to stay callable
+    without a `MctlContext`. That must keep working."""
+    report = mayor.conservation_from_rows(CLEAN_ROWS)
+    assert report.rig == ""
+
+
+# --------------------------------------------------------------------------
 # boot state: the handoff factored into queries
 # --------------------------------------------------------------------------
 

@@ -168,6 +168,11 @@ class ConservationReport:
     #: failed read has zero of everything, and zero dangling roots must NOT
     #: then read as "clean" -- see `clean`.
     readable: bool = True
+    #: #150 G1: this report is ALWAYS one rig's store, never the city. Empty
+    #: string, not omitted, when built by `conservation_from_rows` directly --
+    #: a pure function with no `MctlContext` genuinely has no rig to name, and
+    #: that is a different fact from "the rig is unknown".
+    rig: str = ""
 
     @property
     def clean(self) -> bool | None:
@@ -191,6 +196,7 @@ class ConservationReport:
             "dangling_root_ids": list(self.dangling_root_ids),
             "molecules": self.molecules,
             "orphaned_members": self.orphaned_members,
+            "rig": self.rig,
             "roots_dangling": self.roots_dangling,
             "roots_resolving": self.roots_resolving,
             "store_refs": dict(sorted(self.store_refs.items())),
@@ -400,12 +406,18 @@ def _metadata(row: Mapping[str, object]) -> Mapping[str, object]:
     return raw if isinstance(raw, dict) else {}
 
 
-def conservation_from_rows(rows: Sequence[Mapping[str, object]]) -> ConservationReport:
+def conservation_from_rows(
+    rows: Sequence[Mapping[str, object]], *, rig: str = ""
+) -> ConservationReport:
     """Pure function over bead rows -- the testable half, with no subprocess.
 
     Split out so the invariant can be exercised against fixtures that contain a
     known dangling root. A conservation check that has only ever run against a
     clean store has not been shown to detect anything.
+
+    `rig` defaults to empty rather than being required: a caller with only
+    rows and no `MctlContext` has no rig to name, and that is a different,
+    honest fact from the rig being unknown.
     """
     ids = {str(row.get("id")) for row in rows if row.get("id")}
     members: dict[str, list[Mapping[str, object]]] = {}
@@ -462,6 +474,7 @@ def conservation_from_rows(rows: Sequence[Mapping[str, object]]) -> Conservation
         window_latest=created[-1] if created else None,
         store_refs=store_refs,
         diagnostics=tuple(diagnostics),
+        rig=rig,
     )
 
 
@@ -507,6 +520,7 @@ def conservation_report(ctx: "MctlContext") -> ConservationReport:
             window_latest=None,
             store_refs={},
             readable=False,
+            rig=ctx.rig_id,
             diagnostics=(
                 Diagnostic(
                     severity=Severity.FATAL,
@@ -523,7 +537,7 @@ def conservation_report(ctx: "MctlContext") -> ConservationReport:
                 ),
             ),
         )
-    return conservation_from_rows(rows)
+    return conservation_from_rows(rows, rig=ctx.rig_id)
 
 
 # --------------------------------------------------------------------------

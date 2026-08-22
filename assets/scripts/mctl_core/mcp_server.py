@@ -1527,6 +1527,14 @@ TOOLS: tuple[ToolSpec, ...] = (
                 },
                 "readable": {"type": "boolean"},
                 "molecules": {"type": "integer"},
+                "rig": {
+                    "type": "string",
+                    "description": (
+                        "#150 G1: this report is always ONE rig's store, never the "
+                        "city -- empty string only when built without an "
+                        "MctlContext to read a rig from."
+                    ),
+                },
                 "roots_resolving": {"type": "integer"},
                 "roots_dangling": {"type": "integer"},
                 "orphaned_members": {"type": "integer"},
@@ -1544,6 +1552,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "dangling_root_ids",
                 "molecules",
                 "orphaned_members",
+                "rig",
                 "roots_dangling",
                 "roots_resolving",
             ],
