@@ -51,6 +51,8 @@ DECLARED_TOOLS = (
     "mayor_boot",
     "mayor_city_state",
     "mayor_conservation",
+    "molecules_list",
+    "molecules_show",
     "trace_replay_preview",
     "trace_show",
     "work_claim",

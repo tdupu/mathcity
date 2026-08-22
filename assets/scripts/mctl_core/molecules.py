@@ -36,9 +36,12 @@ than defaulting it.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
-from .beads import Bead
+from .beads import Bead, BeadReadError, read_beads
+from .diagnostics import Diagnostic, Severity
 
 #: The exact `gc.kind` of a molecule root. EXACT: `workflow-finalize` and every
 #: other step kind startswith `workflow`, so a prefix test inverts the whole
@@ -177,3 +180,105 @@ def describe_with_steps(bead: Bead, beads: Sequence[Bead]) -> dict[str, object]:
         for s in steps_of(bead.id, beads)
     ]
     return out
+
+
+# --- the report surface (#111) ----------------------------------------------
+
+#: Molecule roots are `type: task`, and the discriminator is METADATA
+#: (`gc.kind`), not type. So there is no narrowing read: the store must be
+#: asked for every task and filtered here. `read_beads`' own docstring records
+#: what that costs on the largest rig -- 30,364 rows to use 80, 9-11s a view.
+#: Declared rather than discovered: a molecules view on a large rig pays a full
+#: task read, and the fix would be a `gc.kind` index, not a caller change.
+MOLECULE_BEAD_TYPE = "task"
+
+
+@dataclass(frozen=True)
+class MoleculeReport:
+    molecules: tuple[dict[str, object], ...]
+    diagnostics: tuple[Diagnostic, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {"molecules": [dict(m) for m in self.molecules]}
+
+
+def _unreadable(rig_root: Path, error: BaseException) -> Diagnostic:
+    return Diagnostic(
+        code="MCTL_MOLECULES_STORE_UNREADABLE",
+        severity=Severity.ERROR,
+        message=f"The bead store could not be read, so NO molecule count is available: {error}",
+        rig_path=str(rig_root),
+        hint=(
+            "This is 'we could not look', not 'there are none'. An empty list "
+            "here would be a plausible-empty-result: it would read as a city "
+            "with nothing running."
+        ),
+    )
+
+
+def build_molecules(
+    rig_root: Path,
+    *,
+    fixture_path: Path | None = None,
+    with_steps: bool = False,
+) -> MoleculeReport:
+    """Every molecule in one rig.
+
+    On an unreadable store this returns NO molecules AND a diagnostic saying
+    why -- never a bare empty list. An empty molecules list with no diagnostic
+    means 'this rig genuinely has none'; those two must not render alike.
+    """
+    try:
+        beads = read_beads(rig_root, fixture_path=fixture_path, issue_type=MOLECULE_BEAD_TYPE)
+    except (BeadReadError, OSError) as error:
+        return MoleculeReport(molecules=(), diagnostics=(_unreadable(rig_root, error),))
+
+    roots = roots_in(beads)
+    rows = tuple(
+        describe_with_steps(root, beads) if with_steps else describe(root) for root in roots
+    )
+    return MoleculeReport(molecules=rows, diagnostics=())
+
+
+def build_molecule(
+    rig_root: Path,
+    molecule_id: str,
+    *,
+    fixture_path: Path | None = None,
+) -> MoleculeReport:
+    """One molecule with its steps, or a diagnostic naming why not.
+
+    A missing id and an unreadable store are DIFFERENT failures and get
+    different codes: 'no such molecule' is an answer, 'we could not ask' is not.
+    """
+    try:
+        beads = read_beads(rig_root, fixture_path=fixture_path, issue_type=MOLECULE_BEAD_TYPE)
+    except (BeadReadError, OSError) as error:
+        return MoleculeReport(molecules=(), diagnostics=(_unreadable(rig_root, error),))
+
+    for bead in beads:
+        if bead.id == molecule_id and is_molecule_root(bead):
+            return MoleculeReport(molecules=(describe_with_steps(bead, beads),), diagnostics=())
+
+    present = any(b.id == molecule_id for b in beads)
+    return MoleculeReport(
+        molecules=(),
+        diagnostics=(
+            Diagnostic(
+                code="MCTL_MOLECULES_NOT_A_MOLECULE" if present else "MCTL_MOLECULES_NO_SUCH_ID",
+                severity=Severity.ERROR,
+                message=(
+                    f"{molecule_id} exists but is not a molecule root "
+                    f"(gc.kind is not {ROOT_KIND!r})"
+                    if present
+                    else f"No bead {molecule_id} in this rig."
+                ),
+                rig_path=str(rig_root),
+                hint=(
+                    "A step points at its root via gc.root_bead_id; it is not one."
+                    if present
+                    else "Check the rig: a molecule id is rig-scoped."
+                ),
+            ),
+        ),
+    )

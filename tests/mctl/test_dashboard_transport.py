@@ -107,9 +107,20 @@ def test_the_dashboard_speaks_stdio_to_a_real_mctl_mcp_serve_subprocess(tmp_path
     assert "--client-class" in command
     assert command[command.index("--client-class") + 1] == "internal"
     # The server's full internal surface, not the dashboard's own narrower
-    # `ALLOWED_TOOLS` (18): this asserts the subprocess was launched as an
-    # internal client, which is what makes any tool visible at all.
-    assert len(tools) == 24, "an external client would see zero tools here"  # 24 since gates_status (#119) was exposed
+    # `ALLOWED_TOOLS`: this asserts the subprocess was launched as an internal
+    # client, which is what makes any tool visible at all.
+    #
+    # Compared against the live registry rather than a literal count. A literal
+    # has to be bumped every time a tool is added, and a check whose failure
+    # mode is "bump the number" gets bumped reflexively -- which is how a real
+    # regression rides in behind a routine edit. Against the registry the
+    # assertion still fails if the subprocess is launched as an external
+    # client (which would see only the `external_ready` subset), and it stops
+    # failing for reasons that are not regressions.
+    from mctl_core.mcp_server import TOOLS
+
+    assert len(tools) == len(TOOLS), "an external client would see a narrower surface here"
+    assert len(tools) > len([t for t in TOOLS if t.external_ready]), "not the internal surface"
     assert "briefs_adjudicate" in tools
 
 

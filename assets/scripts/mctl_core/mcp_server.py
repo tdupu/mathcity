@@ -83,6 +83,7 @@ from .effects import (
 from .fields import read_frontmatter
 from .fleet import build_fleet_sessions
 from .gates import gates_status
+from .molecules import build_molecule, build_molecules
 from .health import build_city_health
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
@@ -505,6 +506,27 @@ def _handle_gates_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict
     # never claims the city defines none.
     report = gates_status(gates_dir=scope.city_root / "mathcity" / "gates")
     return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
+def _handle_molecules_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Dashboard handoff #111: every molecule in this rig -- one row per RUN.
+
+    An unreadable store returns no molecules AND a diagnostic. It never returns
+    a bare empty list, because an empty census reads as "the city has nothing
+    running" rather than "we could not look".
+    """
+    report = build_molecules(
+        ctx.rig_root,
+        fixture_path=ctx.beads_fixture,
+        with_steps=bool(arguments.get("with_steps")),
+    )
+    return {"diagnostics": _diagnostics(ctx, report.diagnostics), **report.to_dict()}
+
+
+def _handle_molecules_show(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Dashboard handoff #111: one molecule with its steps."""
+    report = build_molecule(
+        ctx.rig_root, str(arguments.get("molecule_id") or ""), fixture_path=ctx.beads_fixture
+    )
+    return {"diagnostics": _diagnostics(ctx, report.diagnostics), **report.to_dict()}
 
 
 def _handle_city_health(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -1051,6 +1073,54 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         handler=_handle_city_health,
         scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="molecules_list",
+        title="List molecules",
+        description=(
+            "Every molecule in this rig -- one row per RUN, not per work item. A molecule "
+            "is a workflow root bead (`gc.kind == \"workflow\"`, an EXACT match: every step "
+            "kind also startswith `workflow`). Its steps are the beads that point AT it via "
+            "`gc.root_bead_id`; the root does NOT carry that key, and the dashboard handoff "
+            "says otherwise -- building the edge from that sentence reverses it. "
+            "Re-dispatching one source bead mints a NEW root, so four attempts are four "
+            "molecules, which is what makes repeated attempts visible. "
+            "NO `state` FIELD: advancing/stalled/stranded need the evidence chain (#115), "
+            "which records nothing today, and a row showing a state it cannot derive would "
+            "be worse than one that omits it. An unreadable store yields a diagnostic and "
+            "no rows -- never a bare empty list."
+        ),
+        input_schema=request_schema(
+            {
+                "with_steps": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Attach each molecule's steps. Off by default: a roster read is not a content read.",
+                }
+            }
+        ),
+        output_schema=response_schema(
+            {"molecules": {"type": "array", "items": {"type": "object"}}}, ["molecules"]
+        ),
+        handler=_handle_molecules_list,
+    ),
+    ToolSpec(
+        name="molecules_show",
+        title="Show one molecule",
+        description=(
+            "One molecule with its steps, by root bead id. A missing id and an id that "
+            "exists but is not a molecule root are DIFFERENT diagnostics: 'no such molecule' "
+            "is an answer, 'that is a step, not a run' is a different answer, and neither is "
+            "an empty result."
+        ),
+        input_schema=request_schema(
+            {"molecule_id": {"type": "string", "description": "The molecule's ROOT bead id."}},
+            ["molecule_id"],
+        ),
+        output_schema=response_schema(
+            {"molecules": {"type": "array", "items": {"type": "object"}}}, ["molecules"]
+        ),
+        handler=_handle_molecules_show,
     ),
     ToolSpec(
         name="briefs_list",
