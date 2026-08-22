@@ -280,25 +280,55 @@ class StdioMcpClient(_JsonRpcClient):
             env=environment,
         )
 
+    def _server_gone(self, message: dict[str, Any], **facts: Any) -> ToolFailure:
+        """The one diagnostic for "the subprocess is not there any more".
+
+        Built here rather than inline because it has to be raised from two
+        places that used to behave differently: the graceful death, where the
+        child closed stdout and `readline()` returns empty, and the abrupt one,
+        where the child is already gone and the *write* fails first.
+
+        `#166`: only the graceful path was handled. A dashboard whose child had
+        already died surfaced a raw `BrokenPipeError` on every route for an
+        hour -- while the sentence the operator needed sat a few lines below,
+        unreachable.
+        """
+        return ToolFailure(
+            str(message.get("method")),
+            [
+                {
+                    "severity": "FATAL",
+                    "code": "MCTL_DASH_SERVER_GONE",
+                    "message": "The mctl MCP server closed the connection.",
+                    "hint": "Restart the dashboard; the server subprocess is no longer running.",
+                    "facts": facts,
+                }
+            ],
+            {},
+        )
+
     def _exchange(self, message: dict[str, Any]) -> dict[str, Any] | None:
-        assert self.process.stdin is not None and self.process.stdout is not None
-        self.process.stdin.write(json.dumps(message) + "\n")
-        self.process.stdin.flush()
+        assert self.process.stdin is not None
+        try:
+            self.process.stdin.write(json.dumps(message) + "\n")
+            self.process.stdin.flush()
+        except (BrokenPipeError, ValueError) as error:
+            # The child died before this write. `poll()` carries its exit code,
+            # which is the only evidence of WHY -- the live incident lost it
+            # entirely and we still do not know what killed that process.
+            # `ValueError` covers a closed pipe object, which presents the same
+            # way to a caller.
+            raise self._server_gone(
+                message,
+                exit_code=self.process.poll(),
+                write_error=f"{type(error).__name__}: {error}",
+            ) from None
+        assert self.process.stdout is not None
         line = self.process.stdout.readline()
         if not line:
             stderr = self.process.stderr.read() if self.process.stderr else ""
-            raise ToolFailure(
-                str(message.get("method")),
-                [
-                    {
-                        "severity": "FATAL",
-                        "code": "MCTL_DASH_SERVER_GONE",
-                        "message": "The mctl MCP server closed the connection.",
-                        "hint": "Restart the dashboard; the server subprocess is no longer running.",
-                        "facts": {"stderr": stderr.strip()},
-                    }
-                ],
-                {},
+            raise self._server_gone(
+                message, stderr=stderr.strip(), exit_code=self.process.poll()
             )
         return json.loads(line)
 
