@@ -1375,6 +1375,27 @@ class Dashboard:
     def handle(self, request: Request) -> Response:
         try:
             return self._handle(request)
+        except ToolFailure as failure:
+            # A ToolFailure carries diagnostics written for the operator --
+            # `MCTL_DASH_SERVER_GONE` has a hint that says exactly what to do.
+            # Letting it fall through to the generic guard below replaced that
+            # with "this is a defect in the dashboard", which is true and
+            # useless (#166).
+            return self._page(
+                "This surface could not be read",
+                "/briefs",
+                None,
+                [
+                    render.notice_panel(
+                        "The dashboard could not reach mctl",
+                        "Nothing here is a statement about any brief. The "
+                        "diagnostic below is from mctl itself and says what to do.",
+                        failure.diagnostics,
+                        region="tool-failure",
+                    )
+                ],
+                status=503,
+            )
         except Exception as error:  # noqa: BLE001
             # A mutation route that raises becomes a dropped connection: no
             # status, no page, nothing in the browser. The operator learns
