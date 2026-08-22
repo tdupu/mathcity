@@ -119,7 +119,12 @@ resolver repair. **State what guarantees a new rig gets one.**
 
 ## Slice D — The MCP-only handicap is written where agents actually read it
 
-**Owner:** QUIMBY 47 (author) · **Worktree:** `.claude/worktrees/quimby` · **Reviewer:** brad
+**Owner:** creek (author) · **Worktree:** `.claude/worktrees/quimby` (handed over) · **Reviewer:** pink
+
+**QUIMBY does not own this.** It is the Mayor: it coordinates, it does not implement.
+Assigning it a slice was the coordinator's category error. **QUIMBY hands creek the
+`debug-city` content it already authored (220 lines, hygiene-validated) and the verbatim
+directive; creek lands both.**
 
 Taylor, verbatim, relayed twice and still not in the skill:
 
@@ -160,9 +165,9 @@ decision. **Nothing else in this plan is blocked by it.**
 
 ## Slice G — QUIMBY 45's two unfiled issues
 
-**Owner:** QUIMBY 47 · **Blocked on:** content. The original message carried no
-paste-ready blocks and QUIMBY 45's context is gone. **Either 47 reconstructs them from
-45's message, or we declare them lost and say so** — an unfiled issue that nobody can
+**Owner:** brad · **Blocked on:** content. The original message carried no
+paste-ready blocks and QUIMBY 45's context is gone. **Either brad reconstructs them from
+QUIMBY 45's 00:47 message, or we declare them lost and say so** — an unfiled issue that nobody can
 reconstruct is a real loss and gets recorded as one, not quietly dropped.
 
 ---
