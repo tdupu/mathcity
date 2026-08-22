@@ -28,8 +28,34 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
-#: The outcome every order reports until the city records execution results (#156).
+#: Reserved for orders the event log has never seen -- NOT a blanket default.
+#: The earlier version of this module reported `unknown` for every order, on a
+#: measurement that missed `<city-root>/.gc/events.jsonl` entirely (#156).
 UNKNOWN_OUTCOME = "unknown"
+
+#: The event types that settle an order's fate. `order.fired` says it started;
+#: only these two say how it ended.
+TERMINAL_EVENTS = {"order.completed": "completed", "order.failed": "failed"}
+
+
+def fold_outcomes(events):
+    """Latest terminal outcome per order subject.
+
+    Freshness is not health. `mol-dog-compactor` fires punctually and has never
+    once completed -- any signal keyed on "did it run lately" renders it green,
+    which is the defect this fold exists to prevent (§5.7).
+    """
+    latest: dict[str, tuple[str, str]] = {}
+    for event in events or ():
+        outcome = TERMINAL_EVENTS.get(event.get("type"))
+        if not outcome:
+            continue
+        subject, when = event.get("subject"), event.get("ts") or ""
+        if not subject:
+            continue
+        if when >= latest.get(subject, ("", ""))[0]:
+            latest[subject] = (when, outcome)
+    return latest
 
 
 def _unreachable(what: str, err: Exception) -> dict[str, Any]:
@@ -58,6 +84,12 @@ def orders_status(read: Callable[[str], Any]) -> dict[str, Any]:
         history, history_state = [], "degraded"
         diagnostics = [f"gc order history unavailable: {err}"]
 
+    try:
+        outcomes = fold_outcomes(read("events"))
+    except Exception as err:  # noqa: BLE001
+        outcomes = {}
+        diagnostics.append(f"event log unavailable: {err}")
+
     last: dict[str, str] = {}
     for entry in history:
         name = entry.get("order")
@@ -68,7 +100,8 @@ def orders_status(read: Callable[[str], Any]) -> dict[str, Any]:
     rows = []
     for order in orders:
         name = order.get("name")
-        executed = last.get(name)
+        settled_at, outcome = outcomes.get(name, (None, UNKNOWN_OUTCOME))
+        executed = last.get(name) or settled_at
         rows.append(
             {
                 "name": name,
@@ -81,8 +114,12 @@ def orders_status(read: Callable[[str], Any]) -> dict[str, Any]:
                 "source": order.get("source"),
                 "last_executed": executed,
                 "ever_ran": executed is not None,
-                # Never derived from `ever_ran`. See module docstring.
-                "last_outcome": UNKNOWN_OUTCOME,
+                # From the event log, never from `ever_ran`: an order that ran
+                # is not an order that worked.
+                "last_outcome": outcome,
+                # Health is the OUTCOME, not the recency. A punctual order that
+                # has never completed is not healthy.
+                "healthy": outcome == "completed",
             }
         )
 
@@ -91,7 +128,8 @@ def orders_status(read: Callable[[str], Any]) -> dict[str, Any]:
         "total": len(rows),
         "orders": rows,
         "ran_at_least_once": sum(1 for r in rows if r["ever_ran"]),
-        "outcome_recorded": 0,
+        "outcome_recorded": sum(1 for r in rows if r["last_outcome"] != UNKNOWN_OUTCOME),
+        "failing": sum(1 for r in rows if r["last_outcome"] == "failed"),
         "diagnostics": diagnostics,
     }
 

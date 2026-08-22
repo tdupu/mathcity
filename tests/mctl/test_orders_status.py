@@ -1,10 +1,8 @@
-"""#117 — orders_status + formulas_catalog.
+"""#117 — orders_status + formulas_catalog, without the event log.
 
-The load-bearing test here is `test_outcome_is_unknown_not_green`. `gc order
-history` records THAT an order ran and never WHETHER it succeeded (#156), so
-every outcome this tool reports is genuinely unknown. A tool that renders the
-24 orders with history as healthy would be asserting something the city does
-not know -- P6.2, in the noun Taylor asked for by name.
+These cover the degraded path: what the tool reports when only `gc order list`
+and `gc order history` are available. Outcomes come from the event log and the
+cases that exercise them are in test_order_outcomes.py.
 """
 from __future__ import annotations
 
@@ -51,17 +49,21 @@ def test_orders_status_reports_each_order_with_its_trigger():
     assert row["enabled"] is True
 
 
-def test_outcome_is_unknown_not_green():
-    """An order WITH history still has an unknown outcome.
+def test_outcome_is_unknown_when_the_event_log_is_unavailable():
+    """With no event log, an order that ran still has an unknown outcome.
 
-    This fails if anyone maps "it executed" to "it succeeded". The history
-    entry carries no outcome field; inventing one is the defect #156 names.
+    CORRECTED. This test previously asserted a blanket `unknown` on the claim
+    that the city records no outcomes anywhere -- which was false: they are in
+    `<city-root>/.gc/events.jsonl` (#156). What survives is narrower and still
+    worth pinning: `gc order history` alone cannot settle an outcome, so a
+    reader without the event log must say `unknown` rather than infer success
+    from execution. The outcome-bearing cases live in test_order_outcomes.py.
     """
     history = [{"order": "dolt-health", "bead_id": "gt-wisp-1", "executed": "2026-08-22T05:07:33Z"}]
     out = orders_status(_reader(orders=[ORDER], history=history))
     row = out["orders"][0]
     assert row["last_outcome"] == "unknown", (
-        "an order that ran has an unknown outcome -- the city records no result"
+        "without the event log, execution alone must not imply success"
     )
     assert row["last_executed"] == "2026-08-22T05:07:33Z"
 
