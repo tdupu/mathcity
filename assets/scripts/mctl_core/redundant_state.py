@@ -132,12 +132,12 @@ def scan_artifacts(
 ) -> tuple[RedundantArtifact, ...]:
     stack_rows = tuple(_read_jsonl(layout.stack_index))
     stack_row = next((row for row in stack_rows if _row_id(row) == brief_id), None)
-    pile_path = layout.pile / f"{brief_id}.md"
+    pile_artifact = _pile_artifact(layout, brief_id)
     cache_path = layout.decisions / f"{brief_id}.toml"
     legacy = legacy_manifest_state(layout) if legacy_state is None else legacy_state
     legacy_row = next((row for row in legacy.rows if _row_id(row) == brief_id), None)
     return (
-        _file_artifact("pile", pile_path),
+        pile_artifact,
         _stack_artifact(layout, stack_row, decision_state),
         _toml_artifact(cache_path, brief_id),
         _legacy_artifact(layout.legacy_manifest, legacy_row, legacy.parse_error),
@@ -190,6 +190,50 @@ def _read_paths(path: Path) -> dict[str, str]:
 def _rig_relative(rig_root: Path, value: str) -> Path:
     candidate = Path(value)
     return candidate if candidate.is_absolute() else rig_root / candidate
+
+
+def _pile_artifact(layout: ArtifactLayout, brief_id: str) -> RedundantArtifact:
+    """Resolve the pile cache file for `brief_id` (#128).
+
+    The exact-name form `<brief_id>.md` was the only one consulted, but the
+    deposited convention is frequently `<brief_id>-<slug>.md`, so a file that
+    exists reported `missing`. Measured when #128 was filed: 5 of 12 live pile
+    files resolved, 7 did not.
+
+    Exact wins outright when present, so an unambiguous deposit is never
+    reinterpreted. Otherwise the slug candidates are considered, and the `-`
+    separator is required: without it `mc-ab` would claim `mc-abc-x.md`, and a
+    prefix collision is precisely the kind of wrong-but-plausible answer this
+    check exists to avoid.
+
+    Two or more candidates report `ambiguous` rather than resolving by sort
+    order. Silently taking the first would replace a false `missing` with a
+    false `present` -- worse, because it names a specific file as the brief's
+    cache when the tool cannot tell which one is.
+    """
+    exact = layout.pile / f"{brief_id}.md"
+    if exact.is_file():
+        return _file_artifact("pile", exact)
+    if not layout.pile.is_dir():
+        return _file_artifact("pile", exact)
+    candidates = sorted(
+        path
+        for path in layout.pile.glob(f"{brief_id}-*.md")
+        if path.is_file()
+    )
+    if len(candidates) == 1:
+        return _file_artifact("pile", candidates[0])
+    if len(candidates) > 1:
+        return RedundantArtifact(
+            kind="pile",
+            path=layout.pile,
+            state="ambiguous",
+            detail=(
+                f"{len(candidates)} candidate cache files match this brief id: "
+                + ", ".join(path.name for path in candidates)
+            ),
+        )
+    return _file_artifact("pile", exact)
 
 
 def _file_artifact(kind: str, path: Path) -> RedundantArtifact:

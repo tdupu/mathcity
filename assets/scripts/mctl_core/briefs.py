@@ -826,7 +826,15 @@ def _strict_invariants(
                     ),
                 )
             )
-    if not any(artifact.state == "present" for artifact in record.redundant_artifacts):
+    # `ambiguous` counts as existing (#128). MBRF021 asks whether the bead has
+    # NO cache artifact; an ambiguous pile means TWO files match, not zero.
+    # Testing only for "present" would report "no redundant cache artifact"
+    # about a brief that has two of them -- a false diagnostic introduced by
+    # the fix for a false diagnostic.
+    if not any(
+        artifact.state in {"present", "ambiguous"}
+        for artifact in record.redundant_artifacts
+    ):
         diagnostics.append(
             _diagnostic(
                 ctx,
