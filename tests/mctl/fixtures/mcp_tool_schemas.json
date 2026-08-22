@@ -7173,6 +7173,183 @@
     },
     "title": "List fleet slots, occupied and empty"
   },
+  "gates_status": {
+    "description": "Gate definitions read from `<city>/mathcity/gates/*.toml`. `gates_readable` is the load-bearing field: an empty `gates` list with `gates_readable: true` means this city defines no gates, and the same empty list with `gates_readable: false` means the directory could not be read. Those are different facts and this tool never collapses them -- a reader that sees only the empty list cannot tell a city with no gates from a city whose gates are unreadable. Statistics are deliberately absent rather than zero: no evaluation store exists, so pass/fail counts are Unknown and say so (#119).",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "gates": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "gates_readable": {
+          "type": "boolean"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "diagnostics",
+        "gates",
+        "gates_readable",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "The city's gate definitions, and whether they could be read"
+  },
   "mayor_boot": {
     "description": "Everything a Mayor reboot can learn by query -- city state, conservation, open and blocked counts, the handoff chain -- plus `prose_residue`, the facts no query can answer. Negative counts mean UNMEASURED, never zero.",
     "external_ready": true,

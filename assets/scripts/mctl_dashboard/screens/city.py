@@ -116,6 +116,49 @@ def health(payload: Mapping[str, Any]) -> str:
     return _panel("City health", body, region="city-health")
 
 
+def gates(payload: Mapping[str, Any]) -> str:
+    """Gate definitions, keeping "none defined" apart from "could not look".
+
+    `mctl_core/gates.py` protects that distinction with `gates_readable`, and
+    the whole point of carrying it through the tool was to be able to carry it
+    to the pixel. A screen that renders "0 gates" for both destroys it at the
+    last step, which would make the care taken underneath worthless.
+    """
+    rows: Sequence[Mapping[str, Any]] = payload.get("gates") or []  # single-shape-ok: gates_status envelope, not a brief row
+    readable = payload.get("gates_readable")
+    if readable is False:
+        return _panel(
+            "Gates",
+            '<p class="lede"><strong>The gate set is unknown.</strong> The gate '
+            "directory could not be read, so this is not a city with no gates — it "
+            "is a city whose gates we could not look at.</p>",
+            region="city-gates",
+        )
+    if not rows:
+        return _panel(
+            "Gates",
+            '<p class="lede">This city defines <strong>no gates</strong>. The '
+            "directory was read successfully and is empty — a measurement, not a "
+            "failure to look.</p>",
+            region="city-gates",
+        )
+    body = (
+        f'<p class="lede"><strong>{len(rows)}</strong> gate'
+        f'{"" if len(rows) == 1 else "s"} defined. '
+        "Pass/fail statistics are deliberately absent rather than zero: no "
+        "evaluation store exists yet, so the numbers are unknown and say so.</p>"
+        '<ul class="reason-list">'
+        + "".join(
+            f'<li><span class="mono">{_e(str(r.get("gate_id")))}</span>'  # single-shape-ok: gates_status row, not a brief
+            + (f' — {_e(str(r.get("checks")))} check(s)' if r.get("checks") is not None else "")
+            + "</li>"
+            for r in rows
+        )
+        + "</ul>"
+    )
+    return _panel("Gates", body, region="city-gates")
+
+
 def unwired(tool: str, *, module: str, issue: int) -> str:
     """A surface whose backend exists and which no page can call.
 

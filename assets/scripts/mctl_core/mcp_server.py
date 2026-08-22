@@ -82,6 +82,7 @@ from .effects import (
 )
 from .fields import read_frontmatter
 from .fleet import build_fleet_sessions
+from .gates import gates_status
 from .health import build_city_health
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
@@ -476,6 +477,33 @@ def _handle_context_rigs(scope: CityScope, arguments: Mapping[str, Any]) -> dict
 def _handle_fleet_sessions(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
     """Dashboard handoff #112: every configured slot, occupied or empty."""
     report = build_fleet_sessions(scope)
+    return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
+
+
+def _handle_gates_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Dashboard handoff #119, made reachable.
+
+    `mctl_core/gates.py` has been correct and unreachable since #119 closed:
+    the dashboard can only call MCP tools, and there was no `gates_status`
+    tool, so no page could ever show a gate. That is #153's deeper shape.
+
+    `gates_readable` is carried through deliberately. An empty `gates` list
+    means two different things -- "this city defines no gates" and "the gate
+    directory could not be read" -- and flattening them here would make the
+    distinction unrecoverable for every screen above.
+    """
+    # `<city>/mathcity/gates` -- measured, not assumed: that is where the gate
+    # TOMLs actually live. `<city>/gates` does not exist, and the pack copies
+    # under `gascity-packs/` are sources rather than the registered rig's set.
+    #
+    # `gates.py` deliberately takes this path explicitly rather than deriving
+    # it, "so this function cannot silently compose a path against a working
+    # directory that is not what the caller meant". Choosing it is therefore
+    # the caller's job, and getting it wrong reports a city with no gates
+    # instead of failing -- so a wrong path here is worse than no tool. If the
+    # directory is absent, `gates_readable=False` says we could not look; it
+    # never claims the city defines none.
+    report = gates_status(gates_dir=scope.city_root / "mathcity" / "gates")
     return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
 
 
@@ -904,6 +932,31 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["slots"],
         ),
         handler=_handle_fleet_sessions,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="gates_status",
+        title="The city's gate definitions, and whether they could be read",
+        description=(
+            "Gate definitions read from `<city>/mathcity/gates/*.toml`. "
+            "`gates_readable` is the load-bearing field: an empty `gates` list with "
+            "`gates_readable: true` means this city defines no gates, and the same "
+            "empty list with `gates_readable: false` means the directory could not be "
+            "read. Those are different facts and this tool never collapses them -- a "
+            "reader that sees only the empty list cannot tell a city with no gates "
+            "from a city whose gates are unreadable. "
+            "Statistics are deliberately absent rather than zero: no evaluation store "
+            "exists, so pass/fail counts are Unknown and say so (#119)."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "gates": {"type": "array", "items": {"type": "object"}},
+                "gates_readable": {"type": "boolean"},
+            },
+            ["gates", "gates_readable"],
+        ),
+        handler=_handle_gates_status,
         scope=CITY_SCOPE,
     ),
     ToolSpec(

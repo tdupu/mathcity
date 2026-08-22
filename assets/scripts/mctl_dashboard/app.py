@@ -1135,7 +1135,11 @@ class Dashboard:
         context = self._scope_context(rig)
 
         sections: list[str] = []
-        for tool, renderer in (("fleet_sessions", city_screen.fleet), ("city_health", city_screen.health)):
+        for tool, renderer in (
+            ("fleet_sessions", city_screen.fleet),
+            ("city_health", city_screen.health),
+            ("gates_status", city_screen.gates),
+        ):
             try:
                 payload = self.client.call(tool, self._args(rig)).payload
             except ToolFailure as failure:
@@ -1158,7 +1162,6 @@ class Dashboard:
         for tool, module, issue in (
             ("blast_radius", "mctl_core/blast_radius.py", 110),
             ("events_list", "mctl_core/ticker.py", 116),
-            ("gates_status", "mctl_core/gates.py", 119),
         ):
             sections.append(city_screen.unwired(tool, module=module, issue=issue))
 

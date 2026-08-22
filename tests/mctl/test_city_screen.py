@@ -94,3 +94,34 @@ def test_an_unwired_surface_does_not_pretend_to_be_empty():
     html = city_screen.unwired("gates_status", module="mctl_core/gates.py", issue=119)
     low = html.lower()
     assert "no data" not in low and "none found" not in low
+
+
+# ---------------------------------------------------------------------------
+# gates: now reachable, and the readable/empty distinction must survive
+# ---------------------------------------------------------------------------
+
+
+def test_unreadable_gates_are_not_rendered_as_no_gates():
+    """The distinction `gates.py` protects, carried all the way to the pixel.
+
+    An empty list means "this city defines no gates" OR "we could not look".
+    A screen that prints "0 gates" for both destroys a fact the core module
+    went out of its way to preserve.
+    """
+    html = city_screen.gates({"gates": [], "gates_readable": False, "diagnostics": []})
+    low = html.lower()
+    assert "could not" in low or "unknown" in low
+    assert "0 gates" not in low
+
+
+def test_a_city_that_genuinely_defines_no_gates_says_zero():
+    html = city_screen.gates({"gates": [], "gates_readable": True, "diagnostics": []})
+    assert "no gates" in html.lower()
+    assert "could not" not in html.lower()
+
+
+def test_gates_are_listed_by_id():
+    html = city_screen.gates(
+        {"gates": [{"gate_id": "latex-gate", "checks": 1}], "gates_readable": True, "diagnostics": []}
+    )
+    assert "latex-gate" in html
