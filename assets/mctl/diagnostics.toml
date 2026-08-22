@@ -565,6 +565,11 @@ severity = "ERROR"
 meaning = "The source bead named by the brief dependency was not found."
 module = "work.py"
 
+[MWRK013]
+severity = "ERROR"
+meaning = "The source bead named by the brief dependency is closed."
+module = "work.py"
+
 [MWRK_ALREADY_DISPATCHED]
 severity = "FATAL"
 meaning = "Work already has dispatch provenance."

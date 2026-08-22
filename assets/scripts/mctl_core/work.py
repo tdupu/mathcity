@@ -543,6 +543,47 @@ def _dispatch_event_payload(
     return payload
 
 
+def _closed_source_blockers(
+    ctx: MctlContext | None, *, brief_id: str, source: Bead | None
+) -> list[Diagnostic]:
+    """Blocker for a source bead that is no longer open (#157).
+
+    `_work_item` checked that the source EXISTS, that it has no active
+    assignee, and that no open child workflow claims it -- and never consulted
+    its status. A closed bead cleared every one of those, so `blockers: []` did
+    not mean "no blockers", it meant "never asked". Measured across all 17
+    rigs, the only two items `work_ready` called dispatchable were closed
+    throwaway test beads (QUIMBY, trace f9d4eb5b).
+
+    `gc` refused the same bead one layer down -- "formulas v2 target
+    gsp-odm8cx is closed" -- so the write was already safe and only the read
+    lied. This closes the gap at the read.
+
+    A MISSING source is deliberately not reported here: `source is None`
+    already raises MWRK012 at the call site, and a second diagnostic for one
+    fact would double-count the same brief.
+
+    Uses `Bead.is_open`, which already carries the working-state vocabulary
+    (`open · hooked · in_progress · blocked · review · testing`) and is
+    case-insensitive. The check was absent, not wrong -- so this must not
+    introduce a second, drifting definition of "closed".
+    """
+    if source is None or source.is_open:
+        return []
+    return [
+        _diagnostic(
+            ctx,
+            Severity.ERROR,
+            "MWRK013",
+            "The source bead named by the brief dependency is closed.",
+            brief_id=brief_id,
+            bead_id=source.id,
+            data_location=_canonical_bead_location(ctx) if ctx is not None else "",
+            detail=f"status={source.status}",
+        )
+    ]
+
+
 def _work_item(
     ctx: MctlContext,
     brief_id: str,
@@ -606,6 +647,7 @@ def _work_item(
                 data_location=_canonical_bead_location(ctx),
             )
         )
+    blockers.extend(_closed_source_blockers(ctx, brief_id=brief_id, source=source))
     if not _approved_for_dispatch(brief):
         blockers.append(
             _diagnostic(
