@@ -70,6 +70,41 @@ fi
 
 rm -rf "$BX"
 
+# --- the PASS branch, which the failing probe above can never render ----------
+# stick-dog's CONCERNS on b14072f: the fixture above contains a failing test, so
+# every run takes the FAIL branch and `pytest: PASS -- ...` is never printed.
+# Reverting the PASS line alone went undetected. Two branches need two probes.
+PX="$(mktemp -d)"
+mkdir -p "$PX/tests/zz-pass-probe"
+cat > "$PX/tests/zz-pass-probe/test_all_pass.py" <<'PYPROBE'
+def test_first():
+    assert True
+
+
+def test_second():
+    assert True
+PYPROBE
+
+( cd "$ROOT" && bash "$RUNNER" "$PX/tests/zz-pass-probe" ) > "$PX/out.txt" 2>&1
+summary_of "$PX/out.txt" > "$PX/pass_summary.txt"
+
+# ONE file, TWO passing tests: input count 1, outcome "2 passed". Different
+# numbers, so a summary reporting the input says "1" and fails.
+if grep -qE '2 passed' "$PX/pass_summary.txt"; then
+  ok "the PASS branch reports pytest's tally (2 passed), not the file count"
+else
+  no "the PASS branch does not report pytest's tally -- it reported the input count"
+  echo "    --- summary block ---"; sed 's/^/    /' "$PX/pass_summary.txt"
+fi
+
+if grep -qE 'collected' "$PX/pass_summary.txt"; then
+  ok "CONTROL: the PASS branch also labels the input count as collected"
+else
+  no "CONTROL: the PASS branch leaves the input count unlabelled"
+fi
+
+rm -rf "$PX"
+
 # An unknown outcome must not borrow the shape of a known one.
 if grep -q 'outcome not reported by pytest' "$RUNNER"; then
   ok "CONTROL: an unparseable pytest tail reports unknown rather than inventing a tally"
