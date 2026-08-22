@@ -147,3 +147,46 @@ def test_the_page_shows_the_hint_not_a_generic_defect_message():
     body = Dashboard(_DeadClient(), city_wide=True, rig=None).handle(Request.get("/queue")).body
     assert "MCTL_DASH_SERVER_GONE" in body
     assert "Restart the dashboard" in body, "the actionable hint was swallowed"
+
+
+# ---------------------------------------------------------------------------
+# the second exception, which was caught and never exercised
+# ---------------------------------------------------------------------------
+
+
+def test_a_closed_pipe_object_also_names_the_cause():
+    """sally's review of `#166`: the `ValueError` arm had 0 test mentions.
+
+    Writing to a *closed* file object raises `ValueError: I/O operation on
+    closed file`, not `BrokenPipeError` — a genuinely different second case,
+    and the one that occurs when the pipe was closed on this side rather than
+    dying on the other.
+
+    The handler is shared, so the code worked; what was untested is that the
+    second exception actually reaches it. An `except` arm nothing exercises is
+    a claim, not a behaviour — which is the shape this file exists to remove.
+    """
+
+    class _ClosedPipe:
+        def write(self, _data):
+            raise ValueError("I/O operation on closed file")
+
+        def flush(self):  # pragma: no cover - write raises first
+            raise ValueError("I/O operation on closed file")
+
+    class _ChildWithClosedStdin(_DeadChild):
+        def __init__(self):
+            super().__init__()
+            self.stdin = _ClosedPipe()
+
+    client = StdioMcpClient.__new__(StdioMcpClient)
+    client.process = _ChildWithClosedStdin()
+
+    with pytest.raises(ToolFailure) as caught:
+        client._exchange({"method": "tools/call"})
+
+    diagnostic = caught.value.diagnostics[0]
+    assert diagnostic.get("code") == "MCTL_DASH_SERVER_GONE"
+    # The write_error fact must name what actually happened, so a reader can
+    # tell the two arms apart in a trace rather than seeing one blurred cause.
+    assert "ValueError" in str((diagnostic.get("facts") or {}).get("write_error"))
