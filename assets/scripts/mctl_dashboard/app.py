@@ -1134,14 +1134,28 @@ class Dashboard:
         rig = self._rig_for(request)
         context = self._scope_context(rig)
 
-        sections: list[str] = []
-        for tool, renderer in (
+        # Three independent reads, fanned out rather than queued. Measured
+        # serially on 5c37a2e: fleet_sessions 60.0s + city_health 31.1s +
+        # gates_status 0.0s = 91.1s, which is the ~90s load #121 shipped with.
+        # They share no ordering and no data, so waiting for each in turn was
+        # cost we were adding on top of a slow probe.
+        #
+        # This does NOT make the city fast -- fleet_sessions alone is 60s
+        # because `gc` times out, and that is #159. It removes only the part
+        # that was ours.
+        surfaces = (
             ("fleet_sessions", city_screen.fleet),
             ("city_health", city_screen.health),
             ("gates_status", city_screen.gates),
-        ):
+        )
+        outcomes = fan_out(self.client, [(tool, self._args(rig)) for tool, _ in surfaces])
+
+        sections: list[str] = []
+        for (tool, renderer), outcome in zip(surfaces, outcomes):
             try:
-                payload = self.client.call(tool, self._args(rig)).payload
+                if isinstance(outcome, Exception):
+                    raise outcome
+                payload = outcome.payload
             except ToolFailure as failure:
                 sections.append(
                     render.notice_panel(
@@ -1150,6 +1164,20 @@ class Dashboard:
                         "different thing from the surfaces below, which have no tool "
                         "at all -- and it is not a statement about the city.",
                         failure.diagnostics,
+                        region=f"city-failed-{tool}",
+                    )
+                )
+            except Exception as error:  # noqa: BLE001
+                # One surface failing must not cost the operator the other two
+                # -- a city page that 500s because a probe is sulking is a page
+                # nobody can use to find out why the probe is sulking.
+                sections.append(
+                    render.notice_panel(
+                        f"{tool} could not be read",
+                        "This is a failure in one surface, not a statement about "
+                        "the city. The other panels on this page are unaffected.",
+                        [{"severity": "ERROR", "code": "MCTL_DASH_SURFACE_FAILED",
+                          "message": f"{type(error).__name__}: {error}"}],
                         region=f"city-failed-{tool}",
                     )
                 )
