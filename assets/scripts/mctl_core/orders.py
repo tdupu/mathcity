@@ -39,7 +39,11 @@ TERMINAL_EVENTS = {"order.completed": "completed", "order.failed": "failed"}
 
 
 def fold_outcomes(events):
-    """Latest terminal outcome per order subject.
+    """Latest terminal outcome per order subject, WITH the timestamp that settled it.
+
+    Returns `{subject: (ts, outcome)}`. The pair is the unit: a caller that
+    takes the outcome from here and the time from elsewhere renders a reading
+    neither source supports.
 
     Freshness is not health. `mol-dog-compactor` fires punctually and has never
     once completed -- any signal keyed on "did it run lately" renders it green,
@@ -53,7 +57,7 @@ def fold_outcomes(events):
         subject, when = event.get("subject"), event.get("ts") or ""
         if not subject:
             continue
-        if when >= latest.get(subject, ("", ""))[0]:
+        if when > latest.get(subject, ("", ""))[0]:  # `>` so file order never decides
             latest[subject] = (when, outcome)
     return latest
 
@@ -101,7 +105,12 @@ def orders_status(read: Callable[[str], Any]) -> dict[str, Any]:
     for order in orders:
         name = order.get("name")
         settled_at, outcome = outcomes.get(name, (None, UNKNOWN_OUTCOME))
-        executed = last.get(name) or settled_at
+        # The outcome and its timestamp are ONE fact and travel together. The
+        # two sources disagree for every order present in both -- `gc order
+        # history` runs hours behind the event log, and they do not even share a
+        # timestamp format (`...Z` vs `...-04:00`), so they are not comparable
+        # as strings. History is a fallback only where the log is silent.
+        executed = settled_at or last.get(name)
         rows.append(
             {
                 "name": name,

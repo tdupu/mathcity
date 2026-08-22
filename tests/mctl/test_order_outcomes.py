@@ -88,3 +88,28 @@ def test_the_failing_orders_are_counted_where_a_reader_will_see_them():
     out = orders_status(_reader())
     assert out["failing"] == 2, "two orders last failed; the summary must say so"
     assert out["outcome_recorded"] == 3, "three of four orders have a recorded outcome"
+
+
+def test_the_outcome_and_its_timestamp_come_from_the_same_event():
+    """A row must not pair an outcome with an unrelated time.
+
+    `gc order history` and the event log both carry execution times, they
+    disagree for all 24 orders present in both, and history is consistently
+    hours older. Preferring history -- which the first version of this fold did
+    -- renders a 13:10 outcome beside an 05:07 timestamp. The pair is the unit;
+    splitting it invents a reading that neither source supports.
+    """
+    events = [
+        {"type": "order.fired", "subject": "dolt-health", "ts": "2026-08-22T13:10:00Z"},
+        {"type": "order.failed", "subject": "dolt-health", "ts": "2026-08-22T13:10:20Z"},
+    ]
+    stale_history = [{"order": "dolt-health", "executed": "2026-08-22T05:07:33Z"}]
+
+    def read(what):
+        return {"orders": ORDERS, "history": stale_history, "events": events}[what]
+
+    row = _row(orders_status(read), "dolt-health")
+    assert row["last_outcome"] == "failed"
+    assert row["last_executed"] == "2026-08-22T13:10:20Z", (
+        "the timestamp must be the one on the event that settled the outcome"
+    )
