@@ -197,8 +197,16 @@ def _pile_artifact(layout: ArtifactLayout, brief_id: str) -> RedundantArtifact:
 
     The exact-name form `<brief_id>.md` was the only one consulted, but the
     deposited convention is frequently `<brief_id>-<slug>.md`, so a file that
-    exists reported `missing`. Measured when #128 was filed: 5 of 12 live pile
-    files resolved, 7 did not.
+    exists reported `missing`.
+
+    On the numbers, precisely, because two different populations are easy to
+    conflate here: of the 12 `.md` files in the live rig piles when #128 was
+    filed, 5 carried an exact `<brief_id>.md` name and 7 carried a slug. That
+    is a count of FILENAME SHAPES. It is NOT a claim that 5 of 12 listed
+    briefs resolved their cache file -- #128's own measurement found the listed
+    brief ids and the pile filenames to be largely disjoint populations, so the
+    resolution rate against the listing is lower and this fix does not change
+    it. That half is the issue's live symptom and is untouched here.
 
     Exact wins outright when present, so an unambiguous deposit is never
     reinterpreted. Otherwise the slug candidates are considered, and the `-`
