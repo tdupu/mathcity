@@ -476,6 +476,21 @@ severity = "INFO"
 meaning = "limit_state is always 'unknown': no per-agent quota/usage-window recording exists yet (dashboard handoff §4.5)."
 module = "fleet.py"
 
+[MCTL_MOLECULES_STORE_UNREADABLE]
+severity = "ERROR"
+meaning = "The bead store could not be read, so no molecule count is available. This is 'we could not look', NOT 'there are none' -- an empty census with no diagnostic reads as a city with nothing running."
+module = "molecules.py"
+
+[MCTL_MOLECULES_NO_SUCH_ID]
+severity = "ERROR"
+meaning = "No bead with this id exists in this rig. Molecule ids are rig-scoped."
+module = "molecules.py"
+
+[MCTL_MOLECULES_NOT_A_MOLECULE]
+severity = "ERROR"
+meaning = "The bead exists but is not a molecule root (gc.kind is not 'workflow'). A step points AT its root via gc.root_bead_id; it is not one. Distinct from NO_SUCH_ID because 'that is a step' is a different answer from 'no such bead'."
+module = "molecules.py"
+
 [MCTL_MUTATION_DEFER_UNTIL_REQUIRED]
 severity = "FATAL"
 meaning = "Deferral requires --until YYYY-MM-DD or --days N."

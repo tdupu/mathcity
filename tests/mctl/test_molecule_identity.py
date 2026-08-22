@@ -160,3 +160,75 @@ class TestDeclaredGaps:
         bare = _bead("z", metadata={"gc.kind": "workflow"})
         d = mol.describe(bare)
         assert d["formula"] is None and d["worker"] is None and d["rig"] is None
+
+
+# --- the report surface (#111) ----------------------------------------------
+
+
+class TestBuildMolecules:
+    """`build_molecules` over an injected fixture -- no live store."""
+
+    @staticmethod
+    def _fixture(tmp_path, beads):
+        import json
+
+        # JSONL -- one object per line. `read_beads` reads a bd export, not a
+        # JSON array; an array raises BeadReadError rather than reading zero
+        # beads, which is the right way round.
+        path = tmp_path / "beads.jsonl"
+        path.write_text(
+            "\n".join(
+                json.dumps(
+                    {
+                        "id": b.id,
+                        "title": b.title,
+                        "status": b.status,
+                        "issue_type": b.issue_type,
+                        "labels": [],
+                        "created_at": b.created_at,
+                        "updated_at": b.updated_at,
+                        "metadata": dict(b.raw.get("metadata") or {}),
+                    }
+                )
+                for b in beads
+            )
+            + "\n"
+        )
+        return path
+
+    def test_only_roots_are_listed(self, tmp_path):
+        fixture = self._fixture(tmp_path, [ROOT, STEP, ORDINARY])
+        report = mol.build_molecules(tmp_path, fixture_path=fixture)
+        assert [m["id"] for m in report.molecules] == [ROOT.id]
+        assert report.diagnostics == ()
+
+    def test_steps_attach_when_asked(self, tmp_path):
+        fixture = self._fixture(tmp_path, [ROOT, STEP, ORDINARY])
+        report = mol.build_molecules(tmp_path, fixture_path=fixture, with_steps=True)
+        assert [s["id"] for s in report.molecules[0]["steps"]] == [STEP.id]
+
+    def test_an_unreadable_store_yields_a_DIAGNOSTIC_not_an_empty_list(self, tmp_path):
+        """The plausible-empty-result guard. 'We could not look' and 'there are
+        none' must not render alike -- an empty list with no diagnostic reads as
+        a city with nothing running."""
+        report = mol.build_molecules(tmp_path, fixture_path=tmp_path / "does-not-exist.jsonl")
+        assert report.molecules == ()
+        assert [d.code for d in report.diagnostics] == ["MCTL_MOLECULES_STORE_UNREADABLE"]
+
+    def test_a_genuinely_empty_rig_yields_NO_diagnostic(self, tmp_path):
+        """The other half: silence here is a real answer and must stay silent."""
+        report = mol.build_molecules(tmp_path, fixture_path=self._fixture(tmp_path, [ORDINARY]))
+        assert report.molecules == () and report.diagnostics == ()
+
+    def test_missing_id_and_not_a_molecule_are_different_codes(self, tmp_path):
+        fixture = self._fixture(tmp_path, [ROOT, STEP])
+        missing = mol.build_molecule(tmp_path, "nope-123", fixture_path=fixture)
+        not_root = mol.build_molecule(tmp_path, STEP.id, fixture_path=fixture)
+        assert [d.code for d in missing.diagnostics] == ["MCTL_MOLECULES_NO_SUCH_ID"]
+        assert [d.code for d in not_root.diagnostics] == ["MCTL_MOLECULES_NOT_A_MOLECULE"]
+
+    def test_show_returns_the_molecule_with_its_steps(self, tmp_path):
+        fixture = self._fixture(tmp_path, [ROOT, STEP, ORDINARY])
+        report = mol.build_molecule(tmp_path, ROOT.id, fixture_path=fixture)
+        assert report.molecules[0]["id"] == ROOT.id
+        assert [s["id"] for s in report.molecules[0]["steps"]] == [STEP.id]
