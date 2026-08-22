@@ -5,9 +5,9 @@ source bead would stop reporting as dispatchable. I excluded exactly one case --
 a MISSING source stays MWRK012's business -- and did not consider a third
 configuration:
 
-    work.py:625   if not source_id:
-    work.py:626       blockers.append(MWRK011 "requires a source bead dependency")
-    work.py:636       source_id = brief_id        <- the brief becomes its OWN source
+    _work_item    if not source_id:
+                      blockers.append(MWRK011 "requires a source bead dependency")
+                      source_id = brief_id        <- the brief becomes its OWN source
                       ...
                       _closed_source_blockers()   <- MINE. requires the source OPEN
 
@@ -21,7 +21,8 @@ the source is closed. A brief cannot be in both worlds.
 
 WHY THE FIX IS IN MY CHECK AND NOT IN THE FALLBACK. I assumed the synthetic
 source was the defect and measured before acting: `source_id` feeds
-`WorkItem.bead_id` (work.py:708) and nine other readers. Removing it would empty
+`WorkItem.bead_id` (the `WorkItem(...)` return in `_work_item`) and 17 other
+references -- sally counted them. Removing it would empty
 `bead_id` in every payload for a sourceless brief. The fallback is load-bearing.
 
 When the brief IS its own source, "is the source closed?" reduces to "is the

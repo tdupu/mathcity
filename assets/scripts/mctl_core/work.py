@@ -741,7 +741,7 @@ def _closed_source_blockers(
     if source.id == brief_id:
         # #173, and the regression is mine: I added this check in #157 without
         # considering that a SOURCELESS brief is made its own source bead
-        # (work.py:636, the `source_id = brief_id` fallback). `briefs_adjudicate`
+        # (the `source_id = brief_id` fallback in `_work_item`). `briefs_adjudicate`
         # then closes it -- closing the brief is what adjudication IS -- so the
         # brief became its own closed source and could never be dispatched.
         # CT4.5 mandates adjudicating before dispatch, so the prescribed
@@ -755,7 +755,8 @@ def _closed_source_blockers(
         # worlds.
         #
         # The fallback is NOT the defect and I checked before assuming it was:
-        # `source_id` feeds `WorkItem.bead_id` (work.py:708) and nine other
+        # `source_id` feeds `WorkItem.bead_id` (the `WorkItem(...)` return in
+        # this function) and 16 other
         # readers, so removing it would empty that field in every payload for a
         # sourceless brief. MWRK011 already reports the real problem.
         return []
