@@ -220,6 +220,27 @@ def blast_radius(payload: Mapping[str, Any]) -> str:
             + "</ul>"
         )
 
+    # What happens to an operation that is NOT on this list -- stick-dog's
+    # review of #110. The count leads the panel, and a reader who sees "7
+    # classified" naturally infers that coverage is seven and everything else
+    # is unconstrained. The opposite is true: `classify()` returns
+    # `gate: UNCLASSIFIED` for an unlisted operation with the reason "refused
+    # rather than permitted", so ABSENCE IS THE SAFE STATE.
+    #
+    # Kept separate from the floor sentence deliberately. That one is about
+    # escalation (contents may raise a floor, never lower it); this is about
+    # omission. They are different mechanisms and collapsing them would let a
+    # reader think the registry is the only thing standing between the city and
+    # an unclassified operation.
+    body += (
+        '<p class="review-note" data-region="blast-radius-omission">'
+        "<strong>An operation absent from this registry is refused, not "
+        "permitted.</strong> It resolves to "
+        '<span class="mono">UNCLASSIFIED</span> and is declined rather than run '
+        "at some default tier — so this list is not the extent of what is "
+        "protected, it is the extent of what has been given a tier.</p>"
+    )
+
     if awaiting:
         body += (
             f'<p class="review-note"><strong>{len(awaiting)} '
