@@ -94,7 +94,18 @@ class Bead:
 
     @property
     def workflow_root_id(self) -> str | None:
-        """The source bead this workflow bead hangs off, if any."""
+        """The MOLECULE ROOT this bead is a step of, if any.
+
+        Corrected in #109. This previously read "the source bead this workflow
+        bead hangs off", which is the dashboard handoff's definition and it has
+        the pointer backwards: the root does NOT carry `gc.root_bead_id`. Steps
+        carry it and point AT the root, and the root is a *run*, not the source
+        bead the run is for -- those are different beads and conflating them
+        makes re-dispatch invisible.
+
+        Presence of this key is therefore the step predicate. See
+        `mctl_core.molecules`.
+        """
         metadata = self.raw.get("metadata")
         if not isinstance(metadata, Mapping):
             return None
