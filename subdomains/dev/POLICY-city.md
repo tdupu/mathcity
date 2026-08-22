@@ -670,6 +670,26 @@ ground, not a restatement of an existing rule under different vocabulary.
   live surface → **revise**. Origin: the Mayor handoff skill claimed "16 real
   tools" against a measured 23 (2026-08-22).
 
+- **CT13.4 A refusal is a result, and it must be loud.** When a typed MCP tool
+  cannot carry an operation to its terminal state it **MUST refuse with a named
+  machine-readable code, a severity, and — where one exists — a
+  `suggested_next_command`**. A refusal in that form **SATISFIES this policy**:
+  it is the control surface working, not failing. The defect is **silence** — a
+  declined operation returning success-shaped output, an empty diagnostics list,
+  or a payload substantively identical to one the caller did not request. Two
+  caller-side corollaries follow and are part of the rule: **a refusal is
+  reported, never routed around** — shelling out, disarming the check, or
+  re-asking a different tool until one answers differently converts a caught
+  error into an uncaught one, and is a violation **whether or not the work then
+  succeeds** — and **a refusal is never branched on to alter control flow**.
+  Bootstrap exemption as in CT13.1. Pass: a tool that cannot complete an
+  operation returns a named code with a severity, and the caller reports it.
+  Fail: a declined operation renders as success, returns no diagnostic, or is
+  worked around rather than surfaced → **fail** (a surface that cannot say no is
+  indistinguishable from one that said yes). Origin: `#146` — `work_dispatch`
+  returned `applied:false` with an empty diagnostics list, so every dispatch read
+  as success and did nothing.
+
 ---
 
 ## Non-negotiables (quick checklist)
@@ -782,6 +802,9 @@ test-outcome labels, not artifact or review verdicts.
   reliability-as-a-dial (already reflected in CT9.2)
 
 ## Change log
+
+### 2026-08-22 — CT13.4 added (Adopted): a refusal is a result, and it must be loud
+A typed MCP tool that cannot complete an operation must refuse with a named code, a severity, and a suggested next command where one exists; a refusal in that form satisfies the policy, and the defect is silence — success-shaped output, an empty diagnostics list, or a payload identical to one the caller did not request. Two caller-side corollaries bind as well: a refusal is reported rather than routed around (a violation whether or not the work then succeeds), and is never branched on to alter control flow. Triggered by: the pack owner's directive, 2026-08-22 — "being blocked on an MCP call is a loud error and hence a good thing" — drafted by the Mayor session against four issues filed the same night (#146 origin; #155, #157 and a gc status timeout as the failing cases) that had no rule ID to cite between them.
 
 ### 2026-08-22 — CT4.5 added (Adopted); CT7.1 amended: a hygienic brief must be filed BEFORE formula dispatch
 Work may not be dispatched to the city as a formula until a hygienic brief for it has been filed — strictly before the dispatch, defined by the brief-system rules (B2.1 source-linked decision bead, B1.4 gates evidenced or N/A, B2.2 verdict recorded) rather than redefined here, with automatic adjudication explicitly permitted under B2.9 and a stated bootstrap exemption for work repairing the brief-intake path itself. CT7.1's "fixed at (or before) dispatch" was amended to "before" in the same pass, because a brief fixed exactly AT dispatch satisfied CT7.1 while failing CT4.5 and the two rules would have contradicted each other. Triggered by: the pack owner's directive, 2026-08-22 — the brief is the durable handle by which work is tracked and completion is detected.
