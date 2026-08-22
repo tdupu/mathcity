@@ -156,17 +156,29 @@ if [ "$shell_fail" -gt 0 ]; then
   done
 fi
 if [ "$pytest_total" -gt 0 ]; then
+  # `$pytest_total` is the number of files HANDED TO pytest -- an input, printed
+  # identically whether they passed or not. Quoted next to PASS it reads as a
+  # coverage result, and it was cited that way in merge commits and status
+  # reports for a day. The outcome line below is pytest's OWN tally, read back
+  # out of its output, so the summary reports what happened rather than what was
+  # requested. Absent or unparseable, it says so -- an unknown outcome must not
+  # borrow the confident shape of a known one.
+  pytest_outcome="outcome not reported by pytest"
+  if [ -f "${PYTEST_OUTPUT:-}" ]; then
+    parsed="$(grep -oE '[0-9]+ (passed|failed|error|errors|skipped|xfailed|xpassed)(, [0-9]+ (passed|failed|error|errors|skipped|xfailed|xpassed))*' "$PYTEST_OUTPUT" | tail -1 || true)"
+    [ -n "$parsed" ] && pytest_outcome="$parsed"
+  fi
   if [ "$pytest_fail" -gt 0 ]; then
-    echo "pytest: FAIL ($pytest_total file(s))"
+    echo "pytest: FAIL -- $pytest_outcome (of $pytest_total file(s) collected)"
     # pytest already names every failure; the summary used to throw that away.
     if [ -f "${PYTEST_OUTPUT:-}" ]; then
       grep -E '^(FAILED|ERROR) ' "$PYTEST_OUTPUT" | sed 's/^/  /' || true
     fi
   else
-    echo "pytest: PASS ($pytest_total file(s))"
+    echo "pytest: PASS -- $pytest_outcome (of $pytest_total file(s) collected)"
   fi
 else
-  echo "pytest: SKIP (0 file(s))"
+  echo "pytest: SKIP (0 file(s) collected)"
 fi
 echo "================================================================"
 
