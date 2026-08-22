@@ -476,6 +476,11 @@ severity = "INFO"
 meaning = "limit_state is always 'unknown': no per-agent quota/usage-window recording exists yet (dashboard handoff §4.5)."
 module = "fleet.py"
 
+[MBRF_ADJUDICATOR_UNRECORDED]
+severity = "WARN"
+meaning = "A verdict was recorded with no adjudicator, so it cannot be attributed and self-approval cannot be detected. WARN not ERROR: recording is not a gate, and blocking the write is a separate policy decision (#152)."
+module = "effects.py"
+
 [MCTL_MOLECULES_STORE_UNREADABLE]
 severity = "ERROR"
 meaning = "The bead store could not be read, so no molecule count is available. This is 'we could not look', NOT 'there are none' -- an empty census with no diagnostic reads as a city with nothing running."

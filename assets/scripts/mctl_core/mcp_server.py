@@ -634,6 +634,7 @@ def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) ->
         verdict=arguments.get("verdict"),
         reason=arguments.get("reason"),
         option=arguments.get("option"),
+        adjudicated_by=arguments.get("adjudicated_by"),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
 
@@ -1251,6 +1252,11 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "verdict": nullable_string("approve, reject, or revise."),
                 "reason": nullable_string("Why this verdict, recorded on the bead."),
                 "option": nullable_string("Which offered option the verdict selects."),
+                "adjudicated_by": nullable_string(
+                    "WHO is rendering this verdict. Pairs with the brief's `requested_by` "
+                    "so self-approval is auditable (#152). Omitting it is allowed and warns: "
+                    "an unattributed verdict cannot be checked against its author."
+                ),
                 "dry_run": DRY_RUN_PROPERTY,
             },
             ["brief_id"],

@@ -5,6 +5,13 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "adjudicated_by": {
+          "description": "WHO is rendering this verdict. Pairs with the brief's `requested_by` so self-approval is auditable (#152). Omitting it is allowed and warns: an unattributed verdict cannot be checked against its author.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "brief_id": {
           "description": "Canonical brief bead id.",
           "type": "string"
