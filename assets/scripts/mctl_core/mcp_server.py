@@ -50,6 +50,7 @@ from .briefs import (
     brief_command_diagnostics,
     brief_options_report,
     doctor_briefs,
+    empty_scope_diagnostic,
     list_briefs_report,
     show_brief,
     validate_brief,
@@ -485,33 +486,6 @@ def _handle_city_health(scope: CityScope, arguments: Mapping[str, Any]) -> dict[
     return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
 
 
-def _empty_scope_diagnostic(ctx: MctlContext) -> Diagnostic:
-    """A rig-scoped read that came back empty names that fact, not just the emptiness.
-
-    `#103`: `briefs list` / `briefs doctor` returned `briefs: []` for a rig
-    with no briefs indistinguishably from a rig asked with the wrong scope --
-    the reader who filed the issue nearly reported mctl as blind for exactly
-    this reason, three minutes from filing before running the discriminator
-    (`--all-rigs`) themselves. This does not compute the discriminator's
-    answer -- doing that here would mean this single-rig call reaching across
-    rig boundaries, the same shape of extra cost that dropped `hq` whole when
-    a cross-rig deadline was too tight (see `list_briefs_report`'s own
-    docstring) -- it names the check that would answer it.
-    """
-    return Diagnostic(
-        severity=Severity.INFO,
-        code="MCTL_BRIEFS_SCOPE_EMPTY",
-        message=f"Rig {ctx.rig_id!r} has no briefs matching this read.",
-        hint="Re-run with all_rigs=true to check whether this is empty because of scope or because the city is.",
-        facts={
-            "city_path": str(ctx.city_root),
-            "rig_name": ctx.rig_id,
-            "implementation_provenance": "mctl empty-scope discriminator hint",
-        },
-        trace_id=ctx.trace_id,
-    )
-
-
 def _handle_briefs_list(
     ctx: MctlContext, arguments: Mapping[str, Any], progress: RigProgress | None = None
 ) -> dict[str, object]:
@@ -536,7 +510,7 @@ def _handle_briefs_list(
     payload = _briefs_list_payload(ctx, listing)
     if progress is None and not listing.records:
         payload["diagnostics"] = list(payload["diagnostics"]) + [
-            _empty_scope_diagnostic(ctx).to_dict()
+            empty_scope_diagnostic(ctx).to_dict()
         ]
     return payload
 
@@ -564,7 +538,7 @@ def _handle_briefs_doctor(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
     payload = report.to_dict()
     diagnostics = _diagnostics(ctx, report.diagnostics)
     if brief_id is None and not report.records:
-        diagnostics = list(diagnostics) + [_empty_scope_diagnostic(ctx).to_dict()]
+        diagnostics = list(diagnostics) + [empty_scope_diagnostic(ctx).to_dict()]
     payload["diagnostics"] = diagnostics
     return payload
 
