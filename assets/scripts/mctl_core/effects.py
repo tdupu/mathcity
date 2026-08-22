@@ -227,6 +227,33 @@ class BriefFrontmatterUnwritable(OSError):
     """
 
 
+
+def _pile_document(body: str) -> str:
+    """The created document, WITH a frontmatter block adjudication can write into.
+
+    Created documents used to be the raw body. Nothing reads a brief's status from
+    the body, so `briefs_adjudicate` had no header to rewrite and raised
+    `BriefFrontmatterUnwritable` -- at WARN, after the verdict had already landed
+    on the bead. The operation reported success with one representation silently
+    stale, and `classify_tier` (materialize_plan.py:292-298), which reads verdict,
+    adjudicated_by and adjudicated_at from THIS block, saw an empty mapping. So an
+    adjudicated brief classified `C-no-disposition`, and materialize_plan.py:379
+    turns that tier into `status="open"` -- a decided brief re-materializing as open
+    work.
+
+    `status: open` and not `ready-for-adjudication`: the decision_toml written by
+    this same call says `open`, and two representations created in one operation
+    disagreeing on their own status is the defect the five-representation work
+    exists to prevent.
+
+    A body that already opens with its own block is passed through untouched --
+    callers that supply frontmatter are honoured rather than given a second one.
+    """
+    if body.lstrip().startswith("---"):
+        return body
+    return f"---\nstatus: open\n---\n\n{body}"
+
+
 @dataclass(frozen=True)
 class BriefCreateInput:
     title: str
@@ -312,7 +339,9 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     layout = artifact_layout(ctx)
     _require_brief_root(ctx, layout)
     pile_create = FileCreate(
-        "pile_markdown", layout.pile / f"{NEW_BRIEF_ID_PLACEHOLDER}.md", body
+        "pile_markdown",
+        layout.pile / f"{NEW_BRIEF_ID_PLACEHOLDER}.md",
+        _pile_document(body),
     )
     cache_update = CacheUpdate(
         "decision_toml",
