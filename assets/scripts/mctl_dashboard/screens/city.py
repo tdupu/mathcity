@@ -89,12 +89,28 @@ def health(payload: Mapping[str, Any]) -> str:
     """Data-plane state, with `unreachable` kept distinct from `unhealthy`."""
     state = str(payload.get("data_plane") or "unknown")
     per_rig: Sequence[Mapping[str, Any]] = payload.get("per_rig") or []
-    if state == "unreachable":
+    if state == "unknown":
+        # #159's fix reaching the page. This is the state that means "we could
+        # not ask" -- and until the core distinguished it, this panel carried
+        # prose apologising for `unreachable` meaning the same thing.
         body = (
-            '<p class="lede"><strong>The data plane could not be reached.</strong> '
-            "That is a statement about the probe, <em>not</em> about the city: "
-            "<em>unreachable</em> is not <em>unhealthy</em>. Nothing here should be "
-            "read as evidence that anything is down.</p>"
+            '<p class="lede"><strong>The data plane\'s state was not '
+            "established.</strong> The probe did not answer, so this is a fact "
+            "about the probe and <em>not</em> evidence about the database. "
+            "Nothing here should be read as anything being down — it may be "
+            "entirely healthy behind a probe that timed out.</p>"
+        )
+    elif state == "unreachable":
+        # And this one now means what it says. Before #159 every probe failure
+        # landed here, so this panel had to hedge -- "unreachable is not
+        # unhealthy" was true then and would be FALSE now. Prose written to
+        # compensate for a bug becomes a lie the moment the bug is fixed.
+        body = (
+            '<p class="lede"><strong>The data plane is unreachable.</strong> '
+            "This is a measurement, not a missing one: the probe answered and "
+            "reported the server down. Distinct from "
+            '<em>unknown</em>, which is what a probe that never answered '
+            "produces.</p>"
         )
     else:
         body = (

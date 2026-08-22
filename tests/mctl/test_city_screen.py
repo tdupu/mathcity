@@ -125,3 +125,38 @@ def test_gates_are_listed_by_id():
         {"gates": [{"gate_id": "latex-gate", "checks": 1}], "gates_readable": True, "diagnostics": []}
     )
     assert "latex-gate" in html
+
+
+def test_an_unknown_data_plane_is_not_rendered_as_unreachable():
+    """#159's fix reaching the page.
+
+    The screen used to carry prose compensating for the core's conflation --
+    "unreachable is not unhealthy" -- because `unreachable` was the only word
+    available for "we could not ask". The core now says `unknown`, so the page
+    can state the fact instead of hedging around a wrong one.
+    """
+    html = city_screen.health({"data_plane": "unknown", "per_rig": [], "diagnostics": []})
+    low = html.lower()
+    # Assert the MEANING. An earlier draft of this checked for the literal word
+    # "unknown" and failed against a panel that says "was not established" --
+    # which is the same fact in better English. Vocabulary assertions are how a
+    # test ends up disagreeing with correct code.
+    assert "not established" in low or "did not answer" in low
+    assert "about the probe" in low
+    # And it must not borrow the word for the state that IS a measurement.
+    assert "unreachable" not in low
+
+
+def test_a_genuinely_unreachable_data_plane_still_says_so():
+    """The measurement must survive: when the probe answered and the answer
+    was that Dolt is down, that is a real fact and must not be softened into
+    'unknown'."""
+    html = city_screen.health({"data_plane": "unreachable", "per_rig": [], "diagnostics": []})
+    low = html.lower()
+    assert "unreachable" in low
+    # The first version of this test checked only that the word appeared, and
+    # passed while the panel still said "unreachable is not unhealthy" -- prose
+    # written when `unreachable` meant "could not ask", which #159 changed.
+    # Assert the MEANING, not the vocabulary.
+    assert "measurement" in low
+    assert "is not" not in low.split("distinct from")[0].replace("is not a missing one", "")

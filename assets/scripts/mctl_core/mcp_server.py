@@ -1053,7 +1053,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         name="city_health",
         title="City-wide data-plane health and resource pressure",
         description=(
-            "Three-valued data-plane health (`healthy` / `reachable_quarantined` / "
+            "Four-valued data-plane health (`healthy` / `reachable_quarantined` / `unknown` / "
             "`unreachable`) read from `gc dolt health`, never collapsed to a boolean -- a "
             "reachable-but-quarantined database is a real, distinct state, not a degraded "
             "'healthy'. Resource pressure covers file descriptors against the OS-level "
@@ -1066,7 +1066,7 @@ TOOLS: tuple[ToolSpec, ...] = (
             {
                 "data_plane": {
                     "type": "string",
-                    "enum": ["healthy", "reachable_quarantined", "unreachable"],
+                    "enum": ["healthy", "reachable_quarantined", "unreachable", "unknown"],
                 },
                 "probe_results": {
                     "type": "array",
@@ -1129,7 +1129,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                         "type": "object",
                         "properties": {
                             "rig_id": {"type": "string"},
-                            "state": {"type": "string", "enum": ["healthy", "degraded", "unreachable"]},
+                            "state": {"type": "string", "enum": ["healthy", "degraded", "unreachable", "unknown"]},  # `unknown` (#159): the probe established nothing about this rig
                             "reason": {"type": "string"},
                         },
                         "required": ["rig_id", "state", "reason"],
