@@ -197,6 +197,8 @@ def _in_lane(brief: Mapping[str, Any], lane: str) -> bool:
     """Whether a brief belongs to one of the pipeline lanes."""
     if lane == "deferred":
         return is_deferred(brief)
+    if lane == "junk":
+        return is_junk(brief)
     state = str(attr(brief, "decision_state") or "")
     return state == lane.rstrip("s") or state == lane
 
@@ -224,6 +226,53 @@ def rig_for_apply(requested: str | None, preview: Any) -> str | None:
         return named
     pinned = getattr(preview, "rig", None)
     return (pinned or "").strip() or None
+
+
+#: Codes that gate SOME verdicts while leaving others available. A brief
+#: carrying one of these is still actionable and belongs in the stack.
+#: `MBRF004` (no source dependency) blocks `approve` under B2.1 and leaves
+#: `revise` and `reject` live -- measured against `mctl`, all three verdicts,
+#: on a real brief. Treating it as unusable would remove the only action
+#: currently available on most of the open queue.
+PARTIAL_GATES: frozenset[str] = frozenset({"MBRF004"})
+
+
+def brief_codes(brief: Mapping[str, Any]) -> tuple[str, ...]:
+    """Diagnostic codes carried on this brief's row, if any."""
+    raw = attr(brief, "diagnostics") or []
+    codes: list[str] = []
+    for entry in raw:
+        if isinstance(entry, Mapping):
+            code = entry.get("code")
+            if code:
+                codes.append(str(code))
+    return tuple(codes)
+
+
+def junk_reason(brief: Mapping[str, Any]) -> str | None:
+    """Why no verdict can land on this brief, or None if one can.
+
+    "Junk" is drawn from what the write path actually refuses, not from a
+    taxonomy anyone maintains by hand -- so it cannot drift from the
+    behaviour it describes.
+
+    Deliberately excludes the partial gates: a brief whose `approve` is
+    blocked but whose `revise` and `reject` work is not junk, it is a brief
+    with one control switched off.
+    """
+    state = str(attr(brief, "decision_state") or "")
+    if not attr(brief, "bead_id"):
+        return "no canonical brief bead — adjudicate refuses it (MBRF010)"
+    if state == "malformed":
+        return "malformed — closed with no verdict field"
+    if state == "adjudicated":
+        return "already adjudicated — nothing left to decide"
+    return None
+
+
+def is_junk(brief: Mapping[str, Any]) -> bool:
+    """Whether no verdict of any kind can land on this brief."""
+    return junk_reason(brief) is not None
 
 
 def rulable(brief: Mapping[str, Any]) -> bool:
@@ -266,6 +315,11 @@ def _scoped(
     """
     if scope in ("errors", "nobrainer"):
         return []
+    if scope == "junk":
+        # Everything no verdict can land on, in one lane with one reason
+        # column -- rather than four lanes for four diagnostics, which would
+        # scatter a population whose whole value is being seen at once.
+        return [b for b in briefs if is_junk(b)]
     states = SCOPE_STATES.get(scope)
     if states is None:
         return list(briefs)
@@ -469,6 +523,7 @@ class Dashboard:
             "deferred": pipeline_screen.deferred,
             "adjudicated": pipeline_screen.adjudicated,
             "malformed": pipeline_screen.malformed,
+            "junk": pipeline_screen.junk,
         }[lane]
         return self._page(
             lane.capitalize(),
@@ -621,10 +676,14 @@ class Dashboard:
         # in, and this says whether a verdict could actually land on it. The
         # stack is the one lane that is a work queue rather than a record, so
         # it is the only one that filters.
+        # The stack no longer HIDES anything: a brief leaves it only by being
+        # in the junk lane, where it is visible, counted and reasoned. Taylor:
+        # "I should be able to SEE other briefs... It is a good signal for
+        # debugging." A hidden brief is a brief nobody debugs.
         held_back: list[Mapping[str, Any]] = []
         if view.scope == "stack":
-            held_back = [b for b in briefs if not rulable(b)]
-            briefs = [b for b in briefs if rulable(b)]
+            held_back = [b for b in briefs if is_junk(b)]
+            briefs = [b for b in briefs if not is_junk(b)]
         # A rig-scoped page with nothing on it is indistinguishable from a
         # broken one. If the rig is empty, find out whether the *city* is --
         # one extra read, only on the empty path, so the page can say which
@@ -679,7 +738,7 @@ class Dashboard:
             'margin: 8px 0 0;"></div>',
             stack.column_picker(view) if columns_open else "",
             stack.table(briefs, view, queued=(), elsewhere=elsewhere),
-            stack.held_back_note(held_back),
+            stack.junk_count_note(held_back, len(briefs) + len(held_back)),
             stack.empty_sort_note(briefs, view),
             stack.key_legend(),
             stack.unfed_note(briefs),
@@ -1355,7 +1414,7 @@ class Dashboard:
             return self._overview(request)
         if request.path == "/queue":
             return self._queue(request)
-        if request.path in ("/pile", "/deferred", "/adjudicated", "/malformed"):
+        if request.path in ("/pile", "/deferred", "/adjudicated", "/malformed", "/junk"):
             return self._lane(request.path[1:], request)
         if request.path == "/priority":
             return self._priority(request)

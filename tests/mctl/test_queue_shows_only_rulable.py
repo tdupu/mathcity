@@ -181,6 +181,10 @@ def test_the_held_back_count_matches_what_was_withheld(tmp_path):
     app = Dashboard(client, city_wide=True, rig=None)
 
     body = app.handle(Request.get("/queue")).body
-    note = re.search(r'data-region="held-back".*?</p>', body, re.S)
-    assert note, "briefs were withheld but the page did not say so"
+    # Renamed from `held-back` to `junk-count` when Taylor corrected the
+    # design: they are no longer "held back" (hidden), they are counted here
+    # and listed in their own lane. The property under test is unchanged --
+    # the number must come from the set the split actually produced.
+    note = re.search(r'data-region="junk-count".*?</p>', body, re.S)
+    assert note, "briefs were separated out but the page did not say so"
     assert re.search(r"\d+", note.group(0)), "the notice names no count"
