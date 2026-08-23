@@ -57,7 +57,21 @@ from test_briefs_create_validate_cli import (  # noqa: E402
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BODY = "## What is being decided\n\nWhether a fresh rig can receive a brief.\n"
+#: `## Gate Evidence` is REQUIRED, not decoration. #169 (MBRF036) made
+#: `briefs_create` refuse a body missing a required section, and these tests were
+#: written before that landed -- they asserted the brief ROOT and supplied whatever
+#: body was convenient. Without it they fail on MBRF036, which is the gate working.
+#:
+#: Second time these fixtures have been overtaken: #173 made a sourceless create
+#: FATAL and they needed `--source`. Both times the gate was right and the fixture
+#: was stale. A test fixture encodes the world at the moment it was written, and
+#: this call is being tightened faster than that.
+BODY = (
+    "## What is being decided\n\n"
+    "Whether a fresh rig can receive a brief.\n\n"
+    "## Gate Evidence\n\n"
+    "N/A -- this brief exists only to exercise brief-root creation.\n"
+)
 
 
 def _create(city_root: Path, rig_root: Path, tmp_path: Path):
