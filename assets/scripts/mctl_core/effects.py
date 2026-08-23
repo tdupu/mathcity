@@ -462,10 +462,26 @@ def _require_brief_root(ctx: MctlContext, layout: ArtifactLayout) -> None:
     # FIRST brief, `agent_skills` among them while already holding 3 decision
     # beads. For `mathcity` it made CT4.5 unsatisfiable -- the rig owning `mctl`
     # had nowhere to land its own repair work.
+    # NO mkdir HERE. This function runs while the plan is being BUILT, before
+    # anything knows whether the caller asked for a dry run, so creating
+    # directories here mutates the filesystem on `dry_run: true`. stripes measured
+    # exactly that on the live city: a dry run against `mathcity` wrote zero files
+    # and brought three directories into existence at the instant of the probe.
+    # A dry run that mutates is not a dry run, and worse, the probe manufactured
+    # its own precondition -- any survey of "which rigs can accept a brief" run
+    # through this tool was contaminated by the act of asking.
+    #
+    # The directories do not need making here anyway: `_atomic_write` already does
+    # `path.parent.mkdir(parents=True, exist_ok=True)`, so applying the plan
+    # creates `.pile/` and `decisions/` as their files land. `stack/` is NOT
+    # created, and should not be -- nothing writes it at creation time; it is the
+    # shuffler's, per B2.10. Asserting it here was my over-reach.
+    #
+    # So the permission is all that belongs at plan time: refuse when the
+    # resolution is unreal, permit when only the cache is absent, and let apply
+    # do the making.
     parent = layout.root.parent
     if parent.is_dir() and not layout.root.exists():
-        for directory in (layout.root, layout.pile, layout.stack, layout.decisions):
-            directory.mkdir(parents=True, exist_ok=True)
         return
 
     raise MutationError(

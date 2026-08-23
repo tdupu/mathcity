@@ -753,8 +753,50 @@ def test_create_makes_the_brief_root_for_a_registered_rig(tmp_path: Path):
 
     assert result.returncode == 0, f"{result.stdout[:400]}{result.stderr[:400]}"
     assert brief_root.is_dir(), "the brief root was not created"
-    for sub in ("stack", ".pile", "decisions"):
+    # `.pile` and `decisions` only. Their files land here, and `_atomic_write`
+    # makes each parent as it writes. `stack/` is NOT created and must not be:
+    # nothing writes it at creation time -- it is the shuffler's, per B2.10.
+    # Asserting it was over-reach on my part, and it kept a plan-time mkdir alive
+    # that mutated the filesystem during dry runs (stripes, measured on the live
+    # city).
+    for sub in (".pile", "decisions"):
         assert (brief_root / sub).is_dir(), f"{sub} was not created"
+    assert not (brief_root / "stack").exists(), (
+        "creation made stack/, which belongs to the shuffler (B2.10)"
+    )
+
+
+def test_a_dry_run_creates_no_directories(tmp_path: Path):
+    """A dry run must not touch the filesystem. stripes measured that it did.
+
+    `_require_brief_root` runs while the plan is BUILT, before anything knows
+    whether this is a dry run, so a mkdir there fires on `dry_run: true`. On the
+    live city that brought three directories into existence at the instant of a
+    probe that wrote zero files -- and the probe thereby manufactured its own
+    precondition, contaminating any survey of which rigs can accept a brief.
+
+    The assertion is on the DIRECTORIES, not on `applied: false`. The old
+    behaviour already returned `applied: false` correctly while mutating the
+    disk, so asserting the flag would pass against the defect.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    brief_root = rig_root / ".beads" / "briefs"
+    shutil.rmtree(brief_root)
+
+    result = run_mctl(
+        *brief_command(
+            city_root, "create",
+            "--title", "probe", "--body-file", str(body_file(tmp_path)),
+            "--source", "mc-source", "--json", "--dry-run",
+        ),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode == 0, f"{result.stdout[:300]}{result.stderr[:300]}"
+    assert not brief_root.exists(), (
+        "a dry run created the brief root -- dry runs must not mutate the filesystem"
+    )
 
 
 def test_create_refuses_for_an_unregistered_rig_and_makes_nothing(tmp_path: Path):
