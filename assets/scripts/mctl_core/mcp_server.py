@@ -112,7 +112,7 @@ from .mayor import city_state as mayor_city_state
 from .mayor import conservation_report as mayor_conservation_report
 from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
 from .beads import read_beads
-from .decisions import dispatchability_refusals
+from .decisions import brief_body, dispatchability_refusals
 from .work import (
     WorkError,
     _open_child_workflow,
@@ -761,11 +761,25 @@ def _handle_decisions_to_briefs(
         }
 
     title = str(arguments.get("title") or decision).strip()[:120] or decision
+    # #169: a body with no `Gate Evidence` section is refused with MBRF036. The
+    # evidence is the checks above that did NOT fire -- each maps to a work.py
+    # dispatch blocker -- so the section carries something a gate can use rather
+    # than a heading over filler.
+    body = brief_body(
+        decision,
+        source_bead_id=source_bead_id,
+        checks_passed=(
+            f"source `{source_bead_id}` resolves in this rig (MDTB002 did not fire)",
+            "source is not closed, so the brief is dispatchable (MDTB003 did not fire)",
+            "source has no active assignee (MDTB004 did not fire)",
+            "source has no open child workflow (MDTB005 did not fire)",
+        ),
+    )
     plan = plan_create_brief(
         ctx,
         BriefCreateInput(
             title=title,
-            body=decision,
+            body=body,
             labels=tuple(arguments.get("labels") or ()),
             requested_by=arguments.get("requested_by"),
             sources=(source_bead_id,),

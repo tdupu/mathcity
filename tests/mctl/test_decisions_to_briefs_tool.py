@@ -131,3 +131,45 @@ def test_present_briefs_completes_through_the_mcp(tmp_path: Path):
     )["result"]["structuredContent"]
 
     assert "briefs" in structured, "present returned no briefs collection"
+
+
+# --- #169 regression -------------------------------------------------------
+#
+# The body this tool emits must satisfy the structural rule in
+# assets/brief-pipeline/required-sections.toml. Nothing asserted that, so when
+# #169 landed the tool silently began emitting briefs that briefs_create refused
+# with MBRF036 -- and the response came back with neither `applied` nor
+# `brief_id`, only diagnostics.
+#
+# The rule lives in a data file precisely so two checkers cannot drift. This test
+# reads THAT file rather than restating the regex, so if the required sections
+# change, this fails instead of quietly passing against a stale copy.
+
+
+def test_the_emitted_body_satisfies_every_required_section(tmp_path: Path):
+    import re
+    import tomllib
+
+    spec = (
+        Path(__file__).resolve().parents[2]
+        / "assets" / "brief-pipeline" / "required-sections.toml"
+    )
+    required = tomllib.loads(spec.read_text(encoding="utf-8"))["section"]
+    assert required, "the required-sections spec is empty; this test would be vacuous"
+
+    from mctl_core.decisions import brief_body
+
+    body = brief_body(
+        "Adopt the narrowed brief read",
+        source_bead_id="source-revise",
+        checks_passed=("source resolves", "source is open"),
+    )
+
+    for section in required:
+        # the spec's regex is POSIX bracket syntax for brief-check.sh; translate
+        # the one class it uses so Python's `re` sees the same rule.
+        pattern = section["match"].replace("[[:space:]]", r"\s")
+        assert re.search(pattern, body, re.MULTILINE), (
+            f"emitted body is missing the required section {section['name']!r}, "
+            f"which briefs_create refuses with MBRF036"
+        )

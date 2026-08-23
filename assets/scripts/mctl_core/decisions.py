@@ -137,3 +137,33 @@ def dispatchability_refusals(
             )
         )
     return tuple(refusals)
+
+
+def brief_body(decision: str, *, source_bead_id: str, checks_passed: tuple[str, ...]) -> str:
+    """A structurally valid brief body, with Gate Evidence that is actually evidence.
+
+    #169 gave `briefs_create` structural validation: a body missing a
+    `Gate Evidence` section is refused with MBRF036. Before that, this tool passed
+    the raw decision string as the body -- no sections at all -- and the create was
+    accepted. So the tool was emitting exactly the un-hygienic briefs Taylor's bar
+    ("a hygienic brief which can be acted on") was written to prevent, and #169
+    caught it on the first thing it touched.
+
+    The Gate Evidence content is the checks this tool already ran before writing
+    anything: the source resolves, is open, is unassigned, and has no open child
+    workflow. That is real evidence for the gate that consumes it -- each line
+    corresponds to a `work.py` dispatch blocker that was tested and did not fire.
+
+    Deliberately NOT filler. A `Gate Evidence` heading over invented text would
+    satisfy the regex and defeat the section's purpose, which is the same
+    could-not-have-failed shape this repo has spent the week removing.
+    """
+    lines = [
+        f"## Decision\n\n{decision.strip()}\n",
+        f"## Source\n\nThis decision is about `{source_bead_id}`.\n",
+        "## Gate Evidence\n",
+        "Checked before this brief was written; each corresponds to a dispatch",
+        "blocker in `work.py` that was tested and did not fire:\n",
+    ]
+    lines.extend(f"- {check}" for check in checks_passed)
+    return "\n".join(lines) + "\n"
