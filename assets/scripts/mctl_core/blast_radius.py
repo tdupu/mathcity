@@ -126,6 +126,26 @@ def classify(operation: str, *, plan_contents: Mapping[str, Any] | None = None,
         }
 
     floor = str(entry.get("floor") or "medium")
+    if floor not in TIERS:
+        # `gated` is a word the PAGE prints, so a human editing the registry
+        # will eventually write `floor = "gated"`. It is not a tier -- the
+        # escalation ladder has no rank for it -- and it used to raise
+        # KeyError inside _escalate. A registry is edited by hand; a crash is
+        # not an answer, and silently ranking it would be worse.
+        #
+        # Treated as UNCLASSIFIED, which is the safe direction: unclassified
+        # operations are refused rather than permitted.
+        return {
+            "blast_radius": None,
+            "blast_radius_floor": None,
+            "gate": UNCLASSIFIED,
+            "blast_radius_reason": (
+                f"operation {operation!r} declares floor {floor!r}, which is not one of "
+                f"{TIERS}. If a human gate owns this operation, express it as "
+                f"`gate = \"<gate-name>\"` rather than as a floor; it is refused "
+                f"rather than permitted until then."
+            ),
+        }
     tier, causes = _escalate(floor, contents)
     reason = entry.get("reason", "").strip()
     if causes:
@@ -173,6 +193,15 @@ def registry_report(path: Path | None = None) -> dict[str, Any]:
             {
                 "operation": operation,
                 "floor": entry.get("floor"),
+                # #110 follow-up: this was DROPPED, so a gated operation reached
+                # the page as `floor: None` and the screen invented the string
+                # "gated" to fill the hole. Correct for branch.delete by
+                # accident; opposite-of-correct for a floorless, gateless entry,
+                # which classifies `medium` and displayed as `gated`.
+                #
+                # A reporting surface that drops a field and lets its consumer
+                # guess is the defect this function was written to prevent.
+                "gate": entry.get("gate"),
                 "reason": entry.get("reason"),
                 "aspirational": bool(entry.get("aspirational", False)),
             }
