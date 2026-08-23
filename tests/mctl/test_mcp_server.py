@@ -38,11 +38,13 @@ DECLARED_TOOLS = (
     "briefs_doctor",
     "briefs_list",
     "briefs_options",
+    "briefs_present",
     "briefs_show",
     "briefs_validate",
     "city_health",
     "context_resolve",
     "context_rigs",
+    "decisions_to_briefs",
     "fleet_sessions",
     # Added when `gates_status` was exposed: `mctl_core/gates.py` shipped with
     # #119 and had no MCP tool, so no page could reach it -- #153's deeper

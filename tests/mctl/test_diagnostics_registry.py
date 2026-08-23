@@ -32,7 +32,12 @@ NOT_CODES = {
     "MCTL_MCP_ENABLE_EXTERNAL_TOOLS",
 }
 
-CODE_PATTERN = re.compile(r'"(MBRF\d{3}|MWRK\d{3}|MOPT\d{3}|MCTL_[A-Z_]+|MWRK_[A-Z_]+|MBRF_[A-Z_]+)"')
+# MDTB is the decisions-to-briefs family (#177). A family missing from this
+# allowlist is invisible to the scanner, so its codes read as "registered but
+# never emitted" no matter how they are written.
+CODE_PATTERN = re.compile(
+    r'"(MBRF\d{3}|MWRK\d{3}|MOPT\d{3}|MDTB\d{3}|MCTL_[A-Z_]+|MWRK_[A-Z_]+|MBRF_[A-Z_]+)"'
+)
 
 VALID_SEVERITIES = {"INFO", "WARN", "ERROR", "FATAL"}
 

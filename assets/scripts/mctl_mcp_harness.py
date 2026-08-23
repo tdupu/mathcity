@@ -52,6 +52,7 @@ EXPECTED_TOOLS = (
     "molecules_list",
     "molecules_show",
     "briefs_list",
+    "briefs_present",
     "briefs_show",
     "briefs_options",
     "briefs_doctor",
@@ -70,6 +71,7 @@ EXPECTED_TOOLS = (
     "mayor_boot",
     "mayor_city_state",
     "mayor_conservation",
+    "decisions_to_briefs",
     "fleet_sessions",
     # `gates_status` exposes `mctl_core/gates.py`, which shipped with #119 and
     # had no MCP tool -- so no page could reach it. See #153.

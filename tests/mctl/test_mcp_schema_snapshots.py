@@ -95,7 +95,8 @@ def test_every_artifact_bearing_output_schema_requires_artifact_trust():
     snapshot = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
     artifact_bearing = {
         "briefs_list",
-        "briefs_show",
+        "briefs_present",
+    "briefs_show",
         "briefs_doctor",
         "briefs_validate",
         "briefs_adjudicate",
@@ -116,6 +117,7 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "briefs_adjudicate",
         "briefs_create",
         "briefs_defer",
+        "decisions_to_briefs",
         "work_dispatch",
         "work_dispatch_event",
     ]

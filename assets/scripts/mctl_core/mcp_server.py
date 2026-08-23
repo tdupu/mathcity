@@ -1448,10 +1448,13 @@ TOOLS: tuple[ToolSpec, ...] = (
             },
             [],
         ),
-        output_schema=response_schema({"briefs": {"type": "array"}}, ["briefs"]),
+        output_schema=response_schema(
+            {"briefs": {"type": "array"}}, ["briefs"], artifact_state=True
+        ),
         handler=_handle_briefs_present,
         mutating=False,
         external_ready=False,
+        artifact_state=True,
     ),
     ToolSpec(
         name="briefs_create",
