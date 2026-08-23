@@ -488,9 +488,12 @@ def _handle_orders_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
     populated). Without this tool the projection existed in `mctl_core` and no
     MCP caller could reach it.
     """
-    from .orders import city_reader, orders_status
+    from .orders import EVENT_LOG_ONLY, city_reader, orders_status
 
-    return orders_status(city_reader(ctx.city_root))
+    # #156 follow-up: the catalog (`gc order list`) measured 89 s in-city and the
+    # tool timed out at 120 s when first exercised live. The outcomes half is a
+    # local file. Serve what is servable; report the catalog `unreachable`.
+    return orders_status(city_reader(ctx.city_root), mode=EVENT_LOG_ONLY)
 
 
 def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
