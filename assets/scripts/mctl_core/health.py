@@ -19,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 import subprocess
 import time
 from pathlib import Path
@@ -352,6 +353,104 @@ def answered_that_dolt_is_down(probe: ProbeResult) -> bool:
     return probe.detail == DOLT_ANSWERED_DOWN_DETAIL
 
 
+@dataclass(frozen=True)
+class RigProbe:
+    """One rig's own answer. `state` is three-valued per the #176 ruling."""
+
+    state: str  # healthy | degraded | unreachable
+    reason: str = ""
+
+
+#: A rig read is cheap on purpose: one bounded `bd list --limit 1`. The question
+#: is liveness, not contents -- #176 exists because a summary that never asked
+#: was indistinguishable from one that did.
+RIG_PROBE_TIMEOUT_SECONDS = 10.0
+
+
+def probe_one_rig(rig: Any, timeout: float = RIG_PROBE_TIMEOUT_SECONDS) -> RigProbe:
+    """Ask ONE rig whether it can be read.
+
+    The smallest question that separates a rig that answers from one that does
+    not -- which is exactly the distinction `city_health` was asserting without
+    asking. Reads one bead, not the store.
+    """
+    try:
+        result = subprocess.run(
+            ["bd", "list", "--limit", "1", "--json", "--readonly"],
+            cwd=str(getattr(rig, "root", ".")),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return RigProbe(state="unreachable", reason=f"{type(error).__name__}: {error}")
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        return RigProbe(
+            state="unreachable",
+            reason=(detail[0] if detail else f"bd exited {result.returncode}")[:200],
+        )
+    return RigProbe(state="healthy", reason="")
+
+
+def probe_rigs(rigs: Sequence[Any], *, probe: Any = None) -> list[PerRigHealth]:
+    """One row per rig, each from that rig's OWN answer.
+
+    #176: every row used to come from a single city-level `gc dolt health` call
+    relabelled per rig, so seventeen rows were one observation wearing seventeen
+    names -- and seventeen agreeing rows is what made the wrong answer
+    persuasive.
+
+    A probe that raises becomes an `unreachable` row rather than an exception:
+    one sulking rig must not take down the report that would explain it.
+    """
+    ask = probe or probe_one_rig
+    rig_list = list(rigs)
+
+    def _one(rig: Any) -> PerRigHealth:
+        try:
+            answer = ask(rig)
+        except Exception as error:  # noqa: BLE001 - becomes a row, see docstring
+            answer = RigProbe(state="unreachable", reason=f"{type(error).__name__}: {error}")
+        return PerRigHealth(
+            rig_id=str(getattr(rig, "name", rig)),
+            state=answer.state,
+            reason=answer.reason,
+        )
+
+    if len(rig_list) < 2:
+        return [_one(rig) for rig in rig_list]
+
+    # Independent reads, so they are not paid in sequence: measured on the live
+    # city, 17 sequential probes cost 43.7s on a tool a page waits for.
+    #
+    # `executor.map` is used deliberately over `as_completed`: it yields in
+    # INPUT order, and order is load-bearing here because the caller matches
+    # these rows against `scope.rigs` by position. Completion order would attach
+    # one rig's state to another rig's name -- a silent mismatch, not a crash.
+    with ThreadPoolExecutor(max_workers=min(8, len(rig_list))) as pool:
+        return list(pool.map(_one, rig_list))
+
+
+def rig_tally(rows: Sequence[PerRigHealth]) -> dict[str, int]:
+    """Counts that state their own denominator.
+
+    `not_counted` is explicit because the ruling is: a rig that could not be
+    reached is excluded from the total **visibly**, never silently dropped and
+    never silently counted as healthy. `total` is every rig asked about, so a
+    reader can always tell "0 healthy of 0" from "0 healthy of 17".
+    """
+    counted = [r for r in rows if r.state != "unreachable"]
+    return {
+        "total": len(rows),
+        "counted": len(counted),
+        "not_counted": len(rows) - len(counted),
+        "healthy": sum(1 for r in counted if r.state == "healthy"),
+        "degraded": sum(1 for r in counted if r.state == "degraded"),
+    }
+
+
 def data_plane_for(probe: ProbeResult, quarantine_by_db: Mapping[str, str]) -> str:
     """The data plane's state, or `unknown` when the probe did not establish it.
 
@@ -393,17 +492,20 @@ def build_city_health(scope: CityScope) -> CityHealthReport:
 
     data_plane = data_plane_for(dolt_probe, quarantine_by_db)
 
+    # #176: every rig is ASKED. This used to be one city-level probe relabelled
+    # per rig, so seventeen rows were one observation wearing seventeen names --
+    # and it reported 17/17 healthy during a total outage.
+    #
+    # Quarantine still wins over a healthy read: a rig whose DB is quarantined
+    # is `degraded` even though `bd` answers, because "it responds" and "it is
+    # well" are different claims and this module exists to keep them apart.
     per_rig: list[PerRigHealth] = []
     disk_per_rig: list[RigDiskUsage] = []
+    probed = {row.rig_id: row for row in probe_rigs(scope.rigs)}
     for rig in scope.rigs:
-        if dolt_probe.outcome != PROBE_SUCCEEDED:
-            per_rig.append(
-                PerRigHealth(
-                    rig_id=rig.name,
-                    state=per_rig_state_for(dolt_probe),
-                    reason=dolt_probe.detail,
-                )
-            )
+        answer = probed.get(rig.name)
+        if answer is not None and answer.state == "unreachable":
+            per_rig.append(answer)
         elif rig.db in quarantine_by_db:
             per_rig.append(
                 PerRigHealth(
@@ -411,7 +513,7 @@ def build_city_health(scope: CityScope) -> CityHealthReport:
                 )
             )
         else:
-            per_rig.append(PerRigHealth(rig_id=rig.name, state="healthy", reason=""))
+            per_rig.append(answer or PerRigHealth(rig_id=rig.name, state="healthy", reason=""))
 
         size, size_reason = _dolt_dir_size_bytes(scope.city_root, rig.db)
         disk_per_rig.append(RigDiskUsage(rig_id=rig.name, bytes_used=size, reason=size_reason))
