@@ -27,6 +27,18 @@ for the honesty invariants.
   to the AUTHOR first, coordinator second.
 - **`tdupu/mathcity` is PUBLIC** — sanitize absolute home paths. No `Co-Authored-By` (P5.5).
 - **`~/repos/mathcity` is coordinator-only.** Work in your own worktree; ask for one.
+- **THE PAIR REQUIREMENT (repo owner, 2026-08-22).** Any mctl command that creates work
+  MUST produce a dispatchable **pair**: an ADJUDICATED BRIEF (closed + approving verdict)
+  carrying a source dependency on an OPEN SOURCE BEAD (status NOT closed). **Either half
+  alone is permanently undispatchable.** All six gates must pass for `readiness: "ready"` —
+  `MWRK010` (brief closed + approving verdict), `MWRK011` (declares a source dependency),
+  `MWRK012` (that id resolves), `MWRK013` (that bead is NOT closed), `MBRF004` (passes
+  brief-doctor), and the unnamed no-active-assignee double-dispatch guard.
+  **Acceptance, not design note:** a test that creates work and asserts only that the call
+  succeeded does NOT satisfy this — the created pair must be shown dispatchable via
+  `work_status` returning `readiness: "ready"`, `blockers: []`.
+- **QUIMBY's lane is mayor API, MCP, and dispatch.** It coordinates; it does not implement.
+  Do not assign it slices. (Coordinator error, corrected by the repo owner 2026-08-22.)
 
 ---
 
@@ -34,16 +46,16 @@ for the honesty invariants.
 
 | Src | Request | Slice |
 |---|---|---|
-| Q45 00:01 | `briefs_create` is a dumb insert, no gates | A |
+| Q45 00:01 | `briefs_create` is a dumb insert, no gates | A — **#169**, **#168** already open |
 | Q45 00:44 | refactor `briefs_adjudicate` revise-path | B |
-| Q45 00:35 | path-B order provenance is non-atomic | E |
+| Q45 00:35 | path-B order provenance is non-atomic | E — filed **#178** |
 | Q45 00:47 | two issues never filed | G |
 | Q47 16:55/17:58 | MCP-only handicap must go in `mayor-math-prime` | D |
-| Q47 19:01 | `city_health` is a SEPARATE defect from #159 | C |
-| Q47 19:41 | `decisions-to-briefs` as a typed MCP tool | F |
-| Taylor D1 | ARM LIVE DISPATCH | F0 (coordinator) |
+| Q47 19:01 | `city_health` is a SEPARATE defect from #159 | C — filed **#176** |
+| Q47 19:41 | `decisions-to-briefs` as a typed MCP tool | F — filed **#177** |
+| Taylor D1 | ARM LIVE DISPATCH | F0 — **blocked on the repo owner**, see below |
 | Taylor D2 | `MBRF034` -> FATAL; creation refuses instead of minting a brick | A |
-| Taylor D3 | rename `briefs_adjudicate` -> `briefs_relay_adjudication` | B |
+| Taylor D3 | rename `briefs_adjudicate` -> `briefs_relay_adjudication` | B — filed **#175** |
 | Taylor D4 | `#147`/`MBRF035` is URGENT | C0 |
 
 ---
@@ -132,10 +144,17 @@ Taylor, verbatim, relayed twice and still not in the skill:
 > needs to be in the mayor-priming skill. **This is an intentional handicapping for the
 > purpose of debugging.**"*
 
-- [ ] Write it into `skills/mayor-math-prime/SKILL.md`, quoting verbatim
-- [ ] Include the conflict case: what to do when the handicap and a dead city collide
+**ALREADY AUTHORED AND LANDED** at `246d33f` on `quimby/debug-city-skill` (base
+`8574757`, not pushed): `skills/debug-city/SKILL.md` +220 NEW, and
+`skills/mayor-math-prime/SKILL.md` +65. **creek reviews; pink second-checks the
+verbatim quoting specifically.** Re-authoring existing good work would be waste; the
+lane correction applies going forward, not retroactively.
+
+- [ ] creek: verdict at `246d33f` — is Taylor's directive VERBATIM, not paraphrased?
+- [ ] Does it say the restriction is an INSTRUMENT, not a safety rail? A Mayor who thinks it is a guardrail routes around it; one who knows it is a measuring device reports the block
+- [ ] Does it handle the conflict case: the handicap vs a dead city (QUIMBY lived it twice today)
       (QUIMBY's own 18:33 self-report — it ran `gc dolt start` and disclosed it)
-- [ ] Land `debug-city` (220 lines, authored, hygiene-validated) in the same worktree
+- [ ] Does anything in `debug-city` tell an agent to work around a refusal? That would contradict `CT13.4`
 
 **Done when:** a fresh Mayor session primes and knows the restriction is an instrument,
 not a safety rail.
@@ -158,10 +177,17 @@ QUIMBY's title suggestion: *"feat: mctl: decisions-to-briefs as a core command e
 as a typed MCP tool."* **#85 already records that the SKILL never calls mctl** — this
 is the tool that makes it possible to.
 
-### F0 — ARM LIVE DISPATCH (coordinator, gated on Taylor)
-`MCTL_ENABLE_LIVE_DISPATCH=1` in the MCP server process environment. **No typed tool
-can set it — it is a session-launch property.** In front of Taylor as an explicit
-decision. **Nothing else in this plan is blocked by it.**
+### F0 — ARM LIVE DISPATCH (blocked on the repo owner, blocks nothing else)
+`MCTL_ENABLE_LIVE_DISPATCH=1` must be in the MCP server process's environment **at
+launch** — no typed tool can set it. **QUIMBY located the binding**: `~/.claude.json`
+-> projects -> `<city-root>` -> `mcpServers` -> `mctl`, currently `env: {}`. **Its
+attempt to set it was blocked by the harness permission gate**, correctly —
+`~/.claude.json` is user-scope config and no agent edits it.
+
+**This needs the repo owner's hands.** `work_dispatch(he-8hoo)` already reached
+`preflight_result: passed` and refused with `MCTL_LIVE_DISPATCH_DISARMED` — a clean
+`CT13.4` refusal, and the evidence that arming is now reasonable. **Nothing else in
+this plan waits on it.**
 
 ## Slice G — QUIMBY 45's two unfiled issues
 
