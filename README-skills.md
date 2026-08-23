@@ -37,6 +37,7 @@ _Regenerate/verify with `/update-README`._
 | `create-convoy` | `mathcity.create-convoy` | Create a properly configured OWNED convoy for an epic bead — the fan-out container for one WIP-dispatcher slot |
 | `create-issue` | `mathcity.create-issue` | File a high-quality GitHub issue against the canonical mathcity repo `tdupu/mathcity` (default; alternatives declared), running the shared investigation standard, filling the target's live `.github/ISSUE_TEMPLATE/` form, and stopping at a human approval gate before anything is filed |
 | `critical-review` | `mathcity.critical-review` | Act as a rigorous, adversarial reviewer of any artifact — SKILL.md files, plans, theorems, LaTeX, code, or any LLM-generated output |
+| `debug-city` | `mathcity.debug-city` | Diagnose a Gas City that will NOT COME UP, whose control plane is unreachable, or whose instruments disagree — establishes ground truth from probes measured as trustworthy before proposing any fix, and refuses to repeat remedies prior sessions measured as failures. Sibling of wake-city, which assumes a live control plane. |
 | `dolt-init` | `mathcity.dolt-init` | Initialize the bd (beads) Dolt database and set the dolt remote in both the city-side rig and repo-side working copy |
 | `dolt-pull` | `mathcity.dolt-pull` | Commit any pending beads changes locally, then pull from the Dolt remote |
 | `dolt-push` | `mathcity.dolt-push` | Commit any pending beads changes and push to the Dolt remote |
