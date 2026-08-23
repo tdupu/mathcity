@@ -175,6 +175,27 @@ def gates(payload: Mapping[str, Any]) -> str:
     return _panel("Gates", body, region="city-gates")
 
 
+def _tier_label(row: Mapping[str, Any]) -> str:
+    """What this operation's row should say, from the payload alone.
+
+    Three genuinely different states, and the old code collapsed the last two:
+
+      floor set        -> the tier
+      gate set         -> `gated`, and the gate OWNS it: no tier is consulted
+      neither          -> `unclassified`, which is what `classify()` calls it.
+                          It must NOT read `gated`: the classifier resolves a
+                          floorless entry to `medium`, and displaying the
+                          strictest tier for the one the classifier treats as
+                          middling is the wrong direction to be wrong in.
+    """
+    floor = row.get("floor")  # single-shape-ok: registry row, not a brief
+    if floor:
+        return str(floor)
+    if row.get("gate"):
+        return "gated"
+    return "unclassified"
+
+
 def blast_radius(payload: Mapping[str, Any]) -> str:
     """Which operations this city treats as dangerous, and what awaits an emitter.
 
@@ -212,7 +233,11 @@ def blast_radius(payload: Mapping[str, Any]) -> str:
             '<ul class="reason-list">'
             + "".join(
                 f'<li><span class="mono">{_e(str(r.get("operation")))}</span> — '  # single-shape-ok: registry row, not a brief
-                f'<strong>{_e(str(r.get("floor") or "gated"))}</strong>'
+                # Render what the payload SAYS. The old `or "gated"` invented
+                # the most restrictive tier for any missing floor -- including
+                # entries the classifier calls `medium`, which is the opposite
+                # end of the ladder and the more reassuring one.
+                f'<strong>{_e(_tier_label(r))}</strong>'
                 + (f' · {_e(str(r.get("reason")))}' if r.get("reason") else "")
                 + "</li>"
                 for r in rows
