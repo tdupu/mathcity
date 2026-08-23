@@ -62,7 +62,15 @@ def test_every_rig_is_probed_individually(tmp_path):
     rigs = [_Rig(n, tmp_path) for n in ("hecke", "hq", "gascity")]
     rows = health.probe_rigs(rigs, probe=_probe)
 
-    assert asked == ["hecke", "hq", "gascity"]
+    # EVERY rig is asked -- that is the property. The *order they are asked in*
+    # is thread scheduling and asserting it pins the wrong thing: this
+    # originally read `asked == [...]`, passed by luck while probing was
+    # sequential, and started failing once the probes were fanned out. A test
+    # that depends on scheduling is a flake waiting for a slow machine.
+    assert sorted(asked) == ["gascity", "hecke", "hq"]
+    # The ORDER THAT MATTERS is the results', because the caller matches rows
+    # against scope.rigs by position. That is pinned here and again, harder, in
+    # test_concurrent_probing_preserves_rig_order.
     assert [r.rig_id for r in rows] == ["hecke", "hq", "gascity"]
 
 
