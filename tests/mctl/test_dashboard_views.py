@@ -347,8 +347,18 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # A drift alarm on a security-relevant list: the allowlist must stay
     # NARROWER than the server surface, so this stays a literal deliberately.
     # Registry-relative would assert allowlist == tools, which is the opposite
-    # of what this guards. Bumped for molecules_list/_show (#111).
-    assert len(ALLOWED_TOOLS) == 21
+    # of what this guards. Bumped for molecules_list/_show (#111), then for
+    # `briefs_present` (#177) -- a READ-ONLY tool, and presenting briefs is the
+    # dashboard's own job.
+    #
+    # `decisions_to_briefs` shipped in the same slice and is deliberately NOT
+    # here. It is mutating, and it mints briefs that are approved and
+    # dispatchable at creation. The MCP has no caller identity -- created_by is
+    # a hardcoded constant, requested_by is caller-asserted -- so putting it on
+    # a web surface's allowlist would let the dashboard mint approved work with
+    # no record of who asked. That is the v2 R8.2 question, and it is not
+    # settled by adding a name to this list.
+    assert len(ALLOWED_TOOLS) == 22
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):
