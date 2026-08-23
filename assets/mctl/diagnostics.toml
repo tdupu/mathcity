@@ -616,6 +616,11 @@ meaning = "Proposed brief body is missing a required structural section."
 policy_ref = "B1.5"
 module = "briefs.py"
 
+[MCTL_STACK_INDEX_ROW_ABSENT]
+severity = "WARN"
+meaning = "No stack index row targets this brief, so none was updated."
+module = "effects.py"
+
 [MWRK_ALREADY_DISPATCHED]
 severity = "FATAL"
 meaning = "Work already has dispatch provenance."

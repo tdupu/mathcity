@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 import fcntl
 import hashlib
@@ -200,6 +200,19 @@ class MutationError(Exception):
         self.diagnostic = diagnostic
 
 
+class StackIndexRowUnwritable(OSError):
+    """No stack-index row matched the brief this write targeted.
+
+    NOT a failed adjudication. The stack-index update is planned whenever the
+    index FILE exists, so a brief with no row -- an archived one, for instance,
+    which is de-indexed by construction under B2.15 -- plans a write that
+    correctly matches nothing. The caller downgrades this to a per-brief WARN.
+
+    It is raised rather than returned so the no-match cannot be dropped by a
+    caller that ignores a return value, which is how #92 stayed invisible.
+    """
+
+
 class DecisionsTrackRowUnwritable(OSError):
     """The legacy manifest row this verdict should sync cannot be rewritten.
 
@@ -227,6 +240,33 @@ class BriefFrontmatterUnwritable(OSError):
     """
 
 
+
+def _pile_document(body: str) -> str:
+    """The created document, WITH a frontmatter block adjudication can write into.
+
+    Created documents used to be the raw body. Nothing reads a brief's status from
+    the body, so `briefs_adjudicate` had no header to rewrite and raised
+    `BriefFrontmatterUnwritable` -- at WARN, after the verdict had already landed
+    on the bead. The operation reported success with one representation silently
+    stale, and `classify_tier` (materialize_plan.py:292-298), which reads verdict,
+    adjudicated_by and adjudicated_at from THIS block, saw an empty mapping. So an
+    adjudicated brief classified `C-no-disposition`, and materialize_plan.py:379
+    turns that tier into `status="open"` -- a decided brief re-materializing as open
+    work.
+
+    `status: open` and not `ready-for-adjudication`: the decision_toml written by
+    this same call says `open`, and two representations created in one operation
+    disagreeing on their own status is the defect the five-representation work
+    exists to prevent.
+
+    A body that already opens with its own block is passed through untouched --
+    callers that supply frontmatter are honoured rather than given a second one.
+    """
+    if body.lstrip().startswith("---"):
+        return body
+    return f"---\nstatus: open\n---\n\n{body}"
+
+
 @dataclass(frozen=True)
 class BriefCreateInput:
     title: str
@@ -238,6 +278,14 @@ class BriefCreateInput:
     # on a malformed brief. Optional, so creation without one still works and
     # warns instead of silently minting an unusable brief.
     sources: tuple[str, ...] = ()
+    # Caller-supplied provenance, written onto the bead alongside mctl's own.
+    # `commission_brief` (#190) carries tracker facts here -- `gh.issue`,
+    # `gh.repo`, `gh.labels` -- rather than as bd labels, because GitHub labels
+    # are namespaced (`kind/bug`) and bd rejects slashes as label tokens
+    # (MBRF033). Dropping the namespace is lossy: `kind/bug` and `status/bug`
+    # collapse to one token. Metadata values have no such restriction and stay
+    # queryable via `--has-metadata-key`.
+    metadata: Mapping[str, str] = field(default_factory=dict)
 
 
 # The plan cannot name the bead it is about to create, because bd mints the
@@ -300,6 +348,12 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     metadata = {"created_by": "mctl", "mctl_trace_id": ctx.trace_id, "created_at": _now()}
     if request.requested_by:
         metadata["requested_by"] = request.requested_by
+    # setdefault, not update: `created_by`, `mctl_trace_id` and `created_at` are
+    # mctl's own attestation that IT made this bead. A caller able to overwrite
+    # them could forge provenance, so caller keys fill gaps and never clobber.
+    for key, value in (request.metadata or {}).items():
+        if isinstance(value, str) and value.strip():
+            metadata.setdefault(str(key), value)
     bead_create = BeadCreate(
         placeholder_id=NEW_BRIEF_ID_PLACEHOLDER,
         title=title,
@@ -312,7 +366,9 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     layout = artifact_layout(ctx)
     _require_brief_root(ctx, layout)
     pile_create = FileCreate(
-        "pile_markdown", layout.pile / f"{NEW_BRIEF_ID_PLACEHOLDER}.md", body
+        "pile_markdown",
+        layout.pile / f"{NEW_BRIEF_ID_PLACEHOLDER}.md",
+        _pile_document(body),
     )
     cache_update = CacheUpdate(
         "decision_toml",
@@ -693,6 +749,39 @@ def _apply_effects(
         for update in plan.cache_updates:
             try:
                 _apply_cache_update(update)
+            except StackIndexRowUnwritable as error:
+                # #92. A WARN, not a failure, and the asymmetry with the
+                # decisions-track case below is deliberate: THAT writer is
+                # planned only when a row is expected (`row_key and
+                # legacy_manifest.is_file()`), so a no-match there is a real
+                # inconsistency. THIS one is planned whenever the index FILE
+                # exists, so a brief with no row -- an archived brief is
+                # de-indexed by construction under B2.15 -- plans a write that
+                # legitimately matches nothing. Measured: 57 index rows against
+                # 79 archived briefs.
+                #
+                # What #92 actually asks for is that the miss be REPORTED. It
+                # used to write nothing and say nothing, which is
+                # indistinguishable from a write that happened.
+                diagnostics.append(
+                    _diagnostic(
+                        ctx,
+                        Severity.WARN,
+                        "MCTL_STACK_INDEX_ROW_ABSENT",
+                        (
+                            "No stack index row was updated for this brief; the "
+                            "index holds no row targeting it."
+                        ),
+                        brief_id=plan.target_brief_id,
+                        data_location=str(update.path),
+                        detail=str(error),
+                        policy_ref="B2.15",
+                        suggested_next_command=(
+                            f"mctl briefs doctor {plan.target_brief_id} --json"
+                        ),
+                    )
+                )
+                continue
             except DecisionsTrackRowUnwritable as error:
                 # Per-brief, and a WARN, for the same reason the frontmatter
                 # case is: the legacy row this brief's stack index pointed at
@@ -1533,6 +1622,7 @@ def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, s
         lines = path.read_text(encoding="utf-8").splitlines()
         spliced: list[str] = []
         changed = False
+        matched = False
         for line in lines:
             if not line.strip():
                 continue
@@ -1542,6 +1632,7 @@ def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, s
                 spliced.append(line)
                 continue
             if isinstance(row, dict) and _row_targets_brief(row, target_brief_id):
+                matched = True
                 row.update(fields)
                 spliced.append(
                     json.dumps(
@@ -1555,6 +1646,12 @@ def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, s
             else:
                 # Untouched: preserve the original bytes exactly.
                 spliced.append(line)
+        if not matched:
+            # #92: this used to return silently. The file is deliberately not
+            # written -- reporting must not become a write.
+            raise StackIndexRowUnwritable(
+                f"{path}: no stack index row targets brief {target_brief_id!r}"
+            )
         if changed:
             _atomic_write(path, "\n".join(spliced) + "\n")
 
