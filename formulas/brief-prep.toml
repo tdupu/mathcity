@@ -47,7 +47,7 @@ default = "gc.review-synthesizer"
 [[steps]]
 id = "initialize-staging"
 title = "Initialize brief staging"
-metadata = { "gc.run_target" = "{{prep_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source}}", "gc.brief.type" = "{{brief_type}}", "gc.brief.path" = "{{artifact_root}}/.staging/{{brief_slug}}/brief.md" }
+metadata = { "gc.run_target" = "{{prep_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source}}", "gc.brief.type" = "{{brief_type}}", "gc.brief.path" = "{{artifact_root}}/.staging/{{brief_slug}}/brief.md", "gc.expected_artifacts.v1" = "[\"{{artifact_root}}/.staging/{{brief_slug}}/brief.md\"]" }
 description = """
 Create or reuse `{{artifact_root}}/.staging/{{brief_slug}}/`.
 
@@ -140,7 +140,7 @@ work dir.
 id = "submit-to-pile"
 title = "Submit the brief to the pile"
 needs = ["coordinate-review"]
-metadata = { "gc.run_target" = "{{prep_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md", "gc.brief.staged_path" = "{{artifact_root}}/.staging/{{brief_slug}}/brief.md" }
+metadata = { "gc.run_target" = "{{prep_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md", "gc.brief.staged_path" = "{{artifact_root}}/.staging/{{brief_slug}}/brief.md", "gc.expected_artifacts.v1" = "[\"{{artifact_root}}/.pile/{{brief_slug}}.md\"]" }
 description = """
 Move the completed staged brief into `{{artifact_root}}/.pile/{{brief_slug}}.md`
 using an atomic rename or copy-and-rename. Keep staged artifacts in
