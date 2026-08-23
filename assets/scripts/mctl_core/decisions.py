@@ -1,7 +1,7 @@
 """`decisions-to-briefs` as a typed operation: a brief that can be acted on.
 
 #85 records the damage this exists to stop. `decisions-to-briefs/SKILL.md` writes
-`.pile/manifest.jsonl` and `decisions-track/` **directly, behind mctl's back**, and
+the pile manifest and the decisions track **directly, behind mctl's back**, and
 it does that because no typed tool exists to do it properly -- the CT13.2 shape,
 capability present, surface absent.
 

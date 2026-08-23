@@ -160,3 +160,80 @@ def test_a_genuinely_unreachable_data_plane_still_says_so():
     # Assert the MEANING, not the vocabulary.
     assert "measurement" in low
     assert "is not" not in low.split("distinct from")[0].replace("is not a missing one", "")
+
+# ---------------------------------------------------------------------------
+# blast radius: the registry, with presence kept distinct from emptiness
+# ---------------------------------------------------------------------------
+
+
+def test_a_missing_registry_is_not_rendered_as_nothing_dangerous():
+    html = city_screen.blast_radius(
+        {"registry_present": False, "operations": [], "awaiting_emitter": []}
+    )
+    low = html.lower()
+    assert "could not" in low or "not found" in low
+    assert "no operations are classified" not in low
+
+
+def test_an_empty_but_present_registry_says_the_city_classifies_none():
+    html = city_screen.blast_radius(
+        {"registry_present": True, "operations": [], "awaiting_emitter": []}
+    )
+    assert "classif" in html.lower()
+    assert "could not" not in html.lower()
+
+
+def test_operations_render_with_their_floor():
+    html = city_screen.blast_radius(
+        {"registry_present": True,
+         "operations": [{"operation": "briefs.adjudicate", "floor": "medium",
+                         "reason": "one-way door", "aspirational": False}],
+         "awaiting_emitter": []}
+    )
+    assert "briefs.adjudicate" in html and "medium" in html
+
+
+def test_awaiting_emitter_is_not_called_an_orphan():
+    """Its own docstring insists on this: "N entries await an emitter" is a
+    fact; "N orphans" is a warning about the wrong thing."""
+    html = city_screen.blast_radius(
+        {"registry_present": True, "operations": [],
+         "awaiting_emitter": ["rig.suspend"]}
+    )
+    assert "rig.suspend" in html
+    assert "orphan" not in html.lower()
+
+
+def test_the_page_says_what_an_UNLISTED_operation_does():
+    """stick-dog's CONCERNS on #110, and it is the right attack.
+
+    The page listed seven classified operations and said nothing about the
+    eighth. A reader counts seven and concludes coverage is seven — that
+    anything absent is unconstrained. **The opposite is true.** `classify()`
+    for an operation not in the registry returns `gate: UNCLASSIFIED` with the
+    reason "refused rather than permitted".
+
+    So omission is the SAFE state, and a page that does not say so invites
+    exactly the wrong inference from the number it leads with. The floor
+    sentence is about escalation; this is about absence, and they are different
+    mechanisms.
+    """
+    html = city_screen.blast_radius(
+        {"registry_present": True,
+         "operations": [{"operation": "briefs.create", "floor": "medium",
+                         "reason": "x", "aspirational": False}],
+         "awaiting_emitter": []}
+    )
+    low = html.lower()
+    assert "refus" in low, "the page does not say what happens to an unlisted operation"
+    assert "not in" in low or "absent" in low or "unlisted" in low
+
+
+def test_the_unlisted_sentence_is_not_shown_when_the_registry_is_missing():
+    """A missing registry is a different statement, and stacking both would
+    imply the refusal behaviour is a reassurance about a file we could not
+    read."""
+    html = city_screen.blast_radius(
+        {"registry_present": False, "operations": [], "awaiting_emitter": []}
+    )
+    assert "could not" in html.lower()

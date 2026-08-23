@@ -1199,6 +1199,7 @@ class Dashboard:
             ("fleet_sessions", city_screen.fleet),
             ("city_health", city_screen.health),
             ("gates_status", city_screen.gates),
+            ("blast_radius_registry", city_screen.blast_radius),
         )
         outcomes = fan_out(self.client, [(tool, self._args(rig)) for tool, _ in surfaces])
 
@@ -1240,7 +1241,6 @@ class Dashboard:
         # call them. Named rather than omitted -- an absent panel reads as
         # "the city has none of these", which is false.
         for tool, module, issue in (
-            ("blast_radius", "mctl_core/blast_radius.py", 110),
             ("events_list", "mctl_core/ticker.py", 116),
         ):
             sections.append(city_screen.unwired(tool, module=module, issue=issue))

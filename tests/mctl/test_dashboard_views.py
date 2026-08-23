@@ -339,6 +339,10 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     A read-only city surface, on the same footing as `fleet_sessions` and
     `city_health`.
 
+    22 since `blast_radius_registry` was added: #110 shipped
+    `mctl_core/blast_radius.py` with no MCP tool and no consumer, so no page
+    could reach it. A read-only city surface, same footing as `gates_status`.
+
     Raise this number only alongside the tool that justifies it, and say which
     tool in the docstring.
     """
@@ -355,7 +359,7 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # here: it is mutating and mints briefs that are approved and dispatchable
     # at creation, and the MCP has no caller identity. Recorded in
     # DELIBERATELY_UNREACHABLE with the reason.
-    assert len(ALLOWED_TOOLS) == 25  # +commission_brief (#190)
+    assert len(ALLOWED_TOOLS) == 26  # +commission_brief (#190), +briefs_present (#177)
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

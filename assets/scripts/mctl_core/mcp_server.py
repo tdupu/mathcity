@@ -87,6 +87,7 @@ from .effects import (
 )
 from .fields import read_frontmatter
 from .fleet import build_fleet_sessions
+from .blast_radius import registry_report
 from .gates import gates_status
 from .molecules import build_molecule, build_molecules
 from .health import build_city_health
@@ -536,6 +537,23 @@ def _handle_fleet_sessions(scope: CityScope, arguments: Mapping[str, Any]) -> di
     return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
 
 
+def _handle_blast_radius_registry(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """#110's classification, made reachable.
+
+    `mctl_core/blast_radius.py` shipped with #110 and closed with no tool, no
+    consumer, and -- despite the issue's title -- no presence on `EffectPlan`.
+    #153's deeper shape: not "the front end was never staffed" but "there is no
+    route from the core to a front end at all".
+
+    Reports `registry_present` rather than only the entry list. `load_registry`
+    collapses an absent file into an empty registry on purpose (safe for a
+    gate: every lookup misses and resolves to UNCLASSIFIED), and that collapse
+    is wrong for a report -- rendered, "no operations are classified" and "the
+    registry is missing" are both `0`.
+    """
+    return {"diagnostics": [], **registry_report()}
+
+
 def _handle_gates_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
     """Dashboard handoff #119, made reachable.
 
@@ -760,7 +778,7 @@ def _handle_decisions_to_briefs(
 ) -> dict[str, object]:
     """One already-made decision -> one brief that can actually be dispatched.
 
-    #85: the `decisions-to-briefs` skill writes `.pile/manifest.jsonl` and
+    #85: the `decisions-to-briefs` skill writes the pile manifest and the
     `decisions-track/` behind mctl's back because no typed tool does it properly.
     A tool emitting briefs that cannot then be dispatched would relocate that, not
     fix it -- so the bar is `work_status` returning readiness "ready".
@@ -1233,6 +1251,35 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["slots"],
         ),
         handler=_handle_fleet_sessions,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="blast_radius_registry",
+        title="Which operations are classified for blast radius, and which await an emitter",
+        description=(
+            "The operation -> control-safety registry behind #110. `registry_present` is "
+            "the load-bearing field: an empty `operations` list with `registry_present: "
+            "true` means this city classifies no operations, and the same empty list with "
+            "`registry_present: false` means the registry file was not found. "
+            "`load_registry` collapses those two on purpose -- safe for a gate, since every "
+            "lookup then misses and resolves to UNCLASSIFIED -- and this surface un-collapses "
+            "them, because a reader seeing only `0` would conclude the city has nothing "
+            "dangerous rather than that we failed to look. "
+            "`awaiting_emitter` lists entries marked aspirational: classified, with nothing "
+            "emitting them yet. That is a fact about coverage, not a warning -- reporting "
+            "them as orphans would be a warning about the wrong thing."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "registry_present": {"type": "boolean"},
+                "registry_path": {"type": "string"},
+                "operations": {"type": "array", "items": {"type": "object"}},
+                "awaiting_emitter": {"type": "array", "items": {"type": "string"}},
+            },
+            ["registry_present", "operations", "awaiting_emitter"],
+        ),
+        handler=_handle_blast_radius_registry,
         scope=CITY_SCOPE,
     ),
     ToolSpec(

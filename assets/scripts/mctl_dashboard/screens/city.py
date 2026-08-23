@@ -175,6 +175,84 @@ def gates(payload: Mapping[str, Any]) -> str:
     return _panel("Gates", body, region="city-gates")
 
 
+def blast_radius(payload: Mapping[str, Any]) -> str:
+    """Which operations this city treats as dangerous, and what awaits an emitter.
+
+    `registry_present` is kept separate from emptiness for the reason the core
+    cannot: `load_registry` collapses an absent file into an empty registry so
+    that every lookup misses and fails safe, which is right for a gate and
+    wrong for a page. Rendered, both would read `0` -- and "nothing here is
+    dangerous" is the most reassuring possible way to say "we could not look".
+    """
+    present = payload.get("registry_present")
+    rows: Sequence[Mapping[str, Any]] = payload.get("operations") or []
+    awaiting: Sequence[str] = payload.get("awaiting_emitter") or []
+
+    if present is False:
+        return _panel(
+            "Blast radius",
+            '<p class="lede"><strong>The classification registry was not found.</strong> '
+            "This is not a city with no dangerous operations — it is a registry we "
+            "could not read. Every lookup against it misses and resolves to "
+            "<span class=\"mono\">UNCLASSIFIED</span>, which is safe, and is not "
+            "the same as safe-because-nothing-is-dangerous.</p>",
+            region="city-blast-radius",
+        )
+
+    if not rows:
+        body = (
+            '<p class="lede">The registry was read and <strong>classifies no '
+            "operations</strong>. A measurement, not a failure to look.</p>"
+        )
+    else:
+        body = (
+            f'<p class="lede"><strong>{len(rows)}</strong> operation'
+            f'{"" if len(rows) == 1 else "s"} classified. <span class="mono">floor</span> '
+            "is a floor: a plan's contents may raise it and may never lower it.</p>"
+            '<ul class="reason-list">'
+            + "".join(
+                f'<li><span class="mono">{_e(str(r.get("operation")))}</span> — '  # single-shape-ok: registry row, not a brief
+                f'<strong>{_e(str(r.get("floor") or "gated"))}</strong>'
+                + (f' · {_e(str(r.get("reason")))}' if r.get("reason") else "")
+                + "</li>"
+                for r in rows
+            )
+            + "</ul>"
+        )
+
+    # What happens to an operation that is NOT on this list -- stick-dog's
+    # review of #110. The count leads the panel, and a reader who sees "7
+    # classified" naturally infers that coverage is seven and everything else
+    # is unconstrained. The opposite is true: `classify()` returns
+    # `gate: UNCLASSIFIED` for an unlisted operation with the reason "refused
+    # rather than permitted", so ABSENCE IS THE SAFE STATE.
+    #
+    # Kept separate from the floor sentence deliberately. That one is about
+    # escalation (contents may raise a floor, never lower it); this is about
+    # omission. They are different mechanisms and collapsing them would let a
+    # reader think the registry is the only thing standing between the city and
+    # an unclassified operation.
+    body += (
+        '<p class="review-note" data-region="blast-radius-omission">'
+        "<strong>An operation absent from this registry is refused, not "
+        "permitted.</strong> It resolves to "
+        '<span class="mono">UNCLASSIFIED</span> and is declined rather than run '
+        "at some default tier — so this list is not the extent of what is "
+        "protected, it is the extent of what has been given a tier.</p>"
+    )
+
+    if awaiting:
+        body += (
+            f'<p class="review-note"><strong>{len(awaiting)} '
+            f'{"entry awaits" if len(awaiting) == 1 else "entries await"} an emitter.</strong> '
+            "Classified, with nothing emitting them yet — a fact about coverage, "
+            "not a defect and not something to clean up: "
+            + " · ".join(f'<span class="mono">{_e(op)}</span>' for op in awaiting)
+            + "</p>"
+        )
+    return _panel("Blast radius", body, region="city-blast-radius")
+
+
 def unwired(tool: str, *, module: str, issue: int) -> str:
     """A surface whose backend exists and which no page can call.
 

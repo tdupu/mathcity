@@ -47,6 +47,7 @@ from mctl_core.schemas import schema_errors
 MCTL = SCRIPTS_ROOT / "mctl.py"
 
 EXPECTED_TOOLS = (
+    "blast_radius_registry",
     "briefs_adjudicate",
     "briefs_create",
     "briefs_defer",
