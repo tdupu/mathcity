@@ -660,6 +660,46 @@ def _find_issue_mirror(ctx: MctlContext, reference: str) -> str | None:
     return None
 
 
+def plan_commission_brief(
+    ctx: MctlContext,
+    *,
+    bead_id: str,
+    title: str,
+    body: str,
+    issue_url: str | None = None,
+    issue_labels: Sequence[str] = (),
+    bead_rig: str | None = None,
+) -> EffectPlan:
+    """A source bead becomes a commission brief in the pile (#190).
+
+    Validation runs FIRST and raises `CommissionRefused` before anything is
+    planned -- constraints 1 and 2 are cheap here and expensive afterwards. The
+    MCP handler converts that refusal into a FATAL diagnostic; a library caller
+    gets the exception, which is the right shape for each.
+
+    Everything else delegates to `plan_create_brief`, so there is one brief
+    creation path and this adds commission semantics on top rather than a
+    parallel implementation.
+    """
+    validate_commission(
+        sources=(bead_id,), bead_rig=bead_rig, brief_rig=ctx.rig_name
+    )
+    metadata = (
+        tracker_metadata(issue_url=issue_url, labels=issue_labels) if issue_url else {}
+    )
+    return plan_create_brief(
+        ctx,
+        BriefCreateInput(
+            title=title,
+            body=body,
+            labels=brief_labels(),
+            requested_by=metadata.get("gh.issue"),
+            sources=(bead_id,),
+            metadata=metadata,
+        ),
+    )
+
+
 def plan_adjudication(
     ctx: MctlContext,
     brief_id: str,

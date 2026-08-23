@@ -33,7 +33,7 @@ NOT_CODES = {
 }
 
 CODE_PATTERN = re.compile(
-    r'"(MBRF\d{3}|MWRK\d{3}|MOPT\d{3}|MISS\d{3}|MCTL_[A-Z_]+|MWRK_[A-Z_]+|MBRF_[A-Z_]+)"'
+    r'"(MBRF\d{3}|MWRK\d{3}|MOPT\d{3}|MISS\d{3}|MCTL_[A-Z_]+|MWRK_[A-Z_]+|MBRF_[A-Z_]+|MCMS_[A-Z_]+)"'
 )
 
 VALID_SEVERITIES = {"INFO", "WARN", "ERROR", "FATAL"}

@@ -41,6 +41,7 @@ DECLARED_TOOLS = (
     "briefs_show",
     "briefs_validate",
     "city_health",
+    "commission_brief",
     "context_resolve",
     "context_rigs",
     "create_issue_bead",

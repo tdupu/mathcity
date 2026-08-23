@@ -348,7 +348,7 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # NARROWER than the server surface, so this stays a literal deliberately.
     # Registry-relative would assert allowlist == tools, which is the opposite
     # of what this guards. Bumped for molecules_list/_show (#111).
-    assert len(ALLOWED_TOOLS) == 23
+    assert len(ALLOWED_TOOLS) == 24  # +commission_brief (#190)
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):
