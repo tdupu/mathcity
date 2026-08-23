@@ -631,6 +631,21 @@ severity = "WARN"
 meaning = "No stack index row targets this brief, so none was updated."
 module = "effects.py"
 
+[MWRK014]
+severity = "ERROR"
+meaning = "The step is already routed; rerouting must be explicit."
+module = "work.py"
+
+[MWRK015]
+severity = "FATAL"
+meaning = "A route target is required; an empty route matches no pool query."
+module = "work.py"
+
+[MWRK016]
+severity = "FATAL"
+meaning = "A step that is not open cannot be routed."
+module = "work.py"
+
 [MWRK_ALREADY_DISPATCHED]
 severity = "FATAL"
 meaning = "Work already has dispatch provenance."

@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-from .beads import BD_LIST_ARGS, Bead, BeadCreate, BeadReadError, BeadRelate, read_beads
+from .beads import BD_LIST_ARGS, Bead, BeadCreate, BeadReadError, BeadRelate, read_beads, BeadUpdate
 from .briefs import BriefError, DoctorReport, doctor_briefs
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
@@ -266,6 +266,108 @@ def work_provenance(ctx: MctlContext, brief_id: str) -> DispatchProvenance:
         return read_dispatch_provenance(ctx, item.bead_id, required=True)
     except ProvenanceError as error:
         raise WorkError(error.diagnostic) from error
+
+
+@dataclass(frozen=True)
+class WorkRoutePlan:
+    """A planned write of `gc.routed_to` onto one step bead (#182)."""
+
+    trace_id: str
+    bead_id: str
+    route: str
+    previous_route: str
+    bead_update: BeadUpdate
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "bead_id": self.bead_id,
+            "bead_update": self.bead_update.to_dict(),
+            "previous_route": self.previous_route,
+            "route": self.route,
+            "trace_id": self.trace_id,
+        }
+
+
+def plan_route_to(
+    ctx: MctlContext, step: Bead, route: str, *, reroute: bool = False
+) -> WorkRoutePlan:
+    """Plan the write that makes a step visible to a pool.
+
+    TAYLOR NAMED THIS VERB, and the name is the correction. It is not `assign`:
+    what a step carries is `gc.routed_to`, a POOL, stamped at cook time by
+    `ApplyGraphRouteBinding`. `assign` would have written an assignee -- a
+    session bead -- which is a different target and duplicates a write cook
+    already performs.
+
+    WHY IT IS NOT REDUNDANT, measured across hecke's 746 step beads: 598 carry
+    `gc.routed_to` and 148 carry NONE. An unrouted step is invisible to every
+    pool query -- `bd ready --metadata-field gc.routed_to=<pool> --unassigned`
+    cannot return it -- so no worker can claim it and it never becomes work.
+
+    WHAT THIS DOES NOT DO. It does not assign, claim, or spawn. A routed step
+    with no live session still waits. Routing is necessary and not sufficient,
+    and this docstring says so because the next reader will otherwise assume
+    the verb makes work execute.
+
+    A REROUTE IS REFUSED BY DEFAULT. 598 steps already carry a route; silently
+    overwriting one moves work away from a pool that may be mid-claim. The
+    caller opts in, and the plan records what it displaced.
+    """
+    if not route.strip():
+        raise WorkError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MWRK015",
+                "A route target is required; an empty route matches no pool query.",
+                bead_id=step.id,
+                suggested_next_command="mctl work route-to <bead-id> <pool>",
+            )
+        )
+    if not step.is_open:
+        raise WorkError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MWRK016",
+                "A step that is not open cannot be routed; routing it would "
+                "resurrect finished work into a pool query.",
+                bead_id=step.id,
+                detail=f"status={step.status}",
+            )
+        )
+    metadata = step.raw.get("metadata") if isinstance(step.raw, dict) else None
+    previous = ""
+    if isinstance(metadata, dict):
+        existing = metadata.get("gc.routed_to")
+        previous = existing if isinstance(existing, str) else ""
+    if previous and not reroute:
+        raise WorkError(
+            _diagnostic(
+                ctx,
+                Severity.ERROR,
+                "MWRK014",
+                "This step is already routed; rerouting must be explicit.",
+                bead_id=step.id,
+                detail=f"current route={previous}",
+                suggested_next_command=(
+                    f"mctl work route-to {step.id} {route} --reroute"
+                ),
+            )
+        )
+    return WorkRoutePlan(
+        trace_id=ctx.trace_id,
+        bead_id=step.id,
+        route=route,
+        previous_route=previous,
+        bead_update=BeadUpdate(
+            id=step.id,
+            metadata={"gc.routed_to": route},
+            # Optimistic concurrency: bd exits 13 and writes nothing if the
+            # status moved between plan and apply.
+            if_status=step.status,
+        ),
+    )
 
 
 def plan_dispatch(ctx: MctlContext, brief_id: str) -> WorkDispatchPlan:
