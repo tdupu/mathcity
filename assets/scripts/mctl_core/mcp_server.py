@@ -851,18 +851,32 @@ def _handle_decisions_to_briefs(
     created = apply_effect_plan(ctx, plan).to_dict()
     brief_id = _minted_brief_id(created)
     diagnostics = list(created.get("diagnostics") or [])
-    if brief_id:
-        # The decision is already made; recording it is what makes the brief
-        # dispatchable (MWRK010). This goes through the ordinary adjudication
-        # gate rather than writing a verdict directly.
-        verdict_plan = plan_adjudication(
-            ctx,
-            brief_id,
-            verdict="approve",
-            reason=f"decisions-to-briefs: {decision}"[:400],
-        )
-        applied_verdict = apply_effect_plan(ctx, verdict_plan).to_dict()
-        diagnostics.extend(applied_verdict.get("diagnostics") or [])
+    # #194: DO NOT adjudicate here. The brief is deposited UNDECIDED.
+    #
+    # This block used to run `plan_adjudication(verdict="approve")` on the
+    # brief it had just created, with the rationale "the decision is already
+    # made; recording it is what makes the brief dispatchable (MWRK010)". That
+    # rationale reads the tool's name one way; Taylor means the other:
+    #
+    #   "decisions to briefs"
+    #     read as   decisions ALREADY MADE -> briefs  ==> needs a verdict
+    #     he means  decisions TO BE MADE   -> briefs  ==> no verdict EXISTS yet
+    #
+    # A decision he NEEDS TO MAKE becomes a hygienic brief deposited UNDECIDED
+    # on the pile. The no-brainer cycle either answers it automatically or
+    # promotes it to the stack, where he adjudicates systematically. The pile is
+    # load-bearing: it is where a question gets a chance to be resolved before it
+    # costs him attention.
+    #
+    # Nothing was ever wrong with the FIRST half. `plan_create_brief` already
+    # writes exactly the right thing -- canonical decision bead, pile markdown,
+    # decision TOML, and no verdict (B2.8; B2.10 keeps `brief-shuffle` the sole
+    # `.pile -> stack` writer). Only this second call was the defect.
+    #
+    # CONSEQUENCE, stated so no caller is surprised: this tool NO LONGER
+    # guarantees a dispatchable brief. That guarantee was what produced verdicts
+    # no human gave. A caller holding a real decision records it the honest way,
+    # through `briefs_adjudicate`, which is the gate that exists for it.
     return {
         "applied": True,
         "brief_id": brief_id,

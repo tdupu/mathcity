@@ -69,8 +69,30 @@ def test_the_tool_exists_and_is_reachable(tmp_path: Path):
     assert "decisions_to_briefs" in names, f"tool not exposed: {sorted(names)}"
 
 
-def test_the_created_brief_is_actually_dispatchable(tmp_path: Path):
-    """THE bar. Not 'the call succeeded' -- work_status must say ready."""
+def test_the_created_brief_is_blocked_only_on_the_missing_verdict(tmp_path: Path):
+    """THE bar, moved to the right point in the lifecycle -- not weakened.
+
+    This test used to assert `readiness == "ready"` straight out of creation.
+    That bar is right in spirit and was wrong in placement: `ready` requires
+    MWRK010, an approving verdict, so demanding it at creation MANDATED the
+    forged approval that #194 is about. The test encoded the bug.
+
+    The concern behind it survives intact. Its original docstring is still the
+    reason this file exists: a tool that emits briefs which cannot then be
+    dispatched RELOCATES #85 instead of fixing it -- the skill keeps writing
+    `.pile/manifest.jsonl` directly, because the sanctioned path still does not
+    work. So we still prove dispatchability. We prove it in two halves:
+
+        here          everything about the brief is dispatch-ready EXCEPT the
+                      verdict -- MWRK010 is the ONLY blocker
+        next test     supplying that verdict through the ordinary gate makes it
+                      ready
+
+    Asserting `blockers == ["MWRK010"]` exactly is stronger than the old
+    `blockers == []`: it proves the brief is well-formed AND names the single
+    thing deliberately withheld. A brief blocked on MWRK010 *plus* anything else
+    is still a defect, and this still catches it.
+    """
     city_root, rig_root = work_fixture(tmp_path)
 
     created = _create(city_root, rig_root)["result"]["structuredContent"]
@@ -80,8 +102,46 @@ def test_the_created_brief_is_actually_dispatchable(tmp_path: Path):
         server(city_root, rig_root), "work_status", {"brief_id": brief_id}
     )["result"]["structuredContent"]["work"]
 
+    codes = sorted(b.get("code") for b in status["blockers"])
+    assert codes == ["MWRK010"], (
+        "an UNDECIDED brief must be blocked on the missing verdict and nothing "
+        f"else; anything more is a malformed brief. blockers={codes}"
+    )
+
+
+def test_it_becomes_dispatchable_once_a_human_adjudicates(tmp_path: Path):
+    """The other half: the honest path to `ready` still works.
+
+    #194 removes the tool's self-approval. If nothing else could supply that
+    verdict the pipeline would be severed, so this proves the human gate --
+    `briefs_adjudicate`, which exists for exactly this -- closes the gap.
+
+    Together with the previous test this is a strictly stronger guarantee than
+    the assertion it replaced: the old one proved a brief could reach `ready`,
+    but could not tell whether a HUMAN or the TOOL put it there.
+    """
+    city_root, rig_root = work_fixture(tmp_path)
+
+    created = _create(city_root, rig_root)["result"]["structuredContent"]
+    brief_id = created["brief_id"]
+
+    call(
+        server(city_root, rig_root),
+        "briefs_adjudicate",
+        {
+            "brief_id": brief_id,
+            "verdict": "approve",
+            "reason": "test: a human adjudicated this brief",
+            "dry_run": False,
+        },
+    )
+
+    status = call(
+        server(city_root, rig_root), "work_status", {"brief_id": brief_id}
+    )["result"]["structuredContent"]["work"]
+
     assert status["blockers"] == [], (
-        "the brief was created but cannot be dispatched: "
+        "adjudicating did not clear the blockers: "
         f"{[b.get('code') for b in status['blockers']]}"
     )
     assert status["readiness"] == "ready", f"readiness={status['readiness']}"
@@ -173,3 +233,56 @@ def test_the_emitted_body_satisfies_every_required_section(tmp_path: Path):
             f"emitted body is missing the required section {section['name']!r}, "
             f"which briefs_create refuses with MBRF036"
         )
+
+
+# --- #194: the tool transports a QUESTION, not a decision ------------------
+#
+# Taylor's ruling, 2026-08-23 -- neither of the two readings that were put to
+# him. The NAME is the bug:
+#
+#   "decisions to briefs"
+#     read as   decisions ALREADY MADE -> briefs   ==> a verdict is required
+#                                                   ==> hardcode verdict="approve"
+#     he means  decisions TO BE MADE   -> briefs   ==> no verdict EXISTS yet
+#                                                   ==> deposit UNDECIDED
+#
+# His pipeline: a decision he needs to make becomes a hygienic brief deposited
+# UNDECIDED on the PILE; the no-brainer cycle either answers it automatically or
+# promotes it to the STACK, where he adjudicates systematically. The pile is
+# load-bearing -- it is where a question gets a chance to be resolved before it
+# costs him attention.
+#
+# So the tool must not approve at all. A tool that stamps its own verdict forges
+# the single thing it exists to collect.
+#
+# This is deliberately NOT asserted via work_status/readiness. `readiness ==
+# "ready"` requires MWRK010, an approving verdict -- so a readiness assertion
+# cannot distinguish "correctly undecided" from "broken". It has to be read off
+# the brief's own state.
+
+
+def test_it_deposits_undecided_and_does_not_adjudicate_at_creation(tmp_path: Path):
+    """#194. The tool must NOT record a verdict nobody gave."""
+    city_root, rig_root = work_fixture(tmp_path)
+
+    created = _create(city_root, rig_root)["result"]["structuredContent"]
+    brief_id = created["brief_id"]
+    assert brief_id, f"nothing was created: {created.get('diagnostics')}"
+
+    brief = call(
+        server(city_root, rig_root), "briefs_show", {"brief_id": brief_id}
+    )["result"]["structuredContent"]["brief"]
+
+    verdict = brief.get("verdict")
+    assert not verdict, (
+        "decisions_to_briefs stamped a verdict nobody gave -- #194. "
+        f"verdict={verdict!r}. The tool transports a question; it does not "
+        "answer it."
+    )
+    assert brief.get("decision_state") != "adjudicated", (
+        "the brief was marked adjudicated at creation; no human has seen it"
+    )
+    assert brief.get("status") != "closed", (
+        "the brief was CLOSED at creation -- it never reaches the pile as an "
+        "open question, so the no-brainer cycle can never triage it"
+    )
