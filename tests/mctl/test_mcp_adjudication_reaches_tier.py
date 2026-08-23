@@ -6,6 +6,19 @@ materialized bead is created `closed` or `open`. So a verdict that fails to reac
 `A-adjudicated` does not merely carry a cosmetic label -- it re-materializes as
 OPEN WORK, with the verdict sitting on the bead and the tier saying nobody decided.
 
+SCOPE, because this claim is easy to over-read and I stated it without the limit
+once already. This path is RECONCILIATION, not live dispatch. `work.py` imports
+`read_verdict` from `verdicts` and never imports `materialize_plan`; what gates
+`MWRK010` is a `VERDICT: <text>` line in the bead's close_reason or notes, parsed
+by `verdicts.py`. `adjudicated_by` appears in exactly two non-test files --
+`materialize_plan.py` and the dashboard's display list -- and in NONE of
+`work.py`, `briefs.py`, `verdicts.py`. (pink, 2026-08-23; I verified each part
+independently before accepting it.)
+
+So a brief that fails to reach `A-adjudicated` re-materializes as open work in the
+LOST-BEAD RECONCILIATION lane. It does NOT stop work dispatching. Both halves
+matter: the first is why this test exists, the second is why it is not a P0.
+
 Measured on a real MCP adjudication (`gsp-4xwync`, 2026-08-21): closed, verdict
 `reject`, `adjudicated_at` set -- classifies `C-no-disposition`.
 
