@@ -61,6 +61,7 @@ ALLOWED_TOOLS = frozenset(
         "fleet_sessions",
         "city_health",
         "gates_status",
+        "blast_radius_registry",
         "molecules_list",
         "molecules_show",
         "briefs_list",

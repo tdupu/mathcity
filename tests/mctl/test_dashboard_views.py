@@ -339,6 +339,10 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     A read-only city surface, on the same footing as `fleet_sessions` and
     `city_health`.
 
+    22 since `blast_radius_registry` was added: #110 shipped
+    `mctl_core/blast_radius.py` with no MCP tool and no consumer, so no page
+    could reach it. A read-only city surface, same footing as `gates_status`.
+
     Raise this number only alongside the tool that justifies it, and say which
     tool in the docstring.
     """
@@ -348,7 +352,7 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # NARROWER than the server surface, so this stays a literal deliberately.
     # Registry-relative would assert allowlist == tools, which is the opposite
     # of what this guards. Bumped for molecules_list/_show (#111).
-    assert len(ALLOWED_TOOLS) == 24  # +commission_brief (#190)
+    assert len(ALLOWED_TOOLS) == 25
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

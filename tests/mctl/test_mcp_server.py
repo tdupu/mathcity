@@ -32,6 +32,9 @@ BRIEF_STATE = FIXTURES / "brief_state"
 WORK_STATE = FIXTURES / "work_state"
 
 DECLARED_TOOLS = (
+    # #110 shipped mctl_core/blast_radius.py with no tool, so no page could
+    # reach it. Exposed as a reporting surface that states registry presence.
+    "blast_radius_registry",
     "briefs_adjudicate",
     "briefs_create",
     "briefs_defer",
