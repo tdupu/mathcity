@@ -47,7 +47,18 @@ if str(SCRIPTS) not in sys.path:
 
 from mctl_core.fields import read_frontmatter  # noqa: E402
 
-BODY = "## What is being decided\n\nWhether the created document has a header.\n"
+#: Reuse the SHARED default rather than defining a third private body.
+#:
+#: This file is the THIRD of mine to go red on a body requirement it predates:
+#: #173 made a sourceless create FATAL, #169 (MBRF036) required `## Gate Evidence`,
+#: and each time a test asserting something ELSE -- the brief root, the frontmatter
+#: block -- failed for a reason it was not about. Patching each private BODY
+#: constant fixes the instance and guarantees a fourth.
+#:
+#: `DEFAULT_BODY` is mutt's, introduced with #169, and `body_file()` already
+#: defaults to it. Importing it means the next required section arrives here for
+#: free -- and if it does not, ONE fixture is wrong instead of several.
+from test_briefs_create_validate_cli import DEFAULT_BODY as BODY  # noqa: E402
 
 
 def _create(tmp_path: Path) -> Path:
@@ -61,6 +72,11 @@ def _create(tmp_path: Path) -> Path:
             "frontmatter contract probe",
             "--body-file",
             str(body_file(tmp_path, BODY)),
+            # #173 raised MBRF034 to FATAL: a sourceless create is refused. This
+            # test is about the DOCUMENT, not B2.1 completeness, so it supplies a
+            # real bead from the fixture rather than failing for an unrelated
+            # -- and correct -- reason.
+            "--source", "mc-source",
             "--json",
         ),
         cwd=Path(__file__).resolve().parents[2],
@@ -92,7 +108,7 @@ def test_control_the_body_survives_the_frontmatter_block(tmp_path: Path):
     doc = _create(tmp_path)
     text = doc.read_text(encoding="utf-8")
 
-    assert "Whether the created document has a header." in text, (
+    assert "Ship it?" in text, (
         "the body did not survive: a frontmatter block must be added to the "
         "document, not written over it"
     )
