@@ -116,8 +116,11 @@ from .mayor import boot_state as mayor_boot_state
 from .mayor import city_state as mayor_city_state
 from .mayor import conservation_report as mayor_conservation_report
 from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
+from .beads import read_beads
+from .decisions import brief_body, dispatchability_refusals
 from .work import (
     WorkError,
+    _open_child_workflow,
     apply_dispatch_plan,
     dispatch_dry_run_payload,
     plan_dispatch,
@@ -725,6 +728,161 @@ def _handle_briefs_defer(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict
         days=arguments.get("days"),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _diagnostic(
+    ctx: MctlContext,
+    severity: Severity,
+    code: str,
+    message: str,
+    *,
+    suggested_next_command: str | None = None,
+) -> Diagnostic:
+    facts: dict[str, object] = {
+        "city_path": str(ctx.city_root),
+        "implementation_provenance": "mctl decisions-to-briefs",
+        "rig_name": ctx.rig_id,
+        "rig_path": str(ctx.rig_root),
+    }
+    if suggested_next_command:
+        facts["suggested_next_command"] = suggested_next_command
+    return Diagnostic(severity, code, message, facts=facts, trace_id=ctx.trace_id)
+
+
+def _brief_population_beads(ctx: MctlContext) -> tuple:
+    """Every bead, not just decisions.
+
+    The source bead is typically a task, so the narrowed decision-only read used
+    by the brief surfaces would not find it.
+    """
+    return read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture)
+
+
+def _open_child_workflow_id(ctx: MctlContext, beads: tuple, bead_id: str) -> str | None:
+    """Delegates to work.py so the two notions of "already being worked" agree."""
+    existing = _open_child_workflow(beads, bead_id)
+    return None if existing is None else existing.id
+
+
+def _minted_brief_id(applied: Mapping[str, Any]) -> str | None:
+    for entry in applied.get("actual_effects") or applied.get("actual") or ():
+        if isinstance(entry, Mapping) and entry.get("kind") == "bead_create":
+            target = entry.get("target")
+            if isinstance(target, str):
+                return target
+    return None
+
+
+def _handle_decisions_to_briefs(
+    ctx: MctlContext, arguments: Mapping[str, Any]
+) -> dict[str, object]:
+    """One already-made decision -> one brief that can actually be dispatched.
+
+    #85: the `decisions-to-briefs` skill writes the pile manifest and the
+    `decisions-track/` behind mctl's back because no typed tool does it properly.
+    A tool emitting briefs that cannot then be dispatched would relocate that, not
+    fix it -- so the bar is `work_status` returning readiness "ready".
+
+    Composes two ALREADY-GATED operations in sequence rather than conflating
+    them: create (through `plan_create_brief`) then adjudicate (through
+    `plan_adjudication`), each keeping its own preconditions. #173 is what
+    conflation looks like -- a brief that made its own source bead and bricked by
+    its own approval. Here the source must already exist and be open, and the
+    caller names it; this tool never mints a source.
+
+    The two steps cannot be one plan: `apply_effect_plan` substitutes minted ids
+    into `bead_relates` but NOT into `bead_updates`, so a close planned alongside
+    the create would target the placeholder.
+    """
+    source_bead_id = str(arguments.get("source_bead_id") or "")
+    decision = str(arguments.get("decision") or "")
+    beads = _brief_population_beads(ctx)
+
+    refusals = dispatchability_refusals(
+        lambda severity, code, message, suggested_next_command=None: _diagnostic(
+            ctx, severity, code, message, suggested_next_command=suggested_next_command
+        ),
+        source_bead_id=source_bead_id,
+        beads=beads,
+        open_child_workflow_of=lambda bead_id: _open_child_workflow_id(ctx, beads, bead_id),
+    )
+    if refusals:
+        # Refused BEFORE any write, so the caller learns at creation rather than
+        # at dispatch. `applied` is false and the reasons are named.
+        # `effect_plan` is omitted rather than null: the declared schema types
+        # it as a plan, and a null there fails validation with
+        # MCTL_MCP_OUTPUT_SCHEMA_VIOLATION -- which would replace the real
+        # reasons with a schema complaint, hiding exactly what the caller needs.
+        return {
+            "applied": False,
+            "brief_id": None,
+            "diagnostics": _diagnostics(ctx, refusals),
+            "trace_id": ctx.trace_id,
+        }
+
+    title = str(arguments.get("title") or decision).strip()[:120] or decision
+    # #169: a body with no `Gate Evidence` section is refused with MBRF036. The
+    # evidence is the checks above that did NOT fire -- each maps to a work.py
+    # dispatch blocker -- so the section carries something a gate can use rather
+    # than a heading over filler.
+    body = brief_body(
+        decision,
+        source_bead_id=source_bead_id,
+        checks_passed=(
+            f"source `{source_bead_id}` resolves in this rig (MDTB002 did not fire)",
+            "source is not closed, so the brief is dispatchable (MDTB003 did not fire)",
+            "source has no active assignee (MDTB004 did not fire)",
+            "source has no open child workflow (MDTB005 did not fire)",
+        ),
+    )
+    plan = plan_create_brief(
+        ctx,
+        BriefCreateInput(
+            title=title,
+            body=body,
+            labels=tuple(arguments.get("labels") or ()),
+            requested_by=arguments.get("requested_by"),
+            sources=(source_bead_id,),
+        ),
+    )
+    if _dry_run(arguments):
+        return _effect_payload(ctx, plan, True)
+
+    created = apply_effect_plan(ctx, plan).to_dict()
+    brief_id = _minted_brief_id(created)
+    diagnostics = list(created.get("diagnostics") or [])
+    if brief_id:
+        # The decision is already made; recording it is what makes the brief
+        # dispatchable (MWRK010). This goes through the ordinary adjudication
+        # gate rather than writing a verdict directly.
+        verdict_plan = plan_adjudication(
+            ctx,
+            brief_id,
+            verdict="approve",
+            reason=f"decisions-to-briefs: {decision}"[:400],
+        )
+        applied_verdict = apply_effect_plan(ctx, verdict_plan).to_dict()
+        diagnostics.extend(applied_verdict.get("diagnostics") or [])
+    return {
+        "applied": True,
+        "brief_id": brief_id,
+        "diagnostics": diagnostics,
+        "effect_plan": created.get("effect_plan") or plan.to_dict(),
+        "trace_id": ctx.trace_id,
+    }
+
+
+def _handle_briefs_present(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """CT13.1: presenting briefs must COMPLETE through the MCP, not merely exist.
+
+    Today it is reachable only as a skill. This is the read half of the same
+    lifecycle as `decisions_to_briefs`, which is why both land together -- split
+    them and one ships without the other.
+    """
+    listing = list_briefs_report(ctx, _filters(arguments), bodies=bool(arguments.get("bodies")))
+    payload = _briefs_list_payload(ctx, listing)
+    payload["trace_id"] = ctx.trace_id
+    return payload
 
 
 def _handle_briefs_create(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -1497,6 +1655,59 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         handler=_handle_briefs_defer,
         mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="decisions_to_briefs",
+        title="File an already-made decision as a dispatchable brief",
+        description=(
+            "Turn one already-made decision into a brief that work_dispatch can "
+            "actually act on. Refuses before writing if the named source bead "
+            "would make the brief undispatchable. Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "decision": {"type": "string", "description": "The decision, as made."},
+                "source_bead_id": {
+                    "type": "string",
+                    "description": "The OPEN bead this decision is about. Never minted here.",
+                },
+                "title": nullable_string("Brief title; defaults to the decision text."),
+                "labels": dict(STRING_ARRAY, description="Brief labels."),
+                "requested_by": nullable_string("Who asked for the brief."),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["decision", "source_bead_id"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied"], artifact_state=True
+        ),
+        handler=_handle_decisions_to_briefs,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="briefs_present",
+        title="Present briefs for adjudication",
+        description=(
+            "The read half of the brief lifecycle: what is waiting for a human "
+            "verdict. CT13.1 requires this to complete through the MCP."
+        ),
+        input_schema=request_schema(
+            {
+                "status": nullable_string("Filter by bead or decision status."),
+                "label": nullable_string("Filter by label."),
+                "bodies": {"type": "boolean", "description": "Include brief bodies."},
+            },
+            [],
+        ),
+        output_schema=response_schema(
+            {"briefs": {"type": "array"}}, ["briefs"], artifact_state=True
+        ),
+        handler=_handle_briefs_present,
+        mutating=False,
         external_ready=False,
         artifact_state=True,
     ),

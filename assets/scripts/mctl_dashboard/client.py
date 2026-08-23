@@ -72,6 +72,7 @@ ALLOWED_TOOLS = frozenset(
         "briefs_adjudicate",
         "briefs_defer",
         "briefs_create",
+    "briefs_present",
         "work_ready",
         "work_status",
         "work_provenance",

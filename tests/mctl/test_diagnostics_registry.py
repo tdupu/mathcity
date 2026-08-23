@@ -32,8 +32,11 @@ NOT_CODES = {
     "MCTL_MCP_ENABLE_EXTERNAL_TOOLS",
 }
 
+# Families are a union: MDTB is decisions-to-briefs (#177), MISS/MCMS came
+# from main. A family missing from this allowlist is invisible to the scanner,
+# so its codes read as "registered but never emitted" however they are written.
 CODE_PATTERN = re.compile(
-    r'"(MBRF\d{3}|MWRK\d{3}|MOPT\d{3}|MISS\d{3}|MCTL_[A-Z_]+|MWRK_[A-Z_]+|MBRF_[A-Z_]+|MCMS_[A-Z_]+)"'
+    r'"(MBRF\d{3}|MBRF_[A-Z_]+|MCMS_[A-Z_]+|MCTL_[A-Z_]+|MDTB\d{3}|MISS\d{3}|MOPT\d{3}|MWRK\d{3}|MWRK_[A-Z_]+)"'
 )
 
 VALID_SEVERITIES = {"INFO", "WARN", "ERROR", "FATAL"}
