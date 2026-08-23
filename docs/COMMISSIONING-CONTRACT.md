@@ -115,8 +115,30 @@ selected formulas, test gates, brief gates, continuation metadata.
 tells a judge nothing. **Each element must be checkable for content, not
 presence** — the same distinction as C3.
 
-**Today:** UNVERIFIED — the formula produces all seven sections; whether any can
-be empty and still pass has not been tested.
+**Today: FAILS** — verified, not assumed.
+
+```
+validate_commission(*, sources, bead_rig, brief_rig) -> None
+of the 7 required brief sections, validated by name:  NONE
+```
+
+**The validator checks five things and none of them is a brief section.** It
+enforces sources non-empty, same-store bead/brief, tracker provenance in
+metadata, label content, and pile-not-stack — all correct, all about the brief's
+*envelope*. **Nothing inspects the brief's body.**
+
+So a brief carrying all seven headings with nothing under them validates,
+adjudicates, and dispatches. `## Test gates` with no gates beneath it passes
+every check in the system and tells a judge nothing.
+
+**This is the same defect as C4 one level up:** the structure is verified and
+the content is not, so "the section is present" stands in for "the work was
+done."
+
+**The fix is not more validation in `validate_commission`** — that function
+guards the envelope on purpose, and it says so. **The check belongs where the
+brief body is assembled**, and it must be content-level: a required section with
+no content is an incomplete brief, not a complete one with an empty field.
 
 ---
 
