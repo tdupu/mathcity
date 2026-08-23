@@ -231,7 +231,12 @@ def test_create_builds_the_expected_bd_create_and_link_argv(tmp_path: Path):
     """Brief creation is bead-first, so its argv is part of the contract."""
     city_root, _rig_root, bin_dir, argv_log = recording_bd_runtime(tmp_path)
     body = tmp_path / "body.md"
-    body.write_text("## What is being decided\n\nShip it?\n", encoding="utf-8")
+    # #169: carries `## Gate Evidence`; briefs_create refuses without it.
+    body.write_text(
+        "## What is being decided\n\nShip it?\n\n"
+        "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n",
+        encoding="utf-8",
+    )
 
     result = run_mctl(
         "briefs", "create", "--title", "Decide dispatch policy",

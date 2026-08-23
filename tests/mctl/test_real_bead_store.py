@@ -264,7 +264,12 @@ def all_bead_rows(rig_root: Path) -> list[dict[str, object]]:
 def brief_body(tmp_path: Path) -> Path:
     path = tmp_path / "body.md"
     path.write_text(
-        "## What is being decided\n\nShip the dispatch policy?\n", encoding="utf-8"
+        # #169: carries `## Gate Evidence` because briefs_create now refuses
+        # without it. This fixture drives a REAL bd store, so a brief it mints
+        # would have been a real brief the drain auto-rejects.
+        "## What is being decided\n\nShip the dispatch policy?\n\n"
+        "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n",
+        encoding="utf-8",
     )
     return path
 

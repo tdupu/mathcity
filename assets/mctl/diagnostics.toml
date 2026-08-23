@@ -585,6 +585,12 @@ severity = "ERROR"
 meaning = "The source bead named by the brief dependency is closed."
 module = "work.py"
 
+[MBRF036]
+severity = "FATAL"
+meaning = "Proposed brief body is missing a required structural section."
+policy_ref = "B1.5"
+module = "briefs.py"
+
 [MWRK_ALREADY_DISPATCHED]
 severity = "FATAL"
 meaning = "Work already has dispatch provenance."

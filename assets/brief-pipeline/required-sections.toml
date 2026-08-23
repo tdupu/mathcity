@@ -1,0 +1,25 @@
+# Structural sections a brief body must carry, in ONE place.
+#
+# #169: `briefs_create` never parsed the body, so a brief missing Gate Evidence
+# was accepted, written, and reported as success -- with the refusal deferred to
+# `brief-check.sh pile-entry` at shuffle time, against an author already told the
+# operation succeeded. That is the CT13.4 shape, and #96 measured the cost: the
+# pile drained 5 -> 0 entirely by auto-reject.
+#
+# WHY A DATA FILE. The issue's candidate 2 says reuse the existing rule rather
+# than write a second checker, because two independently written structural
+# checkers drift -- that is what #35 was about. But the rule was triplicated
+# INSIDE brief-check.sh (lines 293, 300, 331), so there was no single existing
+# rule to reuse. There is now.
+#
+# `match` is the exact regex brief-check.sh uses, character for character. A test
+# asserts brief-check.sh still contains it, so the day the two disagree is the
+# day that test fails rather than the day a brief is silently destroyed.
+#
+# brief-check.sh is NOT yet pointed at this file. It gates the live drain and
+# changing it is a wider blast radius than this issue; that is a follow-up.
+
+[[section]]
+name = "Gate Evidence"
+match = '^##*[[:space:]]+Gate Evidence\b|^Gate Evidence\b'
+reason = "the pipeline rejects a pile entry without it, at shuffle time, after creation reported success"

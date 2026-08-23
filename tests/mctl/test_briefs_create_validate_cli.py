@@ -82,7 +82,19 @@ def read_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-def body_file(tmp_path: Path, text: str = "## What is being decided\n\nShip it?\n") -> Path:
+#: #169: the default body now carries `## Gate Evidence`, because without it
+#: `briefs_create` refuses -- and a fixture that mints a brief the drain would
+#: auto-reject was testing a path that produces invalid data. 16 tests in this
+#: file and test_real_bead_store used this default; every one of them was
+#: creating a brief that #96 shows would be destroyed at shuffle time while
+#: reporting success. The fixture was wrong, not the new check.
+DEFAULT_BODY = (
+    "## What is being decided\n\nShip it?\n\n"
+    "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+)
+
+
+def body_file(tmp_path: Path, text: str = DEFAULT_BODY) -> Path:
     path = tmp_path / "body.md"
     path.write_text(text, encoding="utf-8")
     return path

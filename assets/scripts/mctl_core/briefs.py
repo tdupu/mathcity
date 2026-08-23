@@ -38,6 +38,7 @@ from .manifest import (
     SOURCE_MANIFEST,
     ManifestIssue,
 )
+from .structure import missing_sections
 from .verdicts import (
     NON_BRIEF_MESSAGES,
     Verdict,
@@ -719,6 +720,33 @@ def validate_brief_input(
             )
         )
     clean_body = (body or "").strip()
+    if clean_body:
+        # #169: the body used to be bound, checked non-empty, and returned
+        # verbatim -- never parsed. A one-character body produced a valid plan.
+        # The structural check already existed in `brief-check.sh pile-entry`,
+        # but it runs at shuffle time against an author who has already been
+        # told the operation succeeded (CT13.4). #96 measured the cost: the pile
+        # drained 5 -> 0 entirely by auto-reject, one casualty being exactly
+        # this section.
+        #
+        # The rule is read from data both checkers can share rather than
+        # rewritten here, because two independently written structural checkers
+        # drift -- which is what #35 was about.
+        absent = missing_sections(clean_body)
+        if absent:
+            names = ", ".join(str(section.get("name")) for section in absent)
+            raise BriefError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MBRF036",
+                    f"Proposed brief body is missing a required section: {names}.",
+                    policy_ref="B1.5",
+                    suggested_next_command=(
+                        f"add a '## {names}' section to the body and retry"
+                    ),
+                )
+            )
     if not clean_body:
         raise BriefError(
             _diagnostic(
