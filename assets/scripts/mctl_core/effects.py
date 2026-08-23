@@ -384,6 +384,33 @@ def _require_brief_root(ctx: MctlContext, layout: ArtifactLayout) -> None:
     """
     if layout.root.is_dir():
         return
+
+    # #147: materialise the cache for a root that already resolves.
+    #
+    # The refusal below guards a MIS-RESOLVED root -- writing through one would
+    # build a brief tree where nothing reads. That hazard needs the resolution
+    # itself to be wrong. It is not wrong merely because the directory is absent:
+    # `paths.toml` is rig-relative, `hq.rig_root` IS the city root (so the "city
+    # keeps its tree at the city root" reading describes hq's own rig-relative
+    # tree, not a competing convention), and B2.8 makes the bead store canonical
+    # with this tree as redundant CACHE -- `hecke` serves 45 open briefs holding
+    # `stack=0` on disk.
+    #
+    # So the distinguishing question is whether the rig's `.beads` directory
+    # exists. If it does, the rig is real, the root resolved, and only the cache
+    # is missing -- a directory mctl is entitled to make. If it does not, the
+    # resolution landed somewhere unreal and the refusal stands.
+    #
+    # Measured before this change: 6 of 16 registered rigs could never receive a
+    # FIRST brief, `agent_skills` among them while already holding 3 decision
+    # beads. For `mathcity` it made CT4.5 unsatisfiable -- the rig owning `mctl`
+    # had nowhere to land its own repair work.
+    parent = layout.root.parent
+    if parent.is_dir() and not layout.root.exists():
+        for directory in (layout.root, layout.pile, layout.stack, layout.decisions):
+            directory.mkdir(parents=True, exist_ok=True)
+        return
+
     raise MutationError(
         _diagnostic(
             ctx,
