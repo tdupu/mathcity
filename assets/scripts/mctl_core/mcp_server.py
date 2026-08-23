@@ -1684,15 +1684,21 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         name="decisions_to_briefs",
-        title="File an already-made decision as a dispatchable brief",
+        title="File a decision TO BE MADE as an undecided brief on the pile",
         description=(
-            "Turn one already-made decision into a brief that work_dispatch can "
-            "actually act on. Refuses before writing if the named source bead "
-            "would make the brief undispatchable. Dry run by default."
+            "Deposit one decision that still NEEDS making as a hygienic brief, "
+            "UNDECIDED, on the pile -- for the no-brainer cycle to triage or a "
+            "human to adjudicate through `briefs_adjudicate`. Read the name as "
+            "'decisions TO BE MADE -> briefs': it does NOT record a verdict and "
+            "does NOT return a dispatchable brief. The brief stays blocked on "
+            "MWRK010 -- the missing verdict -- until a human supplies the "
+            "judgement this tool never mints (#194). Refuses before writing if "
+            "the named source bead would make the brief undispatchable. Dry run "
+            "by default."
         ),
         input_schema=request_schema(
             {
-                "decision": {"type": "string", "description": "The decision, as made."},
+                "decision": {"type": "string", "description": "The decision TO BE MADE -- the question/subject to brief, NOT a verdict. Becomes the brief's subject."},
                 "source_bead_id": {
                     "type": "string",
                     "description": "The OPEN bead this decision is about. Never minted here.",

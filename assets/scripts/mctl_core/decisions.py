@@ -54,7 +54,7 @@ MDTB_SOURCE_HAS_WORKFLOW = "MDTB005"  # -> MWRK002
 
 @dataclass(frozen=True)
 class DecisionBriefInput:
-    """One already-made decision, and the open bead it decides about."""
+    """One decision TO BE MADE, and the open bead it decides about."""
 
     decision: str
     source_bead_id: str
