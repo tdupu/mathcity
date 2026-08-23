@@ -610,6 +610,11 @@ severity = "FATAL"
 meaning = "The dispatch command could not be run or exited non-zero, so no dispatch was recorded."
 module = "work.py"
 
+[MWRK_DISPATCH_TIMEOUT_UNKNOWN]
+severity = "FATAL"
+meaning = "The dispatch command ran but did not finish before the timeout, so whether a dispatch was recorded is UNKNOWN. It may have completed; a blind retry can dispatch a second time."
+module = "work.py"
+
 [MWRK_DISPATCH_BLOCKED]
 severity = "FATAL"
 meaning = "Work dispatch is blocked by readiness diagnostics."
