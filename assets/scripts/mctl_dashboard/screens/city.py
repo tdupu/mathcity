@@ -100,6 +100,26 @@ def health(payload: Mapping[str, Any]) -> str:
             "Nothing here should be read as anything being down — it may be "
             "entirely healthy behind a probe that timed out.</p>"
         )
+        # THE SEAM. #159 made this panel say `unknown` when the CITY-level
+        # probe does not answer. #176 then made every rig probed DIRECTLY, so
+        # the rows below are real measurements. Both landed correctly and the
+        # page was left asserting "we established nothing" directly above
+        # seventeen establishments, with nothing in between.
+        #
+        # Conditional on purpose: it fires only when something actually WAS
+        # established under the claim that nothing was. When every rig is also
+        # unreachable there is no tension, and a sentence that always appears
+        # is prose the reader learns to skip -- which is the defect #159's
+        # commit removed from this same function.
+        if any(str(r.get("state") or "") != "unreachable" for r in per_rig):
+            body += (
+                '<p class="note">Both of these are true at once. <strong>The '
+                "city-level probe did not answer; each rig was asked directly "
+                "and did.</strong> A rig row below is that rig&rsquo;s own "
+                "answer, not an inference from the line above — so an "
+                "established rig under an unestablished data plane is a "
+                "narrower failure than an outage, not a contradiction.</p>"
+            )
     elif state == "unreachable":
         # And this one now means what it says. Before #159 every probe failure
         # landed here, so this panel had to hedge -- "unreachable is not
