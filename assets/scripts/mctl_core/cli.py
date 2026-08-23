@@ -14,6 +14,7 @@ from .briefs import (
     brief_command_diagnostics,
     brief_options_report,
     doctor_briefs,
+    empty_scope_diagnostic,
     list_briefs_report,
     present_it_label,
     show_brief,
@@ -554,6 +555,10 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                 context, BriefFilters(args.status, args.label), bodies=args.bodies
             )
             payload = _brief_listing_payload(context, listing)
+            if not listing.records:
+                payload["diagnostics"] = list(payload["diagnostics"]) + [
+                    empty_scope_diagnostic(context).to_dict()
+                ]
         elif args.brief_command == "show":
             record = show_brief(context, args.brief_id)
             payload = _brief_payload(
@@ -579,7 +584,10 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                 report = doctor_briefs(context, args.brief_id)
                 payload = report.to_dict()
                 payload["trace_id"] = context.trace_id
-                payload["diagnostics"] = _diagnostics_payload(context, report.diagnostics)
+                diagnostics = _diagnostics_payload(context, report.diagnostics)
+                if args.brief_id is None and not report.records:
+                    diagnostics = diagnostics + [empty_scope_diagnostic(context).to_dict()]
+                payload["diagnostics"] = diagnostics
             elif args.brief_command == "create":
                 plan = plan_create_brief(
                     context,

@@ -40,6 +40,24 @@ def runtime_fixture(tmp_path: Path) -> tuple[Path, Path]:
     return city_root, rig_root
 
 
+def empty_rig_cli_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """A rig with a working bead store and zero briefs -- #103's exact shape,
+    the CLI-side sibling of `test_mcp_server.py::empty_rig_fixture`."""
+    city_root = tmp_path / "city_root"
+    source_checkout = tmp_path / "source_checkout"
+    rig_root = city_root / "mathcity"
+    shutil.copytree(CITY_ROOT, city_root)
+    shutil.copytree(SOURCE_CHECKOUT, source_checkout)
+    beads = rig_root / ".beads"
+    (beads / "briefs" / "decisions").mkdir(parents=True)
+    (beads / "briefs" / "stack").mkdir(parents=True)
+    (beads / "briefs" / "stack" / ".index.jsonl").write_text("", encoding="utf-8")
+    (beads / "decisions-track").mkdir(parents=True)
+    (beads / "decisions-track" / "manifest.jsonl").write_text("", encoding="utf-8")
+    (beads / "issues.jsonl").write_text("", encoding="utf-8")
+    return city_root, rig_root
+
+
 def run_mctl(
     *args: str, cwd: Path, beads_fixture: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
@@ -604,3 +622,65 @@ def test_malformed_legacy_manifest_fails_closed_with_migration_blocker(tmp_path:
     assert result.returncode == 0, result.stderr
     codes = {diagnostic["code"] for diagnostic in json.loads(result.stdout)["diagnostics"]}
     assert "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED" in codes
+
+
+def test_cli_briefs_list_names_the_empty_scope_rather_than_leaving_it_silent(tmp_path: Path):
+    """#103: the MCP handler has carried `MCTL_BRIEFS_SCOPE_EMPTY` since
+    `a822e14` -- `cli.py` calls `list_briefs_report` directly and never
+    rendered it. `mctl briefs list` on an empty rig prints `briefs: []` with
+    no hint that `--all-rigs` is the way to tell "nothing here" from "wrong
+    scope" apart, which is the exact confusion the finder nearly reported as
+    mctl being blind.
+    """
+    city_root, rig_root = empty_rig_cli_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(city_root, "list", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["briefs"] == []
+    codes = [d["code"] for d in payload["diagnostics"]]
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" in codes
+    hint = next(d["hint"] for d in payload["diagnostics"] if d["code"] == "MCTL_BRIEFS_SCOPE_EMPTY")
+    assert "all_rigs" in hint or "all-rigs" in hint
+
+
+def test_cli_briefs_doctor_names_the_empty_scope_for_a_whole_rig_check(tmp_path: Path):
+    city_root, rig_root = empty_rig_cli_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(city_root, "doctor", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode == 0, result.stderr
+    codes = {d["code"] for d in json.loads(result.stdout)["diagnostics"]}
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" in codes
+
+
+def test_cli_briefs_doctor_on_one_missing_id_does_not_claim_the_scope_is_empty(tmp_path: Path):
+    """A doctor check on a specific, nonexistent id is a different question
+    than "does this rig have any briefs" -- the empty-scope hint would be
+    misleading here (`--all-rigs` would not resolve a bad id either).
+
+    A missing id is FATAL (`MBRF010`) and exits 1 without a JSON payload --
+    a different path entirely from the empty-scope INFO hint, so this checks
+    the rendered diagnostic directly rather than parsing stdout as JSON.
+    """
+    city_root, rig_root = empty_rig_cli_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(city_root, "doctor", "--brief", "mc-does-not-exist", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode == 1
+    assert "MBRF010" in result.stderr
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" not in result.stdout
+    assert "MCTL_BRIEFS_SCOPE_EMPTY" not in result.stderr
