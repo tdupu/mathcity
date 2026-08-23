@@ -39,6 +39,13 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
     "work_dispatch": "mutating dispatch is not driven from the dashboard",
     "work_dispatch_event": "provenance events are written by the dispatcher, not the page",
     "briefs_create": "briefs are produced by the pipeline, not authored in the dashboard",
+    "decisions_to_briefs": (
+        "mutating, and it mints briefs that are APPROVED and dispatchable at "
+        "creation. The MCP has no caller identity -- created_by is a hardcoded "
+        "constant, requested_by is caller-asserted -- so allowing it from a web "
+        "surface would let the dashboard mint approved work with no record of "
+        "who asked (v2 R8.2). Same footing as briefs_create, one step further."
+    ),
     "mayor_boot": "a lifecycle action, not a read the page performs",
     "mayor_conservation": "not yet surfaced; no screen consumes it",
     "mayor_city_state": "not yet surfaced; no screen consumes it",
