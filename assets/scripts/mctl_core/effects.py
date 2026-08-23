@@ -200,6 +200,19 @@ class MutationError(Exception):
         self.diagnostic = diagnostic
 
 
+class StackIndexRowUnwritable(OSError):
+    """No stack-index row matched the brief this write targeted.
+
+    NOT a failed adjudication. The stack-index update is planned whenever the
+    index FILE exists, so a brief with no row -- an archived one, for instance,
+    which is de-indexed by construction under B2.15 -- plans a write that
+    correctly matches nothing. The caller downgrades this to a per-brief WARN.
+
+    It is raised rather than returned so the no-match cannot be dropped by a
+    caller that ignores a return value, which is how #92 stayed invisible.
+    """
+
+
 class DecisionsTrackRowUnwritable(OSError):
     """The legacy manifest row this verdict should sync cannot be rewritten.
 
@@ -722,6 +735,39 @@ def _apply_effects(
         for update in plan.cache_updates:
             try:
                 _apply_cache_update(update)
+            except StackIndexRowUnwritable as error:
+                # #92. A WARN, not a failure, and the asymmetry with the
+                # decisions-track case below is deliberate: THAT writer is
+                # planned only when a row is expected (`row_key and
+                # legacy_manifest.is_file()`), so a no-match there is a real
+                # inconsistency. THIS one is planned whenever the index FILE
+                # exists, so a brief with no row -- an archived brief is
+                # de-indexed by construction under B2.15 -- plans a write that
+                # legitimately matches nothing. Measured: 57 index rows against
+                # 79 archived briefs.
+                #
+                # What #92 actually asks for is that the miss be REPORTED. It
+                # used to write nothing and say nothing, which is
+                # indistinguishable from a write that happened.
+                diagnostics.append(
+                    _diagnostic(
+                        ctx,
+                        Severity.WARN,
+                        "MCTL_STACK_INDEX_ROW_ABSENT",
+                        (
+                            "No stack index row was updated for this brief; the "
+                            "index holds no row targeting it."
+                        ),
+                        brief_id=plan.target_brief_id,
+                        data_location=str(update.path),
+                        detail=str(error),
+                        policy_ref="B2.15",
+                        suggested_next_command=(
+                            f"mctl briefs doctor {plan.target_brief_id} --json"
+                        ),
+                    )
+                )
+                continue
             except DecisionsTrackRowUnwritable as error:
                 # Per-brief, and a WARN, for the same reason the frontmatter
                 # case is: the legacy row this brief's stack index pointed at
@@ -1562,6 +1608,7 @@ def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, s
         lines = path.read_text(encoding="utf-8").splitlines()
         spliced: list[str] = []
         changed = False
+        matched = False
         for line in lines:
             if not line.strip():
                 continue
@@ -1571,6 +1618,7 @@ def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, s
                 spliced.append(line)
                 continue
             if isinstance(row, dict) and _row_targets_brief(row, target_brief_id):
+                matched = True
                 row.update(fields)
                 spliced.append(
                     json.dumps(
@@ -1584,6 +1632,12 @@ def _update_stack_index(path: Path, target_brief_id: str, fields: Mapping[str, s
             else:
                 # Untouched: preserve the original bytes exactly.
                 spliced.append(line)
+        if not matched:
+            # #92: this used to return silently. The file is deliberately not
+            # written -- reporting must not become a write.
+            raise StackIndexRowUnwritable(
+                f"{path}: no stack index row targets brief {target_brief_id!r}"
+            )
         if changed:
             _atomic_write(path, "\n".join(spliced) + "\n")
 
