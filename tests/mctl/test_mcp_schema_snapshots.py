@@ -117,12 +117,9 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "briefs_adjudicate",
         "briefs_create",
         "briefs_defer",
-<<<<<<< HEAD
-        "decisions_to_briefs",
-=======
         "commission_brief",
         "create_issue_bead",
->>>>>>> origin/main
+        "decisions_to_briefs",
         "work_dispatch",
         "work_dispatch_event",
     ]

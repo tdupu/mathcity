@@ -60,11 +60,8 @@ EXPECTED_TOOLS = (
     "commission_brief",
     "context_resolve",
     "context_rigs",
-<<<<<<< HEAD
-    "decisions_to_briefs",
-=======
     "create_issue_bead",
->>>>>>> origin/main
+    "decisions_to_briefs",
     "fleet_sessions",
     "formulas_catalog",
     "gates_status",
