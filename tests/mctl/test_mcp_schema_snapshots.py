@@ -98,7 +98,7 @@ def test_every_artifact_bearing_output_schema_requires_artifact_trust():
         "briefs_show",
         "briefs_doctor",
         "briefs_validate",
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         "briefs_defer",
         "briefs_create",
     }
@@ -113,9 +113,13 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
 
     mutating = [name for name, entry in snapshot.items() if entry["mutating"]]
     assert sorted(mutating) == [
-        "briefs_adjudicate",
+        # Alphabetical, and the rename moved this entry: `briefs_adjudicate`
+        # sorted first among briefs_*, `briefs_relay_adjudication` sorts last
+        # (#175). Re-sorted rather than relaxing the assertion to a set --
+        # the ordering is what makes an added mutating tool visible in review.
         "briefs_create",
         "briefs_defer",
+        "briefs_relay_adjudication",
         "work_dispatch",
         "work_dispatch_event",
     ]

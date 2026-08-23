@@ -145,7 +145,7 @@ class Operation:
 
 OPERATIONS: dict[str, Operation] = {
     "adjudicate": Operation(
-        "adjudicate", "briefs_adjudicate", "adjudication", option_id="adjudicate"
+        "adjudicate", "briefs_relay_adjudication", "adjudication", option_id="adjudicate"
     ),
     "defer": Operation("defer", "briefs_defer", "deferral", option_id="defer"),
     "dispatch": Operation("dispatch", "work_dispatch", "work dispatch", option_id="dispatch-work"),

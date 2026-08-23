@@ -32,12 +32,15 @@ BRIEF_STATE = FIXTURES / "brief_state"
 WORK_STATE = FIXTURES / "work_state"
 
 DECLARED_TOOLS = (
-    "briefs_adjudicate",
+    # Alphabetical. The #175 rename moved this entry: `briefs_adjudicate`
+    # sorted first among briefs_*, `briefs_relay_adjudication` sorts between
+    # `briefs_options` and `briefs_show`.
     "briefs_create",
     "briefs_defer",
     "briefs_doctor",
     "briefs_list",
     "briefs_options",
+    "briefs_relay_adjudication",
     "briefs_show",
     "briefs_validate",
     "city_health",
@@ -407,7 +410,7 @@ def test_dry_run_adjudication_produces_a_plan_and_mutates_nothing(tmp_path: Path
 
     structured = call(
         server(city_root, rig_root),
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         {
             "brief_id": "mc-open",
             "verdict": "approve",
@@ -430,7 +433,7 @@ def test_mutating_tools_default_to_dry_run(tmp_path: Path):
 
     structured = call(
         server(city_root, rig_root),
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         {"brief_id": "mc-open", "verdict": "approve", "reason": "ready", "option": "A"},
     )["result"]["structuredContent"]
 
@@ -526,7 +529,7 @@ def test_mutation_fails_closed_on_a_blocking_precondition(tmp_path: Path):
 
     result = call(
         server(city_root, rig_root),
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         {"brief_id": "mc-open", "verdict": "approve", "dry_run": True},
     )["result"]
 
@@ -560,11 +563,11 @@ def test_armed_external_clients_still_cannot_reach_mutating_tools(tmp_path: Path
     )
 
     names = {tool["name"] for tool in tool_list(armed)}
-    response = call(armed, "briefs_adjudicate", {"brief_id": "mc-open", "verdict": "approve"})
+    response = call(armed, "briefs_relay_adjudication", {"brief_id": "mc-open", "verdict": "approve"})
 
     assert "briefs_list" in names
     assert not names & {
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         "briefs_defer",
         "briefs_create",
         "work_dispatch",
@@ -603,7 +606,7 @@ def test_trace_show_and_replay_preview_do_not_reapply_effects(tmp_path: Path):
     instance = server(city_root, rig_root)
     applied = call(
         instance,
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         {
             "brief_id": "mc-open",
             "verdict": "approve",
@@ -724,7 +727,7 @@ def test_mutating_tools_also_declare_artifact_trust(tmp_path: Path):
 
     structured = call(
         server(city_root, rig_root),
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         {"brief_id": "mc-open", "verdict": "approve", "reason": "ready", "option": "A"},
     )["result"]["structuredContent"]
 

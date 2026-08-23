@@ -394,7 +394,7 @@ def plan_adjudication(
     """Record a verdict on a brief bead.
 
     `adjudicated_by` is the RECORDING half of #152. Three MCP calls compose
-    into self-authorisation -- `briefs_create`, `briefs_adjudicate(approve)`,
+    into self-authorisation -- `briefs_create`, `briefs_relay_adjudication(approve)`,
     `work_dispatch` -- because step 2 supplies the approving verdict step 3
     demands. The rule that a reviewer must not be the author is enforced
     socially on branches and by nothing at all here.

@@ -55,7 +55,7 @@ EXPECTED_TOOLS = (
     "briefs_show",
     "briefs_options",
     "briefs_doctor",
-    "briefs_adjudicate",
+    "briefs_relay_adjudication",
     "briefs_defer",
     "briefs_create",
     "briefs_validate",

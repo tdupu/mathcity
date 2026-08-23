@@ -627,7 +627,7 @@ def _handle_briefs_validate(ctx: MctlContext, arguments: Mapping[str, Any]) -> d
     return payload
 
 
-def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+def _handle_briefs_relay_adjudication(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     plan = plan_adjudication(
         ctx,
         arguments["brief_id"],
@@ -1243,9 +1243,19 @@ TOOLS: tuple[ToolSpec, ...] = (
         artifact_state=True,
     ),
     ToolSpec(
-        name="briefs_adjudicate",
-        title="Record a brief verdict",
-        description="Record a verdict through the shared effect plan. Dry run by default.",
+        name="briefs_relay_adjudication",
+        title="Relay a human adjudication onto a brief",
+        description=(
+            "RELAY a verdict the human adjudicator has already made. This tool does NOT "
+            "confer authority to adjudicate: calling it does not make you the adjudicator, "
+            "it records a decision someone else reached. It was renamed from "
+            "`briefs_adjudicate` for that reason (#175) -- the old name read as a grant of "
+            "authority it never carried, and #152 describes what an agent can compose when "
+            "it believes it holds one: create a brief, approve it, dispatch the work. "
+            "Pass `adjudicated_by` naming WHO decided; omitting it warns, because an "
+            "unattributed verdict cannot be checked against its author. "
+            "Dry run by default."
+        ),
         input_schema=request_schema(
             {
                 "brief_id": _BRIEF_ID,
@@ -1264,7 +1274,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         output_schema=response_schema(
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
-        handler=_handle_briefs_adjudicate,
+        handler=_handle_briefs_relay_adjudication,
         mutating=True,
         external_ready=False,
         artifact_state=True,
