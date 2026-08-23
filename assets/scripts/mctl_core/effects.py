@@ -621,8 +621,14 @@ def plan_create_issue_bead(ctx: MctlContext, request: IssueBeadCreateInput) -> E
         "created_at": _now(),
         "gh.issue": reference,
         "gh.repo": issue.repo,
-        "gh.labels": ",".join(issue.labels),
     }
+    # Absent means the issue had none; an empty string is a value that looks
+    # like a measurement and is not one. Matches #190's commission.py exactly
+    # (stripes' own convention, adopted here rather than diverged from) --
+    # `--has-metadata-key gh.labels` must not return a false positive for
+    # every unlabelled issue. #170/#190 seam review, 2026-08-23.
+    if issue.labels:
+        metadata["gh.labels"] = ",".join(issue.labels)
     bead_create = BeadCreate(
         placeholder_id=NEW_ISSUE_BEAD_ID_PLACEHOLDER,
         title=issue.title,

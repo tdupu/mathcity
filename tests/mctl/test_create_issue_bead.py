@@ -212,6 +212,28 @@ def test_the_plan_carries_the_issue_as_metadata_not_as_bd_labels(tmp_path, monke
     # change introduces or should work around.
 
 
+def test_an_unlabelled_issue_omits_the_gh_labels_key_rather_than_writing_empty(tmp_path, monkeypatch):
+    """#170/#190 seam review (stripes' catch): #190's commission.py omits
+    gh.labels when an issue has none, so `--has-metadata-key gh.labels` never
+    false-positives on an unlabelled issue. #170 must match, not diverge --
+    two implementations of one convention is not a convention. Not
+    hypothetical: `gh#1`, the issue the whole #180 proof ran against, has no
+    labels and would have hit this on the very first real call.
+    """
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    patch_fetch(monkeypatch, an_issue(number=1, labels=()))
+
+    structured = call(
+        server(city_root, rig_root),
+        "create_issue_bead",
+        {"repo": "tdupu/mathcity", "issue_number": 1, "dry_run": True},
+    )["result"]["structuredContent"]
+
+    create = structured["effect_plan"]["bead_creates"][0]
+    assert "gh.labels" not in create["metadata"], "absent means the issue had none; an empty string is not a measurement"
+    assert create["metadata"]["gh.issue"] == "tdupu/mathcity#1"
+
+
 # --- idempotency: a second call must not mint a second mirror ---------------
 
 
