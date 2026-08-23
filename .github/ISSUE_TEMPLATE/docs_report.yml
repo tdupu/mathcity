@@ -12,15 +12,24 @@ body:
         **Title:** `docs: <area>: <correction>` — e.g.
         `docs: README-formulas: index missing create-issue-briefed`.
 
-        This form is deliberately the lightest of the three: a doc bug you don't
-        report because the form was long is worse than a doc bug reported tersely.
+        This form is the live template filled by `mathcity.create-issue` after the
+        shared investigation standard has run: duplicate search, current-main
+        verification, source/policy alignment where relevant, corrected text,
+        example usage, and a human approval gate before filing.
+
+        It is deliberately the lightest of the three: a doc bug you don't report
+        because the form was long is worse than a doc bug reported tersely.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Before you file
       options:
-        - label: I searched open **and closed** issues and did not find a duplicate.
+        - label: I searched open **and closed** issues and PRs with multiple keyword combinations and did not find a duplicate.
+          required: true
+        - label: I confirmed the affected text is still wrong, missing, or misleading on current `origin/main`.
+          required: true
+        - label: I checked the source, policy, or design document that settles the correction, or confirmed no such source applies.
           required: true
 
   - type: input
@@ -53,6 +62,25 @@ body:
         If the doc contradicts the code, cite the source `file:line` that settles
         it — `subdomains/dev/POLICY.md` P5.4 (truth is in the code) makes source the
         tiebreaker, so a citation here converts an opinion into a verified fix.
+    validations:
+      required: true
+
+  - type: textarea
+    id: example_usage
+    attributes:
+      label: Example usage / correct invocation
+      description: |
+        Show the command, skill invocation, config stanza, API call, or smallest
+        concrete example the corrected text should support. Do not just say the
+        current text is wrong; give the maintainer the example they would otherwise
+        have to invent.
+      placeholder: |
+        Correct invocation:
+
+        ```console
+        gc sling hecke/gc.run-operator mathcity-issue-briefed --formula \
+          --var source_bead=he-xxxx --var brief_slug=he-xxxx-issue
+        ```
     validations:
       required: true
 

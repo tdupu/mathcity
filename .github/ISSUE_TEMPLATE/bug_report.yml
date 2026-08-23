@@ -19,19 +19,25 @@ body:
         `bug: check-molecules: Dolt pre-flight misreads exit 2 as unreachable`.
 
         This form asks for the investigation a maintainer would otherwise have to
-        redo. It is the [`write-issue`](https://github.com/gastownhall/gascity-packs/tree/main/contributing/skills/write-issue)
-        checklist in form fields. Two fields accept an explicit `not yet identified`
-        — use it honestly rather than guessing; a caveated report is welcome, a
-        fabricated root cause is not.
+        redo. It is the live template filled by `mathcity.create-issue` after the
+        shared investigation standard has run: duplicate search, current-main
+        verification, policy/design alignment, MRE attempt, blast-radius check, and
+        fix candidates, followed by a human approval gate before filing.
+
+        Do not invent evidence to satisfy the form. If a field is genuinely unknown,
+        say so explicitly; a caveated report is welcome, a fabricated root cause is
+        not.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Before you file
       options:
-        - label: I searched open **and closed** issues and did not find a duplicate.
+        - label: I searched open **and closed** issues and PRs with multiple keyword combinations and did not find a duplicate.
           required: true
-        - label: I reproduced this on the mathcity commit my city actually has deployed, and confirmed the buggy code is still present on `origin/main`.
+        - label: I reproduced this on the mathcity commit my city actually has deployed, and confirmed the buggy code is still present on current `origin/main`.
+          required: true
+        - label: I checked the relevant policy/design corpus (`POLICY*.md`, `subdomains/*/POLICY.md`, `docs/adr/*.md`) and the report or candidate fix does not contradict it.
           required: true
 
   - type: textarea
@@ -89,8 +95,10 @@ body:
         against it, and give the file path plus the APPROVED verdict. `check-mre`
         is the standard for those — this field defers to it rather than restating it.
 
-        If you truly cannot reduce it, say so here. An un-reduced report is still
-        worth filing; expect P3 and slower triage.
+        If you truly cannot reduce it, write exactly
+        `not yet reduced — reduction is step 1`, followed by what you tried and why
+        it resisted reduction. An un-reduced report is still worth filing; expect P3
+        and slower triage.
       placeholder: |
         Required state: rig `hecke` exists; supervisor running; a quarantine
         marker present at `.gc/runtime/packs/dolt/compact-quarantine/<db>`.
@@ -111,8 +119,10 @@ body:
         Tie the symptom to specific code with `path/to/file:LINE` references into
         this repo. Name the invariant that is violated and where.
 
-        If you have not identified it, write exactly `not yet identified` — that is
-        an accepted answer, and better than a guess.
+        If you have not identified it, write exactly `not yet identified`. If
+        `mathcity.create-issue` is drafting for approval and still cannot fill this
+        after investigation, it should mark the field `<unknown — needs input>` for
+        the human gate rather than guessing.
       placeholder: |
         `skills/check-molecules/SKILL.md:42` treats any non-zero exit from
         `gc dolt health` as unreachable. Upstream defines exit 2 as a distinct
@@ -130,8 +140,11 @@ body:
         touched), and what it makes better or worse. Mark which you'd recommend —
         the decision stays with the maintainer.
 
-        If you cannot name two, write `not yet identified`. Expect the issue to be
-        triaged at P3 and to need an investigation pass before anyone can act.
+        If you cannot name two, write `not yet identified`. If `mathcity.create-issue`
+        is drafting for approval and still cannot fill this after investigation, it
+        should mark the field `<unknown — needs input>` for the human gate rather
+        than guessing. Expect the issue to be triaged at P3 and to need an
+        investigation pass before anyone can act.
       placeholder: |
         **A. Point-fix the exit-code check** — branch on exit 2 at each call site.
         - Scope: ~12 skills

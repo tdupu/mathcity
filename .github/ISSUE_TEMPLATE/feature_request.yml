@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a new capability, skill, formula, or policy for the mathcity pack.
+description: Propose a new capability, skill, or formula for the mathcity pack.
 title: "feat: "
 labels: ["kind/feature", "status/needs-triage"]
 body:
@@ -10,8 +10,16 @@ body:
         itself belongs on [gastownhall/gascity](https://github.com/gastownhall/gascity/issues)
         (`subdomains/dev/POLICY.md`, P3.2).
 
+        Policy amendments that would change an accepted rule route through the
+        relevant `new-*-policy` workflow, not this issue form.
+
         **Title:** `feat: <surface>: <capability>` — e.g.
         `feat: formula-work: full formula lifecycle`.
+
+        This form is the live template filled by `mathcity.create-issue` after the
+        shared investigation standard has run: duplicate search, current-main
+        verification, policy/design alignment, wheel check, proposal alternatives,
+        blast radius, and a human approval gate before filing.
 
         The wheel-check below is the field that most often kills a proposal, and it
         is meant to — most "we should build X" turns out to be "we should use the
@@ -22,7 +30,11 @@ body:
     attributes:
       label: Before you file
       options:
-        - label: I searched open **and closed** issues and did not find a duplicate.
+        - label: I searched open **and closed** issues and PRs with multiple keyword combinations and did not find a duplicate.
+          required: true
+        - label: I confirmed the capability is genuinely absent on current `origin/main`, not merely missing from my deployed checkout.
+          required: true
+        - label: I checked the relevant policy/design corpus (`POLICY*.md`, `subdomains/*/POLICY.md`, `docs/adr/*.md`) and this proposal fits it; if it would require changing policy, I am routing that through the relevant policy workflow instead.
           required: true
         - label: I can state the user or maintainer problem this solves, not just the implementation I prefer.
           required: true
