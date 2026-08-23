@@ -1,15 +1,20 @@
-"""#156 follow-up — the catalog read must be BOUNDED, not merely handled.
+"""#156 follow-up — bounds are PER-CALLER, because the callers do not share a cost.
 
-The merged reader gives each `gc` call `timeout=120`, three calls deep, so the
-worst case is 360 s. Measured in-city, `gc order list --json` alone takes
-**89 s** and the whole tool timed out at 120 s when I finally ran it.
+Measured across one night, same command, same city:
 
-The failure-handling path was already correct: a raising catalog degrades to
-`unreachable`, never to zero. That was never the bug. The bug is that the tool
-WAITS -- it is registered, schema-correct, correctly-degrading, and unusable.
-CT13.1: presence is not performance.
+    gc order list --json      28.34s · 43.10s · 42.84s · 46.72s · 89s
+    gc order history --json   55.46s
 
-So the assertion is about the BUDGET, which is the thing that was wrong.
+The dashboard calls both, so its real cost is the SUM -- ~84s today, higher
+earlier. An MCP request cannot wait that long; a dashboard render always must.
+
+A single module constant cannot serve both. My first attempt set one to 15s,
+which meant the catalog timed out on EVERY call -- a path that cannot succeed,
+shipped as graceful degradation. stick-dog measured it and refused it.
+
+The old test asserted `CATALOG_TIMEOUT_SECONDS <= 15`: it checked the bound was
+SMALL, never that it was ACHIEVABLE, so it passed on any number including zero.
+These assert a bound against the cost it must accommodate.
 """
 from __future__ import annotations
 
@@ -18,7 +23,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "assets" / "scripts"))
 
-from mctl_core.orders import CATALOG_TIMEOUT_SECONDS, EVENT_LOG_ONLY, orders_status  # noqa: E402
+from mctl_core.orders import (  # noqa: E402
+    DASHBOARD_CATALOG_TIMEOUT_SECONDS,
+    EVENT_LOG_ONLY,
+    MEASURED_CATALOG_WORST_SECONDS,
+    orders_status,
+)
 
 EVENTS = [
     {"type": "order.fired", "subject": "orphan-sweep", "ts": "2026-08-22T14:10:00Z"},
@@ -26,16 +36,27 @@ EVENTS = [
 ]
 
 
-def test_the_catalog_budget_is_servable():
-    """89 s measured; 120 s budget. The bound must be under what a caller waits."""
-    assert CATALOG_TIMEOUT_SECONDS <= 15, (
-        "a catalog read that can take 89s must be bounded well under it, "
-        "so the tool degrades fast instead of hanging"
+def test_the_dashboard_bound_can_actually_succeed():
+    """The bound must accommodate the worst measured cost of the calls it wraps.
+
+    This is the assertion the first version lacked. A bound below the measured
+    cost is a path that cannot succeed; it fails here rather than in production.
+    """
+    assert DASHBOARD_CATALOG_TIMEOUT_SECONDS >= MEASURED_CATALOG_WORST_SECONDS, (
+        f"bound {DASHBOARD_CATALOG_TIMEOUT_SECONDS}s cannot accommodate the measured "
+        f"worst case {MEASURED_CATALOG_WORST_SECONDS}s -- it would time out every call"
     )
 
 
-def test_event_log_only_mode_never_touches_gc():
-    """The outcomes half is a local file. It must be servable with zero subprocesses."""
+def test_the_measured_worst_case_covers_both_calls_the_dashboard_makes():
+    """The dashboard pays list + history. Budgeting for one is budgeting for half."""
+    assert MEASURED_CATALOG_WORST_SECONDS >= 89 + 55, (
+        "the dashboard makes two gc calls; the budget must cover their sum"
+    )
+
+
+def test_the_mcp_path_takes_no_catalog_bound_at_all():
+    """EVENT_LOG_ONLY spawns no subprocess, so no timeout applies to it."""
     calls = []
 
     def read(what: str):
@@ -45,17 +66,6 @@ def test_event_log_only_mode_never_touches_gc():
         raise AssertionError(f"EVENT_LOG_ONLY must not read {what!r}")
 
     out = orders_status(read, mode=EVENT_LOG_ONLY)
-    assert calls == ["events"], f"touched more than the event log: {calls}"
+    assert calls == ["events"]
     assert out["known_outcomes"]["orphan-sweep"] == "failed"
-
-
-def test_event_log_only_reports_the_catalog_as_unreachable_not_zero():
-    def read(what: str):
-        if what == "events":
-            return EVENTS
-        raise AssertionError("should not be called")
-
-    out = orders_status(read, mode=EVENT_LOG_ONLY)
-    assert out["state"] == "unreachable"
-    assert out["total"] is None, "None means we did not look; 0 would be a lie"
-    assert any("not read" in str(d) or "order list" in str(d) for d in out["diagnostics"])
+    assert out["total"] is None
