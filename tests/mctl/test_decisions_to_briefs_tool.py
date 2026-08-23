@@ -45,6 +45,13 @@ import pytest
 from test_mcp_server import call, server, work_fixture
 
 
+def _tool_names(instance) -> set[str]:
+    response = instance.handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    )
+    return {t["name"] for t in response["result"]["tools"]}
+
+
 def _create(city_root, rig_root, **overrides):
     arguments = {
         "decision": "Adopt the narrowed brief read",
@@ -57,8 +64,7 @@ def _create(city_root, rig_root, **overrides):
 
 def test_the_tool_exists_and_is_reachable(tmp_path: Path):
     """CT13.2: capability present, surface absent is the whole defect in #85."""
-    listed = call(server(*work_fixture(tmp_path)), "tools/list", None)
-    names = {t["name"] for t in listed["result"]["tools"]}
+    names = _tool_names(server(*work_fixture(tmp_path)))
 
     assert "decisions_to_briefs" in names, f"tool not exposed: {sorted(names)}"
 
@@ -117,8 +123,7 @@ def test_present_briefs_completes_through_the_mcp(tmp_path: Path):
     """CT13.1: the operation must COMPLETE through the MCP, not merely exist."""
     city_root, rig_root = work_fixture(tmp_path)
 
-    listed = call(server(city_root, rig_root), "tools/list", None)
-    names = {t["name"] for t in listed["result"]["tools"]}
+    names = _tool_names(server(city_root, rig_root))
     assert "briefs_present" in names, f"present-briefs not exposed: {sorted(names)}"
 
     structured = call(

@@ -384,6 +384,31 @@ severity = "ERROR"
 meaning = "Live dispatch is not armed, so the plan was not slung and nothing ran."
 module = "work.py"
 
+[MDTB001]
+severity = "ERROR"
+meaning = "A dispatchable brief must name the open bead it decides about."
+module = "decisions.py"
+
+[MDTB002]
+severity = "ERROR"
+meaning = "The named source bead was not found in this rig."
+module = "decisions.py"
+
+[MDTB003]
+severity = "ERROR"
+meaning = "The named source bead is closed, so the brief would be born undispatchable."
+module = "decisions.py"
+
+[MDTB004]
+severity = "ERROR"
+meaning = "The named source bead already has an active assignee."
+module = "decisions.py"
+
+[MDTB005]
+severity = "ERROR"
+meaning = "An open child workflow already exists for the named source bead."
+module = "decisions.py"
+
 [MCTL_CONTROL_PLANE_NOT_ACTIVE]
 severity = "FATAL"
 meaning = "The Gas City supervisor is not running, so dispatched work has nothing to route to."
