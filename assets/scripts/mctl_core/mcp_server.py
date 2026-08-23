@@ -72,6 +72,7 @@ from .payloads import (
     replay_blocked as _replay_blocked,
     require_trace as _require_trace,
 )
+from .commission import CommissionRefused
 from .effects import (
     BriefCreateInput,
     IssueBeadCreateInput,
@@ -79,6 +80,7 @@ from .effects import (
     apply_effect_plan,
     dry_run_payload,
     plan_adjudication,
+    plan_commission_brief,
     plan_create_brief,
     plan_create_issue_bead,
     plan_deferral,
@@ -645,6 +647,41 @@ def _handle_briefs_validate(ctx: MctlContext, arguments: Mapping[str, Any]) -> d
     payload = report.to_dict()
     payload["diagnostics"] = _diagnostics(ctx, report.diagnostics)
     return payload
+
+
+def _handle_commission_brief(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """#190: a source bead becomes a commission brief in the pile.
+
+    A COMMISSION AUTHORIZES PLANNING, NOT WORK -- the plan it commissions returns
+    as its own brief for separate approval, which keeps the CT4.5 commission
+    exemption one hop deep.
+
+    `CommissionRefused` is caught HERE and converted, deliberately. It is an
+    exception in the core, which is right for a library: a caller who ignores it
+    gets a traceback rather than a silent half-commission. At a tool boundary an
+    exception escapes the response envelope, so the caller receives a crash
+    instead of a code it can branch on. The refusal carries its own code
+    (MCMS_SOURCES_REQUIRED / MCMS_CROSS_STORE_SOURCE) and that code is surfaced
+    rather than replaced with a generic one.
+    """
+    try:
+        plan = plan_commission_brief(
+            ctx,
+            bead_id=str(arguments.get("bead_id") or ""),
+            title=str(arguments.get("title") or ""),
+            body=str(arguments.get("body") or ""),
+            issue_url=arguments.get("issue_url"),
+            issue_labels=tuple(arguments.get("issue_labels") or ()),
+            bead_rig=arguments.get("bead_rig"),
+        )
+    except CommissionRefused as refused:
+        return {
+            "diagnostics": [
+                _diagnostic(ctx, Severity.FATAL, refused.code, str(refused)).to_dict()
+            ],
+            "applied": False,
+        }
+    return _effect_payload(ctx, plan, _dry_run(arguments))
 
 
 def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -1321,6 +1358,53 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         handler=_handle_briefs_validate,
         artifact_state=True,
+    ),
+    ToolSpec(
+        name="commission_brief",
+        title="Commission a brief from a source bead",
+        description=(
+            "Turn an existing source bead into a COMMISSION brief in the pile. A commission "
+            "authorizes PLANNING ONLY -- the dispatch plan it produces returns as its own "
+            "brief for separate approval, which is what keeps the CT4.5 commission exemption "
+            "one hop deep. "
+            "`bead_id` is required and must live in the SAME rig store as the brief: a "
+            "cross-store source fails at creation with 'no issue found matching', so it is "
+            "refused here first (MCMS_CROSS_STORE_SOURCE). A missing source is refused as "
+            "MCMS_SOURCES_REQUIRED, because a brief without one warns at creation and is "
+            "FATAL at dispatch (MWRK011) -- permanently uncommissionable. "
+            "Tracker provenance rides in METADATA (`gh.issue`, `gh.repo`, `gh.labels`), never "
+            "in bd labels: GitHub labels are namespaced and bd rejects slashes (MBRF033). An "
+            "issue with no labels OMITS `gh.labels` rather than writing an empty string. "
+            "The brief lands in the PILE and enters the shared lifecycle (B2.10); it never "
+            "writes a stack row, because the stack is brief-shuffle's to write."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {"type": "string", "description": "Source bead this brief decides on."},
+                "title": nullable_string("What is being decided."),
+                "body": nullable_string("Brief body markdown."),
+                "issue_url": nullable_string("Originating GitHub issue, if any."),
+                "issue_labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "The issue's labels, carried verbatim into gh.labels metadata.",
+                },
+                "bead_rig": nullable_string(
+                    "Rig whose store holds the source bead. Omit when it is this rig; "
+                    "supplying a different one is refused rather than attempted."
+                ),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["bead_id"],
+        ),
+        output_schema=response_schema({"applied": {"type": "boolean"}}, ["applied"]),
+        handler=_handle_commission_brief,
+        mutating=True,
+        # Every mutating tool in this surface is external_ready=False, and the
+        # snapshot test enforces it. A tool that mints a bead must not be
+        # reachable by an external client; the default (True) would have made
+        # it so, and the test caught that rather than my reading it.
+        external_ready=False,
     ),
     ToolSpec(
         name="briefs_adjudicate",

@@ -476,6 +476,16 @@ severity = "INFO"
 meaning = "limit_state is always 'unknown': no per-agent quota/usage-window recording exists yet (dashboard handoff §4.5)."
 module = "fleet.py"
 
+[MCMS_SOURCES_REQUIRED]
+severity = "FATAL"
+meaning = "A commission brief was requested with no source bead. Refused before writing: without a source the brief is B2.1-incomplete, warns at creation, and is FATAL at dispatch (MWRK011) -- permanently uncommissionable."
+module = "commission.py"
+
+[MCMS_CROSS_STORE_SOURCE]
+severity = "FATAL"
+meaning = "The source bead lives in a different rig store than the brief. A rig store cannot see another rig's beads, so creation would fail with 'no issue found matching <id>'. Refused before writing rather than attempted."
+module = "commission.py"
+
 [MCTL_MOLECULES_STORE_UNREADABLE]
 severity = "ERROR"
 meaning = "The bead store could not be read, so no molecule count is available. This is 'we could not look', NOT 'there are none' -- an empty census with no diagnostic reads as a city with nothing running."
