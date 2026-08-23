@@ -149,3 +149,51 @@ class TestPileOnly:
             if "layout.stack" in line or "stack_index" in line
         ]
         assert not offenders, f"B2.10: commission_brief must not write the stack: {offenders}"
+
+
+class TestMetadataReachesTheBead:
+    """The gap left open at e0bf1ad, closed now that #168 came off the path.
+
+    `commission.tracker_metadata` computed the gh.* keys correctly and
+    `BriefCreateInput` had nowhere to put them, so the provenance died between
+    the two. Metadata is the whole reason we chose it over labels -- unreachable
+    metadata is worse than the labels we rejected, because it looks carried.
+    """
+
+    def test_BriefCreateInput_accepts_metadata(self):
+        import dataclasses
+
+        from mctl_core.effects import BriefCreateInput
+
+        names = {f.name for f in dataclasses.fields(BriefCreateInput)}
+        assert "metadata" in names, "gh.* provenance has nowhere to go without this"
+
+    def test_it_defaults_to_empty_so_existing_callers_are_unaffected(self):
+        import dataclasses
+
+        from mctl_core.effects import BriefCreateInput
+
+        field = next(f for f in dataclasses.fields(BriefCreateInput) if f.name == "metadata")
+        assert field.default == () or field.default_factory is not dataclasses.MISSING
+
+    def test_supplied_metadata_is_written_onto_the_bead(self):
+        source = (SCRIPTS_ROOT / "mctl_core" / "effects.py").read_text(encoding="utf-8")
+        assert "request.metadata" in source, "the field must be READ, not merely accepted"
+
+    def test_caller_metadata_cannot_overwrite_mctl_provenance(self):
+        """created_by/trace_id/created_at are mctl's own attestation. A caller
+        that could overwrite them could forge provenance."""
+        source = (SCRIPTS_ROOT / "mctl_core" / "effects.py").read_text(encoding="utf-8")
+        # Assert the CALLER-METADATA loop specifically, not merely that the word
+        # "setdefault" appears nearby. The first version of this test checked a
+        # 700-char window and passed when the guard was removed, because an
+        # unrelated setdefault elsewhere in the file sat inside that window --
+        # a check satisfied by code it was not testing.
+        loop = source.split("for key, value in (request.metadata or {}).items():", 1)
+        assert len(loop) == 2, "the caller-metadata loop is missing entirely"
+        body = loop[1][:400]
+        assert "metadata.setdefault(" in body, (
+            "caller metadata must fill gaps, never clobber mctl's own attestation "
+            "(created_by / mctl_trace_id / created_at) -- otherwise provenance is forgeable"
+        )
+        assert "metadata[str(key)] =" not in body, "direct assignment would clobber"

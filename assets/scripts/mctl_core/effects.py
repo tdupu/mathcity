@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 import fcntl
 import hashlib
@@ -238,6 +238,14 @@ class BriefCreateInput:
     # on a malformed brief. Optional, so creation without one still works and
     # warns instead of silently minting an unusable brief.
     sources: tuple[str, ...] = ()
+    # Caller-supplied provenance, written onto the bead alongside mctl's own.
+    # `commission_brief` (#190) carries tracker facts here -- `gh.issue`,
+    # `gh.repo`, `gh.labels` -- rather than as bd labels, because GitHub labels
+    # are namespaced (`kind/bug`) and bd rejects slashes as label tokens
+    # (MBRF033). Dropping the namespace is lossy: `kind/bug` and `status/bug`
+    # collapse to one token. Metadata values have no such restriction and stay
+    # queryable via `--has-metadata-key`.
+    metadata: Mapping[str, str] = field(default_factory=dict)
 
 
 # The plan cannot name the bead it is about to create, because bd mints the
@@ -300,6 +308,12 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     metadata = {"created_by": "mctl", "mctl_trace_id": ctx.trace_id, "created_at": _now()}
     if request.requested_by:
         metadata["requested_by"] = request.requested_by
+    # setdefault, not update: `created_by`, `mctl_trace_id` and `created_at` are
+    # mctl's own attestation that IT made this bead. A caller able to overwrite
+    # them could forge provenance, so caller keys fill gaps and never clobber.
+    for key, value in (request.metadata or {}).items():
+        if isinstance(value, str) and value.strip():
+            metadata.setdefault(str(key), value)
     bead_create = BeadCreate(
         placeholder_id=NEW_BRIEF_ID_PLACEHOLDER,
         title=title,
