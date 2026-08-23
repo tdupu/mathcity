@@ -47,7 +47,7 @@ not act on a probe from the untrusted column.
 | `tmux -L gt ls` | **TRUSTED** | Direct observation of the fleet host |
 | `ps` on the supervisor / dolt pids | **TRUSTED** | Direct observation |
 | `lsof -nP -iTCP:<port> -sTCP:LISTEN` | **TRUSTED** | Direct observation of a listener |
-| `gc dolt health` | ok, three-valued | exit 2 = quarantined, NOT down (see `wake-city` step B) |
+| `gc dolt health` | ok, three-valued | exit 2 = quarantined, **NOT down**; exit 1 is the only "down". 78 = cannot resolve runtime port, 127 = gc not on PATH — both abort, neither is a quarantine. Surfaced in Step 0 (Variant B) |
 | `mcp__mctl__city_health` | **DO NOT TRUST** | Reported `data_plane: healthy` and 17/17 rigs healthy while every bead read returned FATAL. Also maps `rig_id` to directory name naively and reports real stores as missing |
 | `gc status` | **DO NOT TRUST** | Times out and renders as "stopped / 0 sessions" (`gs-0cy2`) |
 | `gc stop` final line | **DO NOT TRUST** | Printed "City stopped." with the supervisor still running |
@@ -63,6 +63,26 @@ not — which is exactly when you are reading them.
 Read-only. Nothing here changes state.
 
 ```bash
+# --- P1.14 Dolt pre-flight — REPORTING (see template-fragments/dolt-preflight.md)
+# debug-city is a REPORTING skill: its entire purpose is telling a human what
+# state the city is in, so a standing quarantine is exactly what it must surface.
+# Variant A would make a debugging skill go SILENT on the degradation it exists
+# to diagnose.
+_dolt_out=$(gc dolt health 2>&1); _dolt_rc=$?
+case "$_dolt_rc" in
+  0) ;;   # healthy — proceed silently
+  2) # reachable, but auto-GC is blocked by a standing compaction quarantine.
+     # NON-FATAL: bd resolves beads normally. Surfacing this IS this skill's job.
+     echo "DOLT QUARANTINED — reachable, but auto-GC is blocked:"
+     printf '%s\n' "$_dolt_out" | sed -n '/^Compaction quarantine:/,$p' | sed 's/^/  /'
+     echo "  Not fatal: bd works. Reclaim with 'gc dolt compact' once an operator clears the marker."
+     ;;
+  *) # 1 (server unreachable) or anything else (gc missing, no city) — genuinely unusable
+     echo "I'm sorry, I can't do that — Dolt is unreachable (bd cannot resolve beads)."
+     echo "Run 'gc dolt status' / 'gc dolt start' and retry."
+     exit 1 ;;
+esac
+
 # Fleet host — nothing spawns without it
 tmux -L gt ls
 

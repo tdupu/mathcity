@@ -53,11 +53,12 @@ subdomains/dev/skills/testing-work/SKILL.md
 "
 
 # Variant B — reporting skills. Exit 2 prints the full quarantine block.
-# These three are also the ONLY files sanctioned to report-and-continue on the
+# These four are also the ONLY files sanctioned to report-and-continue on the
 # abort branch instead of exiting (fragment Rule 7): their job is diagnosing a
 # dead city, and wake-city's own remedy for exit 1 is `gc dolt start`.
 VARIANT_B="
 skills/wake-city/SKILL.md
+skills/debug-city/SKILL.md
 subdomains/dev/skills/city-status/SKILL.md
 subdomains/dev/skills/hourly-check/SKILL.md
 "
