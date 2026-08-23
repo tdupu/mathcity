@@ -56,7 +56,15 @@ if handoff_bead:
     try:
         result = subprocess.run(["bd", "show", handoff_bead],
                                 capture_output=True, text=True, timeout=15)
-        handoff_content = result.stdout.strip() or "(empty bead)"
+        if result.returncode != 0:
+            # A failed `bd show` (missing bead, dolt down) must not masquerade
+            # as an empty bead -- surface the exit code and stderr instead.
+            handoff_content = (
+                f"(could not fetch {handoff_bead}: bd show exited "
+                f"{result.returncode}: {result.stderr.strip()})"
+            )
+        else:
+            handoff_content = result.stdout.strip() or "(empty bead)"
     except Exception as e:
         handoff_content = f"(could not fetch {handoff_bead}: {e})"
 
