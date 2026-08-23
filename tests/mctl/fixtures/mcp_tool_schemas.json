@@ -10287,6 +10287,10 @@
         "readable": {
           "type": "boolean"
         },
+        "rig": {
+          "description": "#150 G1: this report is always ONE rig's store, never the city -- empty string only when built without an MctlContext to read a rig from.",
+          "type": "string"
+        },
         "roots_dangling": {
           "type": "integer"
         },
@@ -10323,6 +10327,7 @@
         "molecules",
         "orphaned_members",
         "readable",
+        "rig",
         "roots_dangling",
         "roots_resolving",
         "trace_id"
