@@ -169,3 +169,63 @@ def formulas_catalog(read: Callable[[str], Any]) -> dict[str, Any]:
         "formulas": rows,
         "diagnostics": [],
     }
+
+
+def city_reader(city_root):
+    """A reader over the live city, for the typed tool (#156).
+
+    The event log is a local file and answers in milliseconds. The catalog is
+    `gc order list`, which takes ~33 s -- roughly a third of it `gc` process
+    startup, measured. That asymmetry is why the two are separate reads: an
+    outcome question does not have to pay the catalog's cost.
+
+    Every branch raises rather than returning a default. A caller that cannot
+    read a surface must say so, and `orders_status` turns the exception into a
+    named `unreachable` state -- never into zero orders.
+    """
+    import json
+    import subprocess
+    from pathlib import Path as _Path
+
+    def read(what: str):
+        if what == "events":
+            log = _Path(city_root) / ".gc" / "events.jsonl"
+            if not log.is_file():
+                raise FileNotFoundError(f"no event log at {log}")
+            out = []
+            with log.open(errors="replace") as handle:
+                for line in handle:
+                    if '"order.' not in line:
+                        continue
+                    try:
+                        out.append(json.loads(line))
+                    except ValueError:
+                        continue  # one malformed line is not a dead log
+            return out
+        if what == "orders":
+            proc = subprocess.run(
+                ["gc", "order", "list", "--json"],
+                capture_output=True, text=True, cwd=str(city_root), timeout=120,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(f"gc order list exited {proc.returncode}")
+            return json.loads(proc.stdout).get("orders") or []
+        if what == "history":
+            proc = subprocess.run(
+                ["gc", "order", "history", "--json"],
+                capture_output=True, text=True, cwd=str(city_root), timeout=120,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(f"gc order history exited {proc.returncode}")
+            return json.loads(proc.stdout).get("entries") or []
+        if what == "formulas":
+            proc = subprocess.run(
+                ["gc", "formula", "list"],
+                capture_output=True, text=True, cwd=str(city_root), timeout=120,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError(f"gc formula list exited {proc.returncode}")
+            return [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+        raise KeyError(what)
+
+    return read
