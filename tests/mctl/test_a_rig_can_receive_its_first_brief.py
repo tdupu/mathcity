@@ -66,6 +66,13 @@ def _create(city_root: Path, rig_root: Path, tmp_path: Path):
             city_root, "create",
             "--title", "first brief in this rig",
             "--body-file", str(body_file(tmp_path, BODY)),
+            # #173 raised MBRF034 to FATAL: creation REFUSES a sourceless brief
+            # rather than minting one its own approval would brick. These tests
+            # are about the brief ROOT, not about B2.1 completeness, so they must
+            # supply a source or they fail for an unrelated -- and correct --
+            # reason. Written before #173 landed; the omission was an assumption
+            # that #173 overturned on purpose.
+            "--source", "mc-source",
             "--json",
         ),
         cwd=REPO_ROOT,
