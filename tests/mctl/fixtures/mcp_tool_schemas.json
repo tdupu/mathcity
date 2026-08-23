@@ -6168,7 +6168,7 @@
     "title": "Validate brief consistency"
   },
   "city_health": {
-    "description": "Three-valued data-plane health (`healthy` / `reachable_quarantined` / `unreachable`) read from `gc dolt health`, never collapsed to a boolean -- a reachable-but-quarantined database is a real, distinct state, not a degraded 'healthy'. Resource pressure covers file descriptors against the OS-level `kern.maxfilesperproc` ceiling (not `ulimit -n`, which is not the binding constraint) and per-rig Dolt directory size. `fds_trend` is always 'unknown': no time-series sample store exists yet.",
+    "description": "Four-valued data-plane health (`healthy` / `reachable_quarantined` / `unknown` / `unreachable`) read from `gc dolt health`, never collapsed to a boolean -- a reachable-but-quarantined database is a real, distinct state, not a degraded 'healthy'. Resource pressure covers file descriptors against the OS-level `kern.maxfilesperproc` ceiling (not `ulimit -n`, which is not the binding constraint) and per-rig Dolt directory size. `fds_trend` is always 'unknown': no time-series sample store exists yet.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -6199,7 +6199,8 @@
           "enum": [
             "healthy",
             "reachable_quarantined",
-            "unreachable"
+            "unreachable",
+            "unknown"
           ],
           "type": "string"
         },
@@ -6342,7 +6343,8 @@
                 "enum": [
                   "healthy",
                   "degraded",
-                  "unreachable"
+                  "unreachable",
+                  "unknown"
                 ],
                 "type": "string"
               }

@@ -81,7 +81,24 @@ def test_data_plane_is_quarantined_when_a_registered_rigs_db_is_named(tmp_path, 
     assert by_rig["homog"].state == "healthy"
 
 
-def test_data_plane_is_unreachable_when_the_probe_times_out(tmp_path, monkeypatch):
+def test_data_plane_is_UNKNOWN_when_the_probe_times_out(tmp_path, monkeypatch):
+    """#159: a `gc` timeout was being charged to Dolt.
+
+    This test previously asserted `DATA_PLANE_UNREACHABLE` here, and its own
+    comment already named the distinction it was not enforcing:
+
+        "A timed-out probe is not the same fact as a probe that answered
+         'down' -- the detail must say which one happened."
+
+    The distinction was preserved in the probe DETAIL, where a careful reader
+    finds it, and lost in the headline field that every other reader trusts.
+    On 2026-08-21 that produced `data_plane: "unreachable"` while Dolt answered
+    in 113ms with 18 databases, and seventeen per-rig rows corroborating it --
+    which were not seventeen observations but one probe's silence, repeated.
+
+    The sibling test below still asserts `unreachable` for a server that
+    explicitly answers down. That case is a measurement and must keep the word.
+    """
     def fake_run(command, **kwargs):
         raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs.get("timeout", 0))
 
@@ -90,12 +107,13 @@ def test_data_plane_is_unreachable_when_the_probe_times_out(tmp_path, monkeypatc
 
     report = health_mod.build_city_health(_scope(tmp_path, "hecke"))
 
-    assert report.data_plane == health_mod.DATA_PLANE_UNREACHABLE
+    assert report.data_plane == health_mod.DATA_PLANE_UNKNOWN
     assert report.probe_results[0].outcome == health_mod.PROBE_TIMED_OUT
     # A timed-out probe is not the same fact as a probe that answered "down" --
-    # the detail must say which one happened, not just that it failed.
+    # the detail must say which one happened, not just that it failed. Now the
+    # data_plane field says which one happened too.
     assert "did not answer" in report.probe_results[0].detail
-    assert report.per_rig[0].state == "unreachable"
+    assert report.per_rig[0].state == "unknown"
 
 
 def test_data_plane_is_unreachable_when_the_server_explicitly_answers_down(tmp_path, monkeypatch):

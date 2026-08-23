@@ -31,6 +31,22 @@ DATA_PLANE_HEALTHY = "healthy"
 DATA_PLANE_QUARANTINED = "reachable_quarantined"
 DATA_PLANE_UNREACHABLE = "unreachable"
 
+#: The data plane's state was not established. #159: a `gc` timeout was being
+#: charged to Dolt -- `data_plane: "unreachable"` while Dolt answered in 113ms
+#: with 18 databases. What was broken was the probe.
+#:
+#: This is the None-vs-Unknown distinction this module already makes elsewhere,
+#: applied to its own headline field. "We could not ask" is not "the answer is
+#: no", and spelling them the same way sends a reader looking in the wrong
+#: place with 17 rigs corroborating.
+DATA_PLANE_UNKNOWN = "unknown"
+
+#: The detail `probe_dolt_health` emits when `gc` ANSWERED and the answer was
+#: that the server is down. That is a measurement about the subject; every
+#: other non-success is a fact about the probe. Matched on the detail because
+#: `PROBE_REFUSED` was carrying both cases.
+DOLT_ANSWERED_DOWN_DETAIL = "gc dolt health reports server.reachable=false"
+
 PROBE_SUCCEEDED = "succeeded"
 PROBE_TIMED_OUT = "timed_out"
 PROBE_REFUSED = "refused"
@@ -326,6 +342,43 @@ def _dolt_dir_size_bytes(city_root: Path, rig_db: str) -> tuple[int | None, str 
     return int(match.group(1)) * 1024, None
 
 
+def answered_that_dolt_is_down(probe: ProbeResult) -> bool:
+    """Whether the probe ANSWERED, and the answer was that the server is down.
+
+    `PROBE_REFUSED` is emitted for two incompatible situations: `gc` answered
+    with `server.reachable=false`, which is a measurement, and `gc` failed for
+    its own reasons, which is not. Only the first says anything about Dolt.
+    """
+    return probe.detail == DOLT_ANSWERED_DOWN_DETAIL
+
+
+def data_plane_for(probe: ProbeResult, quarantine_by_db: Mapping[str, str]) -> str:
+    """The data plane's state, or `unknown` when the probe did not establish it.
+
+    #159. The old rule was `outcome != SUCCEEDED -> unreachable`, which turned
+    every way of failing to ask into an answer. A probe timing out is a fact
+    about `gc`; it is not evidence about Dolt, and Dolt was in fact healthy
+    throughout the incident that produced this issue.
+    """
+    if probe.outcome == PROBE_SUCCEEDED:
+        return DATA_PLANE_QUARANTINED if quarantine_by_db else DATA_PLANE_HEALTHY
+    if answered_that_dolt_is_down(probe):
+        return DATA_PLANE_UNREACHABLE
+    return DATA_PLANE_UNKNOWN
+
+
+def per_rig_state_for(probe: ProbeResult) -> str:
+    """Per-rig state under a failed probe.
+
+    Seventeen rigs reporting `unreachable` is what made the wrong conclusion
+    persuasive: they were not seventeen observations, they were one probe's
+    silence repeated seventeen times. If the probe established nothing, each
+    row says `unknown` -- seventeen honest unknowns rather than seventeen
+    corroborating errors.
+    """
+    return "unreachable" if answered_that_dolt_is_down(probe) else "unknown"
+
+
 def build_city_health(scope: CityScope) -> CityHealthReport:
     """Assemble the full report. The only entry point this module exposes."""
     dolt_probe, dolt_payload = probe_dolt_health(scope.city_root)
@@ -338,19 +391,18 @@ def build_city_health(scope: CityScope) -> CityHealthReport:
             if isinstance(entry, dict) and isinstance(entry.get("db"), str):
                 quarantine_by_db[entry["db"]] = str(entry.get("reason") or "quarantined")
 
-    if dolt_probe.outcome != PROBE_SUCCEEDED:
-        data_plane = DATA_PLANE_UNREACHABLE
-    elif quarantine_by_db:
-        data_plane = DATA_PLANE_QUARANTINED
-    else:
-        data_plane = DATA_PLANE_HEALTHY
+    data_plane = data_plane_for(dolt_probe, quarantine_by_db)
 
     per_rig: list[PerRigHealth] = []
     disk_per_rig: list[RigDiskUsage] = []
     for rig in scope.rigs:
         if dolt_probe.outcome != PROBE_SUCCEEDED:
             per_rig.append(
-                PerRigHealth(rig_id=rig.name, state="unreachable", reason=dolt_probe.detail)
+                PerRigHealth(
+                    rig_id=rig.name,
+                    state=per_rig_state_for(dolt_probe),
+                    reason=dolt_probe.detail,
+                )
             )
         elif rig.db in quarantine_by_db:
             per_rig.append(
