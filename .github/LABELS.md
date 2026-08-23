@@ -4,10 +4,12 @@ The issue forms in `ISSUE_TEMPLATE/` apply `kind/*` and `status/needs-triage`
 automatically. This file records the labels they expect and the exact commands
 that create them.
 
-> **None of the commands below have been run.** Label changes mutate the public
-> repo, so they are the repo owner's call. Until they are run, the templates
-> still work — GitHub silently drops label names it doesn't recognize rather than
-> erroring, so issues will be filed correctly but arrive unlabeled.
+> **The commands below have been run.** All seven labels in the target scheme
+> (`kind/bug`, `kind/feature`, `kind/docs`, `priority/p1`, `priority/p2`,
+> `priority/p3`, `status/needs-triage`) are live on `tdupu/mathcity` — confirmed
+> via `gh label list`, 2026-08-22. Path A was followed: the three GitHub
+> defaults were renamed rather than deleted-and-recreated, so their prior issue
+> associations were preserved.
 
 ## Target scheme
 
