@@ -132,7 +132,7 @@ meaning = "Proposed brief label is not a usable bd label token."
 module = "briefs.py"
 
 [MBRF034]
-severity = "WARN"
+severity = "FATAL"
 meaning = "Created brief has no source dependency, so it is B2.1-incomplete."
 policy_ref = "B2.1"
 module = "effects.py"
@@ -610,6 +610,12 @@ severity = "ERROR"
 meaning = "The source bead named by the brief dependency is closed."
 module = "work.py"
 
+[MBRF036]
+severity = "FATAL"
+meaning = "Proposed brief body is missing a required structural section."
+policy_ref = "B1.5"
+module = "briefs.py"
+
 [MWRK_ALREADY_DISPATCHED]
 severity = "FATAL"
 meaning = "Work already has dispatch provenance."
@@ -633,6 +639,11 @@ module = "work.py"
 [MWRK_DISPATCH_COMMAND_FAILED]
 severity = "FATAL"
 meaning = "The dispatch command could not be run or exited non-zero, so no dispatch was recorded."
+module = "work.py"
+
+[MWRK_DISPATCH_TIMEOUT_UNKNOWN]
+severity = "FATAL"
+meaning = "The dispatch command ran but did not finish before the timeout, so whether a dispatch was recorded is UNKNOWN. It may have completed; a blind retry can dispatch a second time."
 module = "work.py"
 
 [MWRK_DISPATCH_BLOCKED]

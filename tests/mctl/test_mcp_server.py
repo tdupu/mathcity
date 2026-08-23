@@ -46,15 +46,14 @@ DECLARED_TOOLS = (
     "context_rigs",
     "decisions_to_briefs",
     "fleet_sessions",
-    # Added when `gates_status` was exposed: `mctl_core/gates.py` shipped with
-    # #119 and had no MCP tool, so no page could reach it -- #153's deeper
-    # shape, a merged surface that is unreachable rather than merely unrendered.
+    "formulas_catalog",
     "gates_status",
     "mayor_boot",
     "mayor_city_state",
     "mayor_conservation",
     "molecules_list",
     "molecules_show",
+    "orders_status",
     "trace_replay_preview",
     "trace_show",
     "work_claim",
@@ -717,6 +716,59 @@ def test_pile_filenames_that_carry_the_bead_id_in_frontmatter_are_untrusted(tmp_
     trust = structured["artifact_trust"]
     assert trust["trusted"] is False
     assert "frontmatter" in trust["reason"]
+
+
+def test_an_absent_pile_is_the_empty_state_not_an_untrust_condition(tmp_path: Path):
+    """#149: `.pile` is created lazily, so absence is normal, not a defect.
+
+    Every brief-producing formula runs `mkdir -p "{{artifact_root}}/.pile"`
+    as it writes its first brief, and nothing provisions the directory before
+    then. A rig that has never piled a brief therefore has no pile directory,
+    and the artifacts under it genuinely are missing -- the reading is
+    accurate, so it may be acted on. Measured when #149 was filed: 6 of 17
+    live rigs were untrusted on this branch alone and 4 of them held zero
+    brief beads.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    shutil.rmtree(rig_root / ".beads" / "briefs" / ".pile")
+
+    structured = call(server(city_root, rig_root), "briefs_list", {})["result"]["structuredContent"]
+
+    trust = structured["artifact_trust"]
+    assert trust["trusted"] is True
+    assert trust["open_question"] is None
+    codes = {diagnostic["code"] for diagnostic in structured["diagnostics"]}
+    assert "MCTL_MCP_ARTIFACT_STATE_UNTRUSTED" not in codes
+
+
+def test_an_absent_pile_still_untrusts_when_the_root_is_also_absent(tmp_path: Path):
+    """Narrowing the pile branch must not narrow the root branch (#2/Q5).
+
+    A missing root also gates the mutation path -- `_require_brief_root`
+    refuses with MBRF035 rather than let `mkdir -p` build a shadow tree -- so
+    it keeps its own verdict.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    shutil.rmtree(rig_root / ".beads" / "briefs")
+
+    structured = call(server(city_root, rig_root), "briefs_list", {})["result"]["structuredContent"]
+
+    assert structured["artifact_trust"]["trusted"] is False
+    assert structured["artifact_trust"]["open_question"] == "Q5"
+
+
+def test_a_malformed_pile_is_still_untrusted_when_absence_is_not(tmp_path: Path):
+    """The distinction #149 draws: absent cannot lie, malformed does."""
+    city_root, rig_root = runtime_fixture(tmp_path)
+    pile = rig_root / ".beads" / "briefs" / ".pile"
+    (pile / "12-inspect-open-brief-brief.md").write_text(
+        "---\nartifact: mc-open\n---\n\n# Inspect open brief\n", encoding="utf-8"
+    )
+
+    structured = call(server(city_root, rig_root), "briefs_list", {})["result"]["structuredContent"]
+
+    assert structured["artifact_trust"]["trusted"] is False
+    assert "frontmatter" in structured["artifact_trust"]["reason"]
 
 
 def test_mutating_tools_also_declare_artifact_trust(tmp_path: Path):

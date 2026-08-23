@@ -73,6 +73,67 @@ class WorkDispatchPlan:
         }
 
 
+#: The command never started -- `OSError` from spawn. Nothing ran, so nothing
+#: landed, and a retry is safe.
+DISPATCH_UNRUNNABLE_CODE = "MWRK_DISPATCH_COMMAND_FAILED"
+
+#: The command RAN and we stopped waiting -- `subprocess.TimeoutExpired`. Whether
+#: its work landed is unknowable from here, so the honest answer is `unknown`.
+DISPATCH_TIMEOUT_CODE = "MWRK_DISPATCH_TIMEOUT_UNKNOWN"
+
+
+@dataclass(frozen=True)
+class DispatchFailureVerdict:
+    """What a failed dispatch subprocess lets us claim about the world (#184).
+
+    `applied` is deliberately three-valued. `False` means the dispatch provably
+    did not happen; `None` means we cannot tell. Collapsing the second into the
+    first is a claim about the world derived from an observation about our
+    patience -- and callers act on it, so it is unsafe rather than merely
+    uninformative.
+    """
+
+    code: str
+    applied: bool | None
+    may_have_dispatched: bool
+    message: str
+    suggested_next_command: str | None = None
+
+
+def classify_dispatch_subprocess_error(error: BaseException) -> DispatchFailureVerdict:
+    """Separate `did-not-run` from `ran-and-we-stopped-waiting`.
+
+    These were caught in one handler and reported with one message, *"the
+    dispatch command could not be run, so no dispatch was recorded."* For a
+    timeout both clauses are wrong: it ran, and whether a dispatch was recorded
+    is exactly what we do not know.
+
+    Measured instance: trace `515ba38a` timed out while the city event log shows
+    `execution.work_associated` 1 ms in and four beads created 35 s in. The
+    dispatch was recorded; the tool reported it was not.
+    """
+    if isinstance(error, subprocess.TimeoutExpired):
+        return DispatchFailureVerdict(
+            code=DISPATCH_TIMEOUT_CODE,
+            applied=None,
+            may_have_dispatched=True,
+            message=(
+                "The dispatch command ran but did not finish before the timeout, so "
+                "whether a dispatch was recorded is UNKNOWN. It may have completed."
+            ),
+            suggested_next_command=(
+                "check whether the dispatch landed before you retry -- a retry after a "
+                "timeout can dispatch a second time"
+            ),
+        )
+    return DispatchFailureVerdict(
+        code=DISPATCH_UNRUNNABLE_CODE,
+        applied=False,
+        may_have_dispatched=False,
+        message="The dispatch command could not be run, so no dispatch was recorded.",
+    )
+
+
 class WorkError(Exception):
     def __init__(self, diagnostic: Diagnostic):
         super().__init__(diagnostic.message)
@@ -337,15 +398,20 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
             timeout=DISPATCH_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
+        # #184: these are opposite worlds and shared one message. A timeout means
+        # the command RAN; `applied: false` after one is a claim about the world
+        # derived from how long we waited, and a caller who believes it retries.
+        verdict = classify_dispatch_subprocess_error(error)
         raise WorkError(
             _diagnostic(
                 ctx,
                 Severity.FATAL,
-                "MWRK_DISPATCH_COMMAND_FAILED",
-                "The dispatch command could not be run, so no dispatch was recorded.",
+                verdict.code,
+                verdict.message,
                 brief_id=plan.target_brief_id,
                 bead_id=plan.bead_id,
                 detail=str(error),
+                suggested_next_command=verdict.suggested_next_command,
             )
         ) from error
     if result.returncode != 0:

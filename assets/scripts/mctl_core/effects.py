@@ -264,16 +264,38 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     preconditions = _blocking_preconditions(legacy_gate_diagnostics(ctx))
     advisories: list[Diagnostic] = []
     if not request.sources:
-        advisories.append(
+        # #173, Taylor's ruling. This was a WARN in `advisories` -- reported to
+        # the operator without blocking -- and warning did not stop the brick.
+        #
+        # A brief created without a source is made its OWN source bead at
+        # dispatch time (work.py:636); `briefs_adjudicate` then closes that bead,
+        # because closing the brief is what adjudication IS. So approving the
+        # brief is what makes it permanently undispatchable -- and CT4.5
+        # MANDATES adjudicating before dispatch. The tool was minting briefs
+        # whose prescribed next step destroys them.
+        #
+        # A refusal at creation is CT13.4 working; a brick at approval is the
+        # failure mode. Only the SEVERITY was ever wrong: the code already named
+        # the right condition and cited the right policy.
+        preconditions = preconditions + (
             _diagnostic(
                 ctx,
-                Severity.WARN,
+                Severity.FATAL,
                 "MBRF034",
                 "Created brief has no source dependency, so it is B2.1-incomplete.",
                 brief_id=NEW_BRIEF_ID_PLACEHOLDER,
                 policy_ref="B2.1",
-                suggested_next_command="bd link <new-brief-id> <source-bead-id> --type related",
-            )
+                # The old remedy -- `bd link <new-brief-id> ...` -- was written
+                # for a WARN that fired AFTER creation, when a brief id existed
+                # to link. Refusing means there is no new brief id, so that
+                # advice is now unfollowable. A refusal that names the rule and
+                # not the remedy is a wall, so the remedy moves to the thing the
+                # caller can actually do: supply the source on the call.
+                suggested_next_command=(
+                    "mctl briefs create --source <source-bead-id> ... "
+                    "(or pass `sources` to briefs_create)"
+                ),
+            ),
         )
     metadata = {"created_by": "mctl", "mctl_trace_id": ctx.trace_id, "created_at": _now()}
     if request.requested_by:
@@ -362,6 +384,33 @@ def _require_brief_root(ctx: MctlContext, layout: ArtifactLayout) -> None:
     """
     if layout.root.is_dir():
         return
+
+    # #147: materialise the cache for a root that already resolves.
+    #
+    # The refusal below guards a MIS-RESOLVED root -- writing through one would
+    # build a brief tree where nothing reads. That hazard needs the resolution
+    # itself to be wrong. It is not wrong merely because the directory is absent:
+    # `paths.toml` is rig-relative, `hq.rig_root` IS the city root (so the "city
+    # keeps its tree at the city root" reading describes hq's own rig-relative
+    # tree, not a competing convention), and B2.8 makes the bead store canonical
+    # with this tree as redundant CACHE -- `hecke` serves 45 open briefs holding
+    # `stack=0` on disk.
+    #
+    # So the distinguishing question is whether the rig's `.beads` directory
+    # exists. If it does, the rig is real, the root resolved, and only the cache
+    # is missing -- a directory mctl is entitled to make. If it does not, the
+    # resolution landed somewhere unreal and the refusal stands.
+    #
+    # Measured before this change: 6 of 16 registered rigs could never receive a
+    # FIRST brief, `agent_skills` among them while already holding 3 decision
+    # beads. For `mathcity` it made CT4.5 unsatisfiable -- the rig owning `mctl`
+    # had nowhere to land its own repair work.
+    parent = layout.root.parent
+    if parent.is_dir() and not layout.root.exists():
+        for directory in (layout.root, layout.pile, layout.stack, layout.decisions):
+            directory.mkdir(parents=True, exist_ok=True)
+        return
+
     raise MutationError(
         _diagnostic(
             ctx,
@@ -1153,17 +1202,35 @@ def _raise_if_blocked(plan: EffectPlan) -> None:
     if legacy is not None:
         raise MutationError(legacy)
     first = plan.preconditions[0]
+    # The blocking diagnostic's own remedy is carried through. Without it the
+    # refusal names a rule and not a way out: the operator is told
+    # `blocking_code: MBRF034` and left to look it up. A refusal that cannot be
+    # acted on is a wall, and walls get worked around rather than fixed.
+    facts = {
+        "blocking_code": first.code,
+        "brief_id": plan.target_brief_id,
+        "operation": plan.operation,
+    }
+    if first.policy_ref:
+        facts["policy_ref"] = first.policy_ref
+    if first.message:
+        facts["blocking_reason"] = first.message
+    if first.suggested_next_command:
+        # Carried in `facts` rather than left on the field, because
+        # `render_diagnostic` (diagnostics.py:78) prints severity, code,
+        # message, hint, facts and trace_id -- and NEVER
+        # `suggested_next_command`. Every diagnostic's remedy is invisible at
+        # the CLI, which is a separate defect filed on its own; this line stops
+        # THIS refusal being a wall while that is fixed properly.
+        facts["remedy"] = first.suggested_next_command
     raise MutationError(
         Diagnostic(
             severity=Severity.FATAL,
             code="MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS",
             message="Mutation blocked because brief doctor reported ERROR or FATAL diagnostics.",
-            facts={
-                "blocking_code": first.code,
-                "brief_id": plan.target_brief_id,
-                "operation": plan.operation,
-            },
+            facts=facts,
             trace_id=plan.trace_id,
+            suggested_next_command=first.suggested_next_command,
         )
     )
 

@@ -82,7 +82,19 @@ def read_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-def body_file(tmp_path: Path, text: str = "## What is being decided\n\nShip it?\n") -> Path:
+#: #169: the default body now carries `## Gate Evidence`, because without it
+#: `briefs_create` refuses -- and a fixture that mints a brief the drain would
+#: auto-reject was testing a path that produces invalid data. 16 tests in this
+#: file and test_real_bead_store used this default; every one of them was
+#: creating a brief that #96 shows would be destroyed at shuffle time while
+#: reporting success. The fixture was wrong, not the new check.
+DEFAULT_BODY = (
+    "## What is being decided\n\nShip it?\n\n"
+    "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+)
+
+
+def body_file(tmp_path: Path, text: str = DEFAULT_BODY) -> Path:
     path = tmp_path / "body.md"
     path.write_text(text, encoding="utf-8")
     return path
@@ -374,8 +386,21 @@ def test_create_rejects_an_unreadable_body_file(tmp_path: Path):
     assert "MBRF031" in result.stderr
 
 
-def test_create_without_a_source_warns_that_the_brief_is_incomplete(tmp_path: Path):
-    """B2.1: a brief is a decision bead WITH a source link."""
+def test_create_without_a_source_is_REFUSED_not_warned(tmp_path: Path):
+    """RENAMED AND INVERTED (#173, Taylor's ruling). This asserted a WARN.
+
+    A warning did not stop the brick: a brief created without a source becomes
+    its own source bead at dispatch (work.py:636), `briefs_adjudicate` closes
+    that bead, and the brief is permanently undispatchable -- via the workflow
+    CT4.5 MANDATES. Creation now refuses instead.
+
+    The old test was not wrong when written; it pinned the behaviour the ruling
+    overturned. Inverted deliberately and in place rather than deleted, so the
+    change of policy is visible in the history of this file.
+
+    Original docstring, preserved: "B2.1: a brief is a decision bead WITH a
+    source link." -- still true, and now enforced rather than observed.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
 
     result = run_mctl(
@@ -393,10 +418,10 @@ def test_create_without_a_source_warns_that_the_brief_is_incomplete(tmp_path: Pa
         beads_fixture=beads_fixture(rig_root),
     )
 
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert "MBRF034" in diagnostic_codes(payload)
-    assert payload["applied"] is False
+    assert result.returncode != 0, "sourceless creation must now refuse"
+    assert result.stdout.strip() == "", "a refused mutation emits no plan"
+    assert "MBRF034" in result.stderr
+    assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" in result.stderr
 
 
 def test_create_is_blocked_by_legacy_decisions_track_uncertainty(tmp_path: Path):
@@ -674,15 +699,41 @@ def test_create_without_json_renders_human_output(tmp_path: Path):
     assert "applied: False" in result.stdout
 
 
-def test_create_aborts_when_the_resolved_brief_root_does_not_exist(tmp_path: Path):
-    """A missing brief root is a resolution failure, not a directory to make.
+def test_create_makes_the_brief_root_for_a_registered_rig(tmp_path: Path):
+    """#147: creation materialises the cache for a rig whose root resolves.
 
-    assets/brief-pipeline/paths.toml declares rig-relative artifact paths, but
-    the live city keeps its brief tree at the city root, so the two disagree.
-    Until that is settled, an unguarded mkdir would quietly build a parallel
-    shadow tree under the rig root and nothing downstream would notice. The
-    resolver stays the single source of truth; creation just refuses to
-    materialize a root the resolver could not find.
+    SUPERSEDES `test_create_aborts_when_the_resolved_brief_root_does_not_exist`
+    and `test_create_dry_run_also_aborts_on_a_missing_brief_root`. Their reasoning
+    is preserved here because the concern was legitimate even though the premise
+    was false, and the next reader deserves the argument rather than its absence:
+
+        "A missing brief root is a resolution failure, not a directory to make.
+         paths.toml declares rig-relative artifact paths, but the live city keeps
+         its brief tree at the city root, so the two disagree. Until that is
+         settled, an unguarded mkdir would quietly build a parallel shadow tree
+         under the rig root and nothing downstream would notice."
+
+    Both claims fail, measured:
+
+    1. "The two disagree." `hq.rig_root` IS the city root, so the tree at
+       `<city-root>/.beads/briefs` is hq's OWN rig-relative tree. One tree,
+       described twice. A guard against a thing diverging from itself cannot fire
+       correctly.
+    2. "An unguarded mkdir would build a shadow tree." SEVEN formulas already
+       `mkdir -p "{{artifact_root}}/.pile"` unguarded on the normal path
+       (stick-dog, #149). The guard forbade in `briefs_create` exactly what the
+       pipeline does routinely elsewhere -- preventing the FIRST tree while
+       permitting every later one.
+
+    Cost, measured before the change: 6 of 16 registered rigs could never receive
+    a FIRST brief; `agent_skills` held 3 decision beads it could not add to; and
+    CT4.5 was unsatisfiable for `mathcity`, the rig that owns `mctl`.
+
+    The surviving concern -- something should notice a brief tree appearing where
+    one should not -- is pinned by the two refusal tests below. This test is the
+    permissive half and is deliberately not shipped alone: on its own it would
+    pass against a build that makes directories anywhere, which is the
+    shadow-tree fear made real.
     """
     city_root, rig_root = runtime_fixture(tmp_path)
     brief_root = rig_root / ".beads" / "briefs"
@@ -690,54 +741,68 @@ def test_create_aborts_when_the_resolved_brief_root_does_not_exist(tmp_path: Pat
 
     result = run_mctl(
         *brief_command(
-            city_root,
-            "create",
-            "--title",
-            "Decide dispatch policy",
-            "--body-file",
-            str(body_file(tmp_path)),
-            "--source",
-            "mc-source",
+            city_root, "create",
+            "--title", "Decide dispatch policy",
+            "--body-file", str(body_file(tmp_path)),
+            "--source", "mc-source",
             "--json",
         ),
         cwd=REPO_ROOT,
         beads_fixture=beads_fixture(rig_root),
     )
 
-    assert result.returncode != 0
-    assert "MBRF035" in result.stderr
-    assert str(brief_root) in result.stderr, "the operator needs the path that was tried"
-    assert not brief_root.exists(), "creation must not have made the missing tree"
-    # Nothing canonical either: the abort happens at plan time, before bd.
-    assert {row["id"] for row in read_jsonl(beads_fixture(rig_root))} == {
-        "mc-consistent",
-        "mc-divergent",
-        "mc-uncached",
-        "mc-stale",
-        "mc-source",
-    }
+    assert result.returncode == 0, f"{result.stdout[:400]}{result.stderr[:400]}"
+    assert brief_root.is_dir(), "the brief root was not created"
+    for sub in ("stack", ".pile", "decisions"):
+        assert (brief_root / sub).is_dir(), f"{sub} was not created"
 
 
-def test_create_dry_run_also_aborts_on_a_missing_brief_root(tmp_path: Path):
+def test_create_refuses_for_an_unregistered_rig_and_makes_nothing(tmp_path: Path):
+    """The restrictive half: creation may not make a tree for a rig that is not one.
+
+    Registration is enforced a layer up -- `MCTL_CONTEXT_UNKNOWN_RIG` fires before
+    `briefs_create` resolves any layout -- so this pins that the upstream guard
+    stays in front of the newly-permissive one. Asserting the REFUSAL alone would
+    not: it also asserts that no directory appeared anywhere under the city.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
-    shutil.rmtree(rig_root / ".beads" / "briefs")
+    before = {p for p in city_root.rglob("briefs") if p.is_dir()}
+
+    result = run_mctl(
+        *("briefs", "create", "--title", "x", "--body-file", str(body_file(tmp_path)),
+          "--city", str(city_root), "--rig", "not-a-registered-rig", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode != 0, "creation succeeded for an unregistered rig"
+    assert "MCTL_CONTEXT_UNKNOWN_RIG" in (result.stdout + result.stderr)
+    after = {p for p in city_root.rglob("briefs") if p.is_dir()}
+    assert after == before, f"directories appeared for an unregistered rig: {after - before}"
+
+
+def test_create_refuses_when_the_resolved_path_is_not_a_directory(tmp_path: Path):
+    """The other restrictive half: a resolved path that cannot BE a directory.
+
+    `mkdir` would raise here, so a create-on-first-use that assumed it could
+    always make the directory would turn a named refusal into an OSError.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    brief_root = rig_root / ".beads" / "briefs"
+    shutil.rmtree(brief_root)
+    brief_root.write_text("not a directory\n", encoding="utf-8")
 
     result = run_mctl(
         *brief_command(
-            city_root,
-            "create",
-            "--title",
-            "Decide dispatch policy",
-            "--body-file",
-            str(body_file(tmp_path)),
-            "--source",
-            "mc-source",
-            "--dry-run",
-            "--json",
+            city_root, "create",
+            "--title", "x", "--body-file", str(body_file(tmp_path)), "--json",
         ),
         cwd=REPO_ROOT,
         beads_fixture=beads_fixture(rig_root),
     )
 
-    assert result.returncode != 0
-    assert "MBRF035" in result.stderr
+    assert result.returncode != 0, "creation succeeded through a non-directory"
+    assert "MBRF035" in (result.stdout + result.stderr), (
+        f"refused without the named code: {result.stdout[:300]}{result.stderr[:300]}"
+    )
+

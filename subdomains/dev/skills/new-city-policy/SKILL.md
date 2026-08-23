@@ -43,10 +43,13 @@ cat <mathcity-pack-root>/subdomains/dev/POLICY-city.md
 
 Note:
 - the header **Status** (Draft vs Adopted) and **Date** line,
-- the highest CT-rule ID within the target pillar (CT1.x … CT12.x),
+- the highest CT-rule ID within the target pillar, read from the policy
+  itself (`grep -oE '^## Pillar CT[0-9]+' POLICY-city.md` for the pillar
+  list — do not assume a fixed upper bound; it grows, most recently to CT13),
 - whether the rule you are touching is **Adopted** or **PROPOSED**,
 - the existing pillars (new rules increment the highest ID in their pillar; a
-  genuinely new theme opens a new pillar, e.g. CT13).
+  genuinely new theme opens a new pillar, incrementing past whatever the
+  current highest is).
 
 Also confirm the CT prefix reservation is intact:
 
@@ -154,6 +157,15 @@ After amendment, run [[check-city-policy]] to confirm:
 - nothing currently in flight fails the new rule unexpectedly,
 - POLICY-city.md still parses (no broken markdown, header table intact),
 - the CT prefix row in `rule-prefix-registry.md` still matches.
+
+If this amendment opened a **new pillar** (e.g. CT13), no separate step is
+needed to make check-city-policy aware of it — its Step 2 derives the pillar
+list live from POLICY-city.md's own `## Pillar CT<N>` headings (#161), so a
+new pillar is audited the moment it's written, even with no hand-written
+guidance for it yet (it renders `unaudited (no guidance)` until someone adds
+that). It is still worth adding a key-signals bullet for the new pillar to
+check-city-policy/SKILL.md Step 2 while you're in the area — an audited-but-
+unguided pillar is correct, not ideal.
 
 Quick sanity counts:
 

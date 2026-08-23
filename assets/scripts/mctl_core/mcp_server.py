@@ -241,14 +241,40 @@ def assess_artifact_trust(ctx: MctlContext) -> ArtifactTrust:
 
     This deliberately does NOT resolve Q5 and does not add a second path
     resolver: it calls the one `artifact_layout()` the rest of mctl calls and
-    then reports whether what came back can be believed. Two independent
-    failures make it unbelievable, and Q5 documents both:
+    then reports whether what came back can be believed.
 
-    * the resolved brief root does not exist, so every artifact reads
-      `missing` for a structural reason rather than an observed one;
-    * pile files carry their bead id in `artifact:` frontmatter instead of in
-      the filename, so the `<bead_id>.md` lookup cannot find a file that is
-      sitting right there.
+    Trust answers exactly one question -- *can these readings be believed?*
+    It is NOT a claim that the brief tree is fully provisioned. Separating
+    those two is the whole content of #149.
+
+    An **absent** pile cannot lie. Every artifact under it reads `missing`,
+    and they really are missing, so the reading is accurate and may be acted
+    on. The pile is created lazily: every brief-producing formula runs
+    `mkdir -p "{{artifact_root}}/.pile"` at the moment it writes its first
+    brief (`formulas/create-issue-briefed.formula.toml:194` and six siblings),
+    and nothing provisions it before then. "No pile directory" is therefore
+    the ordinary empty state of a rig that has not yet piled a brief, not a
+    defect -- so it no longer untrusts the rig. Measured when #149 was filed:
+    6 of 17 rigs were untrusted on this branch alone, and 4 of those 6 held
+    zero brief beads.
+
+    A **malformed** pile does lie: its files carry their bead id in an
+    `artifact:` frontmatter key rather than in the filename, so the
+    `<bead_id>.md` lookup reports `missing` for artifacts sitting right
+    there. That is the one condition Q5 documents which makes a reading
+    unbelievable, and it remains the one condition that untrusts a rig whose
+    root exists.
+
+    A missing *root* stays untrusted and is left to Q5 / issue #2. Unlike the
+    pile it also gates the mutation path -- `_require_brief_root` refuses
+    with MBRF035 rather than let `mkdir -p` build a shadow tree -- so
+    narrowing it is a separate decision with a separate blast radius.
+
+    On MBRF021: it is withheld only while a rig is untrusted. Dropping the
+    pile branch lets it surface on rigs whose pile is genuinely
+    unmaterialised, where it is TRUE ("this bead has no cache artifact"). It
+    stays withheld on the malformed rigs -- which is precisely where Q5
+    measured it firing falsely on 66 of 70 briefs.
     """
     layout = artifact_layout(ctx)
     root = str(layout.root)
@@ -265,15 +291,10 @@ def assess_artifact_trust(ctx: MctlContext) -> ArtifactTrust:
             open_question="Q5",
             reference=Q5_REFERENCE,
         )
-    if not layout.pile.is_dir():
-        return ArtifactTrust(
-            trusted=False,
-            reason=f"the resolved pile directory {pile} does not exist",
-            resolved_brief_root=root,
-            resolved_pile=pile,
-            open_question="Q5",
-            reference=Q5_REFERENCE,
-        )
+    # No `pile.is_dir()` gate here on purpose (#149). `_frontmatter_lookup_mismatch`
+    # already returns None for an absent pile, so an unmaterialised pile falls
+    # through to the trusted return below -- absence is the empty state, not a
+    # data problem.
     mismatch = _frontmatter_lookup_mismatch(layout.pile)
     if mismatch is not None:
         name, artifact_id = mismatch
@@ -292,8 +313,10 @@ def assess_artifact_trust(ctx: MctlContext) -> ArtifactTrust:
     return ArtifactTrust(
         trusted=True,
         reason=(
-            "the resolved brief root exists and its pile uses the <bead_id>.md "
-            "filename convention the lookup assumes"
+            "the resolved brief root exists and its pile is addressable: it "
+            "either uses the <bead_id>.md filename convention the lookup "
+            "assumes, or has not been created yet, which is the empty state "
+            "of a rig that has not piled a brief"
         ),
         resolved_brief_root=root,
         resolved_pile=pile,
@@ -455,6 +478,27 @@ class ToolSpec:
                 }
             },
         }
+
+
+def _handle_orders_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Every registered order with the outcome of its last run (#156).
+
+    The outcome comes from `<city-root>/.gc/events.jsonl`, not from
+    `gc order history` (which logs that an order ran, never how it ended) and
+    not from `gc order check` (whose `last_run_outcome` is declared and never
+    populated). Without this tool the projection existed in `mctl_core` and no
+    MCP caller could reach it.
+    """
+    from .orders import city_reader, orders_status
+
+    return orders_status(city_reader(ctx.city_root))
+
+
+def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Every formula the city knows about (#117 / #156)."""
+    from .orders import city_reader, formulas_catalog
+
+    return formulas_catalog(city_reader(ctx.city_root))
 
 
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -950,6 +994,56 @@ _PROBE_SCHEMA: Schema = {
 
 
 TOOLS: tuple[ToolSpec, ...] = (
+    ToolSpec(
+        name="orders_status",
+        title="Order status with outcomes",
+        description=(
+            "Every registered order with the outcome of its last run. The outcome is "
+            "folded from the city event log; `healthy` is the outcome and never the "
+            "recency, because an order can fire punctually and fail every time."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total": {"type": ["integer", "null"]},
+                "failing": {"type": "integer"},
+                "outcome_recorded": {"type": "integer"},
+                "ran_at_least_once": {"type": "integer"},
+                "orders": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": ["string", "null"]},
+                            "trigger": {"type": ["string", "null"]},
+                            "enabled": {"type": ["boolean", "null"]},
+                            "last_executed": {"type": ["string", "null"]},
+                            "last_outcome": {"type": "string"},
+                            "healthy": {"type": "boolean"},
+                        },
+                    },
+                },
+            },
+            ["state", "total", "orders", "failing", "outcome_recorded"],
+        ),
+        handler=_handle_orders_status,
+    ),
+    ToolSpec(
+        name="formulas_catalog",
+        title="Formula catalog",
+        description="Every formula the city knows about.",
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total": {"type": ["integer", "null"]},
+                "formulas": {"type": "array", "items": {"type": "object"}},
+            },
+            ["state", "total", "formulas"],
+        ),
+        handler=_handle_formulas_catalog,
+    ),
     ToolSpec(
         name="context_resolve",
         title="Resolve runtime context",
