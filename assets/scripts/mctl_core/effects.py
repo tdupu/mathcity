@@ -28,7 +28,7 @@ from .beads import (
     read_beads,
     verify_relation,
 )
-from .github_issues import GithubIssueError, fetch_issue
+from .github_issues import GithubIssueError, fetch_issue, rig_for_issue
 from .briefs import (
     cached_brief_documents,
     decision_options,
@@ -515,7 +515,36 @@ def plan_create_issue_bead(ctx: MctlContext, request: IssueBeadCreateInput) -> E
     exactly that failure in `plan_create_brief`'s own `_require_brief_root`,
     and the fix there does not reach this function, so the discipline has to
     be held here independently rather than inherited.
+
+    The target rig is DETERMINED by the issue's tracker, not chosen by the
+    caller (Taylor, on #190/#170's shared seam) -- checked before the `gh`
+    fetch, not after, so a caller pointed at the wrong rig fails cheaply
+    rather than after a network round trip. A bead minted into the wrong
+    store is exactly what #190's own `MCMS_CROSS_STORE_SOURCE` refuses
+    downstream; this check puts the refusal where the information already
+    is, on this side, rather than relying solely on that downstream catch.
     """
+    issue_url = f"https://github.com/{request.repo}/issues/{request.issue_number}"
+    expected_rig = rig_for_issue(issue_url)
+    if expected_rig is not None and expected_rig != ctx.rig_id:
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS005",
+                (
+                    f"{request.repo}#{request.issue_number} belongs to rig "
+                    f"{expected_rig!r}, not the requested rig {ctx.rig_id!r}."
+                ),
+                hint="The rig is determined by the tracker that holds the issue, not chosen by the caller.",
+                facts={
+                    "city_path": str(ctx.city_root),
+                    "rig_name": ctx.rig_id,
+                    "expected_rig": expected_rig,
+                },
+                trace_id=ctx.trace_id,
+            )
+        )
+
     try:
         issue = fetch_issue(request.repo, request.issue_number)
     except GithubIssueError as error:

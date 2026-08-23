@@ -676,3 +676,8 @@ module = "effects.py"
 severity = "FATAL"
 meaning = "gh could not read the issue (missing, unauthenticated, not found, or a malformed response)."
 module = "effects.py"
+
+[MISS005]
+severity = "FATAL"
+meaning = "The issue belongs to a different rig than the one requested; the rig is determined by the tracker, not chosen by the caller."
+module = "effects.py"

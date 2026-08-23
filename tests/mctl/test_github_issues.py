@@ -17,7 +17,7 @@ SCRIPTS_ROOT = REPO_ROOT / "assets" / "scripts"
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from mctl_core.github_issues import GithubIssueError, fetch_issue
+from mctl_core.github_issues import GithubIssueError, fetch_issue, rig_for_issue
 
 
 def fake_run(returncode: int, stdout: str = "", stderr: str = ""):
@@ -81,3 +81,25 @@ def test_malformed_json_raises_rather_than_crashing(monkeypatch):
 
     with pytest.raises(GithubIssueError, match="unparseable"):
         fetch_issue("tdupu/mathcity", 1)
+
+
+# --- rig_for_issue (stripes' parser, shared with #190) ----------------------
+
+
+def test_rig_for_issue_resolves_the_repo_segment():
+    assert rig_for_issue("https://github.com/tdupu/mathcity/issues/179") == "mathcity"
+
+
+def test_rig_for_issue_accepts_a_trailing_slash():
+    assert rig_for_issue("https://github.com/tdupu/mathcity/issues/179/") == "mathcity"
+
+
+def test_rig_for_issue_rejects_a_trailing_path_rather_than_reading_the_wrong_issue():
+    """A URL like `.../issues/1/foo` must not be read as issue 1."""
+    assert rig_for_issue("https://github.com/tdupu/mathcity/issues/179/foo") is None
+
+
+def test_rig_for_issue_returns_none_never_a_guess_for_garbage_input():
+    assert rig_for_issue("not a url") is None
+    assert rig_for_issue("") is None
+    assert rig_for_issue("https://gitlab.com/tdupu/mathcity/issues/179") is None

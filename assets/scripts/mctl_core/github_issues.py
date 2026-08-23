@@ -15,11 +15,39 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import re
 import subprocess
 
 
 class GithubIssueError(Exception):
     """`gh` could not answer, or answered with something unusable."""
+
+
+#: `https://github.com/<owner>/<repo>/issues/<n>` -- the only shape we parse.
+#: Anything else returns None rather than a guess.
+_ISSUE_URL = re.compile(
+    r"^https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)/?$"
+)
+
+
+def rig_for_issue(issue_url: str) -> str | None:
+    """The rig an issue belongs to, derived from the tracker that holds it.
+
+    Taylor: *"if you are pulling an issue from a github issue tracker, then that
+    tracker belongs to the repo of a rig. The obvious spot is that rig."* The
+    rig is therefore DETERMINED, not chosen -- an override belongs at the call
+    site for the exceptional case, not here.
+
+    Returns None on anything unparseable. A guessed rig writes a brief into the
+    wrong store, which fails at creation if you are lucky and succeeds in the
+    wrong place if you are not.
+
+    stripes' parser, shared for #190's `commission_brief` and #170's
+    `create_issue_bead` so the two tools cannot resolve a rig differently for
+    the same issue -- one copy, imported here rather than reimplemented.
+    """
+    match = _ISSUE_URL.match(issue_url.strip())
+    return match.group("repo") if match else None
 
 
 @dataclass(frozen=True)

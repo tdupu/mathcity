@@ -111,6 +111,35 @@ def test_omitting_dry_run_defaults_to_dry_run(tmp_path, monkeypatch):
 # --- fail-closed conditions ---------------------------------------------------
 
 
+def test_an_issue_for_a_different_rig_is_refused_before_any_gh_call(tmp_path, monkeypatch):
+    """The rig is determined by the tracker, not chosen by the caller.
+
+    The server fixture resolves to rig "mathcity"; a hecke-tracked issue must
+    be refused, and refused BEFORE fetch_issue runs at all -- checking the
+    fake never got called is what proves this is a fail-fast precondition,
+    not a check that happens to also refuse after a wasted network read.
+    """
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    called = []
+
+    def fake_fetch_issue(repo, number, *, timeout=30):
+        called.append((repo, number))
+        return an_issue()
+
+    monkeypatch.setattr(effects, "fetch_issue", fake_fetch_issue)
+
+    result = call(
+        server(city_root, rig_root),
+        "create_issue_bead",
+        {"repo": "tdupu/hecke", "issue_number": 179, "dry_run": True},
+    )["result"]
+
+    assert result.get("isError") is True
+    codes = {d["code"] for d in result["structuredContent"]["diagnostics"]}
+    assert "MISS005" in codes
+    assert called == [], "fetch_issue must not run once the rig mismatch is known"
+
+
 def test_a_closed_issue_is_refused(tmp_path, monkeypatch):
     city_root, rig_root = empty_rig_fixture(tmp_path)
     patch_fetch(monkeypatch, an_issue(state="CLOSED"))
