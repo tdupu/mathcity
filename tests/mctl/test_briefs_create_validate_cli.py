@@ -374,8 +374,21 @@ def test_create_rejects_an_unreadable_body_file(tmp_path: Path):
     assert "MBRF031" in result.stderr
 
 
-def test_create_without_a_source_warns_that_the_brief_is_incomplete(tmp_path: Path):
-    """B2.1: a brief is a decision bead WITH a source link."""
+def test_create_without_a_source_is_REFUSED_not_warned(tmp_path: Path):
+    """RENAMED AND INVERTED (#173, Taylor's ruling). This asserted a WARN.
+
+    A warning did not stop the brick: a brief created without a source becomes
+    its own source bead at dispatch (work.py:636), `briefs_adjudicate` closes
+    that bead, and the brief is permanently undispatchable -- via the workflow
+    CT4.5 MANDATES. Creation now refuses instead.
+
+    The old test was not wrong when written; it pinned the behaviour the ruling
+    overturned. Inverted deliberately and in place rather than deleted, so the
+    change of policy is visible in the history of this file.
+
+    Original docstring, preserved: "B2.1: a brief is a decision bead WITH a
+    source link." -- still true, and now enforced rather than observed.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
 
     result = run_mctl(
@@ -393,10 +406,10 @@ def test_create_without_a_source_warns_that_the_brief_is_incomplete(tmp_path: Pa
         beads_fixture=beads_fixture(rig_root),
     )
 
-    assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert "MBRF034" in diagnostic_codes(payload)
-    assert payload["applied"] is False
+    assert result.returncode != 0, "sourceless creation must now refuse"
+    assert result.stdout.strip() == "", "a refused mutation emits no plan"
+    assert "MBRF034" in result.stderr
+    assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" in result.stderr
 
 
 def test_create_is_blocked_by_legacy_decisions_track_uncertainty(tmp_path: Path):

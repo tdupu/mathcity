@@ -132,7 +132,7 @@ meaning = "Proposed brief label is not a usable bd label token."
 module = "briefs.py"
 
 [MBRF034]
-severity = "WARN"
+severity = "FATAL"
 meaning = "Created brief has no source dependency, so it is B2.1-incomplete."
 policy_ref = "B2.1"
 module = "effects.py"
