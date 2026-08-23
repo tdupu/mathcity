@@ -28,6 +28,7 @@ from .beads import (
     read_beads,
     verify_relation,
 )
+from .github_issues import GithubIssueError, fetch_issue
 from .briefs import (
     cached_brief_documents,
     decision_options,
@@ -485,6 +486,143 @@ def _require_brief_root(ctx: MctlContext, layout: ArtifactLayout) -> None:
             ),
         )
     )
+
+
+@dataclass(frozen=True)
+class IssueBeadCreateInput:
+    repo: str
+    issue_number: int
+
+
+#: The plan cannot name the bead it is about to create, because bd mints the
+#: id -- same reasoning as `NEW_BRIEF_ID_PLACEHOLDER`, a distinct token
+#: because this placeholder never denotes a brief.
+NEW_ISSUE_BEAD_ID_PLACEHOLDER = "(pending-issue-bead-id)"
+
+
+def plan_create_issue_bead(ctx: MctlContext, request: IssueBeadCreateInput) -> EffectPlan:
+    """Plan minting an OPEN bead that mirrors one GitHub issue (#170).
+
+    `MWRK011` requires a brief's source dependency to be a real bead; nothing
+    in mctl currently mints one from a tracker issue, so an issue-derived
+    brief has no legal source to point at. This is the read-then-plan half of
+    the fix -- fetch the issue, decide whether a bead should be minted, and
+    describe that write without performing it.
+
+    Every branch here is a read (the GitHub fetch, the existing-mirror scan
+    over already-materialised beads) or pure computation. No `bd create`, no
+    `mkdir`, nothing else that could make a dry run mutate -- #188 measured
+    exactly that failure in `plan_create_brief`'s own `_require_brief_root`,
+    and the fix there does not reach this function, so the discipline has to
+    be held here independently rather than inherited.
+    """
+    try:
+        issue = fetch_issue(request.repo, request.issue_number)
+    except GithubIssueError as error:
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS004",
+                f"Could not read {request.repo}#{request.issue_number}: {error}",
+                facts={"city_path": str(ctx.city_root), "rig_name": ctx.rig_id},
+                trace_id=ctx.trace_id,
+            )
+        ) from error
+
+    reference = issue.reference
+
+    if not issue.is_open:
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS001",
+                f"{reference} is already {issue.state.lower()}; refusing to mint a bead for it.",
+                hint="A closed issue has nothing left to dispatch work against.",
+                facts={
+                    "city_path": str(ctx.city_root),
+                    "rig_name": ctx.rig_id,
+                    "issue_state": issue.state,
+                },
+                trace_id=ctx.trace_id,
+            )
+        )
+
+    if not issue.body.strip():
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS002",
+                f"{reference} has an empty body; nothing to mirror into a bead.",
+                facts={"city_path": str(ctx.city_root), "rig_name": ctx.rig_id},
+                trace_id=ctx.trace_id,
+            )
+        )
+
+    existing = _find_issue_mirror(ctx, reference)
+    if existing is not None:
+        # Idempotent by construction: report the existing bead rather than
+        # minting a second mirror for the same issue.
+        return EffectPlan(
+            trace_id=ctx.trace_id,
+            operation="create_issue_bead",
+            target_brief_id=existing,
+            preconditions=(),
+            bead_updates=(),
+            cache_updates=(),
+            event_writes=(),
+            trace_writes=(),
+            advisories=(
+                Diagnostic(
+                    Severity.INFO,
+                    "MISS003",
+                    f"{reference} already has a mirror bead: {existing}.",
+                    facts={
+                        "city_path": str(ctx.city_root),
+                        "rig_name": ctx.rig_id,
+                        "bead_id": existing,
+                    },
+                    trace_id=ctx.trace_id,
+                ),
+            ),
+        )
+
+    metadata = {
+        "created_by": "mctl",
+        "mctl_trace_id": ctx.trace_id,
+        "created_at": _now(),
+        "gh.issue": reference,
+        "gh.repo": issue.repo,
+        "gh.labels": ",".join(issue.labels),
+    }
+    bead_create = BeadCreate(
+        placeholder_id=NEW_ISSUE_BEAD_ID_PLACEHOLDER,
+        title=issue.title,
+        body=issue.body,
+        issue_type="task",
+        labels=(),
+        metadata=metadata,
+        sources=(),
+    )
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="create_issue_bead",
+        target_brief_id=NEW_ISSUE_BEAD_ID_PLACEHOLDER,
+        preconditions=(),
+        bead_updates=(),
+        cache_updates=(),
+        event_writes=(),
+        trace_writes=(),
+        bead_creates=(bead_create,),
+    )
+
+
+def _find_issue_mirror(ctx: MctlContext, reference: str) -> str | None:
+    """The existing task bead mirroring this issue, if creation already ran once."""
+    for bead in read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture, issue_type="task"):
+        metadata = bead.raw.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("gh.issue") == reference:
+            return bead.id
+    return None
 
 
 def plan_adjudication(

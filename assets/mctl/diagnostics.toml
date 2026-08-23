@@ -651,3 +651,28 @@ severity = "INFO"
 meaning = "Brief declares no bead subject."
 policy_ref = "B2.1a"
 module = "briefs.py"
+
+# MISS001-004: #170, create_issue_bead. A new prefix -- mirroring a GitHub
+# issue into a bead is neither a brief operation (MBRF) nor a dispatch one
+# (MWRK); it is the read/mint step that gives an issue-derived brief a legal
+# MWRK011 source dependency in the first place.
+
+[MISS001]
+severity = "FATAL"
+meaning = "The GitHub issue is not open; refusing to mint a bead for it."
+module = "effects.py"
+
+[MISS002]
+severity = "FATAL"
+meaning = "The GitHub issue has an empty body; nothing to mirror into a bead."
+module = "effects.py"
+
+[MISS003]
+severity = "INFO"
+meaning = "The issue already has a mirror bead; the existing bead is returned instead of minting a second one."
+module = "effects.py"
+
+[MISS004]
+severity = "FATAL"
+meaning = "gh could not read the issue (missing, unauthenticated, not found, or a malformed response)."
+module = "effects.py"
