@@ -55,6 +55,7 @@ ALLOWED_TOOLS = frozenset(
     {
         "orders_status",
         "formulas_catalog",
+        "commission_brief",
         "context_resolve",
         "context_rigs",
         "fleet_sessions",

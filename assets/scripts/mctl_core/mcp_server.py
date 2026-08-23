@@ -72,13 +72,17 @@ from .payloads import (
     replay_blocked as _replay_blocked,
     require_trace as _require_trace,
 )
+from .commission import CommissionRefused
 from .effects import (
     BriefCreateInput,
+    IssueBeadCreateInput,
     MutationError,
     apply_effect_plan,
     dry_run_payload,
     plan_adjudication,
+    plan_commission_brief,
     plan_create_brief,
+    plan_create_issue_bead,
     plan_deferral,
 )
 from .fields import read_frontmatter
@@ -489,9 +493,12 @@ def _handle_orders_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
     populated). Without this tool the projection existed in `mctl_core` and no
     MCP caller could reach it.
     """
-    from .orders import city_reader, orders_status
+    from .orders import EVENT_LOG_ONLY, city_reader, orders_status
 
-    return orders_status(city_reader(ctx.city_root))
+    # #156 follow-up: the catalog (`gc order list`) measured 89 s in-city and the
+    # tool timed out at 120 s when first exercised live. The outcomes half is a
+    # local file. Serve what is servable; report the catalog `unreachable`.
+    return orders_status(city_reader(ctx.city_root), mode=EVENT_LOG_ONLY)
 
 
 def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -646,6 +653,41 @@ def _handle_briefs_validate(ctx: MctlContext, arguments: Mapping[str, Any]) -> d
     payload = report.to_dict()
     payload["diagnostics"] = _diagnostics(ctx, report.diagnostics)
     return payload
+
+
+def _handle_commission_brief(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """#190: a source bead becomes a commission brief in the pile.
+
+    A COMMISSION AUTHORIZES PLANNING, NOT WORK -- the plan it commissions returns
+    as its own brief for separate approval, which keeps the CT4.5 commission
+    exemption one hop deep.
+
+    `CommissionRefused` is caught HERE and converted, deliberately. It is an
+    exception in the core, which is right for a library: a caller who ignores it
+    gets a traceback rather than a silent half-commission. At a tool boundary an
+    exception escapes the response envelope, so the caller receives a crash
+    instead of a code it can branch on. The refusal carries its own code
+    (MCMS_SOURCES_REQUIRED / MCMS_CROSS_STORE_SOURCE) and that code is surfaced
+    rather than replaced with a generic one.
+    """
+    try:
+        plan = plan_commission_brief(
+            ctx,
+            bead_id=str(arguments.get("bead_id") or ""),
+            title=str(arguments.get("title") or ""),
+            body=str(arguments.get("body") or ""),
+            issue_url=arguments.get("issue_url"),
+            issue_labels=tuple(arguments.get("issue_labels") or ()),
+            bead_rig=arguments.get("bead_rig"),
+        )
+    except CommissionRefused as refused:
+        return {
+            "diagnostics": [
+                _diagnostic(ctx, Severity.FATAL, refused.code, str(refused)).to_dict()
+            ],
+            "applied": False,
+        }
+    return _effect_payload(ctx, plan, _dry_run(arguments))
 
 
 def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -834,6 +876,17 @@ def _handle_briefs_create(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
             labels=tuple(arguments.get("labels") or ()),
             requested_by=arguments.get("requested_by"),
             sources=tuple(arguments.get("sources") or ()),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_create_issue_bead(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_create_issue_bead(
+        ctx,
+        IssueBeadCreateInput(
+            repo=arguments.get("repo") or "",
+            issue_number=int(arguments["issue_number"]),
         ),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
@@ -1468,6 +1521,53 @@ TOOLS: tuple[ToolSpec, ...] = (
         artifact_state=True,
     ),
     ToolSpec(
+        name="commission_brief",
+        title="Commission a brief from a source bead",
+        description=(
+            "Turn an existing source bead into a COMMISSION brief in the pile. A commission "
+            "authorizes PLANNING ONLY -- the dispatch plan it produces returns as its own "
+            "brief for separate approval, which is what keeps the CT4.5 commission exemption "
+            "one hop deep. "
+            "`bead_id` is required and must live in the SAME rig store as the brief: a "
+            "cross-store source fails at creation with 'no issue found matching', so it is "
+            "refused here first (MCMS_CROSS_STORE_SOURCE). A missing source is refused as "
+            "MCMS_SOURCES_REQUIRED, because a brief without one warns at creation and is "
+            "FATAL at dispatch (MWRK011) -- permanently uncommissionable. "
+            "Tracker provenance rides in METADATA (`gh.issue`, `gh.repo`, `gh.labels`), never "
+            "in bd labels: GitHub labels are namespaced and bd rejects slashes (MBRF033). An "
+            "issue with no labels OMITS `gh.labels` rather than writing an empty string. "
+            "The brief lands in the PILE and enters the shared lifecycle (B2.10); it never "
+            "writes a stack row, because the stack is brief-shuffle's to write."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {"type": "string", "description": "Source bead this brief decides on."},
+                "title": nullable_string("What is being decided."),
+                "body": nullable_string("Brief body markdown."),
+                "issue_url": nullable_string("Originating GitHub issue, if any."),
+                "issue_labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "The issue's labels, carried verbatim into gh.labels metadata.",
+                },
+                "bead_rig": nullable_string(
+                    "Rig whose store holds the source bead. Omit when it is this rig; "
+                    "supplying a different one is refused rather than attempted."
+                ),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["bead_id"],
+        ),
+        output_schema=response_schema({"applied": {"type": "boolean"}}, ["applied"]),
+        handler=_handle_commission_brief,
+        mutating=True,
+        # Every mutating tool in this surface is external_ready=False, and the
+        # snapshot test enforces it. A tool that mints a bead must not be
+        # reachable by an external client; the default (True) would have made
+        # it so, and the test caught that rather than my reading it.
+        external_ready=False,
+    ),
+    ToolSpec(
         name="briefs_adjudicate",
         title="Record a brief verdict",
         description="Record a verdict through the shared effect plan. Dry run by default.",
@@ -1583,6 +1683,31 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_briefs_create,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="create_issue_bead",
+        title="Mint an open bead mirroring a GitHub issue",
+        description=(
+            "Mint an OPEN bead from an open GitHub issue, so a brief can carry it as a "
+            "legal source dependency (#170, MWRK011). Idempotent: a second call for the "
+            "same issue returns the existing mirror bead rather than minting another. "
+            "Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "repo": {"type": "string", "description": "owner/name, e.g. tdupu/mathcity."},
+                "issue_number": {"type": "integer", "description": "The GitHub issue number."},
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["repo", "issue_number"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_create_issue_bead,
         mutating=True,
         external_ready=False,
         artifact_state=True,

@@ -44,6 +44,13 @@ def test_data_plane_is_healthy_when_reachable_and_nothing_quarantined(tmp_path, 
     dolt_payload = {"server": {"reachable": True, "latency_ms": 12}, "quarantine": []}
 
     def fake_run(command, **kwargs):
+        # #176: build_city_health now makes TWO kinds of call -- the city-level
+        # `gc dolt health` probe AND a per-rig `bd list` read, because per-rig
+        # state is measured rather than inherited. A mock that answers only the
+        # first turns every rig `unreachable`, which is the code behaving
+        # correctly against a fixture that predates it.
+        if command[:1] == ["bd"]:
+            return _FakeCompleted("[]")
         assert command[:3] == ["gc", "dolt", "health"]
         return _FakeCompleted(json.dumps(dolt_payload))
 
@@ -64,6 +71,8 @@ def test_data_plane_is_quarantined_when_a_registered_rigs_db_is_named(tmp_path, 
     }
 
     def fake_run(command, **kwargs):
+        if command[:1] == ["bd"]:
+            return _FakeCompleted("[]")   # rig answers; quarantine still wins
         return _FakeCompleted(json.dumps(dolt_payload))
 
     monkeypatch.setattr(health_mod.subprocess, "run", fake_run)
@@ -113,13 +122,27 @@ def test_data_plane_is_UNKNOWN_when_the_probe_times_out(tmp_path, monkeypatch):
     # the detail must say which one happened, not just that it failed. Now the
     # data_plane field says which one happened too.
     assert "did not answer" in report.probe_results[0].detail
-    assert report.per_rig[0].state == "unknown"
+    # #176 SUPERSEDES #159 for this row, and the reason is worth keeping.
+    #
+    # #159 made per-rig `unknown` when the CITY-level probe failed, because we
+    # had not asked the rig -- that was honest reporting of ignorance. #176
+    # removes the ignorance: every rig is now asked directly. A rig that does
+    # not answer its own probe IS unreachable, which is a measurement rather
+    # than an inherited guess.
+    #
+    # So per-rig `unknown` no longer exists, and cannot: there is no longer a
+    # path where we report on a rig without asking it. The city-level
+    # `data_plane` above still needs `unknown`, because THAT probe can still
+    # fail to run.
+    assert report.per_rig[0].state == "unreachable"
 
 
 def test_data_plane_is_unreachable_when_the_server_explicitly_answers_down(tmp_path, monkeypatch):
     dolt_payload = {"server": {"reachable": False, "latency_ms": None}, "quarantine": []}
 
     def fake_run(command, **kwargs):
+        if command[:1] == ["bd"]:
+            return _FakeCompleted("[]")   # rig answers; quarantine still wins
         return _FakeCompleted(json.dumps(dolt_payload))
 
     monkeypatch.setattr(health_mod.subprocess, "run", fake_run)

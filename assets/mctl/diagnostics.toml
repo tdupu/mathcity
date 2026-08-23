@@ -501,6 +501,16 @@ severity = "INFO"
 meaning = "limit_state is always 'unknown': no per-agent quota/usage-window recording exists yet (dashboard handoff §4.5)."
 module = "fleet.py"
 
+[MCMS_SOURCES_REQUIRED]
+severity = "FATAL"
+meaning = "A commission brief was requested with no source bead. Refused before writing: without a source the brief is B2.1-incomplete, warns at creation, and is FATAL at dispatch (MWRK011) -- permanently uncommissionable."
+module = "commission.py"
+
+[MCMS_CROSS_STORE_SOURCE]
+severity = "FATAL"
+meaning = "The source bead lives in a different rig store than the brief. A rig store cannot see another rig's beads, so creation would fail with 'no issue found matching <id>'. Refused before writing rather than attempted."
+module = "commission.py"
+
 [MCTL_MOLECULES_STORE_UNREADABLE]
 severity = "ERROR"
 meaning = "The bead store could not be read, so no molecule count is available. This is 'we could not look', NOT 'there are none' -- an empty census with no diagnostic reads as a city with nothing running."
@@ -676,3 +686,33 @@ severity = "INFO"
 meaning = "Brief declares no bead subject."
 policy_ref = "B2.1a"
 module = "briefs.py"
+
+# MISS001-004: #170, create_issue_bead. A new prefix -- mirroring a GitHub
+# issue into a bead is neither a brief operation (MBRF) nor a dispatch one
+# (MWRK); it is the read/mint step that gives an issue-derived brief a legal
+# MWRK011 source dependency in the first place.
+
+[MISS001]
+severity = "FATAL"
+meaning = "The GitHub issue is not open; refusing to mint a bead for it."
+module = "effects.py"
+
+[MISS002]
+severity = "FATAL"
+meaning = "The GitHub issue has an empty body; nothing to mirror into a bead."
+module = "effects.py"
+
+[MISS003]
+severity = "INFO"
+meaning = "The issue already has a mirror bead; the existing bead is returned instead of minting a second one."
+module = "effects.py"
+
+[MISS004]
+severity = "FATAL"
+meaning = "gh could not read the issue (missing, unauthenticated, not found, or a malformed response)."
+module = "effects.py"
+
+[MISS005]
+severity = "FATAL"
+meaning = "The issue belongs to a different rig than the one requested; the rig is determined by the tracker, not chosen by the caller."
+module = "effects.py"

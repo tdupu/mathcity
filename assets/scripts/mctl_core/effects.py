@@ -28,6 +28,7 @@ from .beads import (
     read_beads,
     verify_relation,
 )
+from .github_issues import GithubIssueError, fetch_issue, rig_for_issue
 from .briefs import (
     cached_brief_documents,
     decision_options,
@@ -461,10 +462,26 @@ def _require_brief_root(ctx: MctlContext, layout: ArtifactLayout) -> None:
     # FIRST brief, `agent_skills` among them while already holding 3 decision
     # beads. For `mathcity` it made CT4.5 unsatisfiable -- the rig owning `mctl`
     # had nowhere to land its own repair work.
+    # NO mkdir HERE. This function runs while the plan is being BUILT, before
+    # anything knows whether the caller asked for a dry run, so creating
+    # directories here mutates the filesystem on `dry_run: true`. stripes measured
+    # exactly that on the live city: a dry run against `mathcity` wrote zero files
+    # and brought three directories into existence at the instant of the probe.
+    # A dry run that mutates is not a dry run, and worse, the probe manufactured
+    # its own precondition -- any survey of "which rigs can accept a brief" run
+    # through this tool was contaminated by the act of asking.
+    #
+    # The directories do not need making here anyway: `_atomic_write` already does
+    # `path.parent.mkdir(parents=True, exist_ok=True)`, so applying the plan
+    # creates `.pile/` and `decisions/` as their files land. `stack/` is NOT
+    # created, and should not be -- nothing writes it at creation time; it is the
+    # shuffler's, per B2.10. Asserting it here was my over-reach.
+    #
+    # So the permission is all that belongs at plan time: refuse when the
+    # resolution is unreal, permit when only the cache is absent, and let apply
+    # do the making.
     parent = layout.root.parent
     if parent.is_dir() and not layout.root.exists():
-        for directory in (layout.root, layout.pile, layout.stack, layout.decisions):
-            directory.mkdir(parents=True, exist_ok=True)
         return
 
     raise MutationError(
@@ -484,6 +501,218 @@ def _require_brief_root(ctx: MctlContext, layout: ArtifactLayout) -> None:
                 "against the rig's actual brief tree."
             ),
         )
+    )
+
+
+@dataclass(frozen=True)
+class IssueBeadCreateInput:
+    repo: str
+    issue_number: int
+
+
+#: The plan cannot name the bead it is about to create, because bd mints the
+#: id -- same reasoning as `NEW_BRIEF_ID_PLACEHOLDER`, a distinct token
+#: because this placeholder never denotes a brief.
+NEW_ISSUE_BEAD_ID_PLACEHOLDER = "(pending-issue-bead-id)"
+
+
+def plan_create_issue_bead(ctx: MctlContext, request: IssueBeadCreateInput) -> EffectPlan:
+    """Plan minting an OPEN bead that mirrors one GitHub issue (#170).
+
+    `MWRK011` requires a brief's source dependency to be a real bead; nothing
+    in mctl currently mints one from a tracker issue, so an issue-derived
+    brief has no legal source to point at. This is the read-then-plan half of
+    the fix -- fetch the issue, decide whether a bead should be minted, and
+    describe that write without performing it.
+
+    Every branch here is a read (the GitHub fetch, the existing-mirror scan
+    over already-materialised beads) or pure computation. No `bd create`, no
+    `mkdir`, nothing else that could make a dry run mutate -- #188 measured
+    exactly that failure in `plan_create_brief`'s own `_require_brief_root`,
+    and the fix there does not reach this function, so the discipline has to
+    be held here independently rather than inherited.
+
+    The target rig is DETERMINED by the issue's tracker, not chosen by the
+    caller (Taylor, on #190/#170's shared seam) -- checked before the `gh`
+    fetch, not after, so a caller pointed at the wrong rig fails cheaply
+    rather than after a network round trip. A bead minted into the wrong
+    store is exactly what #190's own `MCMS_CROSS_STORE_SOURCE` refuses
+    downstream; this check puts the refusal where the information already
+    is, on this side, rather than relying solely on that downstream catch.
+    """
+    issue_url = f"https://github.com/{request.repo}/issues/{request.issue_number}"
+    expected_rig = rig_for_issue(issue_url)
+    if expected_rig is not None and expected_rig != ctx.rig_id:
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS005",
+                (
+                    f"{request.repo}#{request.issue_number} belongs to rig "
+                    f"{expected_rig!r}, not the requested rig {ctx.rig_id!r}."
+                ),
+                hint="The rig is determined by the tracker that holds the issue, not chosen by the caller.",
+                facts={
+                    "city_path": str(ctx.city_root),
+                    "rig_name": ctx.rig_id,
+                    "expected_rig": expected_rig,
+                },
+                trace_id=ctx.trace_id,
+            )
+        )
+
+    try:
+        issue = fetch_issue(request.repo, request.issue_number)
+    except GithubIssueError as error:
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS004",
+                f"Could not read {request.repo}#{request.issue_number}: {error}",
+                facts={"city_path": str(ctx.city_root), "rig_name": ctx.rig_id},
+                trace_id=ctx.trace_id,
+            )
+        ) from error
+
+    reference = issue.reference
+
+    if not issue.is_open:
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS001",
+                f"{reference} is already {issue.state.lower()}; refusing to mint a bead for it.",
+                hint="A closed issue has nothing left to dispatch work against.",
+                facts={
+                    "city_path": str(ctx.city_root),
+                    "rig_name": ctx.rig_id,
+                    "issue_state": issue.state,
+                },
+                trace_id=ctx.trace_id,
+            )
+        )
+
+    if not issue.body.strip():
+        raise MutationError(
+            Diagnostic(
+                Severity.FATAL,
+                "MISS002",
+                f"{reference} has an empty body; nothing to mirror into a bead.",
+                facts={"city_path": str(ctx.city_root), "rig_name": ctx.rig_id},
+                trace_id=ctx.trace_id,
+            )
+        )
+
+    existing = _find_issue_mirror(ctx, reference)
+    if existing is not None:
+        # Idempotent by construction: report the existing bead rather than
+        # minting a second mirror for the same issue.
+        return EffectPlan(
+            trace_id=ctx.trace_id,
+            operation="create_issue_bead",
+            target_brief_id=existing,
+            preconditions=(),
+            bead_updates=(),
+            cache_updates=(),
+            event_writes=(),
+            trace_writes=(),
+            advisories=(
+                Diagnostic(
+                    Severity.INFO,
+                    "MISS003",
+                    f"{reference} already has a mirror bead: {existing}.",
+                    facts={
+                        "city_path": str(ctx.city_root),
+                        "rig_name": ctx.rig_id,
+                        "bead_id": existing,
+                    },
+                    trace_id=ctx.trace_id,
+                ),
+            ),
+        )
+
+    metadata = {
+        "created_by": "mctl",
+        "mctl_trace_id": ctx.trace_id,
+        "created_at": _now(),
+        "gh.issue": reference,
+        "gh.repo": issue.repo,
+    }
+    # Absent means the issue had none; an empty string is a value that looks
+    # like a measurement and is not one. Matches #190's commission.py exactly
+    # (stripes' own convention, adopted here rather than diverged from) --
+    # `--has-metadata-key gh.labels` must not return a false positive for
+    # every unlabelled issue. #170/#190 seam review, 2026-08-23.
+    if issue.labels:
+        metadata["gh.labels"] = ",".join(issue.labels)
+    bead_create = BeadCreate(
+        placeholder_id=NEW_ISSUE_BEAD_ID_PLACEHOLDER,
+        title=issue.title,
+        body=issue.body,
+        issue_type="task",
+        labels=(),
+        metadata=metadata,
+        sources=(),
+    )
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="create_issue_bead",
+        target_brief_id=NEW_ISSUE_BEAD_ID_PLACEHOLDER,
+        preconditions=(),
+        bead_updates=(),
+        cache_updates=(),
+        event_writes=(),
+        trace_writes=(),
+        bead_creates=(bead_create,),
+    )
+
+
+def _find_issue_mirror(ctx: MctlContext, reference: str) -> str | None:
+    """The existing task bead mirroring this issue, if creation already ran once."""
+    for bead in read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture, issue_type="task"):
+        metadata = bead.raw.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("gh.issue") == reference:
+            return bead.id
+    return None
+
+
+def plan_commission_brief(
+    ctx: MctlContext,
+    *,
+    bead_id: str,
+    title: str,
+    body: str,
+    issue_url: str | None = None,
+    issue_labels: Sequence[str] = (),
+    bead_rig: str | None = None,
+) -> EffectPlan:
+    """A source bead becomes a commission brief in the pile (#190).
+
+    Validation runs FIRST and raises `CommissionRefused` before anything is
+    planned -- constraints 1 and 2 are cheap here and expensive afterwards. The
+    MCP handler converts that refusal into a FATAL diagnostic; a library caller
+    gets the exception, which is the right shape for each.
+
+    Everything else delegates to `plan_create_brief`, so there is one brief
+    creation path and this adds commission semantics on top rather than a
+    parallel implementation.
+    """
+    validate_commission(
+        sources=(bead_id,), bead_rig=bead_rig, brief_rig=ctx.rig_name
+    )
+    metadata = (
+        tracker_metadata(issue_url=issue_url, labels=issue_labels) if issue_url else {}
+    )
+    return plan_create_brief(
+        ctx,
+        BriefCreateInput(
+            title=title,
+            body=body,
+            labels=brief_labels(),
+            requested_by=metadata.get("gh.issue"),
+            sources=(bead_id,),
+            metadata=metadata,
+        ),
     )
 
 

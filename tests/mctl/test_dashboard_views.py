@@ -347,6 +347,7 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # A drift alarm on a security-relevant list: the allowlist must stay
     # NARROWER than the server surface, so this stays a literal deliberately.
     # Registry-relative would assert allowlist == tools, which is the opposite
+<<<<<<< HEAD
     # of what this guards. Bumped for molecules_list/_show (#111), then for
     # `briefs_present` (#177) -- READ-ONLY, and presenting briefs is the
     # dashboard's own job.
@@ -356,6 +357,10 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # creation, and the MCP has no caller identity. Recorded in
     # DELIBERATELY_UNREACHABLE with the reason.
     assert len(ALLOWED_TOOLS) == 24
+=======
+    # of what this guards. Bumped for molecules_list/_show (#111).
+    assert len(ALLOWED_TOOLS) == 24  # +commission_brief (#190)
+>>>>>>> origin/main
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

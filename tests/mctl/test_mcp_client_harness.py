@@ -92,11 +92,16 @@ def test_the_harness_asserts_the_expected_tool_names(tmp_path: Path):
 
     listing = next(check for check in report["checks"] if check["name"] == "tools_list")
     assert listing["passed"] is True
-    # 26 = 23 base + gates_status (#119) + molecules_list/_show (#111).
+    # 29 = 23 base + gates_status (#119) + molecules_list/_show (#111) +
+    # orders_status + formulas_catalog + create_issue_bead (#170).
     # Deliberate literal: here the count IS the assertion, an independent
     # statement of expected surface size. Registry-relative would be
     # tautological -- the harness asserting what the harness says.
+<<<<<<< HEAD
     assert len(listing["evidence"]["tools"]) == 30
+=======
+    assert len(listing["evidence"]["tools"]) == 30  # 23 base + gates_status + molecules x2 + orders_status + formulas_catalog + create_issue_bead + commission_brief
+>>>>>>> origin/main
     assert "briefs_list" in listing["evidence"]["tools"]
     assert listing["evidence"]["missing"] == []
 
@@ -139,8 +144,12 @@ def test_the_harness_exercises_the_rollout_gate_rather_than_bypassing_it(tmp_pat
 
     check = next(check for check in report["checks"] if check["name"] == "rollout_gate")
     assert check["passed"] is True
+<<<<<<< HEAD
     assert check["evidence"]["internal_tool_count"] == 30  # 23 + gates_status + molecules x2 + orders_status + formulas_catalog + decisions/present
     # + briefs_present/decisions_to_briefs (#177)
+=======
+    assert check["evidence"]["internal_tool_count"] == 30  # 23 base + gates_status + molecules x2 + orders_status + formulas_catalog + create_issue_bead + commission_brief
+>>>>>>> origin/main
     assert check["evidence"]["external_tool_count"] == 0
     assert check["evidence"]["external_call_diagnostic"] == "MCTL_MCP_TOOL_DISABLED"
 
