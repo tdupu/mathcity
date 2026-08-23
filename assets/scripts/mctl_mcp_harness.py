@@ -58,6 +58,7 @@ EXPECTED_TOOLS = (
     "city_health",
     "context_resolve",
     "context_rigs",
+    "create_issue_bead",
     "fleet_sessions",
     "formulas_catalog",
     "gates_status",

@@ -74,11 +74,13 @@ from .payloads import (
 )
 from .effects import (
     BriefCreateInput,
+    IssueBeadCreateInput,
     MutationError,
     apply_effect_plan,
     dry_run_payload,
     plan_adjudication,
     plan_create_brief,
+    plan_create_issue_bead,
     plan_deferral,
 )
 from .fields import read_frontmatter
@@ -676,6 +678,17 @@ def _handle_briefs_create(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
             labels=tuple(arguments.get("labels") or ()),
             requested_by=arguments.get("requested_by"),
             sources=tuple(arguments.get("sources") or ()),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_create_issue_bead(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_create_issue_bead(
+        ctx,
+        IssueBeadCreateInput(
+            repo=arguments.get("repo") or "",
+            issue_number=int(arguments["issue_number"]),
         ),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
@@ -1372,6 +1385,31 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_briefs_create,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="create_issue_bead",
+        title="Mint an open bead mirroring a GitHub issue",
+        description=(
+            "Mint an OPEN bead from an open GitHub issue, so a brief can carry it as a "
+            "legal source dependency (#170, MWRK011). Idempotent: a second call for the "
+            "same issue returns the existing mirror bead rather than minting another. "
+            "Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "repo": {"type": "string", "description": "owner/name, e.g. tdupu/mathcity."},
+                "issue_number": {"type": "integer", "description": "The GitHub issue number."},
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["repo", "issue_number"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_create_issue_bead,
         mutating=True,
         external_ready=False,
         artifact_state=True,
