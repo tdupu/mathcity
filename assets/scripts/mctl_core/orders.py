@@ -43,6 +43,17 @@ from typing import Any, Callable, Mapping
 #: measurement that missed `<city-root>/.gc/events.jsonl` entirely (#156).
 UNKNOWN_OUTCOME = "unknown"
 
+#: `gc order list` measured at 89 s from inside a city, and the tool timed out at
+#: 120 s when first exercised against the live city. Bound it well under what any
+#: caller will wait, so a slow catalog degrades FAST instead of hanging. CT13.1:
+#: a tool that does not carry the operation to its conclusion is not a tool.
+CATALOG_TIMEOUT_SECONDS = 15
+
+#: Serve only the event log -- a local file, milliseconds, 6,800+ order events.
+#: The outcomes half works today; the catalog is what cannot be served. In this
+#: mode no subprocess is spawned at all and the catalog reports `unreachable`.
+EVENT_LOG_ONLY = "event_log_only"
+
 #: The event types that settle an order's fate. `order.fired` says it started;
 #: only these two say how it ended.
 TERMINAL_EVENTS = {"order.completed": "completed", "order.failed": "failed"}
@@ -81,8 +92,39 @@ def _unreachable(what: str, err: Exception) -> dict[str, Any]:
     }
 
 
-def orders_status(read: Callable[[str], Any]) -> dict[str, Any]:
+def _event_log_only(read: Callable[[str], Any]) -> dict[str, Any]:
+    """Outcomes without the catalog: no subprocess, no wait.
+
+    The catalog is reported `unreachable` rather than empty -- we did not look,
+    which is not the same as finding nothing.
+    """
+    diagnostics: list[str] = [
+        "catalog not read: gc order list is not servable inside a request budget "
+        "(measured 89s in-city); serving event-log outcomes only"
+    ]
+    try:
+        outcomes = fold_outcomes(read("events"))
+        outcomes_state = "healthy"
+    except Exception as err:  # noqa: BLE001
+        outcomes, outcomes_state = {}, "unreachable"
+        diagnostics.append(f"event log unavailable: {err}")
+    return {
+        "state": "unreachable",
+        "outcomes_state": outcomes_state,
+        "total": None,
+        "orders": [],
+        "known_outcomes": {name: outcome for name, (_, outcome) in outcomes.items()},
+        "failing": sum(1 for _, o in outcomes.values() if o == "failed"),
+        "outcome_recorded": len(outcomes),
+        "diagnostics": diagnostics,
+    }
+
+
+def orders_status(read: Callable[[str], Any], mode: str | None = None) -> dict[str, Any]:
     """Every registered order, with its last execution and an unknown outcome."""
+    if mode == EVENT_LOG_ONLY:
+        return _event_log_only(read)
+
     try:
         orders = read("orders")
     except Exception as err:  # noqa: BLE001 -- any read failure is "we could not look"
@@ -205,7 +247,7 @@ def city_reader(city_root):
         if what == "orders":
             proc = subprocess.run(
                 ["gc", "order", "list", "--json"],
-                capture_output=True, text=True, cwd=str(city_root), timeout=120,
+                capture_output=True, text=True, cwd=str(city_root), timeout=CATALOG_TIMEOUT_SECONDS,
             )
             if proc.returncode != 0:
                 raise RuntimeError(f"gc order list exited {proc.returncode}")
@@ -213,7 +255,7 @@ def city_reader(city_root):
         if what == "history":
             proc = subprocess.run(
                 ["gc", "order", "history", "--json"],
-                capture_output=True, text=True, cwd=str(city_root), timeout=120,
+                capture_output=True, text=True, cwd=str(city_root), timeout=CATALOG_TIMEOUT_SECONDS,
             )
             if proc.returncode != 0:
                 raise RuntimeError(f"gc order history exited {proc.returncode}")
@@ -221,7 +263,7 @@ def city_reader(city_root):
         if what == "formulas":
             proc = subprocess.run(
                 ["gc", "formula", "list"],
-                capture_output=True, text=True, cwd=str(city_root), timeout=120,
+                capture_output=True, text=True, cwd=str(city_root), timeout=CATALOG_TIMEOUT_SECONDS,
             )
             if proc.returncode != 0:
                 raise RuntimeError(f"gc formula list exited {proc.returncode}")
