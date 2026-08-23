@@ -776,23 +776,33 @@ def _minted_brief_id(applied: Mapping[str, Any]) -> str | None:
 def _handle_decisions_to_briefs(
     ctx: MctlContext, arguments: Mapping[str, Any]
 ) -> dict[str, object]:
-    """One already-made decision -> one brief that can actually be dispatched.
+    """One decision TO BE MADE -> one hygienic brief, deposited UNDECIDED.
 
-    #85: the `decisions-to-briefs` skill writes the pile manifest and the
-    `decisions-track/` behind mctl's back because no typed tool does it properly.
-    A tool emitting briefs that cannot then be dispatched would relocate that, not
-    fix it -- so the bar is `work_status` returning readiness "ready".
+    READ THE NAME CAREFULLY -- its ambiguity is what produced #194:
 
-    Composes two ALREADY-GATED operations in sequence rather than conflating
-    them: create (through `plan_create_brief`) then adjudicate (through
-    `plan_adjudication`), each keeping its own preconditions. #173 is what
-    conflation looks like -- a brief that made its own source bead and bricked by
-    its own approval. Here the source must already exist and be open, and the
-    caller names it; this tool never mints a source.
+        'decisions to briefs'
+          read as   decisions ALREADY MADE -> briefs   ==> a verdict is required
+          MEANS     decisions TO BE MADE   -> briefs   ==> no verdict exists yet
 
-    The two steps cannot be one plan: `apply_effect_plan` substitutes minted ids
-    into `bead_relates` but NOT into `bead_updates`, so a close planned alongside
-    the create would target the placeholder.
+    The first reading is wrong and this docstring used to assert it. Acting on it,
+    this handler ran `plan_adjudication(verdict="approve")` on the brief it had just
+    created, so the tool manufactured verdicts no human ever gave. #194 removed that
+    call. **Do not restore it.**
+
+    This tool does NOT return a dispatchable brief, and must not. A brief it creates
+    reports `readiness: "blocked"` on exactly `MWRK010` -- no approving verdict --
+    until a human adjudicates it through `briefs_adjudicate`. That single blocker is
+    the contract: well-formed in every other respect, missing only the judgement that
+    is not ours to supply.
+
+    #85 is still why the tool exists: the `decisions-to-briefs` skill writes the pile
+    manifest and the decisions track behind mctl's back because no typed tool does it
+    properly. Depositing undecided does not relocate that -- the deposit is the part
+    #85 needed; the verdict never was.
+
+    The source bead must already exist and be open, and the caller names it. This
+    tool NEVER mints its own source: #173 is what that looks like -- a brief that
+    made its own source bead and bricked the moment its own approval closed it.
     """
     source_bead_id = str(arguments.get("source_bead_id") or "")
     decision = str(arguments.get("decision") or "")
