@@ -409,6 +409,45 @@ pre.plan {
   font-size: 11.5px;
 }
 
+/* --- city-operations lists, notes and definition blocks ----------------- */
+/* The city and molecules screens already emit these four classes; before the
+   visual port the sheet defined none of them, so an honest per-rig reason list
+   and a P6.2 caveat rendered as unstyled runs of text. Defined here, in the
+   one shared sheet, rather than inline on each screen -- the same rule the rest
+   of this file follows. */
+ul.reason-list { list-style: none; margin: 6px 0 0; padding: 0; }
+ul.reason-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 12.5px;
+}
+ul.reason-list li:last-child { border-bottom: 0; }
+.muted { color: var(--color-neutral-600); }
+/* The city screens' P6.2 caveat -- "both of these are true at once", "counted
+   separately, never folded in". Same treatment as .review-note (it is the same
+   kind of thing: a note the reader must not skip), kept a distinct class so the
+   two can diverge. */
+.note {
+  font-size: 12px;
+  color: var(--color-neutral-800);
+  background: var(--color-accent-100);
+  border-left: 3px solid var(--color-accent-600);
+  padding: 7px 9px;
+  margin: 6px 0 0;
+}
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0 0 4px; }
+dl.kv dt { color: var(--color-neutral-600); font-size: 12px; }
+dl.kv dd { margin: 0; font-size: 12.5px; }
+
+/* --- capacity strip: the prototype's colored per-slot cells -------------- */
+/* One cell per configured slot. Drawn only when the fleet probe answered --
+   an unknown fleet gets no strip at all, never a row of empty cells that would
+   read as "all free". */
+.mc-cap-strip { display: inline-flex; gap: 2px; align-items: stretch; margin: 4px 0 2px; }
+.mc-cap { width: 13px; height: 18px; border-radius: 1px; display: inline-block; }
+.mc-cap-occupied { background: var(--color-accent-600); }
+.mc-cap-free { background: var(--color-neutral-300); }
+
 /* --- responsive --------------------------------------------------------- */
 @media (max-width: 720px) {
   .mc-shell { flex-direction: column; }
@@ -421,4 +460,30 @@ pre.plan {
 }
 """
 
-STYLESHEET = _root_block() + font_faces() + _RULES
+def _stoplight_rules() -> str:
+    """The stoplight pill family, one rule per `STOP` tone.
+
+    Generated from `STOP` rather than typed out so a pill can never come to
+    disagree with the scale: retune a tone in one place and its pill follows.
+    This is the `.badge`-shaped treatment the design prototype paints on every
+    STATE cell (its `TONE` map is exactly `STOP`), lifted into shared CSS so the
+    city screens paint a status the same way the briefs screens do.
+
+    `ok` is the neutral tone the honesty invariant needs: an `unknown` state is
+    rendered with it, so a probe that could not run is dressed as neither a pass
+    nor a failure.
+    """
+    base = (
+        ".mc-stop { font-family: var(--font-mono); font-size: 10.5px; "
+        "letter-spacing: 0.05em; padding: 1px 6px; border-radius: var(--radius-sm); "
+        "border: 1px solid transparent; display: inline-block; }"
+    )
+    tones = "\n".join(
+        f".mc-stop-{tone} {{ color: {c['fg']}; background: {c['bg']}; "
+        f"border-color: {c['edge']}; }}"
+        for tone, c in STOP.items()
+    )
+    return "\n" + base + "\n" + tones + "\n"
+
+
+STYLESHEET = _root_block() + font_faces() + _RULES + _stoplight_rules()

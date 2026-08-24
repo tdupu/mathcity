@@ -25,6 +25,36 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from mctl_dashboard.render import esc as _e
+from mctl_dashboard.render import stoplight
+
+#: How a city-health state word maps onto the shared stoplight scale.
+#:
+#: `unknown` is deliberately absent -- it must resolve to the neutral `ok`
+#: tone, never a colour, because a probe that could not answer is neither a
+#: pass nor a failure (P6.2). `_state_tone` returns `ok` for anything not
+#: listed here, so an unmapped or unknown state is dressed neutrally by
+#: construction rather than by a caller remembering to.
+_HEALTH_TONE: dict[str, str] = {
+    "healthy": "go",
+    "reachable": "go",
+    "ok": "go",
+    "degraded": "warn",
+    "partial": "warn",
+    "unhealthy": "error",
+    "unreachable": "error",
+    "down": "error",
+}
+
+
+def _state_tone(state: str) -> str:
+    """The stoplight tone for a health/rig state, defaulting to neutral.
+
+    Neutral is the honest default: a state this map does not recognise -- and
+    `unknown` in particular -- is painted `ok`, so it reads as "not classified"
+    rather than borrowing the green of a pass or the red of a failure.
+    """
+    return _HEALTH_TONE.get(str(state).lower(), "ok")
+
 
 #: A diagnostic whose presence means the answer below it is not a measurement.
 PROBE_FAILURE_CODES: frozenset[str] = frozenset(
@@ -76,9 +106,21 @@ def fleet(payload: Mapping[str, Any]) -> str:
             region="city-fleet",
         )
     occupied = sum(1 for s in slots if str(s.get("state")) == "occupied")
+    # The prototype's capacity strip: one cell per configured slot, filled when
+    # the slot is occupied. Drawn only in this branch -- the probe answered, so
+    # the strip is a measurement. An unknown fleet (handled above) gets no strip
+    # at all rather than a row of empty cells that would read as "all free".
+    cells = "".join(
+        '<i class="mc-cap '
+        + ("mc-cap-occupied" if str(s.get("state")) == "occupied" else "mc-cap-free")
+        + '"></i>'
+        for s in slots
+    )
+    strip = f'<div class="mc-cap-strip" data-region="city-capacity">{cells}</div>' if cells else ""
     return _panel(
         "Agents",
-        f'<p class="lede"><strong>{len(slots)}</strong> configured slot'
+        strip
+        + f'<p class="lede"><strong>{len(slots)}</strong> configured slot'
         f'{"" if len(slots) == 1 else "s"}, <strong>{occupied}</strong> occupied. '
         "This is a measurement: the probe answered.</p>",
         region="city-fleet",
@@ -126,6 +168,7 @@ def health(payload: Mapping[str, Any]) -> str:
         # unhealthy" was true then and would be FALSE now. Prose written to
         # compensate for a bug becomes a lie the moment the bug is fixed.
         body = (
+            f'<p>{stoplight("unreachable", "error")}</p>'
             '<p class="lede"><strong>The data plane is unreachable.</strong> '
             "This is a measurement, not a missing one: the probe answered and "
             "reported the server down. Distinct from "
@@ -133,7 +176,11 @@ def health(payload: Mapping[str, Any]) -> str:
             "produces.</p>"
         )
     else:
+        # A measured state: paint it with the stoplight its word maps to.
+        # `_state_tone` returns the neutral `ok` for anything it does not
+        # recognise, so an unfamiliar state is never dressed as a pass.
         body = (
+            f'<p>{stoplight(state, _state_tone(state))}</p>'
             f'<p class="lede">Data plane: <strong>{_e(state)}</strong>, '
             f"across {len(per_rig)} rig{'' if len(per_rig) == 1 else 's'}.</p>"
         )
@@ -142,7 +189,7 @@ def health(payload: Mapping[str, Any]) -> str:
             '<ul class="reason-list">'
             + "".join(
                 f'<li><span class="mono">{_e(str(r.get("rig_id")))}</span> — '  # single-shape-ok: city_health per-rig envelope, not a brief row
-                f'{_e(str(r.get("state")))}'
+                f'{stoplight(str(r.get("state")), _state_tone(str(r.get("state"))))}'
                 + (f' <span class="muted">({_e(str(r.get("reason")))})</span>' if r.get("reason") else "")
                 + "</li>"
                 for r in per_rig[:20]
@@ -554,7 +601,7 @@ def worktrees(payload: Mapping[str, Any]) -> str:
         path_cell = f'<a href="{_e(str(url))}">{_e(path)}</a>' if url else _e(path)
         branch = row.get("branch")
         body_rows.append(
-            "<tr>"
+            '<tr class="mc-row">'
             f'<td class="mono">{path_cell}</td>'  # single-shape-ok: worktrees_status row, not a brief
             f'<td>{_e(str(row.get("rig") or "unknown"))}</td>'
             f'<td class="mono">{_e(str(branch)) if branch else "(detached)"}</td>'
@@ -570,7 +617,7 @@ def worktrees(payload: Mapping[str, Any]) -> str:
             f'<td>{row.get("commits") if row.get("commits") is not None else "unknown"}</td>'
             "</tr>"
         )
-    body += f'<div class="scroll-x"><table>{header}<tbody>{"".join(body_rows)}</tbody></table></div>'
+    body += f'<div class="scroll-x"><table class="ntdata">{header}<tbody>{"".join(body_rows)}</tbody></table></div>'
 
     codes = _codes(payload)
     if codes:

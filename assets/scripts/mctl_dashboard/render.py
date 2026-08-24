@@ -44,7 +44,24 @@ SEVERITY_ORDER = ("FATAL", "ERROR", "WARN", "INFO")
 
 #: The stylesheet now lives in `theme.py`, which is the single source for
 #: every colour, font and radius. Re-exported here because `page()` inlines it.
-from mctl_dashboard.theme import STYLESHEET  # noqa: E402  (kept near its use)
+from mctl_dashboard.theme import STYLESHEET, STOP  # noqa: E402  (kept near its use)
+
+
+def stoplight(label: object, tone: str, *, title: str | None = None) -> str:
+    """A stoplight status pill in the design's semantic tones.
+
+    One place builds a STATE pill, so every screen paints a status the same
+    way -- the treatment the prototype gives its STATE column, driven by the
+    shared `STOP` scale.
+
+    An unrecognised tone falls back to `ok` (neutral), never to a colour: a
+    state the caller could not classify must not be dressed as a pass or a
+    failure. That is the same P6.2 rule the city screens follow one layer up,
+    enforced here so it holds even when a caller is careless.
+    """
+    tone = tone if tone in STOP else "ok"
+    attr_title = f' title="{esc(title)}"' if title else ""
+    return f'<span class="mc-stop mc-stop-{esc(tone)}"{attr_title}>{esc(label)}</span>'
 
 
 #: (href, label, counts-key). The order is the pipeline's own order -- produced

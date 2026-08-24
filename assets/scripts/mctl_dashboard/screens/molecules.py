@@ -25,6 +25,7 @@ from typing import Any, Mapping, Sequence
 
 from mctl_dashboard.render import esc as _e
 from mctl_dashboard.render import molecule_href
+from mctl_dashboard.render import stoplight
 
 
 def _panel(title: str, body: str, *, region: str) -> str:
@@ -43,7 +44,7 @@ def molecules_list(payload: Mapping[str, Any], *, rig: str | None = None) -> str
             region="molecules-empty",
         )
     body_rows = "".join(
-        "<tr>"
+        '<tr class="mc-row">'
         f'<td><a href="{molecule_href(m.get("id"), rig)}">'
         f'<span class="mono">{_e(m.get("id"))}</span></a></td>'
         f'<td>{_e(m.get("formula") or m.get("title"))}</td>'  # single-shape-ok: molecules_list row, not a brief
@@ -60,7 +61,7 @@ def molecules_list(payload: Mapping[str, Any], *, rig: str | None = None) -> str
         '<span class="mono">state</span> column: advancing/stalled/stranded need the full '
         "evidence chain, which is not buildable today (#115) -- open a molecule for its "
         "per-step evidence instead.</p>"
-        '<div class="scroll-x"><table data-region="molecules-table">'
+        '<div class="scroll-x"><table class="ntdata" data-region="molecules-table">'
         "<thead><tr><th>Molecule</th><th>Formula</th><th>Worker</th><th>Rig</th>"
         "<th>Root status</th></tr></thead>"
         f"<tbody>{body_rows}</tbody></table></div>",
@@ -76,11 +77,16 @@ _IS_COMPLETE_LABEL = {
 }
 
 
+#: The stoplight tone each three-valued `is_complete` gets. `unknown` maps to
+#: the neutral `ok` -- painting "no declaration, so nothing was measured" red
+#: or green would claim a finding the city cannot support (P6.2's mirror).
+_IS_COMPLETE_TONE = {"complete": "go", "incomplete": "warn", "unknown": "ok"}
+
+
 def _is_complete_cell(step: Mapping[str, Any]) -> str:
     value = str(step.get("is_complete") or "unknown")
     label = _IS_COMPLETE_LABEL.get(value, value)
-    css = {"complete": "severity-INFO", "incomplete": "severity-WARN"}.get(value, "")
-    return f'<span class="mono {css}">{_e(label)}</span>' if css else f'<span class="mono">{_e(label)}</span>'
+    return stoplight(label, _IS_COMPLETE_TONE.get(value, "ok"))
 
 
 def _artifact_lists(step: Mapping[str, Any]) -> str:
