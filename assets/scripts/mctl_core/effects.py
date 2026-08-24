@@ -760,9 +760,9 @@ def plan_create_github_issue(
     """
     advisories: list[Diagnostic] = []
     try:
-        required = required_template_sections(request.repo)
+        templates = required_template_sections(request.repo)
     except GithubIssueError as error:
-        required = ()
+        templates = {}
         advisories.append(
             _diagnostic(
                 ctx,
@@ -777,25 +777,42 @@ def plan_create_github_issue(
             )
         )
     headings = _body_headings(request.body)
-    missing = [section for section in required if section.strip().lower() not in headings]
-    if missing:
-        raise MutationError(
-            _diagnostic(
-                ctx,
-                Severity.FATAL,
-                "MGHW_TEMPLATE_SECTION_MISSING",
-                (
-                    f"The issue body omits required template section(s): "
-                    f"{', '.join(missing)}."
-                ),
-                brief_id="(github-issue)",
-                data_location=f".github/ISSUE_TEMPLATE (of {request.repo})",
-                suggested_next_command=(
-                    "Add each missing `### <section>` heading, or read the repo's "
-                    "issue template."
-                ),
+    # #211: a body is conformant if it satisfies ANY ONE of the repo's issue
+    # forms -- NOT the union of every form's required sections. The old union
+    # refused a valid bug_report body for lacking feature_request/docs_report
+    # headings. Refuse only when NO template is satisfied, naming the CLOSEST.
+    if templates:
+        per_template_missing = {
+            name: [
+                section
+                for section in reqs
+                if section.strip().lower() not in headings
+            ]
+            for name, reqs in templates.items()
+        }
+        if all(missing for missing in per_template_missing.values()):
+            closest, missing = min(
+                per_template_missing.items(), key=lambda item: len(item[1])
             )
-        )
+            raise MutationError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MGHW_TEMPLATE_SECTION_MISSING",
+                    (
+                        f"The issue body satisfies no {request.repo} issue "
+                        f"template. Closest is `{closest}`, still missing "
+                        f"section(s): {', '.join(missing)}."
+                    ),
+                    brief_id="(github-issue)",
+                    data_location=f".github/ISSUE_TEMPLATE (of {request.repo})",
+                    suggested_next_command=(
+                        "Add the missing `### <section>` headings for one form "
+                        "(you need to satisfy only ONE), or read the repo's "
+                        "issue templates."
+                    ),
+                )
+            )
     write = GithubWrite(
         kind="create",
         repo=request.repo,
