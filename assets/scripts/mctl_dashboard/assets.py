@@ -95,5 +95,79 @@ SCRIPT = """
   });
 
   paint();
+
+  // Save draft -- browser-local only (ADR 0002 D6). The verdict in progress is
+  // stashed in localStorage, keyed by brief id, and restored on return. It has
+  // no authority and does not follow the operator to another machine; with this
+  // script absent the buttons are inert and the form is filled by hand instead.
+  (function () {
+    var box = document.querySelector('[data-region="save-draft"]');
+    if (!box) { return; }
+    var form = box.closest('form');
+    if (!form || !window.localStorage) { return; }
+    var briefId = box.getAttribute('data-brief-id') || '';
+    var key = 'mctl-draft:' + briefId;
+    var status = box.querySelector('[data-role="draft-status"]');
+    var FIELDS = ['verdict', 'option', 'reason', 'option_other', 'days',
+                  'no_brainer', 'no_brainer_reason'];
+
+    function say(text) { if (status) { status.textContent = text; } }
+
+    function collect() {
+      var data = {};
+      FIELDS.forEach(function (name) {
+        var nodes = form.querySelectorAll('[name="' + name + '"]');
+        for (var i = 0; i < nodes.length; i++) {
+          var node = nodes[i];
+          if (node.type === 'radio') {
+            if (node.checked) { data[name] = node.value; }
+          } else if (node.type === 'checkbox') {
+            data[name] = node.checked ? node.value : '';
+          } else {
+            data[name] = node.value;
+          }
+        }
+      });
+      return data;
+    }
+
+    function restore(data) {
+      FIELDS.forEach(function (name) {
+        if (!(name in data)) { return; }
+        var nodes = form.querySelectorAll('[name="' + name + '"]');
+        for (var i = 0; i < nodes.length; i++) {
+          var node = nodes[i];
+          if (node.disabled) { continue; }
+          if (node.type === 'radio') {
+            node.checked = (node.value === data[name]);
+          } else if (node.type === 'checkbox') {
+            node.checked = !!data[name];
+          } else {
+            node.value = data[name];
+          }
+        }
+      });
+    }
+
+    box.addEventListener('click', function (event) {
+      var role = event.target && event.target.getAttribute('data-role');
+      if (role === 'save-draft') {
+        event.preventDefault();
+        try {
+          window.localStorage.setItem(key, JSON.stringify(collect()));
+          say('draft saved on this browser');
+        } catch (err) { say('could not save draft'); }
+      } else if (role === 'clear-draft') {
+        event.preventDefault();
+        try { window.localStorage.removeItem(key); } catch (err) {}
+        say('draft cleared');
+      }
+    });
+
+    try {
+      var saved = window.localStorage.getItem(key);
+      if (saved) { restore(JSON.parse(saved)); say('draft restored on this browser'); }
+    } catch (err) {}
+  })();
 })();
 """

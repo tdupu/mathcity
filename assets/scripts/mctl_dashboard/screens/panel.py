@@ -54,16 +54,30 @@ from mctl_dashboard.theme import LOCKED_BODY, LOCKED_RULE, STOP
 #: enum: 12 of 86 closed briefs carry a compound verdict, and at least one
 #: records two different verdicts in a single submission
 #: (`PASSED-TO-MAYOR-...-PLUS-DEPENDENCY-GRAPH-REJECTED`). Nothing here may
-#: assume three is the final number.
+#: assume four is the final number.
 #:
-#: `defer` is deliberately absent (D6): it is a separate operation with its
-#: own form further down this page (`render.operation_forms`), not a fourth
-#: verdict. Offering it twice is two controls disagreeing about one action.
+#: `defer` is a fourth verdict again (ADR 0002 D3, 2026-08-24): the Brief
+#: Manager design draws it as a verdict radio, and #136's earlier removal is
+#: overridden. The panel owns it -- the dashboard translates `verdict=defer`
+#: to the existing `briefs_defer` tool (`app._preview`) rather than a second
+#: control, so there is one place a disposition is chosen, not two disagreeing.
 VERDICTS: tuple[tuple[str, str], ...] = (
     ("approve", "approve"),
     ("revise", "revise"),
     ("reject", "reject"),
+    ("defer", "defer"),
 )
+
+#: One-line meaning hint per verdict (ADR 0002 D3). Kept beside `VERDICTS`
+#: rather than folded into it so the `(name, label)` tuple shape stays a plain
+#: two-item pair -- extensible by concatenation, and unpackable everywhere it
+#: already is. A verdict with no hint here simply renders without one.
+VERDICT_HINTS: dict[str, str] = {
+    "approve": "adopt + dispatch per disposition",
+    "revise": "sent back for extra work; returns via revise-return",
+    "reject": "closed; nothing dispatches",
+    "defer": "parked with a window; who and why recorded",
+}
 
 #: The one verdict that stays available under a HELD lock. Rejecting a brief
 #: that reached the stack through a failed gate is the only response that does
@@ -111,9 +125,9 @@ def _verdict_control(
 ) -> str:
     struck = state == "held" and disabled
     style = (
-        "font-family: var(--font-mono); font-size: 11px; padding: 3px 9px; "
-        "border-radius: var(--radius-md); display: inline-flex; align-items: center; "
-        "gap: 6px; border: 1px solid "
+        "font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; "
+        "border-radius: var(--radius-md); display: flex; align-items: baseline; "
+        "gap: 7px; border: 1px solid "
     )
     if struck:
         # "This would be wrong." Reserved for a real violation.
@@ -129,11 +143,23 @@ def _verdict_control(
     attrs = ' disabled aria-disabled="true"' if disabled else ""
     if checked and not disabled:
         attrs += " checked"
+    # The one-line meaning hint (ADR 0002 D3). It carries the same
+    # line-through under HELD as the label, so a struck verdict reads as
+    # struck whole rather than a crossed word beside a live gloss.
+    hint = VERDICT_HINTS.get(name, "")
+    hint_html = (
+        f'<span data-region="verdict-hint" style="font-family: var(--font-body); '
+        f"font-size: 11px; color: var(--color-neutral-600); flex: 1 1 auto; "
+        f'min-width: 0;">{_e(hint)}</span>'
+        if hint
+        else ""
+    )
     return (
-        f'<label style="{style}">'
+        f'<label data-verdict="{_e(name)}" style="{style}">'
         f'<input type="radio" name="verdict" value="{_e(name)}"{attrs} '
-        'style="accent-color: var(--color-accent-600); margin: 0;">'
-        f"{_e(label)}</label>"
+        'style="accent-color: var(--color-accent-600); margin: 0; flex: none;">'
+        f'<span style="flex: none; font-weight: 600;">{_e(label)}</span>'
+        f"{hint_html}</label>"
     )
 
 
@@ -192,6 +218,43 @@ def _option_title(entry: Mapping[str, Any]) -> str:
     return str(entry.get("title") or entry.get("summary") or "").strip()  # single-shape-ok: decision option
 
 
+def _option_meta(entry: Mapping[str, Any]) -> str:
+    """The small marks an option card carries -- and only the ones it carries.
+
+    ADR 0002 D5 drops the design's per-option `blast` / `reversible` / `gates`
+    chips: they were fixture fiction, no such fields exist on the parsed option
+    type. What a `ParsedDecisionOption` (core `BriefDecisionOption`) actually
+    holds is `recommended`, `confidence` and `source`, so those are what render
+    here -- each only when present, so an option with no confidence shows no
+    empty confidence chip. Enabled/locked is a separate axis and reads from the
+    action option's `BriefOption.enabled`, not from these.
+    """
+    def _mark(text: str, *, strong: bool = False) -> str:
+        weight = "font-weight: 600; " if strong else ""
+        colour = "var(--color-accent-800)" if strong else "var(--color-neutral-600)"
+        return (
+            f'<span style="font-family: var(--font-mono); font-size: 9.5px; {weight}'
+            f"letter-spacing: 0.03em; padding: 0 5px; border: 1px solid var(--color-divider); "
+            f'border-radius: var(--radius-md); color: {colour}; white-space: nowrap;">{text}</span>'
+        )
+
+    marks: list[str] = []
+    if entry.get("recommended"):
+        marks.append(_mark("recommended", strong=True))
+    confidence = str(entry.get("confidence") or "").strip()
+    if confidence:
+        marks.append(_mark(f"conf {_e(confidence)}"))
+    source = str(entry.get("source") or "").strip()
+    if source:
+        marks.append(_mark(f"src {_e(source)}"))
+    if not marks:
+        return ""
+    return (
+        '<span data-region="option-meta" style="display: inline-flex; gap: 4px; '
+        'flex-wrap: wrap; margin-left: 6px;">' + "".join(marks) + "</span>"
+    )
+
+
 def _adopt_reason(brief: Mapping[str, Any], letter: str) -> str:
     """The reason text a one-click adopt pre-quotes for option `letter`.
 
@@ -222,6 +285,34 @@ def _adopt_href(brief: Mapping[str, Any], letter: str, *, rig: str | None) -> st
     brief_id = str(attr(brief, "brief_id") or attr(brief, "bead_id") or "")
     query = f"?prefill=adopt:{_e(letter)}" + (f"&rig={_e(rig)}" if rig else "")
     return f"/briefs/{_e(brief_id)}{query}#mc-adjudicate"
+
+
+def _defer_window(*, disabled: bool = False) -> str:
+    """The defer window (days), used only when the verdict is `defer`.
+
+    Defer is a verdict here (ADR 0002 D3), but the `briefs_defer` tool it
+    routes to needs a window the other verdicts do not. Rather than a second
+    form, the panel carries one small field the dashboard reads only when
+    `verdict=defer` is submitted (`app._preview` translates it, `_arguments_for`
+    reads `days`). Left blank it defers for the tool's own default. It stays
+    out of the way for the common approve/revise/reject path -- a labelled,
+    optional day count, not a step.
+    """
+    dis = " disabled" if disabled else ""
+    return (
+        '<div data-region="defer-window" style="display: flex; align-items: baseline; '
+        'gap: 7px; margin: -4px 0 12px; padding-left: 2px;">'
+        '<label style="font-family: var(--font-mono); font-size: 10.5px; '
+        'color: var(--color-neutral-600);">defer window (days)</label>'
+        f'<input type="text" name="days" inputmode="numeric" placeholder="7"{dis} '
+        'style="width: 58px; font-family: var(--font-mono); font-size: 11.5px; '
+        "padding: 3px 6px; border: 1px solid var(--color-divider); "
+        'border-radius: var(--radius-sm); box-sizing: border-box;">'
+        '<span style="font-family: var(--font-body); font-size: 10.5px; '
+        'color: var(--color-neutral-500);">only applies when the verdict is '
+        "<strong>defer</strong>; blank defers for the default window</span>"
+        "</div>"
+    )
 
 
 def _disposition_control(
@@ -270,6 +361,7 @@ def _disposition_control(
         if not label:
             continue
         text = f"{_e(label)} &middot; {_e(title)}" if title else _e(label)
+        text += _option_meta(entry)
         adopt = (
             f'<a class="mc-adopt" data-region="adopt-option" '
             f'data-option="{_e(label)}" href="{_adopt_href(brief, label, rig=rig)}" '
@@ -384,6 +476,57 @@ def prefill_offer(brief: Mapping[str, Any], *, rig: str | None = None) -> str:
     )
 
 
+def _save_draft_control(brief_id: str) -> str:
+    """Save the in-progress verdict to THIS browser only (ADR 0002 D6).
+
+    Same contract as the design's priority list: personal, machine-local, no
+    authority, and explicitly labelled as not following the user. It is inline
+    localStorage (wired in `assets.SCRIPT`, keyed by brief id) -- so with
+    JavaScript off the button simply does nothing and every other control still
+    works. It is not a mutation: nothing browser-local can record a verdict, so
+    it never touches `/preview` or `/apply`.
+    """
+    return (
+        '<div data-region="save-draft" data-brief-id="' + _e(brief_id) + '" '
+        'style="margin-top: 12px; display: flex; align-items: center; gap: 9px; '
+        'flex-wrap: wrap;">'
+        '<button type="button" class="btn btn-ghost" data-role="save-draft" '
+        'style="font-size: 11px; padding: 4px 10px;">Save draft</button>'
+        '<button type="button" class="btn btn-ghost" data-role="clear-draft" '
+        'style="font-size: 11px; padding: 4px 10px;">Clear draft</button>'
+        '<span data-role="draft-status" class="mono" '
+        'style="font-size: 10px; color: var(--color-neutral-600);"></span>'
+        '<span class="mono" style="font-size: 10px; color: var(--color-neutral-500); '
+        'font-style: italic;">saved on this browser only — does not follow you</span>'
+        "</div>"
+    )
+
+
+def _dry_run_block() -> str:
+    """A passive, render-only note of the dry-run effect plan (ADR 0002 D3).
+
+    It sits UNDER the panel and is not a step or a gate: submitting runs one
+    dry run through the existing preview path and renders the effect plan, and
+    this block says so where the operator will read it. It renders nothing from
+    the city -- the live plan is computed by `/preview`; this is the standing
+    explanation of what the one Submit produces, not a second control.
+    """
+    return (
+        '<div data-region="dry-run-plan" style="margin-top: 14px; padding: 10px 12px; '
+        "border: 1px solid var(--color-divider); border-left: 3px solid "
+        "var(--color-neutral-400); border-radius: var(--radius-sm); "
+        'background: var(--color-neutral-050);">'
+        '<div class="mono" style="font-size: 10px; letter-spacing: 0.05em; '
+        'text-transform: uppercase; color: var(--color-neutral-600); margin-bottom: 4px;">'
+        "Dry run</div>"
+        '<div style="font-size: 12px; color: var(--color-neutral-800);">'
+        "Submitting runs a <strong>dry run</strong> and shows the effect plan — the "
+        "bead fields it would write and the follow-up it would dispatch. It is "
+        "shown to be read, not stepped through: nothing here is an extra gate."
+        "</div></div>"
+    )
+
+
 def entry(
     brief: Mapping[str, Any],
     options: Sequence[Mapping[str, Any]],
@@ -445,8 +588,9 @@ def entry(
         f"{rig_field}"
         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         'color: var(--color-neutral-600); margin-bottom: 5px;">Verdict</div>'
-        f'<div style="display: flex; gap: 7px; margin-bottom: 12px; flex-wrap: wrap;">'
-        f"{controls}</div>"
+        f'<div data-region="verdict-set" style="display: flex; flex-direction: column; '
+        f'gap: 5px; margin-bottom: 12px;">{controls}</div>'
+        + _defer_window(disabled=locked)
         + _disposition_control(brief, rig=rig, selected=adopt_letter)
         +         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
@@ -465,15 +609,19 @@ def entry(
         + _no_brainer_control(
             checked=filled, reason=INCOMPLETE_NO_BRAINER if filled else ""
         )
+        + _save_draft_control(brief_id)
         + '<div style="display: flex; gap: 9px; align-items: center; margin-top: 13px;">'
         '<button class="btn btn-primary" type="submit">'
-        "Review verdict &rarr;</button>"
+        "Submit verdict &rarr;</button>"
         '<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
         + (
             "approve is unavailable here — you can still revise or reject"
             if locked
-            else "shows the DRY RUN effect plan first — nothing is written yet"
+            else "one click — submitting records this verdict; the dry-run effect "
+            "plan below shows what it does"
         )
         + "</span></div>"
-        "</form></div></section>"
+        "</form>"
+        + _dry_run_block()
+        + "</div></section>"
     )
