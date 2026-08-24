@@ -384,6 +384,35 @@ def test_adjudicating_a_multi_option_bead_body_requires_naming_the_option(tmp_pa
     assert "MOPT001" in result.stderr, result.stderr
 
 
+def test_a_revise_verdict_on_a_multi_option_brief_is_not_gated_on_naming_an_option(tmp_path: Path):
+    """#215: MOPT001 scopes to APPROVE only.
+
+    A revise (or reject) verdict ratifies nothing and selects no option, so
+    requiring it to name one would forge a selection the adjudicator never made --
+    and it blocked recording it at all. Taylor's live revise verdicts on
+    options-carrying briefs could not be recorded until this. Approve without an
+    option still fires MOPT001 (the test above); revise must not.
+    """
+    city_root, fixture = runtime(tmp_path, PRESENT_IT_BODY)
+
+    result = run_mctl(
+        city_root,
+        fixture,
+        "briefs",
+        "adjudicate",
+        BRIEF,
+        "--verdict",
+        "revise",
+        "--reason",
+        "needs the recommendation section before it can be decided",
+        "--json",
+    )
+
+    assert "MOPT001" not in result.stderr, result.stderr
+    assert "MOPT001" not in (result.stdout or "")
+    assert result.returncode == 0, result.stderr
+
+
 # --- the MCP surface ---------------------------------------------------------
 
 

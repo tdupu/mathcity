@@ -920,7 +920,11 @@ def plan_adjudication(
     # `show_brief` already carries the canonical body, so options resolve
     # from it rather than costing a second `bd list` subprocess.
     offered = decision_options(ctx, brief_id, observed.body)
-    if offered:
+    # #215: only an APPROVING verdict selects an option. A revise/reject verdict
+    # (RETURN_VERDICTS) ratifies nothing and consumes no option, so gating it on
+    # "name an option" would forge a selection the adjudicator never made -- and it
+    # blocked recording the return verdict at all. Scope the option gate to approve.
+    if offered and normalized == "approve":
         labels = {item.label.upper() for item in offered}
         if option is None and len(offered) > 1:
             diagnostics.append(
