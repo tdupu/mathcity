@@ -353,6 +353,11 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     `_city_operations` fan-out. A read-only city surface, same footing as
     `queue_status`.
 
+    29 since `worktrees_status` was added (#120): worktree inventory keyed by
+    path, rendered by `screens/city.py::worktrees` in the same
+    `_city_operations` fan-out. CITY_SCOPE, same footing as `fleet_sessions`/
+    `gates_status` -- it fans across every registered rig rather than one.
+
     Raise this number only alongside the tool that justifies it, and say which
     tool in the docstring.
     """
@@ -369,7 +374,7 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # here: it is mutating and mints briefs that are approved and dispatchable
     # at creation, and the MCP has no caller identity. Recorded in
     # DELIBERATELY_UNREACHABLE with the reason.
-    assert len(ALLOWED_TOOLS) == 28  # +commission_brief (#190), +briefs_present (#177), +queue_status (#113), +costs_summary (#118)
+    assert len(ALLOWED_TOOLS) == 29  # +commission_brief (#190), +briefs_present (#177), +queue_status (#113), +costs_summary (#118), +worktrees_status (#120)
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

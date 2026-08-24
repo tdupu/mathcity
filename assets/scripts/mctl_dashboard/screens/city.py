@@ -455,6 +455,130 @@ def costs(payload: Mapping[str, Any]) -> str:
     return _panel("Costs", body, region="city-costs")
 
 
+#: `worktrees_status` (#120): the rig roster (or every registered rig's own
+#: `git worktree list`) failed -- distinct from `MWKT_ORPHAN_UNDERIVABLE` /
+#: `MWKT_CREATED_BY_UNRECORDED` / `MWKT_SIZE_UNKNOWN`, which are informational
+#: and fire on a SUCCESSFUL read that still carries honest gaps.
+WORKTREES_FAILURE_CODES: frozenset[str] = frozenset({"MWKT_WORKTREES_UNREACHABLE"})
+
+#: The typed sentinel `mctl_core.worktrees.UNRECORDED` uses for "nothing
+#: records this field today" -- distinct from a real (possibly empty) value
+#: and distinct from a read failure. Duplicated here rather than imported so
+#: this render module has no import-time dependency on `mctl_core` (matching
+#: every other renderer in this file).
+_UNRECORDED = "unrecorded"
+
+
+def _owner_cell(value: Any) -> str:
+    """The unrecorded sentinel renders as an em dash -- visually distinct
+    from a real recorded value, which may itself legitimately be empty."""
+    if value == _UNRECORDED:
+        return "—"
+    text = str(value) if value not in (None, "") else "(empty)"
+    return _e(text)
+
+
+def _fmt_tri(value: Any) -> str:
+    """A three-valued flag (`True`/`False`/`None`), rendered as `yes`/`no`/
+    `unknown` -- `None` is a real "we do not know", never treated as `False`."""
+    if value is True:
+        return "yes"
+    if value is False:
+        return "no"
+    return "unknown"
+
+
+def _fmt_age(seconds: Any) -> str:
+    if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+        return "unknown"
+    return f"{seconds / 86400.0:.1f}d"
+
+
+def _fmt_size(size_bytes: Any) -> str:
+    if not isinstance(size_bytes, (int, float)) or isinstance(size_bytes, bool):
+        return "unknown"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def worktrees(payload: Mapping[str, Any]) -> str:
+    """Worktree inventory keyed by path, or an honest statement that it is
+    unknown (#120).
+
+    `state == "unreachable"` means the rig roster itself -- or every
+    registered rig's own `git worktree list` -- could not be read: every
+    count is unknown, never zero. `created_by`/`step`/`molecule` render as an
+    em dash when the row carries the `unrecorded` sentinel, kept visually
+    distinct from a real (possibly empty) value. `is_orphan` and
+    `is_registered` render as two separate columns -- never folded into one,
+    per the brief: different problems, different remedies.
+    """
+    state = str(payload.get("state") or "unknown")
+    if state == "unreachable":
+        codes = tuple(c for c in _codes(payload) if c in WORKTREES_FAILURE_CODES)
+        return _panel(
+            "Worktrees",
+            '<p class="lede"><strong>The worktree inventory is unknown.</strong> The rig '
+            "roster — or every registered rig's own read — could not be answered, so "
+            "this is not a city with no worktrees, it is worktrees we could not look "
+            "at.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else ""),
+            region="city-worktrees",
+        )
+
+    rows: Sequence[Mapping[str, Any]] = payload.get("worktrees") or []
+    total = payload.get("total") or 0
+    harvestable_count = payload.get("harvestable_count")
+
+    body = (
+        f'<p class="lede"><strong>{total}</strong> worktree{"" if total == 1 else "s"} '
+        "across every registered rig, keyed by path.</p>"
+    )
+    if harvestable_count is not None:
+        body += (
+            f'<p class="lede"><strong>{harvestable_count}</strong> harvestable '
+            "(git itself reports the directory gone).</p>"
+        )
+
+    if not rows:
+        return _panel("Worktrees", body, region="city-worktrees")
+
+    header = (
+        "<thead><tr><th>Path</th><th>Rig</th><th>Branch</th><th>Molecule</th>"
+        "<th>Created by</th><th>Step</th><th>Merged</th><th>Age</th><th>Size</th>"
+        "<th>Orphan</th><th>Registered</th><th>Harvestable</th><th>Commits</th></tr></thead>"
+    )
+    body_rows = []
+    for row in rows:
+        path = str(row.get("path") or "")
+        url = row.get("url")
+        path_cell = f'<a href="{_e(str(url))}">{_e(path)}</a>' if url else _e(path)
+        branch = row.get("branch")
+        body_rows.append(
+            "<tr>"
+            f'<td class="mono">{path_cell}</td>'  # single-shape-ok: worktrees_status row, not a brief
+            f'<td>{_e(str(row.get("rig") or "unknown"))}</td>'
+            f'<td class="mono">{_e(str(branch)) if branch else "(detached)"}</td>'
+            f"<td>{_owner_cell(row.get('molecule'))}</td>"
+            f"<td>{_owner_cell(row.get('created_by'))}</td>"
+            f"<td>{_owner_cell(row.get('step'))}</td>"
+            f"<td>{_fmt_tri(row.get('merged'))}</td>"
+            f"<td>{_fmt_age(row.get('age_seconds'))}</td>"
+            f"<td>{_fmt_size(row.get('size_bytes'))}</td>"
+            f"<td>{_fmt_tri(row.get('is_orphan'))}</td>"
+            f"<td>{_fmt_tri(row.get('is_registered'))}</td>"
+            f"<td>{_fmt_tri(row.get('harvestable'))}</td>"
+            f'<td>{row.get("commits") if row.get("commits") is not None else "unknown"}</td>'
+            "</tr>"
+        )
+    body += f'<div class="scroll-x"><table>{header}<tbody>{"".join(body_rows)}</tbody></table></div>'
+
+    codes = _codes(payload)
+    if codes:
+        body += f'<p class="mono">{_e(" · ".join(codes))}</p>'
+
+    return _panel("Worktrees", body, region="city-worktrees")
+
+
 def unwired(tool: str, *, module: str, issue: int) -> str:
     """A surface whose backend exists and which no page can call.
 

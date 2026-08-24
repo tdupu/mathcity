@@ -85,6 +85,7 @@ EXPECTED_TOOLS = (
     "work_provenance",
     "work_ready",
     "work_status",
+    "worktrees_status",
 )
 
 CLIENT_INFO = {"name": "mctl-mcp-harness", "version": "0.6.0"}

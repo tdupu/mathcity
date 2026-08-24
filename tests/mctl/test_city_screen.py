@@ -418,3 +418,132 @@ def test_unpriced_count_never_renders_as_folded_into_the_token_total():
     html = city_screen.costs(payload)
     assert "7" in html
     assert "unpriced" in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# worktrees (#120): inventory keyed by path, created_by/step/molecule render
+# `-` when unrecorded, is_orphan/is_registered stay separate, unreachable
+# renders as unknown rather than empty.
+# ---------------------------------------------------------------------------
+
+
+def test_an_unreachable_worktrees_read_renders_as_unknown_not_zero():
+    payload = {
+        "state": "unreachable",
+        "total": None,
+        "orphans": None,
+        "harvestable_count": None,
+        "worktrees": None,
+        "diagnostics": [
+            {"code": "MWKT_WORKTREES_UNREACHABLE", "message": "rig roster unavailable: timeout"}
+        ],
+    }
+    html = city_screen.worktrees(payload)
+    low = html.lower()
+    assert "unknown" in low
+    assert "MWKT_WORKTREES_UNREACHABLE" in html
+    assert "0" not in html
+
+
+def test_a_genuinely_empty_worktrees_read_reports_zero_not_unknown():
+    payload = {
+        "state": "healthy",
+        "total": 0,
+        "orphans": None,
+        "harvestable_count": 0,
+        "worktrees": [],
+        "diagnostics": [],
+    }
+    html = city_screen.worktrees(payload)
+    assert "unknown" not in html.lower()
+    assert "0" in html
+
+
+def test_a_populated_worktrees_table_renders_unrecorded_distinctly_from_a_real_value():
+    payload = {
+        "state": "healthy",
+        "total": 2,
+        "orphans": None,
+        "harvestable_count": 1,
+        "worktrees": [
+            {
+                "path": "/rigs/mathcity/w1",
+                "rig": "mathcity",
+                "branch": "dash-city",
+                "molecule": "unrecorded",
+                "created_by": "unrecorded",
+                "step": "unrecorded",
+                "merged": False,
+                "age_seconds": 86400.0,
+                "size_bytes": 2048,
+                "is_orphan": None,
+                "is_registered": True,
+                "harvestable": False,
+                "commits": 3,
+                "url": "file:///rigs/mathcity/w1",
+            },
+            {
+                "path": "/rigs/mathcity/gone",
+                "rig": "mathcity",
+                "branch": None,
+                "molecule": "unrecorded",
+                "created_by": "molecule-runner",
+                "step": "unrecorded",
+                "merged": None,
+                "age_seconds": None,
+                "size_bytes": None,
+                "is_orphan": None,
+                "is_registered": True,
+                "harvestable": True,
+                "commits": None,
+                "url": "file:///rigs/mathcity/gone",
+            },
+        ],
+        "diagnostics": [
+            {"code": "MWKT_ORPHAN_UNDERIVABLE", "message": "is_orphan is null for every row"},
+            {"code": "MWKT_CREATED_BY_UNRECORDED", "message": "created_by/step/molecule are unrecorded"},
+        ],
+    }
+    html = city_screen.worktrees(payload)
+    assert "/rigs/mathcity/w1" in html
+    assert "/rigs/mathcity/gone" in html
+    assert "molecule-runner" in html, "a real recorded created_by must render as itself"
+    # The unrecorded sentinel renders distinctly (an em/en-dash placeholder),
+    # never as the literal word the row carries and never as a blank cell.
+    assert "—" in html or "&mdash;" in html or "&#8212;" in html
+    table = html[html.index("<table>") : html.index("</table>")]
+    assert "unrecorded" not in table.lower(), (
+        "the raw sentinel string must not leak into a table cell (diagnostic codes below the "
+        "table may legitimately contain the word, e.g. MWKT_CREATED_BY_UNRECORDED)"
+    )
+
+
+def test_harvestable_and_registered_and_orphan_render_as_separate_signals():
+    payload = {
+        "state": "healthy",
+        "total": 1,
+        "orphans": None,
+        "harvestable_count": 1,
+        "worktrees": [
+            {
+                "path": "/rigs/mathcity/gone",
+                "rig": "mathcity",
+                "branch": None,
+                "molecule": "unrecorded",
+                "created_by": "unrecorded",
+                "step": "unrecorded",
+                "merged": None,
+                "age_seconds": None,
+                "size_bytes": None,
+                "is_orphan": None,
+                "is_registered": True,
+                "harvestable": True,
+                "commits": None,
+                "url": None,
+            }
+        ],
+        "diagnostics": [],
+    }
+    html = city_screen.worktrees(payload)
+    assert "harvestable" in html.lower()
+    assert "registered" in html.lower()

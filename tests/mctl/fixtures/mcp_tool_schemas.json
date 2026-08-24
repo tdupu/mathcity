@@ -16212,5 +16212,300 @@
       "type": "object"
     },
     "title": "Show work readiness"
+  },
+  "worktrees_status": {
+    "description": "Every git worktree across every registered rig, keyed by PATH (not id -- measured 2026-08-20, two ids repeat under different parents). `is_orphan` (no live session, no open bead) and `is_registered` (git still knows it) are separate flags, never merged; `is_orphan` is null today because no data source joins a worktree path to a live session or a bead (see MWKT_ORPHAN_UNDERIVABLE). `created_by`/`step`/`molecule` are the literal string 'unrecorded' -- nothing records them at creation time yet, and 'unrecorded' is a distinct sentinel from both null (a read failure) and a real empty owner. `harvestable` and `merged`/`commits` are real, computed git facts (prunable flag; ancestry against the rig's primary branch). Sourced from `git worktree list --porcelain` only, so the frozen orphan directories under ~/gt/hecke/ (zero overlap with that listing) are structurally unreachable from this tool, never walked.",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "harvestable_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "orphans": {
+          "description": "Always null today -- is_orphan is undeterminable per row; see MWKT_ORPHAN_UNDERIVABLE.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "type": "string"
+        },
+        "total": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        },
+        "worktrees": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "branch": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "commits": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "created_by": {
+                "description": "'unrecorded' today for every row; see tool description.",
+                "type": "string"
+              },
+              "harvestable": {
+                "type": "boolean"
+              },
+              "is_orphan": {
+                "description": "Always null today; see MWKT_ORPHAN_UNDERIVABLE.",
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "is_registered": {
+                "description": "Always true today by construction -- see tool description.",
+                "type": "boolean"
+              },
+              "merged": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "molecule": {
+                "description": "'unrecorded' today for every row; see tool description.",
+                "type": "string"
+              },
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "size_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "step": {
+                "description": "'unrecorded' today for every row; see tool description.",
+                "type": "string"
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "rig",
+              "branch",
+              "molecule",
+              "created_by",
+              "step",
+              "merged",
+              "age_seconds",
+              "size_bytes",
+              "is_orphan",
+              "is_registered",
+              "harvestable",
+              "commits",
+              "url"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "diagnostics",
+        "harvestable_count",
+        "orphans",
+        "state",
+        "total",
+        "trace_id",
+        "worktrees"
+      ],
+      "type": "object"
+    },
+    "title": "Worktree inventory"
   }
 }

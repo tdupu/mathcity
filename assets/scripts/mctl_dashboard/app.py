@@ -1203,6 +1203,7 @@ class Dashboard:
             ("blast_radius_registry", city_screen.blast_radius),
             ("queue_status", city_screen.queue),
             ("costs_summary", city_screen.costs),
+            ("worktrees_status", city_screen.worktrees),
         )
         outcomes = fan_out(self.client, [(tool, self._args(rig)) for tool, _ in surfaces])
 

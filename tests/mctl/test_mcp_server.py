@@ -72,6 +72,7 @@ DECLARED_TOOLS = (
     "work_provenance",
     "work_ready",
     "work_status",
+    "worktrees_status",
 )
 
 READ_TOOLS = (

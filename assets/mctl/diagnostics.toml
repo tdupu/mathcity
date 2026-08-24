@@ -809,6 +809,39 @@ severity = "INFO"
 meaning = "One or more usage facts could not be attributed to a rig on either side of the meta-work ratio -- the recovered rig matched neither the meta nor the math prefix list, or the recording worker's session name carried no rig/agent structure to recover a rig from. Reported in unclassified_tokens, never folded into either side."
 module = "costs.py"
 
+# MWKT: worktrees_status reads (#120). Worktree inventory, keyed by path, over
+# git worktree list --porcelain per registered rig. A roster read failure (or
+# every rig's own read failing) makes the whole tool unreachable; a single
+# rig's failure degrades only that rig without discarding rows other rigs
+# produced. The remaining codes are INFO: real, standing honesty gaps in
+# today's data model (no worktree-to-session join, no worktree-to-bead
+# recording), not read failures.
+
+[MWKT_WORKTREES_UNREACHABLE]
+severity = "WARN"
+meaning = "The registered-rig roster could not be read; the state is unreachable and total/worktrees/orphans/harvestable_count are all null, never zero or an empty list."
+module = "worktrees.py"
+
+[MWKT_RIG_UNREACHABLE]
+severity = "WARN"
+meaning = "`git worktree list --porcelain` failed for one registered rig; that rig's rows are omitted (named in facts.rig_name) while rows from other, successfully-read rigs still render. If every rig fails, the whole tool reports unreachable instead."
+module = "worktrees.py"
+
+[MWKT_SIZE_UNKNOWN]
+severity = "INFO"
+meaning = "One or more worktrees could not be sized (`du` failed or timed out); those rows report size_bytes=null rather than a fabricated size or a zero."
+module = "worktrees.py"
+
+[MWKT_ORPHAN_UNDERIVABLE]
+severity = "INFO"
+meaning = "is_orphan is null for every row: `gc session list` carries no working-directory field to join a worktree path to a live session by, and no bead metadata records which worktree it owns. orphans (the row-count summary) is null for the same reason."
+module = "worktrees.py"
+
+[MWKT_CREATED_BY_UNRECORDED]
+severity = "INFO"
+meaning = "created_by/step/molecule are the literal string 'unrecorded' for every row: nothing records them at worktree-creation time today. Distinct from null (a read failure) and from a real empty owner (\"\")."
+module = "worktrees.py"
+
 [MMAY_HANDOFFS_NOT_FOUND]
 severity = "WARN"
 meaning = "mayor_boot's handoff-chain query returned no rows; the diagnostic names the store searched (hq) and the query applied, so an empty recent_handoffs is auditable as 'not found by my query' rather than 'no handoffs exist' (#205, P6.2)."

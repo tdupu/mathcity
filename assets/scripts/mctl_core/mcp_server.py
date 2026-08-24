@@ -560,6 +560,21 @@ def _handle_costs_summary(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
     return costs_summary(city_reader(ctx.city_root))
 
 
+def _handle_worktrees_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Worktree inventory across every registered rig, keyed by path (#120).
+
+    `worktrees_status`/`city_reader` live in `mctl_core/worktrees.py`, reading
+    `git worktree list --porcelain` once per registered rig -- the same
+    read-only enumeration a caller could run by hand, never a filesystem walk
+    that could reach the frozen `~/gt/hecke/` orphans (which have zero
+    overlap with `git worktree list` and so are structurally unreachable from
+    this tool).
+    """
+    from .worktrees import city_reader, worktrees_status
+
+    return worktrees_status(city_reader(scope))
+
+
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     payload = dict(ctx.to_dict())
     payload["diagnostics"] = [warning.to_dict() for warning in ctx.warnings]
@@ -1506,6 +1521,93 @@ TOOLS: tuple[ToolSpec, ...] = (
             ],
         ),
         handler=_handle_costs_summary,
+    ),
+    ToolSpec(
+        name="worktrees_status",
+        title="Worktree inventory",
+        description=(
+            "Every git worktree across every registered rig, keyed by PATH (not id -- "
+            "measured 2026-08-20, two ids repeat under different parents). `is_orphan` (no "
+            "live session, no open bead) and `is_registered` (git still knows it) are "
+            "separate flags, never merged; `is_orphan` is null today because no data source "
+            "joins a worktree path to a live session or a bead (see MWKT_ORPHAN_UNDERIVABLE). "
+            "`created_by`/`step`/`molecule` are the literal string 'unrecorded' -- nothing "
+            "records them at creation time yet, and 'unrecorded' is a distinct sentinel from "
+            "both null (a read failure) and a real empty owner. `harvestable` and `merged`/"
+            "`commits` are real, computed git facts (prunable flag; ancestry against the "
+            "rig's primary branch). Sourced from `git worktree list --porcelain` only, so the "
+            "frozen orphan directories under ~/gt/hecke/ (zero overlap with that listing) are "
+            "structurally unreachable from this tool, never walked."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total": {"type": ["integer", "null"]},
+                "orphans": {
+                    "type": ["integer", "null"],
+                    "description": "Always null today -- is_orphan is undeterminable per row; see MWKT_ORPHAN_UNDERIVABLE.",
+                },
+                "harvestable_count": {"type": ["integer", "null"]},
+                "worktrees": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": ["string", "null"]},
+                            "rig": {"type": ["string", "null"]},
+                            "branch": {"type": ["string", "null"]},
+                            "molecule": {
+                                "type": "string",
+                                "description": "'unrecorded' today for every row; see tool description.",
+                            },
+                            "created_by": {
+                                "type": "string",
+                                "description": "'unrecorded' today for every row; see tool description.",
+                            },
+                            "step": {
+                                "type": "string",
+                                "description": "'unrecorded' today for every row; see tool description.",
+                            },
+                            "merged": {"type": ["boolean", "null"]},
+                            "age_seconds": {"type": ["number", "null"]},
+                            "size_bytes": {"type": ["integer", "null"]},
+                            "is_orphan": {
+                                "type": ["boolean", "null"],
+                                "description": "Always null today; see MWKT_ORPHAN_UNDERIVABLE.",
+                            },
+                            "is_registered": {
+                                "type": "boolean",
+                                "description": "Always true today by construction -- see tool description.",
+                            },
+                            "harvestable": {"type": "boolean"},
+                            "commits": {"type": ["integer", "null"]},
+                            "url": {"type": ["string", "null"]},
+                        },
+                        "required": [
+                            "path",
+                            "rig",
+                            "branch",
+                            "molecule",
+                            "created_by",
+                            "step",
+                            "merged",
+                            "age_seconds",
+                            "size_bytes",
+                            "is_orphan",
+                            "is_registered",
+                            "harvestable",
+                            "commits",
+                            "url",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ["state", "total", "orphans", "harvestable_count", "worktrees"],
+        ),
+        handler=_handle_worktrees_status,
+        scope=CITY_SCOPE,
     ),
     ToolSpec(
         name="context_resolve",
