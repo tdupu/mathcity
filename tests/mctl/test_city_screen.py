@@ -511,7 +511,7 @@ def test_a_populated_worktrees_table_renders_unrecorded_distinctly_from_a_real_v
     # The unrecorded sentinel renders distinctly (an em/en-dash placeholder),
     # never as the literal word the row carries and never as a blank cell.
     assert "—" in html or "&mdash;" in html or "&#8212;" in html
-    table = html[html.index("<table>") : html.index("</table>")]
+    table = html[html.index("<table") : html.index("</table>")]
     assert "unrecorded" not in table.lower(), (
         "the raw sentinel string must not leak into a table cell (diagnostic codes below the "
         "table may legitimately contain the word, e.g. MWKT_CREATED_BY_UNRECORDED)"
