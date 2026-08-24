@@ -276,6 +276,10 @@ class BeadCreate:
     metadata: Mapping[str, str] | None = None
     sources: tuple[str, ...] = ()
     source_link_type: str = "related"
+    #: bd priority (0-4, 0=highest). None means "let bd apply its own default"
+    #: rather than fabricate one -- an issue with no priority label must not be
+    #: minted at a made-up priority.
+    priority: int | None = None
     #: `issue_type="event"` only. bd rejects these three flags on every other
     #: type, so they are emitted only when the type is `event` rather than
     #: whenever they happen to be set.
@@ -297,6 +301,8 @@ class BeadCreate:
             value = getattr(self, key)
             if value is not None:
                 payload[key] = value
+        if self.priority is not None:
+            payload["priority"] = self.priority
         return payload
 
 
@@ -480,6 +486,8 @@ def _apply_bd_relate(rig_root: Path, relate: BeadRelate, timeout: int) -> dict[s
 
 def _apply_bd_create(rig_root: Path, create: BeadCreate, timeout: int) -> dict[str, object]:
     args = ["bd", "create", create.title, "--type", create.issue_type]
+    if create.priority is not None:
+        args.extend(("--priority", str(create.priority)))
     if create.body:
         args.extend(("--description", create.body))
     if create.labels:

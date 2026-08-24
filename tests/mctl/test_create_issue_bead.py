@@ -259,3 +259,67 @@ def test_a_second_call_for_the_same_issue_returns_the_existing_bead(tmp_path, mo
     codes = {d["code"] for d in structured["effect_plan"]["advisories"]}
     assert "MISS003" in codes
     assert tree_digest(rig_root) == before
+
+
+# --- priority mapping (#203-adjacent: the issue's triaged severity must reach
+#     the bead, not be flattened to bd's default 2) --------------------------
+
+def test_the_priority_label_maps_to_bead_priority(tmp_path, monkeypatch):
+    """A `priority/p1` issue mints a bead at bd priority 1, not the default 2."""
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    patch_fetch(monkeypatch, an_issue())  # default labels carry priority/p1
+
+    structured = call(
+        server(city_root, rig_root),
+        "create_issue_bead",
+        {"repo": "tdupu/mathcity", "issue_number": 179, "dry_run": True},
+    )["result"]["structuredContent"]
+
+    create = structured["effect_plan"]["bead_creates"][0]
+    assert create["priority"] == 1, "the triaged priority/p1 must reach the bead"
+
+
+def test_a_p3_issue_maps_to_priority_three(tmp_path, monkeypatch):
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    patch_fetch(monkeypatch, an_issue(labels=("kind/docs", "priority/p3")))
+
+    structured = call(
+        server(city_root, rig_root),
+        "create_issue_bead",
+        {"repo": "tdupu/mathcity", "issue_number": 179, "dry_run": True},
+    )["result"]["structuredContent"]
+
+    assert structured["effect_plan"]["bead_creates"][0]["priority"] == 3
+
+
+def test_an_issue_without_a_priority_label_leaves_priority_unset(tmp_path, monkeypatch):
+    """Absent means unset, not a fabricated default: bd applies its own default.
+
+    Same absent-not-empty discipline as `gh.labels` -- the tool must not invent a
+    severity the triager never assigned."""
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    patch_fetch(monkeypatch, an_issue(number=1, labels=("kind/feature",)))
+
+    structured = call(
+        server(city_root, rig_root),
+        "create_issue_bead",
+        {"repo": "tdupu/mathcity", "issue_number": 1, "dry_run": True},
+    )["result"]["structuredContent"]
+
+    create = structured["effect_plan"]["bead_creates"][0]
+    assert "priority" not in create, "no priority label means no --priority, not a made-up one"
+
+
+def test_the_most_severe_priority_label_wins(tmp_path, monkeypatch):
+    """If an issue somehow carries two priority labels, the lowest number (most
+    severe) is used -- never a silent pick that could under-prioritise a p1."""
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    patch_fetch(monkeypatch, an_issue(labels=("priority/p3", "priority/p1")))
+
+    structured = call(
+        server(city_root, rig_root),
+        "create_issue_bead",
+        {"repo": "tdupu/mathcity", "issue_number": 179, "dry_run": True},
+    )["result"]["structuredContent"]
+
+    assert structured["effect_plan"]["bead_creates"][0]["priority"] == 1
