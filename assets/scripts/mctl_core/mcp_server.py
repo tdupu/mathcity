@@ -73,8 +73,11 @@ from .payloads import (
     require_trace as _require_trace,
 )
 from .commission import CommissionRefused
+from .defect_beads import DefectBeadCreateInput, plan_create_defect_bead
+from .issue_standardize import StandardizeIssueInput, plan_standardize_github_issue
 from .effects import (
     BriefCreateInput,
+    GithubIssueCreateInput,
     IssueBeadCreateInput,
     MutationError,
     apply_effect_plan,
@@ -82,6 +85,7 @@ from .effects import (
     plan_adjudication,
     plan_commission_brief,
     plan_create_brief,
+    plan_create_github_issue,
     plan_create_issue_bead,
     plan_deferral,
 )
@@ -933,6 +937,47 @@ def _handle_create_issue_bead(ctx: MctlContext, arguments: Mapping[str, Any]) ->
         ),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_create_github_issue(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_create_github_issue(
+        ctx,
+        GithubIssueCreateInput(
+            repo=arguments.get("repo") or "",
+            title=arguments.get("title") or "",
+            body=arguments.get("body") or "",
+            labels=tuple(arguments.get("labels") or ()),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_create_defect_bead(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_create_defect_bead(
+        ctx,
+        DefectBeadCreateInput(
+            title=arguments.get("title") or "",
+            body=arguments.get("body") or "",
+            labels=tuple(arguments.get("labels") or ()),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_standardize_github_issue(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_standardize_github_issue(
+        ctx,
+        StandardizeIssueInput(
+            repo=arguments.get("repo") or "",
+            issue_number=int(arguments["issue_number"]),
+        ),
+    )
+    dry_run = _dry_run(arguments)
+    # An already-standardized issue holds no github write: serve it as a no-op
+    # (`applied: false`) even on a live call, so a second run appends nothing.
+    if not plan.github_writes:
+        dry_run = True
+    return _effect_payload(ctx, plan, dry_run)
 
 
 def _handle_work_ready(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -1791,6 +1836,88 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_create_issue_bead,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="create_github_issue",
+        title="File a GitHub issue",
+        description=(
+            "File a GitHub issue against a repo through the typed surface (#185), so a "
+            "Mayor that finds a defect can open the issue without a human carrying it. "
+            "The body is checked against the target repo's LIVE issue template: a body "
+            "omitting a REQUIRED section is refused before anything is posted. Dry run "
+            "by default -- a preview renders the full issue and shells nothing."
+        ),
+        input_schema=request_schema(
+            {
+                "repo": {"type": "string", "description": "owner/name, e.g. tdupu/mathcity."},
+                "title": {"type": "string", "description": "The issue title."},
+                "body": {"type": "string", "description": "The issue body markdown."},
+                "labels": dict(STRING_ARRAY, description="GitHub labels to apply."),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["repo", "title", "body"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_create_github_issue,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="create_defect_bead",
+        title="Mint a defect bead with no GitHub issue",
+        description=(
+            "Mint an OPEN task bead recording a defect that has no GitHub issue yet "
+            "(#185) -- the 'not conversely' case of the owner's rule that issues are "
+            "always paired with a bead but beads need not have issues. Carries "
+            "metadata.defect_report=true and no gh.issue key, and maps a priority/pN "
+            "label to bd priority. Refuses to mint an orphan duplicate of an open "
+            "defect of the same title. Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "title": {"type": "string", "description": "The defect title."},
+                "body": {"type": "string", "description": "The defect description markdown."},
+                "labels": dict(STRING_ARRAY, description="Labels, e.g. priority/p1 (mapped, not landed)."),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["title", "body"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_create_defect_bead,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="standardize_github_issue",
+        title="Standardize a GitHub issue in place",
+        description=(
+            "Make an existing GitHub issue hygienic in place (#185/#52) by APPENDING a "
+            "'## Standardized restatement' section. Additive only: every existing byte "
+            "of the body is preserved -- never consolidated, because an agent-tracker's "
+            "issue history is evidence. Idempotent: a second run detects the marker and "
+            "no-ops. Dry run by default, and posts nothing on a preview."
+        ),
+        input_schema=request_schema(
+            {
+                "repo": {"type": "string", "description": "owner/name, e.g. tdupu/mathcity."},
+                "issue_number": {"type": "integer", "description": "The GitHub issue number."},
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["repo", "issue_number"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_standardize_github_issue,
         mutating=True,
         external_ready=False,
         artifact_state=True,

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
@@ -16,6 +17,29 @@ BD_TIMEOUT_ENV = "MCTL_BD_TIMEOUT_SECONDS"
 # bd reserves exit 13 for "an --if-status/--if-assignee guard no longer held".
 BD_GUARD_MISMATCH_EXIT = 13
 BD_LIST_ARGS = ("bd", "list", "--all", "--limit", "0", "--json", "--readonly")
+
+
+#: A GitHub `priority/pN` label (LABELS.md), N in 0-4. bd priority is 0=highest.
+_PRIORITY_LABEL = re.compile(r"^priority/p([0-4])$")
+
+
+def priority_from_labels(labels: tuple[str, ...]) -> int | None:
+    """The bd priority named by a `priority/pN` label; most severe wins.
+
+    Shared by `create_issue_bead` (from an issue's labels, #206) and
+    `create_defect_bead` (from the caller's labels, #185) so both honour a
+    triaged severity instead of flattening every bead to bd's default priority 2
+    -- a p1 bug and a p3 polish must not land at the same priority. Absent label
+    -> None, so bd applies its own default rather than a fabricated one (the same
+    absent-not-empty discipline `gh.labels` follows). Multiple priority labels
+    resolve to the most severe (lowest number).
+    """
+    found = [
+        int(match.group(1))
+        for label in labels
+        if (match := _PRIORITY_LABEL.match(str(label).strip()))
+    ]
+    return min(found) if found else None
 
 
 def bd_timeout_seconds() -> int:

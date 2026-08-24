@@ -38,7 +38,7 @@ NOT_CODES = {
 # allowlist is invisible to the scanner, so its codes read as "registered but
 # never emitted" however they are written.
 CODE_PATTERN = re.compile(
-    r'"(MBRF\d{3}|MBRF_[A-Z_]+|MCMS_[A-Z_]+|MCTL_[A-Z_]+|MDTB\d{3}|MISS\d{3}|MMAY_[A-Z_]+|MOPT\d{3}|MORD_[A-Z_]+|MWRK\d{3}|MWRK_[A-Z_]+)"'
+    r'"(MBRF\d{3}|MBRF_[A-Z_]+|MCMS_[A-Z_]+|MCTL_[A-Z_]+|MDTB\d{3}|MGHW_[A-Z_]+|MISS\d{3}|MMAY_[A-Z_]+|MOPT\d{3}|MORD_[A-Z_]+|MWRK\d{3}|MWRK_[A-Z_]+)"'
 )
 
 VALID_SEVERITIES = {"INFO", "WARN", "ERROR", "FATAL"}
