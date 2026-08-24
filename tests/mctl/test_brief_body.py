@@ -413,6 +413,54 @@ def test_a_revise_verdict_on_a_multi_option_brief_is_not_gated_on_naming_an_opti
     assert result.returncode == 0, result.stderr
 
 
+# --- #76 Field 8: options RENDER off the record ------------------------------
+#
+# The reader (`decision_options`) and the writer (the §4 Options block) both
+# ship, but `BriefRecord.to_dict()` dropped the parsed options, so the
+# dashboard disposition panel and the stack Opts/Rec columns read them off the
+# record as `decision_options` / `recommendation` (dashboard `attr()` on the
+# wire dict) and found nothing -- rendering "THIS BRIEF NAMES NO OPTIONS" on a
+# brief that carries them. `briefs show` must emit the parsed options, with the
+# recommended one named, so the panel can offer them.
+
+
+def test_briefs_show_emits_decision_options_and_recommendation(tmp_path: Path):
+    """#76 Field 8: show carries the options the disposition panel renders."""
+    city_root, fixture = runtime(tmp_path, PRESENT_IT_BODY)
+
+    brief = show(city_root, fixture)
+
+    options = brief["decision_options"]
+    assert [option["label"] for option in options] == ["A", "B"]
+    # The panel reads `entry.get("title")` for the option's prose.
+    assert options[0]["title"] == "Return body and sections."
+    # The `*(recommended)*` marker the writer emits names the recommendation.
+    assert brief["recommendation"] == "A"
+
+
+def test_briefs_show_emits_no_options_when_the_brief_names_none(tmp_path: Path):
+    """Absent means absent: a brief with no §4 emits `[]` and no recommendation,
+    never a fabricated option -- the panel must be able to tell them apart."""
+    city_root, fixture = runtime(
+        tmp_path, "## §1 — What is being decided\n\nJust this, no options.\n"
+    )
+
+    brief = show(city_root, fixture)
+
+    assert brief["decision_options"] == []
+    assert brief["recommendation"] is None
+
+
+def test_the_briefs_show_schema_declares_decision_options_and_recommendation():
+    from mctl_core import mcp_server
+
+    tool = next(item for item in mcp_server.TOOLS if item.name == "briefs_show")
+    brief = tool.output_schema["properties"]["brief"]
+
+    assert brief["properties"]["decision_options"]["type"] == "array"
+    assert "null" in brief["properties"]["recommendation"]["type"]
+
+
 # --- the MCP surface ---------------------------------------------------------
 
 

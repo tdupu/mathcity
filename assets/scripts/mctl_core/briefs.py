@@ -329,6 +329,21 @@ class BriefRecord:
             payload["body_diagnostics"] = [
                 diagnostic.to_dict() for diagnostic in self.body_diagnostics
             ]
+            # #76 Field 8: the disposition panel and the stack Opts/Rec columns
+            # read the parsed options and the recommendation off the record.
+            # The reader (`parse_decision_options`) and the writer (§4 block)
+            # both exist; dropping them here is why a brief that carries options
+            # rendered "names no options". Emitted only when a body is present,
+            # which is exactly `briefs show` (and a document record), so a
+            # bodiless roster read stays a cheap metadata read.
+            options = parse_decision_options(
+                self.body,
+                source=_OPTION_SOURCE_BY_RECORD_SOURCE.get(
+                    self.source, OPTION_SOURCE_BEAD_DESCRIPTION
+                ),
+            )
+            payload["decision_options"] = [option.to_dict() for option in options]
+            payload["recommendation"] = recommended_option_label(options)
         return payload
 
 
@@ -993,6 +1008,16 @@ OPTION_SOURCE_BEAD_DESCRIPTION = "bead_description"
 OPTION_SOURCE_STACK_FILE = "stack_file"
 OPTION_SOURCE_PILE_FILE = "pile_file"
 
+#: Which option lane a record's body was read from, keyed by `BriefRecord.source`.
+#: A bead record's body is the canonical bead description; a stack-file or
+#: manifest record's body is a markdown file. Unknown sources fall back to the
+#: canonical lane rather than mislabelling the option's provenance.
+_OPTION_SOURCE_BY_RECORD_SOURCE = {
+    SOURCE_BEAD: OPTION_SOURCE_BEAD_DESCRIPTION,
+    SOURCE_STACK_FILE: OPTION_SOURCE_STACK_FILE,
+    SOURCE_MANIFEST: OPTION_SOURCE_STACK_FILE,
+}
+
 
 @dataclass(frozen=True)
 class BriefDecisionOption:
@@ -1011,6 +1036,49 @@ class BriefDecisionOption:
     confidence: str
     #: Which of the brief's bodies these options were parsed out of.
     source: str = OPTION_SOURCE_BEAD_DESCRIPTION
+
+    @property
+    def recommended(self) -> bool:
+        """Whether the author marked this option `*(recommended)*` (#194 advisory).
+
+        Read off the marker `render_decision_options_section` writes, so the
+        reader and the writer agree without a second metadata channel. The
+        marker is advisory prose -- it stays out of the verdict (MOPT).
+        """
+        return bool(_RECOMMENDED_MARKER.search(self.raw_text))
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "confidence": self.confidence,
+            "heading": self.heading,
+            "label": self.label,
+            "raw_text": self.raw_text,
+            "recommended": self.recommended,
+            "source": self.source,
+            # `title` is what the dashboard disposition panel reads for the
+            # option's prose; it is the heading under a stable name so the
+            # renderer is not coupled to `heading`.
+            "title": self.heading,
+        }
+
+
+#: The advisory `*(recommended)*` marker the option writer emits, matched
+#: case-insensitively so a hand-authored brief still resolves.
+_RECOMMENDED_MARKER = re.compile(r"\*\(\s*recommended\s*\)\*", re.IGNORECASE)
+
+
+def recommended_option_label(
+    options: Iterable[BriefDecisionOption],
+) -> str | None:
+    """The label of the option the author marked recommended, or None.
+
+    None when no option carries the marker -- absent means absent, so the
+    dashboard pre-selects nothing rather than a fabricated default.
+    """
+    for option in options:
+        if option.recommended:
+            return option.label
+    return None
 
 
 # Real briefs enumerate options as list items under an options section:

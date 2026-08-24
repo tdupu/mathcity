@@ -443,6 +443,26 @@ BODY_DIAGNOSTICS_SCHEMA: Schema = {
     "description": "Why the body parse produced what it did; empty on a clean parse.",
 }
 
+#: #76 Field 8. The decision options PARSED from a brief's §4, as the dashboard
+#: disposition panel reads them -- distinct from `DECISION_OPTIONS_SCHEMA`,
+#: which is the author's `{id, label, description}` INPUT. `label` is the
+#: option letter; `title` is its prose (what the panel renders); `recommended`
+#: is the advisory `*(recommended)*` marker (#194 -- never a verdict).
+PARSED_DECISION_OPTION_SCHEMA: Schema = {
+    "type": "object",
+    "title": "ParsedDecisionOption",
+    "required": ["confidence", "heading", "label", "recommended", "source", "title"],
+    "properties": {
+        "confidence": {"type": "string"},
+        "heading": {"type": "string"},
+        "label": {"type": "string", "description": "The option letter, e.g. 'A'."},
+        "raw_text": {"type": "string"},
+        "recommended": {"type": "boolean"},
+        "source": {"type": "string"},
+        "title": {"type": "string", "description": "The option's prose; what the panel renders."},
+    },
+}
+
 BRIEF_RECORD_SCHEMA: Schema = {
     "type": "object",
     "title": "BriefRecord",
@@ -574,6 +594,14 @@ BRIEF_RECORD_SCHEMA: Schema = {
         "body": BODY_SCHEMA,
         "body_diagnostics": BODY_DIAGNOSTICS_SCHEMA,
         "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},
+        # #76 Field 8. Present only when a body is (i.e. `briefs show` and
+        # document records), for the same reason `body` is: parsing options is
+        # a body read. Optional here, so a bodiless roster item omits them.
+        "decision_options": {"type": "array", "items": PARSED_DECISION_OPTION_SCHEMA},
+        "recommendation": nullable_string(
+            "The label of the option the author marked `*(recommended)*`, or null "
+            "when none is. Advisory only (#194): it never selects a verdict."
+        ),
     },
 }
 

@@ -2735,6 +2735,46 @@
                   "null"
                 ]
               },
+              "decision_options": {
+                "items": {
+                  "properties": {
+                    "confidence": {
+                      "type": "string"
+                    },
+                    "heading": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "The option letter, e.g. 'A'.",
+                      "type": "string"
+                    },
+                    "raw_text": {
+                      "type": "string"
+                    },
+                    "recommended": {
+                      "type": "boolean"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "The option's prose; what the panel renders.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "confidence",
+                    "heading",
+                    "label",
+                    "recommended",
+                    "source",
+                    "title"
+                  ],
+                  "title": "ParsedDecisionOption",
+                  "type": "object"
+                },
+                "type": "array"
+              },
               "decision_state": {
                 "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
@@ -2843,6 +2883,13 @@
                   "type": "object"
                 },
                 "type": "array"
+              },
+              "recommendation": {
+                "description": "The label of the option the author marked `*(recommended)*`, or null when none is. Advisory only (#194): it never selects a verdict.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "redundant_artifacts": {
                 "items": {
@@ -3658,6 +3705,46 @@
                   "null"
                 ]
               },
+              "decision_options": {
+                "items": {
+                  "properties": {
+                    "confidence": {
+                      "type": "string"
+                    },
+                    "heading": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "The option letter, e.g. 'A'.",
+                      "type": "string"
+                    },
+                    "raw_text": {
+                      "type": "string"
+                    },
+                    "recommended": {
+                      "type": "boolean"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "The option's prose; what the panel renders.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "confidence",
+                    "heading",
+                    "label",
+                    "recommended",
+                    "source",
+                    "title"
+                  ],
+                  "title": "ParsedDecisionOption",
+                  "type": "object"
+                },
+                "type": "array"
+              },
               "decision_state": {
                 "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
@@ -3766,6 +3853,13 @@
                   "type": "object"
                 },
                 "type": "array"
+              },
+              "recommendation": {
+                "description": "The label of the option the author marked `*(recommended)*`, or null when none is. Advisory only (#194): it never selects a verdict.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "redundant_artifacts": {
                 "items": {
@@ -5115,6 +5209,46 @@
                 "null"
               ]
             },
+            "decision_options": {
+              "items": {
+                "properties": {
+                  "confidence": {
+                    "type": "string"
+                  },
+                  "heading": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "description": "The option letter, e.g. 'A'.",
+                    "type": "string"
+                  },
+                  "raw_text": {
+                    "type": "string"
+                  },
+                  "recommended": {
+                    "type": "boolean"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "The option's prose; what the panel renders.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "confidence",
+                  "heading",
+                  "label",
+                  "recommended",
+                  "source",
+                  "title"
+                ],
+                "title": "ParsedDecisionOption",
+                "type": "object"
+              },
+              "type": "array"
+            },
             "decision_state": {
               "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
               "type": "string"
@@ -5223,6 +5357,13 @@
                 "type": "object"
               },
               "type": "array"
+            },
+            "recommendation": {
+              "description": "The label of the option the author marked `*(recommended)*`, or null when none is. Advisory only (#194): it never selects a verdict.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "redundant_artifacts": {
               "items": {
@@ -6145,6 +6286,46 @@
                   "null"
                 ]
               },
+              "decision_options": {
+                "items": {
+                  "properties": {
+                    "confidence": {
+                      "type": "string"
+                    },
+                    "heading": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "The option letter, e.g. 'A'.",
+                      "type": "string"
+                    },
+                    "raw_text": {
+                      "type": "string"
+                    },
+                    "recommended": {
+                      "type": "boolean"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "The option's prose; what the panel renders.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "confidence",
+                    "heading",
+                    "label",
+                    "recommended",
+                    "source",
+                    "title"
+                  ],
+                  "title": "ParsedDecisionOption",
+                  "type": "object"
+                },
+                "type": "array"
+              },
               "decision_state": {
                 "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
@@ -6253,6 +6434,13 @@
                   "type": "object"
                 },
                 "type": "array"
+              },
+              "recommendation": {
+                "description": "The label of the option the author marked `*(recommended)*`, or null when none is. Advisory only (#194): it never selects a verdict.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "redundant_artifacts": {
                 "items": {
