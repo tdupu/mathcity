@@ -18,6 +18,14 @@ BD_TIMEOUT_ENV = "MCTL_BD_TIMEOUT_SECONDS"
 BD_GUARD_MISMATCH_EXIT = 13
 BD_LIST_ARGS = ("bd", "list", "--all", "--limit", "0", "--json", "--readonly")
 
+#: Metadata flag a sourced create carries WHILE its links are still being made
+#: (#192). `bd create` then a separate `bd link` per source is two writes under
+#: one call: if a link fails, the bead is already written. Marking it incomplete
+#: until every link lands turns that stranded bead from an orphan a retry would
+#: DUPLICATE into a partial a retry ADOPTS. Cleared to `"false"` once complete --
+#: a queryable "this brief's links are known-good", not merely absent.
+COMMISSION_INCOMPLETE_KEY = "commission_incomplete"
+
 
 #: A GitHub `priority/pN` label (LABELS.md), N in 0-4. bd priority is 0=highest.
 _PRIORITY_LABEL = re.compile(r"^priority/p([0-4])$")
@@ -509,6 +517,109 @@ def _apply_bd_relate(rig_root: Path, relate: BeadRelate, timeout: int) -> dict[s
 
 
 def _apply_bd_create(rig_root: Path, create: BeadCreate, timeout: int) -> dict[str, object]:
+    if not create.sources:
+        # No link step follows, so there is no partial state to recover from:
+        # one create, one boundary.
+        return _bd_create_bead(rig_root, create, timeout)
+    return _apply_bd_create_with_sources(rig_root, create, timeout)
+
+
+def _apply_bd_create_with_sources(
+    rig_root: Path, create: BeadCreate, timeout: int
+) -> dict[str, object]:
+    """Create a decision bead and link its sources as ONE recoverable unit (#192).
+
+    `bd create` mints the bead, then a SEPARATE `bd link` records each source --
+    bd has no create-time `related` dependency flag. Those are distinct writes,
+    and a link that fails after the create used to strand an unmarked bead a
+    retry could not distinguish from a fresh request, so the retry minted a
+    second brief.
+
+    Instead: the bead is created already marked `commission_incomplete=true`, and
+    the marker is not cleared until every link has landed. A retry FIRST looks
+    for a partial this exact create left behind and adopts it -- relinking only
+    what is still missing -- rather than minting a twin. This does NOT reproduce
+    the create-then-link split; the two writes are now bracketed by the marker
+    that makes the pair recoverable.
+    """
+    partial = _find_incomplete_partial(rig_root, create, timeout)
+    if partial is None:
+        result = _bd_create_bead(
+            rig_root,
+            create,
+            timeout,
+            extra_metadata={COMMISSION_INCOMPLETE_KEY: "true"},
+        )
+        bead_id = str(result["id"])
+        already_linked: set[str] = set()
+    else:
+        bead_id = partial.id
+        already_linked = set(partial.source_dependencies)
+        result = {"id": bead_id, "mode": "bd", "result": {"id": bead_id, "adopted": True}}
+    # bd link answers in prose, not JSON, so only its exit code is read. A
+    # failure here re-raises with the bead still marked incomplete -- adoptable,
+    # not orphaned.
+    for source in create.sources:
+        if source in already_linked:
+            continue
+        _run_bd_command(
+            rig_root,
+            ["bd", "link", bead_id, source, "--type", create.source_link_type],
+            timeout,
+            f"Could not link bead {bead_id} to source {source}",
+        )
+    # Every link landed: the bead is a complete brief, not a partial. Clearing
+    # the marker is the commit that ends the transaction.
+    _apply_bd_update(
+        rig_root,
+        BeadUpdate(id=bead_id, metadata={COMMISSION_INCOMPLETE_KEY: "false"}),
+        timeout,
+    )
+    return result
+
+
+def _find_incomplete_partial(
+    rig_root: Path, create: BeadCreate, timeout: int
+) -> Bead | None:
+    """A decision bead a prior attempt left mid-transaction for THIS create.
+
+    Identity is the create's title plus the incomplete marker: only a stranded
+    partial carries the marker, and a commission's title is issue-derived and
+    distinct. As a guard against adopting an unrelated same-title partial, its
+    existing links must be a subset of the sources this create asks for -- a
+    fresh partial has none, so it always qualifies.
+
+    A store that cannot be read returns None: we then create, which is the
+    pre-#192 behaviour and no worse than it. It is never wrong to fail to adopt
+    -- only wrong to adopt the wrong bead.
+    """
+    try:
+        beads = read_beads(rig_root, timeout=timeout, issue_type=create.issue_type)
+    except BeadReadError:
+        return None
+    requested = set(create.sources)
+    for bead in beads:
+        metadata = bead.raw.get("metadata")
+        if not isinstance(metadata, Mapping):
+            continue
+        if str(metadata.get(COMMISSION_INCOMPLETE_KEY, "")).lower() != "true":
+            continue
+        if bead.title != create.title:
+            continue
+        if not set(bead.source_dependencies) <= requested:
+            continue
+        return bead
+    return None
+
+
+def _bd_create_bead(
+    rig_root: Path,
+    create: BeadCreate,
+    timeout: int,
+    *,
+    extra_metadata: Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    """Mint one bead with `bd create`. No links -- that is the caller's step."""
     args = ["bd", "create", create.title, "--type", create.issue_type]
     if create.priority is not None:
         args.extend(("--priority", str(create.priority)))
@@ -526,8 +637,11 @@ def _apply_bd_create(rig_root: Path, create: BeadCreate, timeout: int) -> dict[s
         ):
             if value is not None:
                 args.extend((flag, value))
-    if create.metadata:
-        args.extend(("--metadata", json.dumps(dict(sorted(create.metadata.items())), sort_keys=True)))
+    metadata = dict(create.metadata or {})
+    if extra_metadata:
+        metadata.update(extra_metadata)
+    if metadata:
+        args.extend(("--metadata", json.dumps(dict(sorted(metadata.items())), sort_keys=True)))
     args.append("--json")
     failure = f"Could not create bead {create.title!r}"
     stdout = _run_bd_command(rig_root, args, timeout, failure)
@@ -538,16 +652,6 @@ def _apply_bd_create(rig_root: Path, create: BeadCreate, timeout: int) -> dict[s
     bead_id = parsed.get("id") if isinstance(parsed, dict) else None
     if not isinstance(bead_id, str) or not bead_id:
         raise BeadWriteError(f"bd create returned no bead id for {create.title!r}")
-    # B2.1 wants the source link on the canonical bead, and bd has no
-    # create-time `related` dependency flag, so the link is a second call.
-    # bd link answers in prose, not JSON, so only its exit code is read.
-    for source in create.sources:
-        _run_bd_command(
-            rig_root,
-            ["bd", "link", bead_id, source, "--type", create.source_link_type],
-            timeout,
-            f"Could not link bead {bead_id} to source {source}",
-        )
     return {"id": bead_id, "mode": "bd", "result": parsed}
 
 

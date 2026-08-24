@@ -407,7 +407,22 @@ def dispatch_dry_run_payload(plan: WorkDispatchPlan) -> dict[str, object]:
 
 
 LIVE_DISPATCH_ENV = "MCTL_ENABLE_LIVE_DISPATCH"
-DISPATCH_TIMEOUT_SECONDS = 120
+
+#: The worst MEASURED cost of a live `gc sling`, S48 on this city 2026-08-22/23:
+#: 162.7s, exit 0 -- slow, not hung (recorded in SURFACE-STATUS.md §4/row 7).
+#: `gc` does ~8-10s of cwd-scoped whole-city enumeration before it even knows
+#: its subcommand, and dry-run resolution alone measured 56s (#181); the routing
+#: half pushes the total past two minutes. Same discipline as
+#: `orders.MEASURED_CATALOG_WORST_SECONDS`: raise this only when a LARGER cost is
+#: measured, never to make a failing call pass.
+MEASURED_SLING_WORST_SECONDS = 162.7
+
+#: The subprocess budget `apply_dispatch_plan` gives `gc sling`. It MUST clear
+#: the measured worst case above -- a bound below it is a path that cannot
+#: succeed, which is what shipped at 120s and what #181 measured being killed at.
+#: 200s = the 162.7s measurement plus ~23% headroom for a busier city.
+#: `test_dispatch_budget.py` fails if this ever drops back below the measurement.
+DISPATCH_TIMEOUT_SECONDS = 200
 
 
 def live_dispatch_enabled(env: Mapping[str, str] | None = None) -> bool:
