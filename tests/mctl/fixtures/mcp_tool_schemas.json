@@ -215,6 +215,20 @@
           "description": "Preview the effect plan without applying it. Defaults to true.",
           "type": "boolean"
         },
+        "no_brainer": {
+          "description": "The classifier signal that this brief should not have needed a human (#76 Field 7). Persisted as bead metadata beside the verdict, replacing the reason-string marker stopgap. Orthogonal to the verdict, not a disposition.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no_brainer_reason": {
+          "description": "Why this was a no-brainer; recorded on the bead beside the flag.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "option": {
           "description": "Which offered option the verdict selects.",
           "type": [
@@ -902,6 +916,33 @@
             "null"
           ]
         },
+        "decision_options": {
+          "description": "Options the adjudicator chooses among, rendered into the brief's \u00a74 Options section. Advisory only -- an option is never a verdict.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "description": "Optional detail for the option.",
+                "type": "string"
+              },
+              "id": {
+                "description": "Short option id (e.g. 'A'); what `recommendation` and the verdict name.",
+                "type": "string"
+              },
+              "label": {
+                "description": "One-line summary of the option.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ],
+            "title": "DecisionOption",
+            "type": "object"
+          },
+          "type": "array"
+        },
         "dry_run": {
           "default": true,
           "description": "Preview the effect plan without applying it. Defaults to true.",
@@ -913,6 +954,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "recommendation": {
+          "description": "Advisory: which option id you recommend. Rendered as *(recommended)* on that option. NEVER a verdict -- the brief is deposited undecided (#194). Refused if it names an option absent from decision_options.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "requested_by": {
           "description": "Who asked for the brief.",
@@ -9781,6 +9829,33 @@
           "description": "The decision TO BE MADE -- the question/subject to brief, NOT a verdict. Becomes the brief's subject.",
           "type": "string"
         },
+        "decision_options": {
+          "description": "Options the adjudicator chooses among, rendered into the brief's \u00a74 Options section. Advisory only -- an option is never a verdict.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "description": "Optional detail for the option.",
+                "type": "string"
+              },
+              "id": {
+                "description": "Short option id (e.g. 'A'); what `recommendation` and the verdict name.",
+                "type": "string"
+              },
+              "label": {
+                "description": "One-line summary of the option.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ],
+            "title": "DecisionOption",
+            "type": "object"
+          },
+          "type": "array"
+        },
         "dry_run": {
           "default": true,
           "description": "Preview the effect plan without applying it. Defaults to true.",
@@ -9792,6 +9867,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "recommendation": {
+          "description": "Advisory: which option id you recommend. Rendered as *(recommended)* on that option. NEVER a verdict -- the brief is deposited undecided (#194). Refused if it names an option absent from decision_options.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "requested_by": {
           "description": "Who asked for the brief.",

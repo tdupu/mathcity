@@ -59,10 +59,10 @@ from .fanout import fan_out
 from .reading import attr
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
-#: Marker written into the adjudication reason when the no-brainer box is
-#: ticked. Fixed string so a later migration to a first-class field can find
-#: every one of them: `bd list | grep "[no-brainer]"`.
-NO_BRAINER_MARKER = "[no-brainer] surfacing this was a pipeline regression."
+#: The no-brainer box once folded a marker into the verdict reason because the
+#: core had no field for it. #208 Part 2 gave `briefs_adjudicate` typed
+#: `no_brainer`/`no_brainer_reason` params (#76 Field 7), so the form maps the
+#: checkbox to those directly -- the marker stopgap is gone.
 
 #: Marker for a disposition the brief did not offer. Same reasoning as the
 #: no-brainer marker: a fixed string so a later migration to a first-class
@@ -2067,16 +2067,16 @@ def _arguments_for(
             # operator could otherwise submit Other alongside Approve --
             # so the disposition, not the verdict control, decides here.
             arguments["verdict"] = "revise"
-        # The no-brainer flag is a classifier signal, not a disposition, and the
-        # core has no field for it yet. Rather than drop it -- which would make
-        # the checkbox decorative -- it is folded into the reason that is
-        # already written to the bead, behind a fixed marker so it stays
-        # greppable when the first-class field lands.
+        # The no-brainer flag is a classifier signal, not a disposition. #208
+        # Part 2 gave the tool typed params for it (#76 Field 7), so the checkbox
+        # maps straight to `no_brainer`/`no_brainer_reason` -- the reason is left
+        # as the operator's reason, no marker folded in. Sent only when ticked,
+        # so an ordinary verdict carries no `no_brainer` argument at all.
         if (form.get("no_brainer") or "").strip():
+            arguments["no_brainer"] = True
             note = (form.get("no_brainer_reason") or "").strip()
-            marker = NO_BRAINER_MARKER + (f" {note}" if note else "")
-            existing = arguments["reason"]
-            arguments["reason"] = f"{existing}\n\n{marker}" if existing else marker
+            if note:
+                arguments["no_brainer_reason"] = note
         return arguments
     if operation.name == "defer":
         arguments["brief_id"] = brief_id
