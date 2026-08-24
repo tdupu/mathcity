@@ -71,11 +71,16 @@ class GhRecorder:
         return self.url
 
 
-def patch_gh(monkeypatch, recorder=None, *, template=()):
+def patch_gh(monkeypatch, recorder=None, *, template=(), templates=None):
     recorder = recorder or GhRecorder()
     monkeypatch.setattr(effects, "create_issue", recorder)
+    # #211: required_template_sections returns a PER-TEMPLATE map
+    # {template-file: (required labels,)}. A flat `template=` list is the
+    # back-compat one-template case; `templates=` gives the full map.
+    if templates is None:
+        templates = {"bug_report.yml": tuple(template)} if template else {}
     monkeypatch.setattr(
-        effects, "required_template_sections", lambda repo, **_: tuple(template)
+        effects, "required_template_sections", lambda repo, **_: dict(templates)
     )
     return recorder
 
@@ -183,6 +188,63 @@ def test_a_body_carrying_every_required_section_is_allowed(tmp_path, monkeypatch
 
     assert structured["applied"] is False
     assert structured["effect_plan"]["github_writes"]
+
+
+# --- #211: per-template matching, NOT the union of every form ---------------
+
+
+def test_a_body_satisfying_one_of_several_templates_is_accepted(tmp_path, monkeypatch):
+    """#211: the repo has THREE forms (bug/feature/docs). A conformant bug_report
+    body must NOT be refused for lacking the OTHER forms' sections. The validator
+    must satisfy ANY one template, never the union of all of them -- the union is
+    the bug that refused the first issue ever filed through this tool."""
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    recorder = patch_gh(
+        monkeypatch,
+        templates={
+            "bug_report.yml": ("Summary", "Root cause"),
+            "feature_request.yml": ("Motivation", "Proposed change"),
+            "docs_report.yml": ("What is wrong", "Where"),
+        },
+    )
+
+    structured = call(
+        server(city_root, rig_root),
+        "create_github_issue",
+        {"repo": "tdupu/mathcity", "title": "bug: x", "body": VALID_BODY, "dry_run": True},
+    )["result"]["structuredContent"]
+
+    assert structured["applied"] is False
+    assert structured["effect_plan"]["github_writes"], (
+        "a body fully satisfying the bug_report form must be accepted even though "
+        "it carries no feature_request/docs_report sections (#211)"
+    )
+    assert recorder.calls == []
+
+
+def test_a_body_satisfying_no_template_is_still_refused(tmp_path, monkeypatch):
+    """The per-template fix must not become a bypass: a body that satisfies NONE
+    of the forms is still refused, and the diagnostic names the CLOSEST form's
+    missing sections rather than the union."""
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    recorder = patch_gh(
+        monkeypatch,
+        templates={
+            "bug_report.yml": ("Summary", "Root cause"),
+            "feature_request.yml": ("Motivation", "Proposed change"),
+        },
+    )
+
+    result = call(
+        server(city_root, rig_root),
+        "create_github_issue",
+        {"repo": "tdupu/mathcity", "title": "x", "body": "### Summary\nonly this", "dry_run": False},
+    )["result"]
+
+    assert result.get("isError") is True
+    codes = {d["code"] for d in result["structuredContent"]["diagnostics"]}
+    assert "MGHW_TEMPLATE_SECTION_MISSING" in codes
+    assert recorder.calls == [], "no template satisfied -> refuse before any subprocess"
 
 
 # --- #203 served-schema pattern: validate the SERVED response ---------------

@@ -210,23 +210,30 @@ def edit_issue(repo: str, number: int, body: str, *, timeout: int = 30) -> str:
     return url or f"https://github.com/{repo}/issues/{number}"
 
 
-def required_template_sections(repo: str, *, timeout: int = 30) -> tuple[str, ...]:
-    """The REQUIRED field labels of the target repo's live issue-form templates.
+def required_template_sections(repo: str, *, timeout: int = 30) -> dict[str, tuple[str, ...]]:
+    """The REQUIRED field labels of the target repo's live issue-form templates,
+    keyed PER TEMPLATE (`{template-file: (required labels,)}`).
 
     The repo's `.github/ISSUE_TEMPLATE/*.yml` is the enforcement point -- the
     `create-issue` skill's rule -- and it changes without telling you, so this
     reads it LIVE rather than baking a copy in. A GitHub issue FORM renders each
     field's `label` as a `### <label>` heading in the created body, so the set of
-    labels whose `validations.required` is true is exactly the set of headings a
-    conformant body must carry.
+    labels whose `validations.required` is true is the set of headings a body
+    conformant TO THAT ONE TEMPLATE must carry.
+
+    #211: this used to flatten every template's required set into one union, so a
+    body conformant to `bug_report` was refused for lacking `feature_request` /
+    `docs_report` headings -- it refused the first issue ever filed through the
+    typed surface. A body is conformant if it satisfies ANY ONE template, so the
+    caller matches per-template and refuses only when NO template is satisfied.
 
     Best-effort by design: a template that cannot be listed, fetched, or parsed
-    returns `()` rather than raising. Refusing to file an issue because the
-    template could not be READ would turn a hygiene aid into a wall; the planner
-    surfaces that unreadability as an advisory instead.
+    is omitted (or the whole map is `{}`) rather than raising. Refusing to file
+    an issue because the template could not be READ would turn a hygiene aid into
+    a wall; the planner surfaces that unreadability as an advisory instead.
     """
     if yaml is None:
-        return ()
+        return {}
     try:
         listing = subprocess.run(
             ["gh", "api", f"repos/{repo}/contents/.github/ISSUE_TEMPLATE"],
@@ -240,13 +247,13 @@ def required_template_sections(repo: str, *, timeout: int = 30) -> tuple[str, ..
     if listing.returncode != 0:
         # No template directory is a legitimate answer, not an error: many repos
         # have none, and such a repo simply imposes no required sections.
-        return ()
+        return {}
     try:
         entries = json.loads(listing.stdout)
     except json.JSONDecodeError as error:
         raise GithubIssueError("gh api returned unparseable template listing") from error
 
-    required: list[str] = []
+    templates: dict[str, tuple[str, ...]] = {}
     for entry in entries if isinstance(entries, list) else []:
         name = str(entry.get("name", ""))
         if not name.endswith((".yml", ".yaml")):
@@ -254,13 +261,12 @@ def required_template_sections(repo: str, *, timeout: int = 30) -> tuple[str, ..
         raw = _fetch_template_file(repo, name, timeout=timeout)
         if raw is None:
             continue
-        required.extend(_required_labels(raw))
-    # De-duplicate, preserving first-seen order, so a label required by two forms
-    # is reported once.
-    seen: dict[str, None] = {}
-    for label in required:
-        seen.setdefault(label, None)
-    return tuple(seen)
+        # Preserve first-seen label order within a template.
+        seen: dict[str, None] = {}
+        for label in _required_labels(raw):
+            seen.setdefault(label, None)
+        templates[name] = tuple(seen)
+    return templates
 
 
 def _fetch_template_file(repo: str, name: str, *, timeout: int) -> str | None:
