@@ -972,7 +972,27 @@ def operation_forms(
             "</form>"
         )
     )
-    heading = "Defer or dispatch" if "adjudicate" in set(omit) else "Record a decision"
+    omit_set = set(omit)
+    defer_form = (
+        ""
+        if "defer" in omit_set
+        else (
+            '<form class="operation" method="post" action="/preview">'
+            f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
+            '<input type="hidden" name="operation" value="defer">'
+            '<label>Defer for (days)<input type="text" name="days" value="7"></label>'
+            '<label>Reason<textarea name="reason" rows="2"></textarea></label>'
+            '<div><button type="submit" class="secondary">Preview deferral</button></div>'
+            f"{_blocked('defer')}"
+            "</form>"
+        )
+    )
+    if "adjudicate" in omit_set and "defer" in omit_set:
+        heading = "Dispatch work"
+    elif "adjudicate" in omit_set:
+        heading = "Defer or dispatch"
+    else:
+        heading = "Record a decision"
     return (
         '<section class="panel" data-region="mutations">'
         f"<h2>{heading}</h2>"
@@ -980,15 +1000,8 @@ def operation_forms(
         "<strong>dry run</strong> through the MCP tool and writes nothing; the confirm control "
         "appears only on the preview, and only while that preview is still true.</p>"
         + adjudicate_form
+        + defer_form
         + '<form class="operation" method="post" action="/preview">'
-        f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
-        '<input type="hidden" name="operation" value="defer">'
-        '<label>Defer for (days)<input type="text" name="days" value="7"></label>'
-        '<label>Reason<textarea name="reason" rows="2"></textarea></label>'
-        '<div><button type="submit" class="secondary">Preview deferral</button></div>'
-        f"{_blocked('defer')}"
-        "</form>"
-        '<form class="operation" method="post" action="/preview">'
         f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
         '<input type="hidden" name="operation" value="dispatch">'
         '<div><button type="submit" class="secondary">Preview work dispatch</button></div>'

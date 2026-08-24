@@ -1016,9 +1016,10 @@ class Dashboard:
             render.options_panel(option_rows) if options else "",
             # The adjudication panel above supersedes the adjudicate form; two
             # forms writing the same field is a chance to submit the one you
-            # did not mean. Defer and dispatch have no other home yet, so they
-            # stay.
-            render.operation_forms(brief_id, option_rows, rig=rig, omit=("adjudicate",)),
+            # did not mean. Defer joined it as a panel verdict (ADR 0002 D3),
+            # so it is omitted here too; dispatch has no other home yet and
+            # stays.
+            render.operation_forms(brief_id, option_rows, rig=rig, omit=("adjudicate", "defer")),
             render.diagnostics_sections(
                 doctor.diagnostics if doctor else [],
                 doctor.untrusted_diagnostics if doctor else [],
@@ -1616,6 +1617,19 @@ class Dashboard:
 
     def _preview(self, request: Request) -> Response:
         operation = OPERATIONS.get(request.form.get("operation", "").strip())
+        # ADR 0002 D3: `defer` is a verdict on the adjudication panel, not a
+        # second form. The panel posts it through the adjudicate form, and the
+        # dashboard translates it to the existing `briefs_defer` tool here --
+        # the same kind of UI-to-backend translation `_arguments_for` already
+        # does for the "Other" disposition. One place chooses the disposition;
+        # the recorded preview carries `defer`, so `/apply` follows it. No new
+        # backend: `briefs_defer` is the tool that already existed.
+        if (
+            operation is not None
+            and operation.name == "adjudicate"
+            and (request.form.get("verdict", "") or "").strip() == "defer"  # single-shape-ok: form field
+        ):
+            operation = OPERATIONS["defer"]
         if operation is None:
             return self._mutation_notice(
                 "Unknown operation",
