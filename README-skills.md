@@ -13,7 +13,7 @@ Parent: [README.md](./README.md)
 
 _Regenerate/verify with `/update-README`._
 
-### Parent pack — `mathcity/skills/`  (56)
+### Parent pack — `mathcity/skills/`  (57)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -50,6 +50,7 @@ _Regenerate/verify with `/update-README`._
 | `gc-recycle-bead` | `mathcity.gc-recycle-bead` | Handle graceful lifecycle transitions for research beads — beads that contain mathematical decisions, session notes, or research context rather than purely actionable task steps |
 | `get-best-apis` | `mathcity.get-best-apis` | Fetches live LLM benchmark rankings (IFScale / AA Intelligence Index) and current API pricing (input $/1M, output $/1M) across OpenRouter, Ollama, OpenCode, Anthropic, and OpenAI, then renders a self-contained HTML table sorted by score… |
 | `get-best-models` | `mathcity.get-best-models` | Recommends the best open-weights / local LLM for a given hardware constraint and use case, using IFScale as the primary ranking metric and the memory-constraint formula (P*b <= available RAM) to filter candidates |
+| `github-issues-to-briefs` | `mathcity.github-issues-to-briefs` | Hourly self-terminating drain of the GitHub issue tracker into per-issue decision briefs — standardize each issue against the repo templates, mint its bead, deposit ONE full-form brief titled "github-issue N — ...", comment the bead id back onto the issue, auto-adjudicate evidence-backed resolved/moot classes, and close issues when their briefs resolve |
 | `grill-and-present` | `mathcity.grill-and-present` | Produce decision-ready brief(s) on artifact(s) (branch, bead, PR, diff) by gathering all present-it sections, grilling the decision-maker on ambiguity one question at a time, running the artifact's tests (divide-and-conquer in parallel),… |
 | `immediate-work` | `mathcity.immediate-work` | In-session synchronous dispatch — spawn the right agent NOW in the current session to complete a specific bead or task |
 | `improve-test-execution-silent` | `mathcity.improve-test-execution-silent` | G14 improve step (test-execution-silent) |
