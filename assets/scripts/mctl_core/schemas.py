@@ -612,6 +612,31 @@ BRIEF_OPTION_SCHEMA: Schema = {
     },
 }
 
+#: Author-supplied decision options (#208). The verdict and `recommendation`
+#: name an option by its `id`; the writer renders these as the §4 markdown the
+#: adjudication reader (`decision_options` / MOPT001/MOPT002) already parses.
+DECISION_OPTIONS_SCHEMA: Schema = {
+    "type": "array",
+    "description": (
+        "Options the adjudicator chooses among, rendered into the brief's §4 "
+        "Options section. Advisory only -- an option is never a verdict."
+    ),
+    "items": {
+        "type": "object",
+        "title": "DecisionOption",
+        "required": ["id", "label"],
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Short option id (e.g. 'A'); what `recommendation` and the verdict name.",
+            },
+            "label": {"type": "string", "description": "One-line summary of the option."},
+            "description": {"type": "string", "description": "Optional detail for the option."},
+        },
+        "additionalProperties": False,
+    },
+}
+
 BRIEF_DIAGNOSTICS_SCHEMA: Schema = {
     "type": "array",
     "description": "Diagnostics grouped by the brief they were raised against.",

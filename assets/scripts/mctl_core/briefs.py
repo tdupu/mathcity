@@ -1023,6 +1023,62 @@ _OPTION_ITEM = re.compile(
     re.MULTILINE,
 )
 
+#: The heading a WRITER emits so `parse_decision_options` reads its options back.
+#: `_heading_names_options` matches it by the word "Options", not the number, so
+#: the reader is not coupled to the §4 the composer will one day stop using.
+DECISION_OPTIONS_HEADING = "## §4 — Options"
+
+
+def unknown_recommendation_option(
+    options: Iterable[Mapping[str, object]], recommendation: str | None
+) -> str | None:
+    """The recommendation id that names no offered option, or None when valid.
+
+    An advisory recommendation pointing at an option the brief does not offer is
+    a filing error: the dashboard would pre-select an option nobody can adopt.
+    Returned rather than raised so the caller owns the diagnostic and can refuse
+    BEFORE the write -- the brief is never deposited naming a phantom choice.
+    """
+    rec = str(recommendation or "").strip()
+    if not rec:
+        return None
+    ids = {str(option.get("id") or "").strip() for option in options}
+    return None if rec in ids else rec
+
+
+def render_decision_options_section(
+    options: Iterable[Mapping[str, object]], recommendation: str | None = None
+) -> str:
+    """Author `[{id, label, description}]` as the §4 markdown the reader parses.
+
+    Returns `""` when no options are supplied, so a caller can append the result
+    unconditionally. This is deliberately ADDITIVE and NOT part of the body
+    composer: the section is a self-contained block a caller concatenates after
+    whatever body was composed, so the composer can be rebuilt (the `## Decision`
+    / `## Source` / `## Gate Evidence` shape is being redesigned) without
+    unwinding option authoring.
+
+    The recommendation is written as the `*(recommended)*` marker the live
+    corpus already uses -- the same shape the reader's own fixtures carry -- so
+    no second metadata channel is invented. It stays advisory: the marker is
+    prose the MOPT reader does not read as a verdict (#194).
+    """
+    materialised = list(options)
+    if not materialised:
+        return ""
+    recommended = str(recommendation or "").strip()
+    lines = [DECISION_OPTIONS_HEADING, ""]
+    for option in materialised:
+        option_id = str(option.get("id") or "").strip()
+        label = str(option.get("label") or "").strip()
+        description = str(option.get("description") or "").strip()
+        marker = " *(recommended)*" if option_id and option_id == recommended else ""
+        item = f"- **({option_id}) {label}**{marker}"
+        if description:
+            item += f" {description}"
+        lines.append(item)
+    return "\n".join(lines) + "\n"
+
 
 def _heading_names_options(heading: str) -> bool:
     """True when the heading's own words say "options", whatever number it wears.

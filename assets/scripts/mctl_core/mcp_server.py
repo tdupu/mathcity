@@ -52,7 +52,9 @@ from .briefs import (
     doctor_briefs,
     empty_scope_diagnostic,
     list_briefs_report,
+    render_decision_options_section,
     show_brief,
+    unknown_recommendation_option,
     validate_brief,
     validation_scope,
 )
@@ -104,6 +106,7 @@ from .schemas import (
     BRIEF_DETAIL_SCHEMA,
     BRIEF_OPTION_SCHEMA,
     BRIEF_RECORD_SCHEMA,
+    DECISION_OPTIONS_SCHEMA,
     CLAIM_STATE_SCHEMA,
     DRY_RUN_PROPERTY,
     EFFECT_PLAN_SCHEMA,
@@ -801,6 +804,34 @@ def _minted_brief_id(applied: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _decision_options_section(ctx: MctlContext, arguments: Mapping[str, Any]) -> str:
+    """The §4 options markdown to append to a brief body, or "" when none.
+
+    #208. Refuses BEFORE any write with MBRF_RECOMMENDATION_UNKNOWN_OPTION when
+    the advisory recommendation names an option the brief does not offer -- so a
+    brief is never deposited pointing the adjudicator at a phantom choice. The
+    section is ADDITIVE: it is appended to the body a caller already built, never
+    woven into the composer, so the composer can be redesigned (Part 3) without
+    touching option authoring. The recommendation stays advisory (#194); it is
+    the `*(recommended)*` marker, not a verdict.
+    """
+    options = list(arguments.get("decision_options") or ())
+    recommendation = arguments.get("recommendation")
+    unknown = unknown_recommendation_option(options, recommendation)
+    if unknown is not None:
+        raise BriefError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MBRF_RECOMMENDATION_UNKNOWN_OPTION",
+                f"recommendation {unknown!r} names no option in decision_options; "
+                "the recommendation must be one of the offered option ids.",
+                suggested_next_command="pass a recommendation whose id appears in decision_options",
+            )
+        )
+    return render_decision_options_section(options, recommendation)
+
+
 def _handle_decisions_to_briefs(
     ctx: MctlContext, arguments: Mapping[str, Any]
 ) -> dict[str, object]:
@@ -873,6 +904,12 @@ def _handle_decisions_to_briefs(
             "source has no open child workflow (MDTB005 did not fire)",
         ),
     )
+    # #208: options/recommendation are appended as their own §4 block, NOT woven
+    # into `brief_body` -- the composer is being redesigned (Part 3) and must
+    # stay untouched. Refuses here on an unknown recommendation, before the write.
+    options_section = _decision_options_section(ctx, arguments)
+    if options_section:
+        body = body.rstrip("\n") + "\n\n" + options_section
     plan = plan_create_brief(
         ctx,
         BriefCreateInput(
@@ -952,11 +989,17 @@ def _emit_brief_submitted(payload: dict[str, object]) -> Diagnostic | None:
 
 
 def _handle_briefs_create(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    body = arguments.get("body") or ""
+    # #208: append authored options as their own §4 block after the caller's
+    # body, never inside it. Refuses on an unknown recommendation before writing.
+    options_section = _decision_options_section(ctx, arguments)
+    if options_section:
+        body = body.rstrip("\n") + "\n\n" + options_section
     plan = plan_create_brief(
         ctx,
         BriefCreateInput(
             title=arguments.get("title") or "",
-            body=arguments.get("body") or "",
+            body=body,
             labels=tuple(arguments.get("labels") or ()),
             requested_by=arguments.get("requested_by"),
             sources=tuple(arguments.get("sources") or ()),
@@ -1813,6 +1856,12 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "title": nullable_string("Brief title; defaults to the decision text."),
                 "labels": dict(STRING_ARRAY, description="Brief labels."),
                 "requested_by": nullable_string("Who asked for the brief."),
+                "decision_options": DECISION_OPTIONS_SCHEMA,
+                "recommendation": nullable_string(
+                    "Advisory: which option id you recommend. Rendered as *(recommended)* "
+                    "on that option. NEVER a verdict -- the brief is deposited undecided (#194). "
+                    "Refused if it names an option absent from decision_options."
+                ),
                 "dry_run": DRY_RUN_PROPERTY,
             },
             ["decision", "source_bead_id"],
@@ -1859,6 +1908,12 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "labels": dict(STRING_ARRAY, description="Brief labels."),
                 "sources": dict(STRING_ARRAY, description="Source bead ids this brief decides on."),
                 "requested_by": nullable_string("Who asked for the brief."),
+                "decision_options": DECISION_OPTIONS_SCHEMA,
+                "recommendation": nullable_string(
+                    "Advisory: which option id you recommend. Rendered as *(recommended)* "
+                    "on that option. NEVER a verdict -- the brief is deposited undecided (#194). "
+                    "Refused if it names an option absent from decision_options."
+                ),
                 "dry_run": DRY_RUN_PROPERTY,
             },
             ["title", "body"],
