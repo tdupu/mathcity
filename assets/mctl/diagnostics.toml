@@ -761,3 +761,15 @@ module = "orders.py"
 severity = "WARN"
 meaning = "The city event log could not be read, so order outcomes could not be folded; outcomes are reported unreachable rather than as failures."
 module = "orders.py"
+
+# MEVT: mctl event participation (#202, Plan C). The typed surface rings the
+# city's doorbells -- brief.submitted on deposit, brief.decided on adjudication
+# -- so event-triggered orders fire within seconds instead of at the next
+# condition tick. Emission is best-effort: the typed mutation is the source of
+# truth and the condition backstop recovers a lost event, so a failed doorbell
+# is a WARN advisory, never a FATAL on the effect plan.
+
+[MEVT_EMIT_FAILED]
+severity = "WARN"
+meaning = "A best-effort city event (brief.submitted / brief.decided) could not be emitted; the typed mutation already succeeded and the condition backstop recovers the lost wake-up."
+module = "gc_events.py"
