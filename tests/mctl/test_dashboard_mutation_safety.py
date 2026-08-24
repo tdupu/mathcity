@@ -191,6 +191,31 @@ def test_the_applied_trace_id_is_shown_so_the_mutation_can_be_audited(tmp_path: 
     assert trace, "an applied mutation must surface its trace id"
 
 
+def test_the_advance_control_is_focused_so_the_next_brief_needs_no_mouse(tmp_path: Path):
+    """#125 (partial): adjudicate fast -- advance without touching the mouse.
+
+    After a verdict is recorded the applied page offers "Next brief"; #125's DoD
+    is that the next brief comes up "without touching the mouse or the back
+    button". Autofocusing the advance control makes Enter advance -- a JS-off,
+    honesty-preserving step (the applied page still renders, status stays 200,
+    the trace id stays shown). The full POST->302 auto-advance and honest-skip
+    of unadjudicable briefs remain.
+    """
+    dashboard, _, _ = dashboard_for(tmp_path)
+    previewed = preview(dashboard)
+
+    response = dashboard.handle(Request.post("/apply", token=token_in(previewed.body)))
+
+    assert response.status == 200
+    # The advance region is present, and its primary control takes focus so a
+    # keyboard operator advances with Enter alone.
+    assert 'data-region="advance"' in response.body
+    advance = response.body.split('data-region="advance"', 1)[1]
+    assert "Next brief" in advance, "the applied page must offer the next brief"
+    next_anchor = advance.split("Next brief", 1)[0].rsplit("<a", 1)[1]
+    assert "autofocus" in next_anchor, "the next-brief control must take focus for Enter-to-advance"
+
+
 def test_a_token_is_single_use_so_a_resubmitted_form_cannot_apply_twice(tmp_path: Path):
     dashboard, _, rig_root = dashboard_for(tmp_path)
     token = token_in(preview(dashboard).body)

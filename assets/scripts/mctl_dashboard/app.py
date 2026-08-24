@@ -1918,9 +1918,14 @@ class Dashboard:
             'style="font-size: 12px; padding: 5px 12px;">Back to queue</a>'
         ]
         if next_id:
+            # #125: adjudicate fast. The next brief must come up "without
+            # touching the mouse or the back button". `autofocus` puts the
+            # keyboard on this control the moment the applied page loads, so
+            # Enter advances -- a JS-off step toward the specified POST->302
+            # auto-advance, and it keeps the applied confirmation on screen.
             buttons.insert(
                 0,
-                f'<a class="btn btn-primary" href="/briefs/{render.esc(next_id)}{suffix}" '
+                f'<a class="btn btn-primary" autofocus href="/briefs/{render.esc(next_id)}{suffix}" '
                 'style="font-size: 12px; padding: 5px 14px;">Next brief &rarr;</a>',
             )
         remaining = (
