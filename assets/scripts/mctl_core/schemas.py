@@ -700,6 +700,7 @@ EFFECT_PLAN_SCHEMA: Schema = {
         "cache_updates": {"type": "array"},
         "event_writes": {"type": "array"},
         "file_creates": {"type": "array"},
+        "github_writes": {"type": "array"},
         "formula_invocation": {"type": "object"},
         "operation": {"type": "string"},
         "preconditions": DIAGNOSTIC_ARRAY,

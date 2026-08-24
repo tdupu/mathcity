@@ -75,6 +75,7 @@ from .payloads import (
 from .commission import CommissionRefused
 from .effects import (
     BriefCreateInput,
+    GithubIssueCreateInput,
     IssueBeadCreateInput,
     MutationError,
     apply_effect_plan,
@@ -82,6 +83,7 @@ from .effects import (
     plan_adjudication,
     plan_commission_brief,
     plan_create_brief,
+    plan_create_github_issue,
     plan_create_issue_bead,
     plan_deferral,
 )
@@ -930,6 +932,19 @@ def _handle_create_issue_bead(ctx: MctlContext, arguments: Mapping[str, Any]) ->
         IssueBeadCreateInput(
             repo=arguments.get("repo") or "",
             issue_number=int(arguments["issue_number"]),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_create_github_issue(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_create_github_issue(
+        ctx,
+        GithubIssueCreateInput(
+            repo=arguments.get("repo") or "",
+            title=arguments.get("title") or "",
+            body=arguments.get("body") or "",
+            labels=tuple(arguments.get("labels") or ()),
         ),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
@@ -1791,6 +1806,34 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_create_issue_bead,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="create_github_issue",
+        title="File a GitHub issue",
+        description=(
+            "File a GitHub issue against a repo through the typed surface (#185), so a "
+            "Mayor that finds a defect can open the issue without a human carrying it. "
+            "The body is checked against the target repo's LIVE issue template: a body "
+            "omitting a REQUIRED section is refused before anything is posted. Dry run "
+            "by default -- a preview renders the full issue and shells nothing."
+        ),
+        input_schema=request_schema(
+            {
+                "repo": {"type": "string", "description": "owner/name, e.g. tdupu/mathcity."},
+                "title": {"type": "string", "description": "The issue title."},
+                "body": {"type": "string", "description": "The issue body markdown."},
+                "labels": dict(STRING_ARRAY, description="GitHub labels to apply."),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["repo", "title", "body"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_create_github_issue,
         mutating=True,
         external_ready=False,
         artifact_state=True,

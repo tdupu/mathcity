@@ -761,3 +761,24 @@ module = "orders.py"
 severity = "WARN"
 meaning = "The city event log could not be read, so order outcomes could not be folded; outcomes are reported unreachable rather than as failures."
 module = "orders.py"
+
+# MGHW: GitHub-write intake surfaces (#185). create_github_issue,
+# create_defect_bead and standardize_github_issue -- the typed tools that let a
+# Mayor file/mint/hygiene a defect without a human carrying it. Emitted as typed
+# Diagnostic OBJECTS through diagnostics.py; a bare string here dies FATAL
+# MCTL_MCP_OUTPUT_SCHEMA_VIOLATION against the declared object schema (#203).
+
+[MGHW_TEMPLATE_SECTION_MISSING]
+severity = "FATAL"
+meaning = "The issue body omits a section the target repo's live issue template marks REQUIRED; refused before any subprocess runs, because the repo's template is the enforcement point."
+module = "effects.py"
+
+[MGHW_TEMPLATE_UNREADABLE]
+severity = "WARN"
+meaning = "The target repo's issue template could not be read, so no required-section check ran; surfaced as an advisory rather than blocking, since an unreadable template must not become a wall."
+module = "effects.py"
+
+[MGHW_GH_UNAVAILABLE]
+severity = "FATAL"
+meaning = "gh could not complete the create/edit (absent, unauthenticated, timed out, or non-zero exit); the write aborts loudly so a caller never mistakes a failed post for a filed issue."
+module = "effects.py"

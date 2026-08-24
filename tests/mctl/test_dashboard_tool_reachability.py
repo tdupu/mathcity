@@ -51,6 +51,7 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
     "mayor_city_state": "not yet surfaced; no screen consumes it",
     "work_claim": "not yet surfaced; no screen consumes it (pre-existing, found by this test)",
     "create_issue_bead": "mints a bead from an external GitHub issue; not a read the dashboard performs (#170)",
+    "create_github_issue": "files a GitHub issue against an external tracker; a mutation, not a read the dashboard performs (#185)",
 }
 
 #: `gates_status` is deliberately NOT listed here -- by the time this branch

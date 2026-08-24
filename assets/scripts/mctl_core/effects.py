@@ -28,7 +28,14 @@ from .beads import (
     read_beads,
     verify_relation,
 )
-from .github_issues import GithubIssueError, fetch_issue, rig_for_issue
+from .github_issues import (
+    GithubIssueError,
+    create_issue,
+    edit_issue,
+    fetch_issue,
+    required_template_sections,
+    rig_for_issue,
+)
 from .briefs import (
     cached_brief_documents,
     decision_options,
@@ -132,6 +139,41 @@ class FileCreate:
 
 
 @dataclass(frozen=True)
+class GithubWrite:
+    """A GitHub tracker mutation this plan intends to make (#185).
+
+    Distinct from every bead/cache effect: it touches no store, it shells `gh`,
+    and it is the one effect whose target lives outside the city. `kind` is
+    `create` (a new issue) or `edit` (an additive body rewrite, #52). The body
+    is carried in full so a dry-run PREVIEW shows exactly what would be posted --
+    for `edit` that is the whole point, since the operator must be able to see
+    byte-for-byte that the original body is preserved and only appended to.
+    """
+
+    kind: str
+    repo: str
+    body: str
+    title: str | None = None
+    labels: tuple[str, ...] = ()
+    number: int | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "kind": self.kind,
+            "repo": self.repo,
+            "body": self.body,
+            "body_bytes": len(self.body.encode("utf-8")),
+            "body_sha256": hashlib.sha256(self.body.encode("utf-8")).hexdigest(),
+            "labels": list(self.labels),
+        }
+        if self.title is not None:
+            payload["title"] = self.title
+        if self.number is not None:
+            payload["issue_number"] = self.number
+        return payload
+
+
+@dataclass(frozen=True)
 class JsonlWrite:
     kind: str
     path: Path
@@ -160,6 +202,9 @@ class EffectPlan:
     # about to mint: `BeadRelate` ids go through the same placeholder
     # substitution derived paths do.
     bead_relates: tuple[BeadRelate, ...] = ()
+    # GitHub tracker writes (#185). Empty for every bead/brief mutation; the
+    # only effects that leave the city.
+    github_writes: tuple[GithubWrite, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -170,6 +215,7 @@ class EffectPlan:
             "cache_updates": [update.to_dict() for update in self.cache_updates],
             "event_writes": [write.to_dict() for write in self.event_writes],
             "file_creates": [create.to_dict() for create in self.file_creates],
+            "github_writes": [write.to_dict() for write in self.github_writes],
             "operation": self.operation,
             "preconditions": [diagnostic.to_dict() for diagnostic in self.preconditions],
             "target_brief_id": self.target_brief_id,
@@ -698,6 +744,99 @@ def _find_issue_mirror(ctx: MctlContext, reference: str) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class GithubIssueCreateInput:
+    repo: str
+    title: str
+    body: str
+    labels: tuple[str, ...] = ()
+
+
+#: A markdown heading line, capturing the heading text. GitHub issue FORMS render
+#: each required field's `label` as exactly this shape in the created body.
+_HEADING = re.compile(r"^\s*#{1,6}\s+(?P<text>.+?)\s*$", re.MULTILINE)
+
+
+def _body_headings(body: str) -> set[str]:
+    return {match.group("text").strip().lower() for match in _HEADING.finditer(body)}
+
+
+def plan_create_github_issue(
+    ctx: MctlContext, request: GithubIssueCreateInput
+) -> EffectPlan:
+    """Plan filing a GitHub issue against `request.repo` (#185, loop step 1).
+
+    The whole cost of this tool is that a Mayor who finds a defect can open the
+    issue with no human carrying it. It is dry-run-first like every mctl
+    mutation: the plan carries the fully rendered issue and the apply step is the
+    only thing that shells `gh`.
+
+    The target repo's LIVE issue template is the enforcement point (the
+    `create-issue` skill's rule). A body missing a section the template marks
+    REQUIRED is refused BEFORE the plan is built, so no subprocess can run for a
+    body the template would reject. A template that cannot be READ is a different
+    matter -- it is surfaced as an advisory and does not block, because refusing
+    to file for want of a readable template turns a hygiene aid into a wall.
+    """
+    advisories: list[Diagnostic] = []
+    try:
+        required = required_template_sections(request.repo)
+    except GithubIssueError as error:
+        required = ()
+        advisories.append(
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MGHW_TEMPLATE_UNREADABLE",
+                (
+                    f"Could not read {request.repo}'s issue template, so no "
+                    "required-section check ran."
+                ),
+                brief_id="(github-issue)",
+                detail=str(error),
+            )
+        )
+    headings = _body_headings(request.body)
+    missing = [section for section in required if section.strip().lower() not in headings]
+    if missing:
+        raise MutationError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MGHW_TEMPLATE_SECTION_MISSING",
+                (
+                    f"The issue body omits required template section(s): "
+                    f"{', '.join(missing)}."
+                ),
+                brief_id="(github-issue)",
+                data_location=f".github/ISSUE_TEMPLATE (of {request.repo})",
+                suggested_next_command=(
+                    "Add each missing `### <section>` heading, or read the repo's "
+                    "issue template."
+                ),
+            )
+        )
+    write = GithubWrite(
+        kind="create",
+        repo=request.repo,
+        title=request.title,
+        body=request.body,
+        labels=request.labels,
+    )
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="create_github_issue",
+        target_brief_id="(github-issue)",
+        preconditions=(),
+        bead_updates=(),
+        cache_updates=(),
+        event_writes=(),
+        trace_writes=(),
+        github_writes=(write,),
+        advisories=tuple(advisories),
+    )
+
+
 def plan_commission_brief(
     ctx: MctlContext,
     *,
@@ -1042,6 +1181,8 @@ def _apply_effects(
         actual.append({"kind": "bead_update", "target": update.id, "result": result})
     for relate in plan.bead_relates:
         _apply_bead_relation(ctx, plan, relate, minted, actual, trace_file)
+    for write in plan.github_writes:
+        _apply_github_write(ctx, plan, write, actual, trace_file)
     if plan.bead_creates:
         _apply_created_artifacts(ctx, plan, minted, actual, diagnostics)
     else:
@@ -1290,6 +1431,48 @@ def _abort_relation(
             detail=detail,
             suggested_next_command=suggested_next_command,
         )
+    )
+
+
+def _apply_github_write(
+    ctx: MctlContext,
+    plan: EffectPlan,
+    write: GithubWrite,
+    actual: list[Mapping[str, object]],
+    trace_file: Path,
+) -> None:
+    """Perform one GitHub tracker write, aborting loudly if `gh` cannot.
+
+    A failed create or edit aborts rather than degrading to a diagnostic: an
+    intake tool that reported `applied` while the issue was never filed is the
+    exact false-success the whole typed surface exists to remove. The `gh`
+    error becomes a typed `MGHW_GH_UNAVAILABLE` object -- never a bare string,
+    which was #203 -- built through the shared `_diagnostic` constructor.
+    """
+    try:
+        if write.kind == "edit":
+            url = edit_issue(write.repo, int(write.number), write.body)
+        else:
+            url = create_issue(write.repo, write.title or "", write.body, write.labels)
+    except GithubIssueError as error:
+        append_aborted(
+            trace_file,
+            plan.trace_id,
+            [{"code": "MGHW_GH_UNAVAILABLE", "detail": str(error)}],
+        )
+        raise MutationError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MGHW_GH_UNAVAILABLE",
+                f"gh could not complete the {write.kind} on {write.repo}; nothing was filed.",
+                brief_id=plan.target_brief_id,
+                detail=str(error),
+                suggested_next_command="gh auth status",
+            )
+        ) from error
+    actual.append(
+        {"kind": "github_issue", "operation": write.kind, "repo": write.repo, "url": url}
     )
 
 

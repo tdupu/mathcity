@@ -61,6 +61,7 @@ EXPECTED_TOOLS = (
     "commission_brief",
     "context_resolve",
     "context_rigs",
+    "create_github_issue",
     "create_issue_bead",
     "decisions_to_briefs",
     "fleet_sessions",
