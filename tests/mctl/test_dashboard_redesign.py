@@ -1346,11 +1346,12 @@ def _adj_op():
 def test_the_no_brainer_flag_reaches_the_bead():
     """A control that posts a field the handler drops is decoration.
 
-    The core has no no-brainer field yet, so the flag is folded into the reason
-    that is written to the bead. This test is what stops it from silently
-    becoming a no-op again.
+    #208 Part 2: the tool now has typed `no_brainer`/`no_brainer_reason` params,
+    so the form maps its checkbox to THOSE -- not to a marker folded into the
+    verdict reason. This test is what stops the mapping from silently becoming a
+    no-op again, and asserts the reason is left clean.
     """
-    from mctl_dashboard.app import NO_BRAINER_MARKER, _arguments_for
+    from mctl_dashboard.app import _arguments_for
 
     args = _arguments_for(
         _adj_op(),
@@ -1360,19 +1361,21 @@ def test_the_no_brainer_flag_reaches_the_bead():
         None,
     )
     assert args["verdict"] == "revise"
-    assert "needs fields" in args["reason"]
-    assert NO_BRAINER_MARKER in args["reason"]
-    assert "classifier should have caught it" in args["reason"]
+    assert args["no_brainer"] is True
+    assert args["no_brainer_reason"] == "empty brief, classifier should have caught it"
+    # The reason is the operator's reason, verbatim -- no folded-in marker.
+    assert args["reason"] == "needs fields"
+    assert "no-brainer" not in args["reason"]
 
 
 def test_an_unticked_no_brainer_box_changes_nothing():
-    from mctl_dashboard.app import NO_BRAINER_MARKER, _arguments_for
+    from mctl_dashboard.app import _arguments_for
 
     args = _arguments_for(
         _adj_op(), "he-1", {"verdict": "revise", "reason": "needs fields"}, None
     )
     assert args["reason"] == "needs fields"
-    assert NO_BRAINER_MARKER not in args["reason"]
+    assert "no_brainer" not in args
 
 
 def test_the_banner_does_not_claim_a_dead_end():

@@ -725,6 +725,8 @@ def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) ->
         reason=arguments.get("reason"),
         option=arguments.get("option"),
         adjudicated_by=arguments.get("adjudicated_by"),
+        no_brainer=bool(arguments.get("no_brainer")),
+        no_brainer_reason=arguments.get("no_brainer_reason"),
     )
 
     def _emit_brief_decided(_payload: dict[str, object]) -> Diagnostic | None:
@@ -1797,6 +1799,17 @@ TOOLS: tuple[ToolSpec, ...] = (
                     "WHO is rendering this verdict. Pairs with the brief's `requested_by` "
                     "so self-approval is auditable (#152). Omitting it is allowed and warns: "
                     "an unattributed verdict cannot be checked against its author."
+                ),
+                "no_brainer": {
+                    "type": ["boolean", "null"],
+                    "description": (
+                        "The classifier signal that this brief should not have needed a human "
+                        "(#76 Field 7). Persisted as bead metadata beside the verdict, replacing "
+                        "the reason-string marker stopgap. Orthogonal to the verdict, not a disposition."
+                    ),
+                },
+                "no_brainer_reason": nullable_string(
+                    "Why this was a no-brainer; recorded on the bead beside the flag."
                 ),
                 "dry_run": DRY_RUN_PROPERTY,
             },

@@ -215,6 +215,20 @@
           "description": "Preview the effect plan without applying it. Defaults to true.",
           "type": "boolean"
         },
+        "no_brainer": {
+          "description": "The classifier signal that this brief should not have needed a human (#76 Field 7). Persisted as bead metadata beside the verdict, replacing the reason-string marker stopgap. Orthogonal to the verdict, not a disposition.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no_brainer_reason": {
+          "description": "Why this was a no-brainer; recorded on the bead beside the flag.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "option": {
           "description": "Which offered option the verdict selects.",
           "type": [

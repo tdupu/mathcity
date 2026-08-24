@@ -865,6 +865,8 @@ def plan_adjudication(
     reason: str | None,
     option: str | None = None,
     adjudicated_by: str | None = None,
+    no_brainer: bool = False,
+    no_brainer_reason: str | None = None,
 ) -> EffectPlan:
     """Record a verdict on a brief bead.
 
@@ -975,6 +977,16 @@ def plan_adjudication(
                 brief_id=brief_id,
             ),
         ]
+    # #208 Part 2 / #76 Field 7: the no-brainer classifier signal, as typed bead
+    # metadata rather than a marker folded into `verdict_reason`. Written only
+    # when set -- absent means absent, so an ordinary verdict is not stamped
+    # `no_brainer: false`. The value is a string because bead metadata is
+    # string-valued (like `adjudicated_by`), and it is orthogonal to the verdict:
+    # a no-brainer is a comment on WHY this reached a human, not a disposition.
+    if no_brainer:
+        metadata["no_brainer"] = "true"
+        if no_brainer_reason and no_brainer_reason.strip():
+            metadata["no_brainer_reason"] = no_brainer_reason.strip()
     cache_fields = {
         "adjudicated_at": now,
         "status": "adjudicated",
