@@ -25,11 +25,13 @@ Minimum checks:
 - Every command cited (`mctl work dispatch`, `gc sling`, `git push`, etc.)
   actually exists in the city surface (`bin/mctl --help`, `gc --help`,
   `git --help`).
-- Every `mcp__mctl__*` tool cited is one of the 16 real tools
-  (`template-fragments/mctl-entry-point.md` has the list). Verify against that
-  list, **not** against your current tool list: the MCP is absent from most
-  sessions by design, so "not in my tools right now" does not mean the tool
-  does not exist, and the next session may well have it.
+- Every `mcp__mctl__*` tool cited is one of the real mctl tools. The canonical
+  live roster is `tools/list` on a connected server, mirrored by the checked-in
+  snapshot `tests/mctl/fixtures/mcp_tool_schemas.json`; `template-fragments/mctl-entry-point.md`
+  maps the CLI-mirrored ones. Verify against that roster (never a hand-written
+  count — `#162`), and **not** against your current tool list: the MCP is absent
+  from most sessions by design, so "not in my tools right now" does not mean the
+  tool does not exist, and the next session may well have it.
 - No mathematical claims appear that were not verified at source this session.
 - No file paths are cited that do not exist on disk (`ls <path>`).
 

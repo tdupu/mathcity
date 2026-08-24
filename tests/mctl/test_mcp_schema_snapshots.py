@@ -121,6 +121,7 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "create_defect_bead",
         "create_github_issue",
         "create_issue_bead",
+        "dashboard_restart",
         "decisions_to_briefs",
         "standardize_github_issue",
         "work_dispatch",

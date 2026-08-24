@@ -43,6 +43,26 @@ never lands in the other's folder. Superpowers design specs (non-dashboard) foll
 the brainstorming default: `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`;
 implementation plans: `docs/superpowers/plans/`.
 
+## Running & tearing down a dashboard (the #154 contract)
+
+A `mctl dashboard serve` process has no natural exit condition, so a debugging
+session that starts one leaves it running forever unless the agent stops it.
+Eight were once live at once; the danger is not the leak but the ambiguity —
+a browser pointed at a stale server on a stray port shows a fix "working" while
+the canonical dashboard never got it. **If you start a dashboard, you tear it
+down.**
+
+- Every `mctl dashboard serve` now stamps itself under `<city>/.mctl/dashboards/`
+  (pid, port, and the commit it imported); dead stamps self-prune.
+- **See what is running:** the `dashboard_status` MCP tool (or read the stamp
+  dir) — pid, port, serving commit, and staleness per instance.
+- **Tear it down at session end / when parking a branch:**
+  `mctl dashboard teardown --city <root>` stops every dashboard for that city
+  and clears its stamp; `--port N` stops just one. It exits non-zero if a stop
+  did not take, so it is safe in a session-end hook.
+- Restarting the canonical instance onto current code is a **deliberate**
+  `dashboard_restart` (#207) — never an automatic reload (#164/#210).
+
 ## Git / lane (outside agents)
 
 Repo work happens in `~/repos/mathcity`; commits reach the running city and the

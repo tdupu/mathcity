@@ -99,11 +99,19 @@ call beats a prose command for mechanical reasons:
 The server is `assets/scripts/mctl_core/mcp_server.py` (`mctl`, stdio). When it
 is connected to a session its tools appear as **`mcp__mctl__<tool>`**.
 
-### The 16 tools, and the CLI command each mirrors
+### The CLI-mirrored tools, and the command each mirrors
 
 Same core, same diagnostics, same trace ids — two front doors. The mapping is
 mechanical, so anything this fragment says about a CLI command is equally true
-of its tool:
+of its tool.
+
+**This table is illustrative, not the roster.** It shows the read/mutate tools
+that mirror a `mctl` CLI command; the surface is larger and grows as tools are
+registered, so this fragment deliberately names no total (`#162`/CT13.3: a
+frozen count tells an agent a real capability does not exist). The canonical
+live roster is `tools/list` on a connected `mcp__mctl__*` server, mirrored by the
+checked-in snapshot `tests/mctl/fixtures/mcp_tool_schemas.json`. Verify a tool's
+existence against that, never against a number written here.
 
 | MCP tool | CLI equivalent | mutating |
 | --- | --- | --- |
@@ -129,9 +137,9 @@ of its tool:
 `mcp_server.py` gates the tool list by client class:
 
 - **`external`** (the default) sees **zero** tools until an operator sets
-  `MCTL_MCP_ENABLE_EXTERNAL_TOOLS=1`; even armed, the four mutating tools stay
+  `MCTL_MCP_ENABLE_EXTERNAL_TOOLS=1`; even armed, the mutating tools stay
   hidden, because `external_ready=False` on each.
-- **`internal`** (`MCTL_MCP_CLIENT_CLASS=internal`) sees all 16.
+- **`internal`** (`MCTL_MCP_CLIENT_CLASS=internal`) sees the full roster.
 
 So the surface being absent is the **designed default**, not a fault. Registering
 the server is an operator action, it only takes effect at session start, and its

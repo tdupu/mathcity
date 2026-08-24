@@ -67,6 +67,7 @@ from .city import (
 )
 from .context import CityScope, ContextError, MctlContext, resolve_city, resolve_context
 from . import gc_events
+from . import dashboards
 from . import serving
 from .diagnostics import Diagnostic, Severity
 from .payloads import (
@@ -630,6 +631,120 @@ def _handle_city_health(scope: CityScope, arguments: Mapping[str, Any]) -> dict[
     """Dashboard handoff #114: three-valued data-plane health and resource pressure."""
     report = build_city_health(scope)
     return {"diagnostics": [diag.to_dict() for diag in report.diagnostics], **report.to_dict()}
+
+
+def _handle_dashboard_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """`#207`: which dashboards are running, and are they serving current code.
+
+    Reads the per-instance stamp each `mctl dashboard serve` leaves (pid, port,
+    and the commit it imported at startup -- the `#210`/`#164` stamp made
+    queryable), compares each against the checkout's current HEAD, and emits a
+    WARN for every stale instance. It reports; it never restarts (that stays a
+    deliberate act -- `dashboard_restart`).
+
+    `current_commit` can be `None` (`P6.2`): if the checkout HEAD cannot be
+    read, staleness is unknown rather than falsely 'current'.
+    """
+    current = serving.read_commit(serving.PACK_ROOT)
+    instances = dashboards.discover(scope.city_root, current_commit=current)
+    diags = [
+        Diagnostic(
+            severity=Severity.WARN,
+            code="MDSH_STALE_INSTANCE",
+            message=(
+                f"Dashboard pid {inst.pid} on port {inst.port} is serving {inst.serving_commit}, "
+                f"not the checkout's current {inst.current_commit}."
+            ),
+            hint="Rebind deliberately with dashboard_restart; #164 keeps restart a decision, never automatic.",
+            facts={
+                "pid": str(inst.pid),
+                "port": str(inst.port),
+                "serving_commit": str(inst.serving_commit),
+                "current_commit": str(inst.current_commit),
+            },
+        ).to_dict()
+        for inst in instances
+        if inst.stale
+    ]
+    return {
+        "diagnostics": diags,
+        "running": bool(instances),
+        "instances": [inst.to_dict() for inst in instances],
+        "current_commit": current,
+        "current_commit_known": current is not None,
+    }
+
+
+def _handle_dashboard_restart(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """`#207`: stop a named dashboard and re-serve it from current code.
+
+    A DELIBERATE rebind, dry-run by default -- never a hot-reload and never
+    automatic (`#164`/`#210`: a silent contract swap mid-session is worse than a
+    visible stale one). A dry run previews old -> new commit and touches nothing;
+    a live call stops the target and starts a fresh detached instance on the
+    same port.
+
+    `P6.2` on the mutation: a stop that does not take is reported as
+    `MDSH_RESTART_FAILED` with `applied=False`, and nothing is started on top of
+    a process that may still be up. An absent target is `MDSH_NO_INSTANCE`, not
+    a silent no-op that reads like success.
+    """
+    port = int(arguments["port"])
+    current = serving.read_commit(serving.PACK_ROOT)
+    instances = dashboards.discover(scope.city_root, current_commit=current)
+    target = next((inst for inst in instances if inst.port == port), None)
+    if target is None:
+        return {
+            "diagnostics": [
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    code="MDSH_NO_INSTANCE",
+                    message=f"No running dashboard is stamped on port {port} for this city.",
+                    hint="Call dashboard_status to see which ports are live before restarting one.",
+                    facts={"port": str(port)},
+                ).to_dict()
+            ],
+            "applied": False,
+        }
+    if _dry_run(arguments):
+        return {
+            "diagnostics": [],
+            "applied": False,
+            "plan": {
+                "pid": target.pid,
+                "port": target.port,
+                "host": target.host,
+                "rig": target.rig,
+                "old_commit": target.serving_commit,
+                "new_commit": current,
+            },
+        }
+    if not dashboards.stop_instance(target):
+        return {
+            "diagnostics": [
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    code="MDSH_RESTART_FAILED",
+                    message=f"Could not stop dashboard pid {target.pid} on port {port}; it may still be running.",
+                    hint="Check the process by hand (ps/kill) before retrying; the old instance was not replaced.",
+                    facts={"pid": str(target.pid), "port": str(port)},
+                ).to_dict()
+            ],
+            "applied": False,
+        }
+    dashboards.remove_stamp(scope.city_root, target.pid)
+    started = dashboards.start_instance(
+        city_root=scope.city_root, host=target.host, port=target.port, rig=target.rig
+    )
+    return {
+        "diagnostics": [],
+        "applied": True,
+        "old_pid": target.pid,
+        "new_pid": int(started["pid"]),
+        "old_commit": target.serving_commit,
+        "new_commit": started.get("serving_commit"),
+        "url": started.get("url"),
+    }
 
 
 def _handle_briefs_list(
@@ -1586,6 +1701,89 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         handler=_handle_city_health,
         scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="dashboard_status",
+        title="Report running dashboards and their serving commits",
+        description=(
+            "Which `mctl dashboard serve` instances are running for this city, and whether "
+            "each is serving current code (#207). Reads the stamp every dashboard leaves at "
+            "startup -- pid, port, and the commit its code imported (the #210/#164 stamp made "
+            "queryable) -- prunes stamps whose process is gone, and compares each live "
+            "instance against the checkout's current HEAD. Emits a WARN per stale instance. "
+            "Reports only; it never restarts anything. `current_commit` is null when the "
+            "checkout HEAD cannot be read (P6.2): staleness is then unknown, never falsely "
+            "'current'."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "running": {"type": "boolean", "description": "Whether any dashboard is live for this city."},
+                "instances": {
+                    "type": "array",
+                    "description": "One entry per live dashboard, port-ordered.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "pid": {"type": "integer"},
+                            "host": {"type": "string"},
+                            "port": {"type": "integer"},
+                            "url": {"type": "string"},
+                            "rig": nullable_string("The rig this dashboard is pinned to, or null for city-wide."),
+                            "serving_commit": nullable_string("The commit this process imported at startup."),
+                            "serving_known": {"type": "boolean", "description": "False (P6.2) when the serving commit could not be captured."},
+                            "started_at": {"type": "string"},
+                            "current_commit": nullable_string("The checkout's current HEAD, for comparison."),
+                            "stale": {"type": "boolean", "description": "True only when both commits are known and differ."},
+                            "staleness_known": {"type": "boolean"},
+                        },
+                        "required": ["pid", "port", "serving_commit", "serving_known", "stale", "staleness_known"],
+                    },
+                },
+                "current_commit": nullable_string("The checkout's current HEAD; null if unreadable (P6.2)."),
+                "current_commit_known": {"type": "boolean"},
+            },
+            ["running", "instances", "current_commit", "current_commit_known"],
+        ),
+        handler=_handle_dashboard_status,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="dashboard_restart",
+        title="Deliberately restart a dashboard onto current code",
+        description=(
+            "Stop a named dashboard and re-serve it from current code (#207) -- a DELIBERATE "
+            "rebind, never a hot-reload and never automatic (#164/#210: a silent contract "
+            "swap mid-session is worse than a visible stale one). Dry run by default: a "
+            "preview names the target and its old -> new commit and touches nothing. A live "
+            "call (dry_run=false) stops the instance on the given port and starts a fresh "
+            "detached one there, returning old/new pids and commits. A stop that does not "
+            "take is reported MDSH_RESTART_FAILED with applied=false and nothing is started "
+            "on top of it; an absent target is MDSH_NO_INSTANCE, not a silent no-op."
+        ),
+        input_schema=request_schema(
+            {
+                "port": {"type": "integer", "description": "The port of the dashboard instance to restart."},
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["port"],
+        ),
+        output_schema=response_schema(
+            {
+                "applied": {"type": "boolean", "description": "False for a dry run or a refusal."},
+                "plan": {"type": "object", "description": "The dry-run preview: target and old -> new commit."},
+                "old_pid": {"type": "integer"},
+                "new_pid": {"type": "integer"},
+                "old_commit": nullable_string("The commit the stopped instance was serving."),
+                "new_commit": nullable_string("The commit the fresh instance will serve."),
+                "url": nullable_string("The URL the fresh instance is bound to."),
+            },
+            ["applied"],
+        ),
+        handler=_handle_dashboard_restart,
+        scope=CITY_SCOPE,
+        mutating=True,
+        external_ready=False,
     ),
     ToolSpec(
         name="molecules_list",

@@ -813,3 +813,24 @@ module = "issue_standardize.py"
 severity = "WARN"
 meaning = "A best-effort city event (brief.submitted / brief.decided) could not be emitted; the typed mutation already succeeded and the condition backstop recovers the lost wake-up."
 module = "gc_events.py"
+
+# MDSH: dashboard lifecycle (#207). dashboard_status/dashboard_restart make the
+# hand-launched `mctl dashboard serve` process visible and deliberately
+# restartable from the typed surface. Restart stays a decision, never automatic
+# (#164/#210), and every read obeys P6.2: an unknown serving commit is reported
+# unknown, never a placeholder compared against origin/main.
+
+[MDSH_STALE_INSTANCE]
+severity = "WARN"
+meaning = "A running dashboard is serving a commit other than the checkout's current HEAD; dashboard_status flags it so an operator can rebind deliberately with dashboard_restart. Not automatic -- #164 keeps restart a decision."
+module = "mcp_server.py"
+
+[MDSH_NO_INSTANCE]
+severity = "ERROR"
+meaning = "dashboard_restart was asked to restart a port with no live dashboard stamped for this city; refused rather than silently no-opping in a way that reads like success."
+module = "mcp_server.py"
+
+[MDSH_RESTART_FAILED]
+severity = "ERROR"
+meaning = "dashboard_restart could not stop the target instance, so nothing was started on top of a process that may still be up (P6.2 on the mutation); applied is false and the operator must check the process by hand."
+module = "mcp_server.py"

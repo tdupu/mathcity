@@ -64,6 +64,8 @@ EXPECTED_TOOLS = (
     "create_defect_bead",
     "create_github_issue",
     "create_issue_bead",
+    "dashboard_restart",
+    "dashboard_status",
     "decisions_to_briefs",
     "fleet_sessions",
     "formulas_catalog",

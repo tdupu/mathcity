@@ -53,7 +53,7 @@ from .screens import pipeline as pipeline_screen
 from .screens import priority as priority_screen
 from .screens import city as city_screen
 from .screens import stack
-from .aggregate import CityView
+from .aggregate import CityView, is_deferred as _agg_is_deferred
 from .client import McpClient, ToolFailure, ToolResponse
 from .fanout import fan_out
 from .reading import attr
@@ -188,11 +188,12 @@ def is_deferred(brief: Mapping[str, Any]) -> bool:
     from, and the Deferred screen reported a confident zero about it.
 
     Both are consulted until the core reconciles them.
+
+    Delegates to the canonical `aggregate.is_deferred` so the queue's lane filter
+    and the overview's census cannot drift and disagree on one brief -- the
+    `#198` off-by-one this single-sourcing closes.
     """
-    return (
-        str(attr(brief, "decision_state") or "") == "deferred"
-        or str(attr(brief, "status") or "") == "deferred"
-    )
+    return _agg_is_deferred(brief)
 
 
 def _in_lane(brief: Mapping[str, Any], lane: str) -> bool:

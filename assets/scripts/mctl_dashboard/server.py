@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import os
 from pathlib import Path
 import re
 import sys
@@ -116,6 +117,45 @@ def make_server(
     return httpd, f"http://{bound_host}:{bound_port}"
 
 
+def teardown_from_args(args: argparse.Namespace) -> int:
+    """`mctl dashboard teardown`: the session-end step `#154` was missing.
+
+    Stops live dashboards for this city (all, or the one on `--port`) and clears
+    their stamps, reaping dead stamps in passing. Returns non-zero if any stop
+    failed, so a caller (or a session-end hook) can tell a clean teardown from
+    one that left a process it could not kill.
+    """
+    from mctl_core import dashboards as _dashboards
+
+    city = Path(args.city) if args.city else Path.cwd()
+    report = _dashboards.teardown(city, port=getattr(args, "port", None))
+    for entry in report["stopped"]:
+        print(f"stopped dashboard pid {entry['pid']} on port {entry['port']}", file=sys.stderr)
+    for entry in report["failed"]:
+        print(
+            f"FAILED to stop dashboard pid {entry['pid']} on port {entry['port']} -- "
+            "it may still be running; check by hand (ps/kill)",
+            file=sys.stderr,
+        )
+    if not report["stopped"] and not report["failed"]:
+        print("no running dashboards to tear down for this city", file=sys.stderr)
+    return 0 if not report["failed"] else 1
+
+
+def internal_tool_count() -> int:
+    """How many tools an `internal` MCP client sees, read from the LIVE roster.
+
+    `#162`: the banner below hard-coded `16` and printed it on every dashboard
+    start, long after the surface had grown -- a stale count reinforced dozens
+    of times a night (see `#154`). Deriving it from `mcp_server.TOOLS` means it
+    can never disagree with the roster it describes (CT13.3's own pass
+    condition: defer to a live enumeration, never name one).
+    """
+    from mctl_core import mcp_server
+
+    return len(mcp_server.TOOLS)
+
+
 def serve_from_args(args: argparse.Namespace) -> int:
     """Entry point for `mctl dashboard serve`, wired from mctl_core.cli."""
     # `--rig` omitted means city-wide. The MCP server is then started without
@@ -135,12 +175,41 @@ def serve_from_args(args: argparse.Namespace) -> int:
         f"  scope: {'city-wide (every registered rig)' if city_wide else 'rig ' + args.rig}",
         file=sys.stderr,
     )
-    print(f"  MCP client class: internal (all 16 tools); server: {' '.join(client.command)}", file=sys.stderr)
+    print(
+        f"  MCP client class: internal (all {internal_tool_count()} tools); "
+        f"server: {' '.join(client.command)}",
+        file=sys.stderr,
+    )
+
+    # #207: stamp this process so dashboard_status/dashboard_restart can see it.
+    # Best-effort and never fatal to serving: the stamp names pid, the bound
+    # port, and the commit THIS process imported (serving.SERVING_COMMIT,
+    # captured once at import -- the #210 semantic). Removed on shutdown so a
+    # dead stamp cannot masquerade as a live dashboard (#154).
+    from pathlib import Path as _Path
+    from mctl_core import dashboards as _dashboards, serving as _serving
+
+    bound_port = httpd.server_address[1]
+    stamp_city = _Path(args.city) if args.city else _Path.cwd()
+    try:
+        _dashboards.write_stamp(
+            stamp_city,
+            pid=os.getpid(),
+            host=args.host,
+            port=bound_port,
+            url=url,
+            rig=args.rig,
+            serving_commit=_serving.SERVING_COMMIT,
+            started_at=_serving.SERVER_STARTED_AT,
+        )
+    except OSError:
+        pass  # a dashboard that cannot stamp itself still serves
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        _dashboards.remove_stamp(stamp_city, os.getpid())
         httpd.server_close()
         client.close()
     return 0

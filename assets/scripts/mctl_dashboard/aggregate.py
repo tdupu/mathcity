@@ -22,6 +22,25 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
+from .reading import attr
+
+
+def is_deferred(row: Mapping[str, Any]) -> bool:
+    """Whether a brief has been held out of the pending queue.
+
+    THE canonical rule, single-sourced here so the overview census
+    (`CityView.state_counts`) and the queue's lane filter (`app.is_deferred`,
+    which re-exports this) cannot drift and disagree on one brief -- the `#198`
+    off-by-one. Deferral is written to the bead's `status`
+    (`effects.py::plan_deferral` sets `status="deferred"`) while `decision_state`
+    is computed separately and never takes that value; both are consulted until
+    the core reconciles them.
+    """
+    return (
+        str(attr(row, "decision_state") or "") == "deferred"
+        or str(attr(row, "status") or "") == "deferred"
+    )
+
 
 @dataclass(frozen=True)
 class RigView:
@@ -140,7 +159,15 @@ class CityView:
     def state_counts(self, rig_id: str | None = None) -> dict[str, int]:
         counts: dict[str, int] = {}
         for row in self.rows_for(rig_id):
-            state = str(row.get("decision_state"))
+            # `#198`: a deferred brief's `decision_state` is still `"pending"`
+            # (deferral is written to `status`, never to `decision_state`), so
+            # counting the raw field put it under `pending` -- and the overview
+            # then reported one more "pending, needs a human" than `/queue`,
+            # which drops deferred briefs from its in-scope count. A deferred
+            # brief has been excused from the queue; it belongs under `deferred`.
+            # Reclassifying here (not dropping) keeps the census total equal to
+            # the number of briefs, and makes the two paths agree.
+            state = "deferred" if is_deferred(row) else str(row.get("decision_state"))
             counts[state] = counts.get(state, 0) + 1
         return counts
 

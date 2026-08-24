@@ -140,6 +140,12 @@ class _JsonRpcClient:
     def __init__(self) -> None:
         self._next_id = 0
         self._initialized = False
+        #: `#165`: consecutive health-check respawns that have not yet yielded a
+        #: working exchange. Bounds auto-recovery so a child that dies on every
+        #: request cannot fork a new process per request forever; a successful
+        #: `_exchange` clears it. Only `StdioMcpClient` ever spawns, but the
+        #: counter lives here so every client carries a defined value.
+        self._respawns = 0
         # One pipe, one request at a time. `ThreadingHTTPServer` already
         # serves requests concurrently, and a city-wide page fans out on top
         # of that, so interleaved writes are reachable rather than theoretical
@@ -269,6 +275,14 @@ class StdioMcpClient(_JsonRpcClient):
         """
         return StdioMcpClient(city=self.city, rig=self.rig, env=dict(self.env or {}))
 
+    #: `#165`: the most consecutive respawns of a dead child before the client
+    #: gives up and raises the named diagnostic instead of spawning again. Small
+    #: on purpose: one or two deaths are a transient hiccup worth papering over
+    #: invisibly; a child that dies this many times in a row is a real fault the
+    #: operator must see, not something to keep forking processes at forever
+    #: (the `#98` FD-exhaustion pattern is a leading candidate for the deaths).
+    _MAX_RESPAWNS = 3
+
     def __post_init__(self) -> None:
         super().__init__()
         self.command = [
@@ -283,6 +297,15 @@ class StdioMcpClient(_JsonRpcClient):
             self.command += ["--city", str(self.city)]
         if self.rig:
             self.command += ["--rig", str(self.rig)]
+        self._spawn()
+
+    def _spawn(self) -> None:
+        """Start (or replace) the `mctl mcp serve` subprocess.
+
+        Factored out of `__post_init__` so the health check can respawn a dead
+        child through the same fixed argv -- no operator input reaches it, there
+        is no shell. Binds the new process to `self.process`.
+        """
         environment = os.environ.copy()
         environment.update({key: str(value) for key, value in dict(self.env or {}).items()})
         self.process = subprocess.Popen(
@@ -322,7 +345,64 @@ class StdioMcpClient(_JsonRpcClient):
             {},
         )
 
+    def _ensure_child_alive(self, message: dict[str, Any]) -> None:
+        """Health-check the child before dispatch; respawn a dead one, bounded.
+
+        `#165`: the dashboard spawned this subprocess once at startup and nothing
+        ever checked it was still alive. When it died and became a zombie, every
+        request that needed a tool call failed -- rendering a finished dashboard
+        as an empty city, not a broken server. `poll()` returns the child's exit
+        code once it has exited; a live child returns `None`.
+
+        A child that has already exited is replaced with a fresh one so THIS
+        request is served against it -- auto-recovery, so a transient death is an
+        invisible hiccup rather than an outage a human has to notice and restart.
+
+        Bounded per the issue's own trade-off note: after `_MAX_RESPAWNS`
+        consecutive respawns that never produced a working exchange, it stops
+        spawning and raises the named `MCTL_DASH_SERVER_GONE`, carrying
+        `respawns_exhausted` -- an honest "the data source will not come back",
+        not a silent retry-forever loop that forks a process per request. The
+        budget is reset by a successful `_exchange`.
+        """
+        if self.process.poll() is None:
+            return
+        if self._respawns >= self._MAX_RESPAWNS:
+            raise self._server_gone(
+                message,
+                exit_code=self.process.poll(),
+                respawns_exhausted=self._respawns,
+            )
+        self._respawns += 1
+        self._close_dead_child()
+        self._spawn()
+        # A fresh process has not seen `initialize`; force the handshake to run
+        # again before the client assumes the MCP session is established.
+        self._initialized = False
+
+    def _close_dead_child(self) -> None:
+        """Best-effort close of the exited child's pipes before we drop it.
+
+        `poll()` (called just before this) has already reaped the zombie; this
+        releases its file descriptors so repeated respawns cannot themselves
+        become the FD leak that may have killed the child in the first place
+        (`#98`). Guarded broadly: a half-built or faked process must not turn
+        cleanup into a new failure.
+        """
+        dead = self.process
+        for stream in (
+            getattr(dead, "stdin", None),
+            getattr(dead, "stdout", None),
+            getattr(dead, "stderr", None),
+        ):
+            try:
+                if stream is not None:
+                    stream.close()
+            except Exception:  # noqa: BLE001 - cleanup must not raise
+                pass
+
     def _exchange(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        self._ensure_child_alive(message)
         assert self.process.stdin is not None
         try:
             self.process.stdin.write(json.dumps(message) + "\n")
@@ -345,6 +425,9 @@ class StdioMcpClient(_JsonRpcClient):
             raise self._server_gone(
                 message, stderr=stderr.strip(), exit_code=self.process.poll()
             )
+        # A working exchange: clear the respawn budget so a client that recovers
+        # now and then is never capped by deaths long in its past (`#165`).
+        self._respawns = 0
         return json.loads(line)
 
     def close(self) -> None:
