@@ -61,6 +61,7 @@ DECLARED_TOOLS = (
     "molecules_list",
     "molecules_show",
     "orders_status",
+    "standardize_github_issue",
     "trace_replay_preview",
     "trace_show",
     "work_claim",

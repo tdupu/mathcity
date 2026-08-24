@@ -787,3 +787,8 @@ module = "effects.py"
 severity = "FATAL"
 meaning = "An OPEN defect bead of the same title already exists; create_defect_bead refuses to mint an orphan duplicate at scale (a CLOSED duplicate does not block)."
 module = "defect_beads.py"
+
+[MGHW_ALREADY_STANDARDIZED]
+severity = "INFO"
+meaning = "The issue body already carries a '## Standardized restatement' section; standardize_github_issue no-ops (applied:false) rather than appending a second one, preserving the additive #52 contract."
+module = "issue_standardize.py"

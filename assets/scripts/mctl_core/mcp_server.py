@@ -74,6 +74,7 @@ from .payloads import (
 )
 from .commission import CommissionRefused
 from .defect_beads import DefectBeadCreateInput, plan_create_defect_bead
+from .issue_standardize import StandardizeIssueInput, plan_standardize_github_issue
 from .effects import (
     BriefCreateInput,
     GithubIssueCreateInput,
@@ -961,6 +962,22 @@ def _handle_create_defect_bead(ctx: MctlContext, arguments: Mapping[str, Any]) -
         ),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_standardize_github_issue(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_standardize_github_issue(
+        ctx,
+        StandardizeIssueInput(
+            repo=arguments.get("repo") or "",
+            issue_number=int(arguments["issue_number"]),
+        ),
+    )
+    dry_run = _dry_run(arguments)
+    # An already-standardized issue holds no github write: serve it as a no-op
+    # (`applied: false`) even on a live call, so a second run appends nothing.
+    if not plan.github_writes:
+        dry_run = True
+    return _effect_payload(ctx, plan, dry_run)
 
 
 def _handle_work_ready(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -1875,6 +1892,32 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_create_defect_bead,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="standardize_github_issue",
+        title="Standardize a GitHub issue in place",
+        description=(
+            "Make an existing GitHub issue hygienic in place (#185/#52) by APPENDING a "
+            "'## Standardized restatement' section. Additive only: every existing byte "
+            "of the body is preserved -- never consolidated, because an agent-tracker's "
+            "issue history is evidence. Idempotent: a second run detects the marker and "
+            "no-ops. Dry run by default, and posts nothing on a preview."
+        ),
+        input_schema=request_schema(
+            {
+                "repo": {"type": "string", "description": "owner/name, e.g. tdupu/mathcity."},
+                "issue_number": {"type": "integer", "description": "The GitHub issue number."},
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["repo", "issue_number"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_standardize_github_issue,
         mutating=True,
         external_ready=False,
         artifact_state=True,
