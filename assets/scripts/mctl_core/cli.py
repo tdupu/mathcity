@@ -65,6 +65,13 @@ def main(argv: list[str] | None = None) -> int:
         # request through its own MCP client, so a context resolved here would
         # be stale before the first page render. Imported lazily so no ordinary
         # CLI invocation pays for http.server.
+        if args.dashboard_command == "teardown":
+            # #154: stop stray/leaked dashboards and clear their stamps. A pure
+            # lifecycle action, no server to start, so it does not go through
+            # serve_from_args.
+            from mctl_dashboard.server import teardown_from_args
+
+            return teardown_from_args(args)
         from mctl_dashboard.server import serve_from_args as serve_dashboard
 
         return serve_dashboard(args)
@@ -382,6 +389,17 @@ def _add_dashboard_parser(commands: argparse._SubParsersAction[argparse.Argument
     serve.add_argument("--rig", help="registered rig identifier the dashboard operates on")
     serve.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
     serve.add_argument("--port", type=int, default=8471, help="bind port (default 8471)")
+
+    # #154: the session-end step. Stop stray/leaked dashboards for this city and
+    # clear their stamps, so a debug server cannot linger and answer for the
+    # canonical one. dashboard_status (MCP) shows what is running; this stops it.
+    teardown = subcommands.add_parser(
+        "teardown", help="stop running dashboards for this city and clear their stamps"
+    )
+    teardown.add_argument("--city", help="registered Gas City root whose dashboards to stop")
+    teardown.add_argument(
+        "--port", type=int, default=None, help="stop only the instance on this port (default: all)"
+    )
 
 
 def _add_runtime_arguments(parser: argparse.ArgumentParser) -> None:

@@ -223,6 +223,29 @@ def discover(city_root: Path, *, current_commit: str | None = None, prune: bool 
 # ---------------------------------------------------------------------------
 
 
+def teardown(city_root: Path, *, port: int | None = None) -> dict[str, object]:
+    """Stop live dashboards and clear their stamps -- the missing #154 step.
+
+    `discover` already reaps dead stamps (a process that is gone is not a running
+    dashboard), so a plain teardown also cleans up the strays that accrued. Each
+    live instance (all of them, or the one on `port`) is stopped and its stamp
+    removed; a stop that does not take is reported as a failure with its stamp
+    LEFT IN PLACE (`P6.2`: never count an instance that may still be up as torn
+    down).
+    """
+    instances = discover(city_root)  # prunes dead stamps as a side effect
+    targets = [inst for inst in instances if port is None or inst.port == port]
+    stopped: list[dict[str, object]] = []
+    failed: list[dict[str, object]] = []
+    for inst in targets:
+        if stop_instance(inst):
+            remove_stamp(city_root, inst.pid)
+            stopped.append(inst.to_dict())
+        else:
+            failed.append(inst.to_dict())
+    return {"requested_port": port, "stopped": stopped, "failed": failed}
+
+
 def stop_instance(instance: DashboardInstance) -> bool:
     """SIGTERM the instance, escalating to SIGKILL if it will not exit.
 

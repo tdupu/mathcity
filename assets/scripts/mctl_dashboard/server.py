@@ -117,6 +117,31 @@ def make_server(
     return httpd, f"http://{bound_host}:{bound_port}"
 
 
+def teardown_from_args(args: argparse.Namespace) -> int:
+    """`mctl dashboard teardown`: the session-end step `#154` was missing.
+
+    Stops live dashboards for this city (all, or the one on `--port`) and clears
+    their stamps, reaping dead stamps in passing. Returns non-zero if any stop
+    failed, so a caller (or a session-end hook) can tell a clean teardown from
+    one that left a process it could not kill.
+    """
+    from mctl_core import dashboards as _dashboards
+
+    city = Path(args.city) if args.city else Path.cwd()
+    report = _dashboards.teardown(city, port=getattr(args, "port", None))
+    for entry in report["stopped"]:
+        print(f"stopped dashboard pid {entry['pid']} on port {entry['port']}", file=sys.stderr)
+    for entry in report["failed"]:
+        print(
+            f"FAILED to stop dashboard pid {entry['pid']} on port {entry['port']} -- "
+            "it may still be running; check by hand (ps/kill)",
+            file=sys.stderr,
+        )
+    if not report["stopped"] and not report["failed"]:
+        print("no running dashboards to tear down for this city", file=sys.stderr)
+    return 0 if not report["failed"] else 1
+
+
 def internal_tool_count() -> int:
     """How many tools an `internal` MCP client sees, read from the LIVE roster.
 
