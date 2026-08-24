@@ -313,8 +313,43 @@ def _headers(view: ViewState) -> str:
             f'<span class="mono" style="color: var(--color-accent-700);">'
             f"{_e(view.sort_marker(key))}</span></a></th>"
         )
-    cells.append('<th style="width: 104px; border: 0;"></th>')
+    cells.append('<th style="width: 184px; border: 0;"></th>')
     return "".join(cells)
+
+
+def _quick_action(brief: Mapping[str, Any], brief_id: str, rig: str | None) -> str:
+    """The triage-first row action, when this row's data qualifies for one.
+
+    The design's stack lets a clerk clear the obvious rows without opening
+    them: a no-brainer `resolve →`, an untitled brief `send back →`. Both are
+    LINKS into the brief's own adjudication panel, not a one-click write --
+    firing one lands the operator in the preview-first panel with the honest
+    verdict already in view, so nothing is recorded until they confirm.
+
+    Gated on data that is actually present. `kind` is unfed today (issue #66),
+    so the `resolve →` action stays dark until the core reports brief type --
+    the same self-feeding rule the columns follow. A missing title, by
+    contrast, is readable now, so `send back →` lights up on the empties.
+    """
+    query_rig = f"&rig={_e(rig)}" if rig else ""
+    title = str(attr(brief, "title") or "").strip()
+    kind = str(attr(brief, "kind") or "")
+    if not title:
+        href = f"/briefs/{_e(brief_id)}?prefill=incomplete{query_rig}#mc-adjudicate"
+        tip = ("No title — the honest verdict is to send it back for the "
+               "required fields. Opens the panel; nothing is written yet.")
+        label = "send back &rarr;"
+    elif kind == "nobrainer":
+        href = f"/briefs/{_e(brief_id)}?{query_rig[1:]}#mc-adjudicate" if query_rig else f"/briefs/{_e(brief_id)}#mc-adjudicate"
+        tip = ("Flagged a no-brainer — clear it in the panel. Preview-first; "
+               "nothing is written until you confirm.")
+        label = "resolve &rarr;"
+    else:
+        return ""
+    return (
+        f'<a class="mc-quick" data-region="quick-action" href="{href}" '
+        f'title="{_e(tip)}">{label}</a>'
+    )
 
 
 def _row(
@@ -326,14 +361,11 @@ def _row(
 ) -> str:
     bead = str(attr(brief, "bead_id") or "")
     brief_id = str(attr(brief, "brief_id") or bead)
+    rig_val = str(attr(brief, "rig_id") or "") or view.rig
     # The rig travels with the link. A brief lives in exactly one rig's store,
     # so a city-wide detail page cannot resolve it without being told which --
     # without this every click city-wide returns 400 rig-required.
-    href = view.url(
-        view="brief",
-        brief_id=brief_id,
-        rig=str(attr(brief, "rig_id") or "") or view.rig,
-    )
+    href = view.url(view="brief", brief_id=brief_id, rig=rig_val)
     background = row_background(brief, index=index, cursor=view.cursor)
     edge = row_edge(brief, index=index, cursor=view.cursor)
 
@@ -368,6 +400,15 @@ def _row(
             f"✓ queued {position}</span>"
         )
 
+    action = _quick_action(brief, brief_id, rig_val)
+    trailing = (
+        '<span style="display: inline-flex; gap: 6px; align-items: center; '
+        'justify-content: flex-end; flex-wrap: nowrap;">'
+        + queue_cell
+        + action
+        + "</span>"
+    )
+
     return (
         f'<tr class="mc-row" data-row-index="{index}" data-href="{_e(href)}" '
         f'style="background: {background}; box-shadow: inset 3px 0 0 {edge};">'
@@ -377,8 +418,8 @@ def _row(
         f'<span class="mono" style="font-size: 10px; color: var(--color-neutral-500); '
         f'margin-left: 4px;">{index + 1}</span></td>'
         + "".join(cells)
-        + '<td style="padding: 5px 8px 5px 4px; text-align: center; vertical-align: top;">'
-        + queue_cell
+        + '<td style="padding: 5px 8px 5px 4px; text-align: right; vertical-align: top;">'
+        + trailing
         + "</td></tr>"
     )
 

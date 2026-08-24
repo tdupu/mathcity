@@ -188,13 +188,56 @@ def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
     )
 
 
-def _disposition_control(brief: Mapping[str, Any]) -> str:
+def _option_title(entry: Mapping[str, Any]) -> str:
+    return str(entry.get("title") or entry.get("summary") or "").strip()  # single-shape-ok: decision option
+
+
+def _adopt_reason(brief: Mapping[str, Any], letter: str) -> str:
+    """The reason text a one-click adopt pre-quotes for option `letter`.
+
+    Quoting the option the operator adopted, rather than leaving the box blank,
+    is the point of click-to-adopt: the recorded reason then says which of the
+    brief's own alternatives the verdict took, in the brief's own words. The
+    human still confirms it through the preview before anything is written.
+    """
+    for entry in attr(brief, "decision_options") or ():
+        if isinstance(entry, Mapping) and str(entry.get("label") or "").strip() == letter:
+            title = _option_title(entry)
+            return (
+                f"Adopting option {letter}: {title}." if title
+                else f"Adopting option {letter} as filed."
+            )
+    return f"Adopting option {letter}."
+
+
+def _adopt_href(brief: Mapping[str, Any], letter: str, *, rig: str | None) -> str:
+    """One click to adopt an option: reload the panel with it pre-filled.
+
+    A link rather than script, so click-to-adopt works with JavaScript off --
+    it lands the same `?prefill=adopt:{letter}` the server already forwards to
+    this panel, which then checks approve, selects the option and quotes it in
+    the reason. Preview-first is untouched: adopting fills the form, it does not
+    record anything.
+    """
+    brief_id = str(attr(brief, "brief_id") or attr(brief, "bead_id") or "")
+    query = f"?prefill=adopt:{_e(letter)}" + (f"&rig={_e(rig)}" if rig else "")
+    return f"/briefs/{_e(brief_id)}{query}#mc-adjudicate"
+
+
+def _disposition_control(
+    brief: Mapping[str, Any], *, rig: str | None = None, selected: str | None = None
+) -> str:
     """Which option the verdict adopts, offered as the brief's own options.
 
     A bare "option letter" text box asks the operator to remember what the
     letters were and to retype one correctly; the brief already states them,
     so the panel can offer them. Where a brief names no options the box is
     honest about that instead of demanding a letter that does not exist.
+
+    Each named option also carries an **adopt** link -- one click that fills
+    the whole form for that option (approve, the option selected, the reason
+    quoting it) so the common case is a click, not three separate inputs. The
+    radios remain for picking without committing the verdict.
 
     The last choice is always to propose something else. A decision-maker who
     can only pick from the options as filed cannot say "none of these, do
@@ -203,7 +246,7 @@ def _disposition_control(brief: Mapping[str, Any]) -> str:
     options = list(attr(brief, "decision_options") or ())
     rows: list[str] = []
 
-    def _chip(value: str, label: str, *, checked: bool = False) -> str:
+    def _chip(value: str, label: str, *, checked: bool = False, adopt: str = "") -> str:
         return (
             '<label style="display: flex; gap: 7px; align-items: baseline; '
             "font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; "
@@ -212,24 +255,36 @@ def _disposition_control(brief: Mapping[str, Any]) -> str:
             f'<input type="radio" name="option" value="{_e(value)}"'
             f'{" checked" if checked else ""} '
             'style="accent-color: var(--color-accent-600); margin: 0; flex: none;">'
-            f'<span style="min-width: 0;">{label}</span></label>'
+            f'<span style="min-width: 0; flex: 1 1 auto;">{label}</span>'
+            f"{adopt}</label>"
         )
 
-    rows.append(_chip("", "Accept the recommendation as filed", checked=True))
+    rows.append(
+        _chip("", "Accept the recommendation as filed", checked=selected is None)
+    )
     for entry in options:
         if not isinstance(entry, Mapping):
             continue
         label = str(entry.get("label") or "").strip()
-        title = str(entry.get("title") or entry.get("summary") or "").strip()  # single-shape-ok: decision option
+        title = _option_title(entry)
         if not label:
             continue
         text = f"{_e(label)} &middot; {_e(title)}" if title else _e(label)
-        rows.append(_chip(label, text))
+        adopt = (
+            f'<a class="mc-adopt" data-region="adopt-option" '
+            f'data-option="{_e(label)}" href="{_adopt_href(brief, label, rig=rig)}" '
+            'style="flex: none; font-family: var(--font-mono); font-size: 10.5px; '
+            "padding: 1px 7px; border: 1px solid var(--color-accent-600); "
+            "border-radius: var(--radius-md); color: var(--color-accent-800); "
+            'white-space: nowrap;">adopt &rarr;</a>'
+        )
+        rows.append(_chip(label, text, checked=label == selected, adopt=adopt))
 
     rows.append(
         _chip(
             "other",
             "Other &mdash; propose your own",
+            checked=selected == "other",
         )
     )
 
@@ -342,13 +397,23 @@ def entry(
     brief_id = str(attr(brief, "brief_id") or attr(brief, "bead_id") or "")
 
     filled = prefill == "incomplete"
+    # `?prefill=adopt:{letter}` is one-click adoption of a named option: it
+    # arrives from the option's adopt link and pre-fills approve + that option
+    # + a reason quoting it. Parsed here, not in the router, so the panel owns
+    # the whole pre-fill and the app just forwards the raw prefill value.
+    adopt_letter = (
+        prefill.split(":", 1)[1].strip()
+        if prefill and prefill.startswith("adopt:")
+        else None
+    )
+    adopting = bool(adopt_letter)
     controls = "".join(
         _verdict_control(
             name,
             label,
             state=state,
             disabled=state != "open" and name not in RETURN_VERDICTS,
-            checked=filled and name == "revise",
+            checked=(filled and name == "revise") or (adopting and name == "approve"),
         )
         for name, label in VERDICTS
     )
@@ -382,16 +447,20 @@ def entry(
         'color: var(--color-neutral-600); margin-bottom: 5px;">Verdict</div>'
         f'<div style="display: flex; gap: 7px; margin-bottom: 12px; flex-wrap: wrap;">'
         f"{controls}</div>"
-        + _disposition_control(brief)
+        + _disposition_control(brief, rig=rig, selected=adopt_letter)
         +         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
         '<textarea name="reason" required minlength="3" rows="3" '
         'placeholder="Why this verdict — recorded on the brief bead." '
-        
+
         'style="width: 100%; font-family: var(--font-body); font-size: 13px; '
         "padding: 6px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        + (_e(INCOMPLETE_REASON) if filled else "")
+        + (
+            _e(INCOMPLETE_REASON) if filled
+            else _e(_adopt_reason(brief, adopt_letter)) if adopting
+            else ""
+        )
         + "</textarea>"
         + _no_brainer_control(
             checked=filled, reason=INCOMPLETE_NO_BRAINER if filled else ""

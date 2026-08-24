@@ -34,6 +34,7 @@ is simply no longer the source for any colour.
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 #: [template] verbatim from the design system: ink at 16%, expressed as a
@@ -133,12 +134,29 @@ FONT_DIR = Path(__file__).resolve().parents[2] / "mctl" / "fonts"
 
 _FACE_TEMPLATE = """@font-face {
   font-family: %(family)s;
-  src: url('/fonts/%(file)s') format('woff2');
+  src: url('%(src)s') format('woff2');
   font-weight: %(weight)s;
   font-style: %(style)s;
   font-display: swap;
 }
 """
+
+
+def _data_uri(path: Path) -> str:
+    """A `woff2` file as a self-contained `data:` URI.
+
+    Embedded rather than served from `/fonts/`: the design handoff calls for
+    the typeface to travel *inside* the page, so the stylesheet is complete on
+    its own with no second request. That also closes the two failure modes a
+    served font has here -- a loopback tool must never phone out, and a font
+    request would leak which rig is being read to whoever answers it -- and it
+    means the page renders in Cormorant/Lora even where `server.py`'s `/fonts/`
+    route is not reachable. The bytes are the OFL families vendored in
+    `assets/mctl/fonts/`; base64 adds about a third to their size, paid once
+    per page in the inlined stylesheet.
+    """
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:font/woff2;base64,{encoded}"
 
 _FACES = (
     ("'Cormorant Garamond'", "CormorantGaramond-SemiBold.woff2", "600", "normal"),
@@ -148,24 +166,28 @@ _FACES = (
 
 
 def font_faces() -> str:
-    """@font-face rules for the font files that are actually present.
+    """@font-face rules embedding each present font file as a `data:` URI.
 
-    Declaring a face whose file is missing is not harmful -- the browser falls
-    back to Georgia, which is why Georgia leads the fallback list -- but it does
-    put a 404 in the server log on every cold load, which trains an operator to
-    ignore 404s in the log of a tool whose whole job is to report failure
-    honestly.
-
-    So the rules are emitted only for files on disk. Drop the two OFL families
-    into `assets/mctl/fonts/` (see the README there) and the typography appears
-    with no code change; leave them out and the dashboard renders in Georgia.
+    The rules are emitted only for files on disk, and each carries the font's
+    own bytes inline (see `_data_uri`) rather than a `/fonts/` URL. So there is
+    no cold-load request to 404 and nothing to phone out for: the typeface is
+    part of the stylesheet. Drop the two OFL families into `assets/mctl/fonts/`
+    (see the README there) and the typography appears with no code change;
+    leave them out and the dashboard renders in Georgia, which is why Georgia
+    leads the fallback list.
     """
     present = []
     for family, filename, weight, style in _FACES:
-        if (FONT_DIR / filename).is_file():
+        path = FONT_DIR / filename
+        if path.is_file():
             present.append(
                 _FACE_TEMPLATE
-                % {"family": family, "file": filename, "weight": weight, "style": style}
+                % {
+                    "family": family,
+                    "src": _data_uri(path),
+                    "weight": weight,
+                    "style": style,
+                }
             )
     return "\n" + "".join(present) if present else "\n"
 
@@ -308,6 +330,25 @@ table.ntdata thead tr {
 .btn-secondary { background: var(--color-neutral-200); border-color: var(--color-neutral-400); }
 .btn-ghost { background: transparent; }
 .btn[disabled], .btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+
+/* --- one-click affordances --------------------------------------------- */
+/* The option adopt link and the stack quick actions fill on hover, per the
+   design's "outlined, fills on hover" note. Real CSS rather than an inline
+   computed value, which the design's authoring note requires for hover. */
+.mc-adopt:hover {
+  background: var(--color-accent-600);
+  color: var(--color-neutral-100);
+}
+.mc-quick {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border: 1px solid #8f2c22;
+  border-radius: var(--radius-md);
+  color: #8f2c22;
+  white-space: nowrap;
+}
+.mc-quick:hover { background: #8f2c22; color: #fdeedd; }
 
 /* --- badges ------------------------------------------------------------- */
 .mc-dry-run {
