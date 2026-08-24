@@ -25,6 +25,7 @@ from .beads import (
     apply_bead_create,
     apply_bead_relate,
     apply_bead_update,
+    priority_from_labels,
     read_beads,
     verify_relation,
 )
@@ -562,27 +563,6 @@ class IssueBeadCreateInput:
 NEW_ISSUE_BEAD_ID_PLACEHOLDER = "(pending-issue-bead-id)"
 
 
-#: A GitHub `priority/pN` label (LABELS.md), N in 0-4. bd priority is 0=highest.
-_PRIORITY_LABEL = re.compile(r"^priority/p([0-4])$")
-
-
-def _priority_from_labels(labels: tuple[str, ...]) -> int | None:
-    """The bd priority named by an issue's `priority/pN` label; most severe wins.
-
-    Without this the minted bead defaulted to bd's priority 2 regardless of the
-    triaged severity carried on the issue -- a p1 bug and a p3 polish landed at
-    the same priority. Absent label -> None, so bd applies its own default rather
-    than a fabricated one (matching the `gh.labels` absent-not-empty discipline).
-    Multiple priority labels resolve to the most severe (lowest number).
-    """
-    found = [
-        int(match.group(1))
-        for label in labels
-        if (match := _PRIORITY_LABEL.match(str(label).strip()))
-    ]
-    return min(found) if found else None
-
-
 def plan_create_issue_bead(ctx: MctlContext, request: IssueBeadCreateInput) -> EffectPlan:
     """Plan minting an OPEN bead that mirrors one GitHub issue (#170).
 
@@ -720,7 +700,7 @@ def plan_create_issue_bead(ctx: MctlContext, request: IssueBeadCreateInput) -> E
         labels=(),
         metadata=metadata,
         sources=(),
-        priority=_priority_from_labels(issue.labels),
+        priority=priority_from_labels(issue.labels),
     )
     return EffectPlan(
         trace_id=ctx.trace_id,

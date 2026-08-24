@@ -73,6 +73,7 @@ from .payloads import (
     require_trace as _require_trace,
 )
 from .commission import CommissionRefused
+from .defect_beads import DefectBeadCreateInput, plan_create_defect_bead
 from .effects import (
     BriefCreateInput,
     GithubIssueCreateInput,
@@ -942,6 +943,18 @@ def _handle_create_github_issue(ctx: MctlContext, arguments: Mapping[str, Any]) 
         ctx,
         GithubIssueCreateInput(
             repo=arguments.get("repo") or "",
+            title=arguments.get("title") or "",
+            body=arguments.get("body") or "",
+            labels=tuple(arguments.get("labels") or ()),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_create_defect_bead(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_create_defect_bead(
+        ctx,
+        DefectBeadCreateInput(
             title=arguments.get("title") or "",
             body=arguments.get("body") or "",
             labels=tuple(arguments.get("labels") or ()),
@@ -1834,6 +1847,34 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_create_github_issue,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="create_defect_bead",
+        title="Mint a defect bead with no GitHub issue",
+        description=(
+            "Mint an OPEN task bead recording a defect that has no GitHub issue yet "
+            "(#185) -- the 'not conversely' case of the owner's rule that issues are "
+            "always paired with a bead but beads need not have issues. Carries "
+            "metadata.defect_report=true and no gh.issue key, and maps a priority/pN "
+            "label to bd priority. Refuses to mint an orphan duplicate of an open "
+            "defect of the same title. Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "title": {"type": "string", "description": "The defect title."},
+                "body": {"type": "string", "description": "The defect description markdown."},
+                "labels": dict(STRING_ARRAY, description="Labels, e.g. priority/p1 (mapped, not landed)."),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["title", "body"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_create_defect_bead,
         mutating=True,
         external_ready=False,
         artifact_state=True,

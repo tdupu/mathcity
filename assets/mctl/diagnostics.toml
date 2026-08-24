@@ -782,3 +782,8 @@ module = "effects.py"
 severity = "FATAL"
 meaning = "gh could not complete the create/edit (absent, unauthenticated, timed out, or non-zero exit); the write aborts loudly so a caller never mistakes a failed post for a filed issue."
 module = "effects.py"
+
+[MGHW_DUPLICATE_DEFECT]
+severity = "FATAL"
+meaning = "An OPEN defect bead of the same title already exists; create_defect_bead refuses to mint an orphan duplicate at scale (a CLOSED duplicate does not block)."
+module = "defect_beads.py"
