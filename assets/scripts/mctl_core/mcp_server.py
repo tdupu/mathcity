@@ -65,6 +65,7 @@ from .city import (
 )
 from .context import CityScope, ContextError, MctlContext, resolve_city, resolve_context
 from . import gc_events
+from . import serving
 from .diagnostics import Diagnostic, Severity
 from .payloads import (
     brief_filters as _filters,
@@ -151,6 +152,21 @@ INSTRUCTIONS = (
     "OPEN-DESIGN-QUESTIONS Q5 is unresolved that state may be unverifiable, "
     "and unactionable diagnostics are moved to `untrusted_diagnostics`."
 )
+
+def _serving_meta() -> dict[str, object]:
+    """The `_meta` block naming the commit THIS process is serving (`#210`/`#172`).
+
+    Rides `initialize` and `tools/list` under the `_meta.mctl` namespace the
+    per-tool wire already uses -- additive, so existing consumers that read
+    `result["tools"]` are untouched, and `_meta` is the MCP-reserved home for
+    implementation metadata. The value is captured once at import (see
+    `serving.py`): a stale process reports its OWN startup commit, which is the
+    signal a caller diffs against current `origin/main` to detect drift. This
+    reports staleness; it never acts on it -- deliberate rebind stays the
+    operator's call (`#210` rejects hot-reload).
+    """
+    return {"mctl": {"serving": serving.serving_info()}}
+
 
 # Names a generic-passthrough tool would plausibly take. Asserted absent by
 # tests and by the harness, so the constraint is checked rather than trusted.
@@ -2338,7 +2354,13 @@ class MctlMcpServer:
         if method == "ping":
             return self._ok(message_id, {})
         if method == "tools/list":
-            return self._ok(message_id, {"tools": [tool.to_wire() for tool in self.visible_tools()]})
+            return self._ok(
+                message_id,
+                {
+                    "tools": [tool.to_wire() for tool in self.visible_tools()],
+                    "_meta": _serving_meta(),
+                },
+            )
         if method == "tools/call":
             return self._call(message_id, params)
         return self._error(
@@ -2354,6 +2376,7 @@ class MctlMcpServer:
             "capabilities": {"tools": {"listChanged": False}},
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "instructions": INSTRUCTIONS,
+            "_meta": _serving_meta(),
         }
 
     def _call(self, message_id: object, params: Mapping[str, Any]) -> dict[str, object]:
