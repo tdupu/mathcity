@@ -62,6 +62,13 @@ class _DeadChild:
 def _client_with_dead_child():
     client = StdioMcpClient.__new__(StdioMcpClient)
     client.process = _DeadChild()
+    # `#165` added health-check + respawn: a child that has already exited is
+    # normally REPLACED before the next request rather than written to. These
+    # tests pin the *terminal* case -- respawn has been tried and exhausted, so
+    # the death can no longer be papered over and MUST be named (never a raw
+    # OSError). Exhausting the budget here reaches that path without spawning a
+    # real subprocess; `test_mcp_child_respawn.py` covers the recovery path.
+    client._respawns = StdioMcpClient._MAX_RESPAWNS
     return client
 
 
@@ -178,6 +185,14 @@ def test_a_closed_pipe_object_also_names_the_cause():
         def __init__(self):
             super().__init__()
             self.stdin = _ClosedPipe()
+
+        def poll(self):
+            # The write-side death this arm exists for: the health check
+            # (`#165`) sees a live child, so the exchange proceeds to the write
+            # -- where the closed pipe raises. A child that already reads dead
+            # via `poll()` would be respawned instead of written to, which is a
+            # different path (`test_mcp_child_respawn.py`).
+            return None
 
     client = StdioMcpClient.__new__(StdioMcpClient)
     client.process = _ChildWithClosedStdin()
