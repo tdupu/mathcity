@@ -731,3 +731,29 @@ module = "effects.py"
 severity = "FATAL"
 meaning = "The issue belongs to a different rig than the one requested; the rig is determined by the tracker, not chosen by the caller."
 module = "effects.py"
+
+# MORD: orders_status / formulas_catalog reads (#203). These reads degrade
+# rather than fail -- a catalog or event-log read that cannot run is reported
+# as a typed diagnostic beside an `unreachable`/`degraded` state, never as a
+# zero. Emitted as diagnostic OBJECTS; a string here dies FATAL
+# MCTL_MCP_OUTPUT_SCHEMA_VIOLATION against the declared object schema.
+
+[MORD_CATALOG_UNREACHABLE]
+severity = "WARN"
+meaning = "A catalog read (gc order list / gc formula list) could not run; the state is unreachable and total is null, never zero."
+module = "orders.py"
+
+[MORD_CATALOG_NOT_READ]
+severity = "INFO"
+meaning = "The MCP request path serves event-log outcomes only and does not read the catalog, which is not servable inside a request budget (measured 89s in-city)."
+module = "orders.py"
+
+[MORD_HISTORY_UNAVAILABLE]
+severity = "WARN"
+meaning = "gc order history could not be read; the catalog is served in a degraded state with outcomes from the event log alone."
+module = "orders.py"
+
+[MORD_EVENT_LOG_UNAVAILABLE]
+severity = "WARN"
+meaning = "The city event log could not be read, so order outcomes could not be folded; outcomes are reported unreachable rather than as failures."
+module = "orders.py"

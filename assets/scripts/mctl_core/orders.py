@@ -38,6 +38,18 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
+from .diagnostics import Diagnostic, Severity
+
+#: Structured diagnostic codes for the orders/formulas reads. Registered in
+#: assets/mctl/diagnostics.toml; every consumer (the MCP tool AND the dashboard)
+#: receives typed diagnostic OBJECTS, never strings -- a string diagnostic dies
+#: FATAL MCTL_MCP_OUTPUT_SCHEMA_VIOLATION against the declared object schema
+#: (#203).
+MORD_CATALOG_UNREACHABLE = "MORD_CATALOG_UNREACHABLE"
+MORD_CATALOG_NOT_READ = "MORD_CATALOG_NOT_READ"
+MORD_HISTORY_UNAVAILABLE = "MORD_HISTORY_UNAVAILABLE"
+MORD_EVENT_LOG_UNAVAILABLE = "MORD_EVENT_LOG_UNAVAILABLE"
+
 #: Reserved for orders the event log has never seen -- NOT a blanket default.
 #: The earlier version of this module reported `unknown` for every order, on a
 #: measurement that missed `<city-root>/.gc/events.jsonl` entirely (#156).
@@ -102,7 +114,13 @@ def _unreachable(what: str, err: Exception) -> dict[str, Any]:
     return {
         "state": "unreachable",
         "total": None,
-        "diagnostics": [f"gc {what} unavailable: {err}"],
+        "diagnostics": [
+            Diagnostic(
+                Severity.WARN,
+                MORD_CATALOG_UNREACHABLE,
+                f"gc {what} unavailable: {err}",
+            ).to_dict()
+        ],
     }
 
 
@@ -112,16 +130,26 @@ def _event_log_only(read: Callable[[str], Any]) -> dict[str, Any]:
     The catalog is reported `unreachable` rather than empty -- we did not look,
     which is not the same as finding nothing.
     """
-    diagnostics: list[str] = [
-        "catalog not read: gc order list is not servable inside a request budget "
-        "(measured 89s in-city); serving event-log outcomes only"
+    diagnostics: list[dict] = [
+        Diagnostic(
+            Severity.INFO,
+            MORD_CATALOG_NOT_READ,
+            "catalog not read: gc order list is not servable inside a request budget "
+            "(measured 89s in-city); serving event-log outcomes only",
+        ).to_dict()
     ]
     try:
         outcomes = fold_outcomes(read("events"))
         outcomes_state = "healthy"
     except Exception as err:  # noqa: BLE001
         outcomes, outcomes_state = {}, "unreachable"
-        diagnostics.append(f"event log unavailable: {err}")
+        diagnostics.append(
+            Diagnostic(
+                Severity.WARN,
+                MORD_EVENT_LOG_UNAVAILABLE,
+                f"event log unavailable: {err}",
+            ).to_dict()
+        )
     return {
         "state": "unreachable",
         "outcomes_state": outcomes_state,
@@ -144,21 +172,39 @@ def orders_status(read: Callable[[str], Any], mode: str | None = None) -> dict[s
     except Exception as err:  # noqa: BLE001 -- any read failure is "we could not look"
         out = _unreachable("order list", err)
         out["orders"] = []
+        # The declared schema requires `failing` and `outcome_recorded` on every
+        # orders_status response; with no orders read, both are 0 -- not absent.
+        # (`_unreachable` is shared with formulas_catalog, so these orders-only
+        # keys live here, not in it.)
+        out["failing"] = 0
+        out["outcome_recorded"] = 0
         return out
 
     try:
         history = read("history")
         history_state = "healthy"
-        diagnostics: list[str] = []
+        diagnostics: list[dict] = []
     except Exception as err:  # noqa: BLE001
         history, history_state = [], "degraded"
-        diagnostics = [f"gc order history unavailable: {err}"]
+        diagnostics = [
+            Diagnostic(
+                Severity.WARN,
+                MORD_HISTORY_UNAVAILABLE,
+                f"gc order history unavailable: {err}",
+            ).to_dict()
+        ]
 
     try:
         outcomes = fold_outcomes(read("events"))
     except Exception as err:  # noqa: BLE001
         outcomes = {}
-        diagnostics.append(f"event log unavailable: {err}")
+        diagnostics.append(
+            Diagnostic(
+                Severity.WARN,
+                MORD_EVENT_LOG_UNAVAILABLE,
+                f"event log unavailable: {err}",
+            ).to_dict()
+        )
 
     last: dict[str, str] = {}
     for entry in history:

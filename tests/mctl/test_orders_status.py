@@ -83,7 +83,10 @@ def test_a_failed_read_is_degraded_never_zero_orders():
     assert out["state"] == "unreachable"
     assert out["orders"] == []
     assert out["total"] is None, "total must be None (unknown), never 0"
-    assert any("unavailable" in d.lower() for d in out["diagnostics"])
+    # Diagnostics are typed OBJECTS (code/message/severity), never strings --
+    # a string here dies FATAL against the declared MCP object schema (#203).
+    assert any("unavailable" in d["message"].lower() for d in out["diagnostics"])
+    assert all(isinstance(d, dict) and "code" in d for d in out["diagnostics"])
 
 
 def test_formulas_catalog_lists_formulas():
