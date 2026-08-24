@@ -37,6 +37,7 @@ than defaulting it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
@@ -126,6 +127,228 @@ def _artifacts_of(metadata: Mapping[str, object]) -> dict[str, str]:
     return dict(sorted(out.items()))
 
 
+# --- the evidence core (#115), buildable slice only -------------------------
+#
+# The issue owner measured the live event log and ruled the full five-link
+# chain (claimed -> agent_active -> commit -> artifact -> step_closed) NOT
+# BUILDABLE as specified: four of five links have no emitter, and building a
+# positional `broken_at` regardless would blame link 1 (`claimed`) on every
+# healthy step -- the exact defect inverted (P6.2's mirror: a check that
+# could not have failed must not render as passed). What follows is the
+# honest subset: read the declaration #142 already lays down, derive
+# `is_complete` three-valued from it, and represent all five links with a
+# tri-state that never claims more than the city can measure.
+
+#: `gc.expected_artifacts.v1` -- a JSON array of path strings, set at formula-
+#: authoring time (#142). `.v1`-suffixed keys holding JSON are the house
+#: convention for structured metadata (see `gc.graphv2_vars.v1`).
+EXPECTED_ARTIFACTS_KEY = "gc.expected_artifacts.v1"
+
+IS_COMPLETE_COMPLETE = "complete"
+IS_COMPLETE_INCOMPLETE = "incomplete"
+#: "We did not measure", never a fallback to bead status. A closed bead with
+#: no declaration is `unknown`, not `complete` -- self-reported completion is
+#: the defect #115 exists to stop trusting.
+IS_COMPLETE_UNKNOWN = "unknown"
+
+
+def _expected_artifacts_of(metadata: Mapping[str, object]) -> list[str] | None:
+    """The step's declared artifact paths, or `None` -- "no declaration".
+
+    `None` covers three cases that must all read alike downstream: the key is
+    absent, its value is blank, and its value is present but does not parse
+    as a JSON array of strings. A malformed declaration must NOT become `[]`
+    ("declared zero artifacts") -- that would let `is_complete` report
+    `complete` for a step that simply failed to author its metadata
+    correctly, which is a false positive, not an honest empty case. Never
+    raises: a formula author's typo must not crash a read.
+    """
+    raw = _text(metadata, EXPECTED_ARTIFACTS_KEY)
+    if raw is None:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+        return None
+    return [item.strip() for item in parsed if item.strip()]
+
+
+def _completion_of(metadata: Mapping[str, object]) -> dict[str, object]:
+    """`is_complete`, THREE-VALUED, derived only from declared-vs-actual
+    artifacts -- never from bead status.
+
+    Carries its own inputs (`declared`/`present`/`missing`) so the verdict
+    shows its work (honesty invariant Sec 5.5: a derived state carries its
+    inputs), rather than asserting a bare word a reader has to trust.
+    """
+    declared = _expected_artifacts_of(metadata)
+    if declared is None:
+        return {
+            "is_complete": IS_COMPLETE_UNKNOWN,
+            "declared": None,
+            "present": [],
+            "missing": [],
+        }
+    actual_paths = set(_artifacts_of(metadata).values())
+    present = [path for path in declared if path in actual_paths]
+    missing = [path for path in declared if path not in actual_paths]
+    return {
+        "is_complete": IS_COMPLETE_INCOMPLETE if missing else IS_COMPLETE_COMPLETE,
+        "declared": declared,
+        "present": present,
+        "missing": missing,
+    }
+
+
+LINK_RECORDED = "recorded"
+#: No emitter exists for this link in the city today. Deliberately never
+#: `not_yet` -- `not_yet` claims an emitter exists and simply has not fired,
+#: which is a stronger and false claim for these three links.
+LINK_NOT_RECORDED = "not_recorded"
+#: An emitter exists and has not fired for this step.
+LINK_NOT_YET = "not_yet"
+
+#: The five links of the evidence chain (#115), in chain order. This is
+#: DISPLAY order only -- `broken_at` does NOT walk this list picking the
+#: first `not_yet` link. See `_broken_at` for why that would be dishonest.
+EVIDENCE_LINK_ORDER = ("claimed", "agent_active", "commit", "artifact", "step_closed")
+
+#: Measured against the live event log (#115's scope ruling): these three
+#: have no emitter in the city today.
+_NO_EMITTER_LINKS = frozenset({"claimed", "agent_active", "commit"})
+
+#: Bead-status values this city treats as closed. Shared with `work.py` /
+#: `briefs.py`'s own `{"closed", "done"}` convention rather than inventing a
+#: second one here.
+_CLOSED_STATUSES = frozenset({"closed", "done"})
+
+
+def _evidence_links(
+    step_metadata: Mapping[str, object], step_status: str, actual_artifacts: Mapping[str, str]
+) -> tuple[dict[str, object], ...]:
+    """The five evidence links, each an honest tri-state object.
+
+    `step_metadata` is accepted (and currently unused) so a future emitter
+    for `claimed`/`agent_active`/`commit` has an obvious place to read from
+    without changing every caller's signature.
+    """
+    del step_metadata  # no emitter reads step metadata for the three links yet
+    links: list[dict[str, object]] = []
+    for name in EVIDENCE_LINK_ORDER:
+        if name in _NO_EMITTER_LINKS:
+            links.append(
+                {
+                    "link": name,
+                    "status": LINK_NOT_RECORDED,
+                    "reason": f"No emitter exists for the {name!r} link in this city today (#115).",
+                }
+            )
+        elif name == "artifact":
+            if actual_artifacts:
+                links.append(
+                    {
+                        "link": name,
+                        "status": LINK_RECORDED,
+                        "reason": (
+                            f"{len(actual_artifacts)} gc.build.* artifact(s) recorded for this step."
+                        ),
+                    }
+                )
+            else:
+                links.append(
+                    {
+                        "link": name,
+                        "status": LINK_NOT_YET,
+                        "reason": "gc.build.* records artifacts; none is recorded for this step yet.",
+                    }
+                )
+        else:  # step_closed
+            closed = step_status.strip().lower() in _CLOSED_STATUSES
+            links.append(
+                {
+                    "link": name,
+                    "status": LINK_RECORDED if closed else LINK_NOT_YET,
+                    "reason": f"Bead status is {step_status!r}.",
+                }
+            )
+    return tuple(links)
+
+
+def _broken_at(step_status: str, completion: Mapping[str, object]) -> dict[str, object]:
+    """The ONE genuine, checkable break -- and nothing else.
+
+    An earlier draft named the first `not_yet` link in chain order. That is
+    the exact defect #115 was filed to prevent, shifted from `claimed` to
+    `artifact`/`step_closed`: with only those two links observable and no
+    staleness/timing signal, "advancing" (healthy, still in flight) and
+    "stalled" (broken) are INDISTINGUISHABLE from a bare `not_yet`. Naming
+    the first one regardless renders "Break: artifact" on every healthy
+    in-flight step -- a check that could not have failed rendering as failed
+    (the honesty invariants' mirror: a check that could not have PASSED must
+    not render as a finding; here it is a check that could not have FAILED,
+    yet, rendering as one).
+
+    The one break this city CAN check today: a step whose bead status is
+    CLOSED (`step_closed` recorded) but whose DECLARED `expected_artifacts`
+    are still MISSING. That is not "not yet" -- the step already claims to
+    be done, so a missing declared artifact is a genuine, checkable defect:
+    completion self-reported without producing the declared output. This is
+    exactly the `is_complete == "incomplete"` case occurring on a closed
+    step.
+
+    Every other case -- open/in-flight, no declaration (nothing to check),
+    or closed with every declared artifact present -- reports `broken_at:
+    None` with a reason. `None` here is NOT a claim the whole chain is
+    healthy: `claimed`/`agent_active`/`commit` have no emitter and remain
+    unassessed regardless of this verdict.
+    """
+    declared = completion.get("declared")
+    missing = completion.get("missing") or []
+    closed = step_status.strip().lower() in _CLOSED_STATUSES
+    if closed and declared is not None and missing:
+        return {
+            "broken_at": "artifact",
+            "broken_at_reason": (
+                f"Bead status is closed (step_closed recorded), but {len(missing)} of "
+                f"{len(declared)} declared artifact(s) are missing -- completion was "
+                "self-reported without producing the declared output."
+            ),
+        }
+    return {
+        "broken_at": None,
+        "broken_at_reason": (
+            "No genuine break. Distinguishing an advancing step from a stalled one needs a "
+            "staleness/timing signal no recorder provides today, so a merely not-yet link on "
+            "an open step is never named as broken -- only a closed step with a missing "
+            "declared artifact is. claimed/agent_active/commit have no emitter and remain "
+            "unassessed either way; this is not a claim the whole chain is healthy."
+        ),
+    }
+
+
+def _step_view(step: Bead) -> dict[str, object]:
+    """One step's identity plus its derived completion and evidence (#115)."""
+    metadata = _metadata(step)
+    completion = _completion_of(metadata)
+    actual = _artifacts_of(metadata)
+    links = _evidence_links(metadata, step.status, actual)
+    broken = _broken_at(step.status, completion)
+    return {
+        "id": step.id,
+        "title": step.title,
+        "status": step.status,
+        "kind": _text(metadata, "gc.kind"),
+        "expected_artifacts": completion["declared"],
+        "artifacts": actual,
+        "artifacts_present": completion["present"],
+        "artifacts_missing": completion["missing"],
+        "is_complete": completion["is_complete"],
+        "evidence": {"links": list(links), **broken},
+    }
+
+
 def describe(bead: Bead) -> dict[str, object]:
     """The molecule's identity and field map.
 
@@ -173,12 +396,13 @@ def describe(bead: Bead) -> dict[str, object]:
 
 
 def describe_with_steps(bead: Bead, beads: Sequence[Bead]) -> dict[str, object]:
-    """`describe`, plus the molecule's steps by the reverse index."""
+    """`describe`, plus the molecule's steps by the reverse index.
+
+    Each step carries its derived `is_complete` and evidence (#115) alongside
+    the identity fields `describe_with_steps` has always reported.
+    """
     out = describe(bead)
-    out["steps"] = [
-        {"id": s.id, "title": s.title, "status": s.status, "kind": _text(_metadata(s), "gc.kind")}
-        for s in steps_of(bead.id, beads)
-    ]
+    out["steps"] = [_step_view(s) for s in steps_of(bead.id, beads)]
     return out
 
 

@@ -1598,10 +1598,15 @@ TOOLS: tuple[ToolSpec, ...] = (
             "says otherwise -- building the edge from that sentence reverses it. "
             "Re-dispatching one source bead mints a NEW root, so four attempts are four "
             "molecules, which is what makes repeated attempts visible. "
-            "NO `state` FIELD: advancing/stalled/stranded need the evidence chain (#115), "
-            "which records nothing today, and a row showing a state it cannot derive would "
-            "be worse than one that omits it. An unreadable store yields a diagnostic and "
-            "no rows -- never a bare empty list."
+            "NO `state` FIELD: advancing/stalled/stranded need the FULL evidence chain, ruled "
+            "not buildable as specified (#115: four of five links have no emitter). When "
+            "`with_steps` is set, each step DOES carry the buildable slice: `is_complete` "
+            "(three-valued `complete`/`incomplete`/`unknown`, derived ONLY from declared "
+            "`expected_artifacts` (#142) versus actual `artifacts`, never from bead status), "
+            "and `evidence.links` -- all five links (claimed/agent_active/commit/artifact/"
+            "step_closed), each `recorded`/`not_yet`/`not_recorded`. `not_recorded` names a "
+            "link with no emitter in this city today; `evidence.broken_at` NEVER names one. "
+            "An unreadable store yields a diagnostic and no rows -- never a bare empty list."
         ),
         input_schema=request_schema(
             {
@@ -1624,7 +1629,12 @@ TOOLS: tuple[ToolSpec, ...] = (
             "One molecule with its steps, by root bead id. A missing id and an id that "
             "exists but is not a molecule root are DIFFERENT diagnostics: 'no such molecule' "
             "is an answer, 'that is a step, not a run' is a different answer, and neither is "
-            "an empty result."
+            "an empty result. Always includes steps, each carrying the #115 evidence core: "
+            "`expected_artifacts` (declared, #142, or null -- no declaration), `artifacts` "
+            "(actual, from `gc.build.*`), the three-valued `is_complete` derived from the two "
+            "(NEVER from bead status), and `evidence.links` for all five links with an honest "
+            "tri-state (`not_recorded` for claimed/agent_active/commit, which have no emitter "
+            "today; `evidence.broken_at` never names one of those three)."
         ),
         input_schema=request_schema(
             {"molecule_id": {"type": "string", "description": "The molecule's ROOT bead id."}},
