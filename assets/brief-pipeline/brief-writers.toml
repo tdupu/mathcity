@@ -213,6 +213,11 @@ over-approximation. "reader" is the closest of the four roles; none of them mean
   role = "unaudited"
 
   [[artifact.referencer]]
+  file = "formulas/revise-return.toml"
+  role = "reader"
+  note = "Reads decisions/<slug>.toml records to find revise verdicts (#209); re-deposits via a brief-prep pour and writes only revise-returned.jsonl (top-level artifact_root, not under decisions/). Never writes a decision record."
+
+  [[artifact.referencer]]
   file = "skills/adjudicate-brief/SKILL.md"
   role = "violation"
   since = "2026-08-20"

@@ -1,0 +1,251 @@
+description = """
+Revise-return: turn a `revise` verdict back into a fresh brief deposit.
+
+THE GAP THIS CLOSES (#209, fix candidate 2). A `revise` verdict used to die
+silently. brief-decision-dispatch's revise arm creates a `[revise] <slug>`
+follow-up bead carrying the revision feedback, but NOTHING turned that feedback
+back into a brief — the author had to be found by hand and the Mayor
+hand-carried the return trip (measured live 2026-08-23). This formula is the
+missing consumer: on `brief.decided`, it scans the decision records, and for
+each `decision = "revise"` it MECHANICALLY re-deposits a fresh brief from the
+record's `reason` field (the revision instructions), so a revise verdict
+automatically produces a fresh brief deposit instead of dying.
+
+DIVISION OF LABOR (three brief.decided consumers, no overlap):
+  - brief-decision-dispatch ACTS on the verdict — on revise it creates the
+    `[revise] <slug>` tracking bead in the source rig carrying the feedback.
+  - post-decision-file-or-sendback routes FOLLOW-UP BRIEFING — for a revise it
+    SEND-BACKs (archives) the ORIGINAL brief; it deliberately EXCLUDES
+    dispatch-created beads (those carry a `brief_slug` metadata key) from its
+    FILE path, so it never re-deposits the revise itself.
+  - THIS formula (revise-return) is the sole RE-DEPOSITOR for a revise: it
+    produces the fresh, revised brief in the pile via the sanctioned deposit
+    path. No other consumer deposits a brief for a revise, so there is no
+    double-deposit.
+
+RE-DEPOSIT THROUGH THE SANCTIONED PATH (POLICY B2.8 — no hand-written governed
+brief paths). This formula never writes a brief into `.pile`/`stack` itself.
+It re-deposits by POURING `brief-prep` — the existing typed producer that
+stages, gate-attaches, and submits to the pile through mctl — exactly as
+post-decision-file-or-sendback's FILE arm and on-merge-brief-record do. The
+revision instructions are carried to the brief-prep drafter by appending them
+to the source bead as a `bd comment`, which the `mathcity.brief-prep` skill
+reads when it turns the bead into a brief.
+
+IDEMPOTENCY + RETRY (mirrors brief-decision-dispatch's ledger contract). A
+revise slug counts as re-deposited only when a SUCCESS line (one carrying
+`redeposited_at`) names it in `{{artifact_root}}/revise-returned.jsonl`. A
+failed re-deposit appends a `pending_retry: true` line with NO `redeposited_at`,
+so the next `brief.decided` wake retries it. `brief.decided` is a wake-up, not a
+work queue — events coalesce, so the durable decision records on disk are the
+source of truth and re-firing is safe.
+
+## Claim contract (vapor wisp)
+
+This formula pours as a single root-only vapor wisp routed to the city dog
+pool (same staffing model as brief-decision-dispatch: gsp-f79). phase=vapor
+(not [requires] formula_compiler) because a graph-v2 root is a blocked
+container the demand probe never counts, while a vapor root is the shape gc
+demonstrably staffs to a pool via a city event order. The wisp is claimed by a
+CITY dog; the global artifact_root is the single scan point, and source beads
+are resolved to their owning rig via `gc rig list --json` (rig-scoped event
+orders would fan out once per rig on every city event — deliberately avoided).
+After claiming this wisp:
+
+```bash
+gc formula show revise-return --json
+```
+
+Run the single step, then:
+
+```bash
+gc runtime drain-ack
+```
+"""
+formula = "revise-return"
+version = 1
+# phase=vapor: staffs to the city pool via the event order (cf.
+# brief-decision-dispatch). A graph-v2 root is demand-invisible and never
+# staffed; a vapor root is.
+phase = "vapor"
+
+[catalog]
+name = "revise-return"
+description = "Re-deposit a fresh brief from a revise verdict's revision instructions, via the sanctioned brief-prep path."
+
+[vars]
+[vars.artifact_root]
+description = "Brief pipeline artifact root (global scan point; same as brief-decision-dispatch)."
+default = "~/.gc/mathcity/briefs"
+
+[[steps]]
+id = "scan-and-redeposit"
+title = "Scan for undeposited revise verdicts and re-deposit each via brief-prep"
+metadata = { "gc.brief.root" = "{{artifact_root}}", "gc.brief.revise_ledger" = "{{artifact_root}}/revise-returned.jsonl" }
+description = """
+Run everything in ONE shell session.
+
+**Scan.** Find `{{artifact_root}}/decisions/<slug>.toml` records whose
+`decision` is `revise` and that have NOT yet been re-deposited. A slug is
+re-deposited when a SUCCESS line (has `redeposited_at`) names it in
+`{{artifact_root}}/revise-returned.jsonl`. The artifact_root is a global path;
+the `~` prefix is expanded to $HOME at runtime.
+
+**Re-deposit.** For each pending revise slug: read `source_bead` and `reason`
+(the revision instructions) from the record. Resolve the source bead's owning
+rig from the city registry (`gc rig list --json`, longest-prefix match).
+Carry the revision instructions to the brief-prep drafter by appending them to
+the source bead as a `bd comment`, then RE-DEPOSIT through the sanctioned path
+by pouring `brief-prep` for the same source bead under a fresh, incremented
+slug (`<slug>-r1`, then `<slug>-r2`, ...). Append one ledger line: a SUCCESS
+line (with `redeposited_at`) on success, or a `pending_retry: true` line (no
+`redeposited_at`) on failure so the next wake retries.
+
+A record with an empty `source_bead` can never be poured (brief-prep requires
+`source`) — write a TERMINAL success-shaped line with `action = "undepositable"`
+and reason `missing-source-bead` so the scan settles it and does not retry
+forever.
+
+Run this as one shell script:
+
+```bash
+set -euo pipefail
+WORK_BEAD="${GC_BEAD_ID:-}"
+
+ROOT="{{artifact_root}}"
+ROOT="${ROOT/#\\~/$HOME}"
+LEDGER="$ROOT/revise-returned.jsonl"
+
+# A slug is re-deposited only when a SUCCESS line (has redeposited_at) names it.
+is_redeposited() {
+  [ -f "$LEDGER" ] || return 1
+  grep "\\"brief_slug\\":[[:space:]]*\\"$1\\"" "$LEDGER" 2>/dev/null \\
+    | grep -q '"redeposited_at"'
+}
+
+# Count pending_retry lines for a slug (retry-limit guard).
+pending_retry_count() {
+  [ -f "$LEDGER" ] || { echo 0; return; }
+  grep "\\"brief_slug\\":[[:space:]]*\\"$1\\"" "$LEDGER" 2>/dev/null \\
+    | grep -c '"pending_retry"' || true
+}
+
+# Resolve a bead id -> owning rig name via gc's authoritative registry
+# (longest configured prefix wins; HQ row included). Mirrors
+# brief-decision-dispatch's resolver.
+RIG_REGISTRY_JSON=""
+resolve_rig_name() {
+  [ -n "$RIG_REGISTRY_JSON" ] || RIG_REGISTRY_JSON="$(gc rig list --json 2>/dev/null || true)"
+  [ -n "$RIG_REGISTRY_JSON" ] || return 0
+  printf '%s' "$RIG_REGISTRY_JSON" | jq -r --arg id "$1" '
+    [(.rigs // [])[] | select(.prefix as $p | $id | startswith($p + "-"))]
+    | sort_by(.prefix | length) | last // empty
+    | select(. != null) | .name'
+}
+
+# Next revise slug: <base>-r<N+1> if slug already ends -r<N>, else <slug>-r1.
+next_slug() {
+  case "$1" in
+    *-r[0-9]*)
+      base="${1%-r*}"; n="${1##*-r}"
+      case "$n" in (*[!0-9]*) printf '%s-r1' "$1"; return ;; esac
+      printf '%s-r%d' "$base" "$((n + 1))" ;;
+    *) printf '%s-r1' "$1" ;;
+  esac
+}
+
+ledger_line() {  # slug decision action follow_slug outcome
+  ts="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo 'unknown')"
+  if [ "$5" = "success" ]; then
+    jq -cn --arg slug "$1" --arg src "$2" --arg action "$3" \\
+      --arg follow "$4" --arg ts "$ts" \\
+      '{brief_slug: $slug, source_bead: $src, action: $action, redeposited_slug: $follow, redeposited_at: $ts}'
+  else
+    jq -cn --arg slug "$1" --arg src "$2" --arg action "$3" --arg ts "$ts" \\
+      '{brief_slug: $slug, source_bead: $src, action: $action, pending_retry: true, failed_at: $ts}'
+  fi
+}
+
+redeposit_slug() {
+  slug="$1"
+  rec="$ROOT/decisions/$slug.toml"
+  [ -f "$rec" ] || { echo "WARN: missing record for $slug"; return; }
+  if is_redeposited "$slug"; then echo "already re-deposited: $slug"; return; fi
+
+  decision="$(grep '^decision[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+  [ "$decision" = "revise" ] || { echo "not a revise ($decision): $slug"; return; }
+
+  reason="$(grep '^reason[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+  source_bead="$(grep '^source_bead\\b[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+  brief_type="$(grep '^brief_type[[:space:]]*=' "$rec" | head -n1 | sed 's/.*=[[:space:]]*//' | tr -d '"')"
+  [ -n "$brief_type" ] || brief_type="standard"
+
+  # Terminalize: no source bead means brief-prep can never pour.
+  if [ -z "$source_bead" ]; then
+    printf '%s\\n' "$(jq -cn --arg slug "$slug" \\
+      --arg ts "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)" \\
+      '{brief_slug: $slug, action: "undepositable", undepositable_reason: "missing-source-bead", redeposited_at: $ts}')" >> "$LEDGER"
+    echo "TERMINAL $slug: missing-source-bead"
+    return
+  fi
+
+  # Retry-limit guard (unbounded-loop prevention).
+  if [ "$(pending_retry_count "$slug")" -ge 3 ]; then
+    printf '%s\\n' "$(jq -cn --arg slug "$slug" --arg src "$source_bead" \\
+      --arg ts "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)" \\
+      '{brief_slug: $slug, source_bead: $src, action: "undepositable", undepositable_reason: "retry-limit-reached", redeposited_at: $ts}')" >> "$LEDGER"
+    echo "TERMINAL $slug: retry-limit-reached"
+    return
+  fi
+
+  new_slug="$(next_slug "$slug")"
+  RIG_NAME="$(resolve_rig_name "$source_bead")"
+
+  # Carry the revision instructions to the brief-prep drafter (best-effort):
+  # append them to the source bead so mathcity.brief-prep reads them when it
+  # redrafts. A failed comment does not block the re-deposit.
+  comment_body="Revision requested on brief $slug (verdict=revise). Address this feedback in the re-deposited brief: $reason"
+  if [ -n "$RIG_NAME" ]; then
+    gc bd --rig "$RIG_NAME" comment "$source_bead" "$comment_body" 2>/dev/null || \\
+      bd comment "$source_bead" "$comment_body" 2>/dev/null || true
+  else
+    bd comment "$source_bead" "$comment_body" 2>/dev/null || true
+  fi
+
+  # Re-deposit via the sanctioned deposit path: pour brief-prep for the source
+  # bead under the fresh slug. brief-prep stages, gate-attaches, and submits to
+  # the pile through mctl (POLICY B2.8: never a hand-written governed path).
+  if bd mol pour brief-prep \\
+      --var source="$source_bead" \\
+      --var brief_slug="$new_slug" \\
+      --var brief_type="$brief_type"; then
+    printf '%s\\n' "$(ledger_line "$slug" "$source_bead" "re-deposited via brief-prep pour" "$new_slug" success)" >> "$LEDGER"
+    echo "re-deposited $slug -> $new_slug (source=$source_bead)"
+  else
+    printf '%s\\n' "$(ledger_line "$slug" "$source_bead" "brief-prep pour failed" "$new_slug" failure)" >> "$LEDGER"
+    echo "FAILED re-deposit for $slug (source=$source_bead); will retry"
+  fi
+}
+
+# Main scan — global brief root, single scan point (city dog).
+redeposited=0
+if [ -d "$ROOT/decisions" ]; then
+  for f in "$ROOT/decisions/"*.toml; do
+    [ -f "$f" ] || continue
+    slug="$(basename "$f" .toml)"
+    if is_redeposited "$slug"; then echo "already re-deposited: $slug"; continue; fi
+    redeposit_slug "$slug"
+    redeposited=$((redeposited + 1))
+  done
+fi
+
+echo "scan-and-redeposit complete: processed=$redeposited"
+
+if [ -n "$WORK_BEAD" ]; then
+  bd close "$WORK_BEAD" --reason "revise-return: processed=$redeposited"
+fi
+gc runtime drain-ack
+```
+
+Append-only; never rewrite existing ledger lines.
+"""

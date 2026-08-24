@@ -1,0 +1,38 @@
+# Event-trigger order — re-deposit a fresh brief after a `revise` verdict.
+#
+# THE GAP THIS CLOSES (#209): a revise verdict used to die silently. This order
+# catches the `brief.decided` bell and pours revise-return, which reads the
+# undeposited revise verdicts and re-deposits each as a fresh brief from the
+# revision instructions, via the sanctioned brief-prep deposit path.
+#
+# DIVISION OF LABOR (three brief.decided consumers, no overlap):
+#   - brief-decision-dispatch ACTS on the verdict (on revise: creates the
+#     tracking follow-up bead carrying the feedback).
+#   - post-decision-file-or-sendback routes follow-up briefing (on revise it
+#     archives the ORIGINAL brief; it excludes dispatch-created beads from its
+#     FILE arm, so it never re-deposits the revise itself).
+#   - THIS order (revise-return) is the sole RE-DEPOSITOR for a revise — it
+#     produces the fresh, revised brief in the pile. No double-deposit.
+#
+# `brief.decided` is rung by briefs_adjudicate's LIVE apply path (Plan C, #202,
+# landed 83962df) with the verdict + adjudicator in the payload, and by the
+# skill path (brief-record-decision). This order fires within seconds of a
+# verdict, so a revise comes back around unattended.
+#
+# The formula is idempotent: it compares revise decision records against
+# revise-returned.jsonl and skips already-re-deposited slugs, so coalesced or
+# repeated events are safe.
+
+[order]
+description = "Re-deposit a fresh brief from a revise verdict's revision instructions after a brief decision is recorded."
+scope = "city"
+formula = "revise-return"
+trigger = "event"
+on = "brief.decided"
+# Same import-qualified CITY pool + vapor-staffing rationale as
+# brief-decision-dispatch (gsp-f79): a bare "polecat" never resolves for a
+# city order, so the formula is phase=vapor and the reconciler wakes a city
+# dog for the pour; the formula scans every rig's source beads itself.
+pool = "mathcity.brief-operator"
+timeout = "120s"
+idempotent = true
