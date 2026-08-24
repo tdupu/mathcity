@@ -598,6 +598,20 @@ class BootState:
         }
 
 
+def _hq_store_root(ctx: "MctlContext") -> Path:
+    """The store the session handoff chain lives in.
+
+    Handoff beads (gt-*, e.g. gt-iw0dc3) are written to the city's own HQ store
+    at ``<city-root>/.beads`` by the session-catalog convention, NOT to any
+    per-rig store. That store is read by running ``bd`` with the city root as
+    cwd -- its reserved rig entry resolves ``path: "."`` (see
+    ``context.HQ_RIG_ID``). ``boot_state`` read ``ctx.rig_root`` and so returned
+    an empty chain while gt-iw0dc3 was live (#205); the handoff query targets
+    the HQ store here instead.
+    """
+    return ctx.city_root
+
+
 def _handoff_chain(rows: Sequence[Mapping[str, object]], limit: int = 5) -> list[dict[str, object]]:
     """The session chain, newest last. This replaces the prose 'work done by
     previous sessions' block -- it is a query, and it was always a query."""
@@ -670,12 +684,48 @@ def boot_state(ctx: "MctlContext", handoff_limit: int = 5) -> BootState:
             )
         )
 
+    # The session handoff chain lives in the HQ store, not the per-rig store
+    # (#205). Read it from there; the rig-store rows above answer everything
+    # else on this surface.
+    hq_root = _hq_store_root(ctx)
+    hq_rows, hq_error = load_rows(hq_root)
+    recent_handoffs = _handoff_chain(hq_rows, handoff_limit)
+
+    if not recent_handoffs:
+        # Emptiness is not absence. An empty chain -- whether the store was
+        # readable and nothing matched, or the store could not be read -- is
+        # reported so a consumer can tell "my query found no handoffs" from "no
+        # handoffs exist". A silent empty list is the P6.2 defect this pins.
+        readable = hq_error is None
+        message = "No handoff beads matched the query in the hq store"
+        if not readable:
+            message = f"{message}; the store could not be read: {hq_error}"
+        diagnostics.append(
+            Diagnostic(
+                severity=Severity.WARN,
+                code="MMAY_HANDOFFS_NOT_FOUND",
+                message=f"{message}.",
+                hint=(
+                    "The session chain lives in the hq store; read `bd list` there "
+                    "by hand, or confirm the handoff-title convention still holds."
+                ),
+                facts={
+                    "store": "hq",
+                    "store_path": str(hq_root),
+                    "store_readable": "true" if readable else "false",
+                    "query": "bd list --all; title contains one of "
+                    + ", ".join(repr(marker) for marker in _HANDOFF_MARKERS),
+                    "implementation_provenance": "mctl mayor boot",
+                },
+            )
+        )
+
     return BootState(
         city=city_state(ctx.city_root),
         conservation=conservation_from_rows(rows),
         open_beads=open_beads,
         blocked_beads=blocked_beads,
-        recent_handoffs=_handoff_chain(rows, handoff_limit),
+        recent_handoffs=recent_handoffs,
         escalations_queryable=bool(wisps),
         prose_residue=PROSE_RESIDUE,
         diagnostics=tuple(diagnostics),

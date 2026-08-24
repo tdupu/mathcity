@@ -339,3 +339,76 @@ def test_boot_counts_are_negative_when_unmeasured_not_zero(monkeypatch, tmp_path
     assert state.blocked_beads == -1
     assert state.open_beads != 0
     assert "MAYOR_BOOT_STORE_UNREADABLE" in {d.code for d in state.diagnostics}
+
+
+def _boot_ctx(rig_root: Path, city_root: Path):
+    """A minimal context with the rig store and the hq (city) store apart."""
+
+    class _Ctx:
+        pass
+
+    ctx = _Ctx()
+    ctx.rig_root = rig_root
+    ctx.city_root = city_root
+    ctx.rig_id = "mathcity"
+    ctx.trace_id = "t"
+    return ctx
+
+
+def test_boot_reads_the_handoff_chain_from_the_hq_store(monkeypatch, tmp_path) -> None:
+    """#205: handoff beads (gt-iw0dc3, S49) live in the HQ store at
+    `<city-root>/.beads`, NOT the per-rig store. `boot_state` read the rig
+    store and returned `recent_handoffs: []` while the chain was live. The
+    query must reach the store where the chain actually lives.
+    """
+    rig_root = tmp_path / "rig"
+    city_root = tmp_path / "city"
+    ctx = _boot_ctx(rig_root, city_root)
+
+    handoff = {
+        "id": "gt-iw0dc3",
+        "created_at": "2026-08-23T22:15:21Z",
+        "status": "open",
+        "title": "S49 handoff — QUIMBY 49",
+    }
+
+    def loader(root, *_a, **_k):
+        # The hq store is the city root; the rig store carries no handoffs.
+        if Path(root) == Path(city_root):
+            return [handoff], None
+        return [], None
+
+    monkeypatch.setattr(mayor, "load_rows", loader)
+    monkeypatch.setattr(mayor, "city_state", lambda *_a, **_k: mayor.CityState(
+        state="unknown", probes=(), suspended_rigs=(), active_rigs=(), pane_count=None))
+
+    state = mayor.boot_state(ctx)
+    assert [h["id"] for h in state.recent_handoffs] == ["gt-iw0dc3"]
+    # A non-empty chain must NOT carry the not-found diagnostic.
+    assert "MMAY_HANDOFFS_NOT_FOUND" not in {d.code for d in state.diagnostics}
+
+
+def test_boot_warns_when_no_handoff_found_in_a_readable_hq_store(monkeypatch, tmp_path) -> None:
+    """#205 (P6.2): an empty chain read from a READABLE store must carry a WARN
+    diagnostic naming the store and the query. An empty list with no diagnostic
+    is exactly the failure being pinned -- emptiness indistinguishable from
+    absence.
+    """
+    rig_root = tmp_path / "rig"
+    city_root = tmp_path / "city"
+    ctx = _boot_ctx(rig_root, city_root)
+
+    # Both stores readable and empty of handoffs.
+    monkeypatch.setattr(mayor, "load_rows", lambda *_a, **_k: ([], None))
+    monkeypatch.setattr(mayor, "city_state", lambda *_a, **_k: mayor.CityState(
+        state="unknown", probes=(), suspended_rigs=(), active_rigs=(), pane_count=None))
+
+    state = mayor.boot_state(ctx)
+    assert list(state.recent_handoffs) == []
+    diag = next((d for d in state.diagnostics if d.code == "MMAY_HANDOFFS_NOT_FOUND"), None)
+    assert diag is not None, "empty handoff chain from a readable store carried no diagnostic"
+    assert diag.severity == Severity.WARN
+    # The diagnostic must name the store searched and the query applied.
+    blob = (diag.message + " " + " ".join(f"{k}={v}" for k, v in diag.facts.items())).lower()
+    assert "hq" in blob, "diagnostic does not name the hq store it searched"
+    assert "handoff" in blob, "diagnostic does not name the handoff query it applied"

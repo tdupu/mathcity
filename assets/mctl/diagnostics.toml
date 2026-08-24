@@ -761,3 +761,8 @@ module = "orders.py"
 severity = "WARN"
 meaning = "The city event log could not be read, so order outcomes could not be folded; outcomes are reported unreachable rather than as failures."
 module = "orders.py"
+
+[MMAY_HANDOFFS_NOT_FOUND]
+severity = "WARN"
+meaning = "mayor_boot's handoff-chain query returned no rows; the diagnostic names the store searched (hq) and the query applied, so an empty recent_handoffs is auditable as 'not found by my query' rather than 'no handoffs exist' (#205, P6.2)."
+module = "mayor.py"
