@@ -140,30 +140,63 @@ def dispatchability_refusals(
 
 
 def brief_body(decision: str, *, source_bead_id: str, checks_passed: tuple[str, ...]) -> str:
-    """A structurally valid brief body, with Gate Evidence that is actually evidence.
+    """The `present-it` full-form body: §1 Decision-at-Top through §7 gates.
 
-    #169 gave `briefs_create` structural validation: a body missing a
-    `Gate Evidence` section is refused with MBRF036. Before that, this tool passed
-    the raw decision string as the body -- no sections at all -- and the create was
-    accepted. So the tool was emitting exactly the un-hygienic briefs Taylor's bar
-    ("a hygienic brief which can be acted on") was written to prevent, and #169
-    caught it on the first thing it touched.
+    #208 part 3. The old body was a hardcoded `## Decision` / `## Source` /
+    `## Gate Evidence` triple. The Brief Manager detail screen renders the
+    present-it full form -- §1 what-is-being-decided, §2 recommended answer,
+    §3 assumptions, §4 alternatives, §5 risks, §6 evidence, §7 plan/gates --
+    so a three-section body rendered as a stub with five empty sections. This
+    composes all seven, in grill order, with the decision at the very top.
 
-    The Gate Evidence content is the checks this tool already ran before writing
-    anything: the source resolves, is open, is unassigned, and has no open child
-    workflow. That is real evidence for the gate that consumes it -- each line
-    corresponds to a `work.py` dispatch blocker that was tested and did not fire.
+    The **Decision-at-Top INVARIANT** ([[present-it]] §1) is load-bearing:
+    "what is being decided" is the FIRST content, before source, evidence or
+    gates. `decisions_to_briefs` transports a QUESTION to be decided (#194),
+    so this composer records no verdict and no recommendation -- §2 says so
+    rather than inventing a recommended answer nobody gave. Authored decision
+    options, when supplied, are appended as their own §4 Options block by the
+    caller (mcp_server, #208 parts 1-2); this composer does not weave them in.
 
-    Deliberately NOT filler. A `Gate Evidence` heading over invented text would
-    satisfy the regex and defeat the section's purpose, which is the same
-    could-not-have-failed shape this repo has spent the week removing.
+    Sections that have no material at composition say "None surfaced" with the
+    reason, per present-it, rather than fabricating content -- the same
+    could-not-have-failed shape this repo has spent the week removing. Only
+    what was actually established is stated: the decision (§1), that no verdict
+    exists yet (§2), the open source bead (§6), and the dispatch checks that
+    passed (§7 Gate Evidence).
+
+    The `### Gate Evidence` subsection under §7 keeps `briefs_create`'s
+    structural rule satisfied (MBRF036, `required-sections.toml`), and its
+    content is real evidence: each line is a `work.py` dispatch blocker that
+    was tested before the write and did not fire.
     """
-    lines = [
-        f"## Decision\n\n{decision.strip()}\n",
-        f"## Source\n\nThis decision is about `{source_bead_id}`.\n",
-        "## Gate Evidence\n",
-        "Checked before this brief was written; each corresponds to a dispatch",
-        "blocker in `work.py` that was tested and did not fire:\n",
-    ]
-    lines.extend(f"- {check}" for check in checks_passed)
-    return "\n".join(lines) + "\n"
+    decision_text = decision.strip()
+    evidence_lines = "\n".join(f"- {check}" for check in checks_passed)
+    return (
+        "## §1 — What is being decided\n\n"
+        f"{decision_text}\n\n"
+        "## §2 — Recommended answer\n\n"
+        "None recorded. This brief transports a question to be decided; "
+        "`decisions_to_briefs` deposits it UNDECIDED (#194) and the human "
+        "adjudicator supplies the verdict.\n\n"
+        "## §3 — Assumptions surfaced\n\n"
+        "None surfaced at composition -- this brief was composed from a "
+        "decision statement and its open source bead, not from a reviewed "
+        "artifact.\n\n"
+        "## §4 — Alternatives named\n\n"
+        "None enumerated at composition. Authored decision options, when "
+        "present, appear in the Options section below; the adjudicator may "
+        "propose another.\n\n"
+        "## §5 — Risks foregrounded\n\n"
+        "None surfaced at composition. The decision has not yet been reviewed "
+        "for breakage or downstream commitment; that is the adjudication.\n\n"
+        "## §6 — Supporting evidence\n\n"
+        f"This decision is about `{source_bead_id}`, an open bead in this rig. "
+        "The source resolves, is not closed, and is unassigned -- the pair "
+        "requirement an adjudicated brief needs to be dispatchable.\n\n"
+        "## §7 — Plan membership, blocking, and required gates\n\n"
+        f"Blocking: adjudicating this brief unblocks `{source_bead_id}`.\n\n"
+        "### Gate Evidence\n\n"
+        "Checked before this brief was written; each corresponds to a dispatch "
+        "blocker in `work.py` that was tested and did not fire:\n\n"
+        f"{evidence_lines}\n"
+    )

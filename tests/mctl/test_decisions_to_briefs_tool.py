@@ -206,6 +206,48 @@ def test_present_briefs_completes_through_the_mcp(tmp_path: Path):
 # change, this fails instead of quietly passing against a stale copy.
 
 
+def test_the_emitted_body_is_the_present_it_full_form_shape(tmp_path: Path):
+    """#208 part 3: rebuild the composer to the present-it 7-section body.
+
+    The old body was a hardcoded `## Decision` / `## Source` / `## Gate
+    Evidence` triple. The Brief Manager detail screen renders the present-it
+    full form -- §1 what-is-being-decided (Decision-at-Top) through §7
+    plan/gates -- so a brief composed with three ad-hoc sections rendered as a
+    stub. The composer must emit all seven, with the decision at the very top.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    scripts = _Path(__file__).resolve().parents[2] / "assets" / "scripts"
+    if str(scripts) not in _sys.path:
+        _sys.path.insert(0, str(scripts))
+    from mctl_core.briefs import parse_brief_sections
+    from mctl_core.decisions import brief_body
+
+    decision = "Adopt the narrowed brief read for hecke"
+    body = brief_body(
+        decision,
+        source_bead_id="source-revise",
+        checks_passed=("source resolves", "source is open", "source is unassigned"),
+    )
+
+    sections = parse_brief_sections(body)
+    indices = [s.section_index for s in sections if s.level == 2 and s.section_index]
+
+    # All seven present-it sections, in order.
+    assert indices == [1, 2, 3, 4, 5, 6, 7], f"not the full-form shape: {indices}"
+
+    # Decision-at-Top INVARIANT: §1 is what-is-being-decided, it is FIRST, and
+    # it carries the decision verbatim -- before source, evidence or gates.
+    first = next(s for s in sections if s.level == 2)
+    assert first.section_index == 1
+    assert first.section_key == "what_is_being_decided"
+    assert decision in first.body
+    assert body.index(decision) < body.index("source-revise"), (
+        "the decision must appear before its source bead -- Decision-at-Top"
+    )
+
+
 def test_the_emitted_body_satisfies_every_required_section(tmp_path: Path):
     import re
     import tomllib
