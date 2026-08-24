@@ -329,6 +329,14 @@
           "title": "ArtifactTrust",
           "type": "object"
         },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
           "items": {
@@ -1060,6 +1068,14 @@
           "title": "ArtifactTrust",
           "type": "object"
         },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
           "items": {
@@ -1751,6 +1767,14 @@
           ],
           "title": "ArtifactTrust",
           "type": "object"
+        },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
         },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
@@ -8339,6 +8363,14 @@
           "title": "ArtifactTrust",
           "type": "object"
         },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
           "items": {
@@ -9027,6 +9059,14 @@
           "title": "ArtifactTrust",
           "type": "object"
         },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
           "items": {
@@ -9702,6 +9742,14 @@
           ],
           "title": "ArtifactTrust",
           "type": "object"
+        },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
         },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
@@ -10894,6 +10942,14 @@
           ],
           "title": "ArtifactTrust",
           "type": "object"
+        },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
         },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
@@ -13795,6 +13851,14 @@
           "title": "ArtifactTrust",
           "type": "object"
         },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
           "items": {
@@ -15072,6 +15136,14 @@
           "description": "False for a dry run.",
           "type": "boolean"
         },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
           "items": {
@@ -15580,6 +15652,14 @@
         "applied": {
           "description": "False for a dry run.",
           "type": "boolean"
+        },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
         },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
@@ -16506,6 +16586,13 @@
               "readiness": {
                 "type": "string"
               },
+              "skipped_sources": {
+                "description": "Sources the multi-source resolver walked past because they were already being worked (#228). Empty for a single-source brief or when the first source was dispatchable.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "title": {
                 "type": "string"
               }
@@ -16837,6 +16924,13 @@
             },
             "readiness": {
               "type": "string"
+            },
+            "skipped_sources": {
+              "description": "Sources the multi-source resolver walked past because they were already being worked (#228). Empty for a single-source brief or when the first source was dispatchable.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
             },
             "title": {
               "type": "string"

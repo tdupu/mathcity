@@ -606,8 +606,8 @@ meaning = "An open child workflow already exists for the same source bead."
 module = "work.py"
 
 [MWRK003]
-severity = "FATAL"
-meaning = "The dispatch command succeeded but the bead was never claimed."
+severity = "WARN"
+meaning = "The dispatch succeeded but the claim has not been observed yet; recheck with work_status rather than retrying (a blind retry can dispatch a second time)."
 module = "work.py"
 
 [MWRK010]

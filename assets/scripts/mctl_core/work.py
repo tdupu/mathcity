@@ -16,6 +16,7 @@ from .diagnostics import Diagnostic, Severity
 from .effects import EffectPlan, JsonlWrite
 from .events import append_jsonl
 from .liveness import probe_control_plane
+from .molecules import is_molecule_root
 from .verdicts import brief_population, is_brief_bead, read_verdict
 from .trace import append_applied, append_planned
 from .provenance import (
@@ -34,6 +35,10 @@ class WorkItem:
     readiness: str
     blockers: tuple[Diagnostic, ...]
     provenance: DispatchProvenance | None
+    #: Sources the multi-source resolver walked PAST because they were already
+    #: being worked (#228). Empty for a single-source brief, or when the first
+    #: source was dispatchable. Named in the payload so the walk is not silent.
+    skipped_sources: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -42,6 +47,7 @@ class WorkItem:
             "brief_id": self.brief_id,
             "provenance": self.provenance.to_dict() if self.provenance is not None else None,
             "readiness": self.readiness,
+            "skipped_sources": list(self.skipped_sources),
             "title": self.title,
         }
 
@@ -544,28 +550,22 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
             )
         )
 
-    # Plan §4 MWRK003: a sling can exit 0 without actually claiming the bead.
-    # Recording provenance then would assert a handoff that silently did not
-    # take, and would block every retry via MWRK_ALREADY_DISPATCHED.
+    # #212 MWRK003: a sling that exits 0 DISPATCHED. Whether the claim has been
+    # OBSERVED yet is a separate question, and it is not fatal. The claim does
+    # NOT land as a source-bead `assignee` -- work-briefed associates it on the
+    # molecule it mints and on the source's `execution.work_associated` event.
+    # Reading `assignee` and calling the claimless source a FATAL failure (the
+    # old behaviour) reported every successful live dispatch as failed, and --
+    # because it raised BEFORE provenance was written -- made the retry re-sling
+    # and mint a duplicate input convoy (#213). So: write provenance on exit 0
+    # (mirrors #184's UNKNOWN-not-failure contract), and report the claim as
+    # `observed` or `pending` rather than raising.
     try:
-        dispatched = {bead.id: bead for bead in _beads(ctx)}.get(plan.bead_id)
+        beads_after = _beads(ctx)
     except WorkError:
-        dispatched = None
-    if dispatched is None or not dispatched.has_active_assignee:
-        raise WorkError(
-            _diagnostic(
-                ctx,
-                Severity.FATAL,
-                "MWRK003",
-                "The dispatch command succeeded but the bead was never claimed.",
-                brief_id=plan.target_brief_id,
-                bead_id=plan.bead_id,
-                data_location=_canonical_bead_location(ctx),
-                detail="no active assignee after dispatch; nothing was recorded",
-            )
-        )
+        beads_after = ()
+    claim_observed = _claim_observed(beads_after, plan.bead_id)
 
-    # Only now, with a verified handoff behind us, is provenance truthful.
     provenance = write_dispatch_provenance(
         ctx,
         bead_id=plan.bead_id,
@@ -590,13 +590,46 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         },
     )
     append_applied(plan.trace_path, plan.trace_id, actual_effects)
-    return {
+    payload: dict[str, object] = {
         "actual_effects": actual_effects,
         "applied": True,
+        "claim": "observed" if claim_observed else "pending",
         "effect_plan": plan.to_dict(),
         "provenance": provenance.to_dict(),
         "trace_id": plan.trace_id,
     }
+    if not claim_observed:
+        payload["diagnostics"] = [
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MWRK003",
+                "The dispatch succeeded but the claim has not been observed yet.",
+                brief_id=plan.target_brief_id,
+                bead_id=plan.bead_id,
+                data_location=_canonical_bead_location(ctx),
+                detail=(
+                    "no molecule, convoy, or execution.work_associated on the source yet; "
+                    "the operator pool may not have picked it up -- recheck rather than retry"
+                ),
+                suggested_next_command=f"mctl work status {plan.target_brief_id} --json",
+            ).to_dict()
+        ]
+    return payload
+
+
+def _claim_observed(beads: tuple[Bead, ...], source_id: str) -> bool:
+    """Whether a claim on this dispatch is observable yet (#212).
+
+    True as soon as ANY real claim signal is present -- an assignee, the
+    source's `execution.work_associated` event, or an open child molecule /
+    convoy. None of these having landed is `pending`, not a failure: the claim
+    can land minutes after an exit-0 sling (~210s measured, #212).
+    """
+    source = {bead.id: bead for bead in beads}.get(source_id)
+    if source is not None and (source.has_active_assignee or _source_work_associated(source)):
+        return True
+    return _open_child_workflow(beads, source_id) is not None
 
 
 DISPATCH_EVENT_SCHEMA = "dispatch-provenance.v1"
@@ -825,7 +858,16 @@ def _work_item(
             if diagnostic.facts.get("brief_id") == brief_id
         )
     blockers.extend(_blocking_doctor_diagnostics(brief_diagnostics))
-    source_id = brief.source_dependencies[0] if brief.source_dependencies else ""
+    skipped_sources: tuple[str, ...] = ()
+    if brief.source_dependencies:
+        # #228: WALK the sources, skipping any already being worked, instead of
+        # blindly taking source[0] forever. Otherwise a multi-source brief
+        # re-slings its first source on every call and never reaches the rest.
+        source_id, skipped_sources = _select_dispatch_source(
+            ctx, beads, bead_by_id, brief.source_dependencies
+        )
+    else:
+        source_id = ""
     if not source_id:
         blockers.append(
             _diagnostic(
@@ -914,21 +956,131 @@ def _work_item(
         readiness=readiness,
         blockers=tuple(blockers),
         provenance=provenance,
+        skipped_sources=skipped_sources,
     )
 
 
-def _open_child_workflow(beads: tuple[Bead, ...], source_id: str) -> Bead | None:
-    """An open workflow bead already rooted at this source bead, if any.
+def _bead_metadata(bead: Bead) -> Mapping[str, object]:
+    metadata = bead.raw.get("metadata") if isinstance(bead.raw, Mapping) else None
+    return metadata if isinstance(metadata, Mapping) else {}
 
-    Gas City workflow beads carry their root in metadata as gc.root_bead_id;
-    a live one means the source is already being worked.
+
+def _metadata_str(metadata: Mapping[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _is_truthy_flag(value: object) -> bool:
+    """Whether a metadata flag reads as set. `gc` writes booleans and strings."""
+    if isinstance(value, bool):
+        return value
+    return isinstance(value, str) and value.strip().lower() in {"true", "1", "yes"}
+
+
+def _open_child_workflow(beads: tuple[Bead, ...], source_id: str) -> Bead | None:
+    """An open child molecule / synthetic input convoy already working this source.
+
+    #228: the earlier version keyed SOLELY on `gc.root_bead_id == source_id`,
+    which is the wrong edge and made this check blind to every real molecule.
+    A real molecule ROOT carries NO `gc.root_bead_id` -- its STEPS do, and they
+    point at the RUN root, never at the source bead (see `mctl_core.molecules`).
+    The root records the source it works as the sling var `gc.var.source_bead`.
+    So a source already being worked read as dispatchable, and the resolver
+    re-slung it: the measured double-dispatch of mc-2xuc (tdupu/mathcity#228).
+
+    Any of the following, open, means the source is already in flight:
+
+    * a molecule ROOT whose `gc.var.source_bead` is this source (the real edge);
+    * a bead pointing at this source via `gc.root_bead_id` (the legacy edge,
+      kept so a step that genuinely roots at the source still counts, and so
+      pre-existing fixtures built on that shape keep their meaning);
+    * a synthetic input convoy (`gc.synthetic`) that DEPENDS ON this source --
+      the convoy a prior partial dispatch left behind (#213). Detecting it is
+      the pre-sling half of #192's adopt-don't-duplicate contract at this call
+      site: an existing open convoy refuses a re-sling instead of minting a
+      second one.
     """
     for bead in beads:
-        if bead.id == source_id:
+        if bead.id == source_id or not bead.is_open:
             continue
-        if bead.workflow_root_id == source_id and bead.is_open:
+        metadata = _bead_metadata(bead)
+        if is_molecule_root(bead) and _metadata_str(metadata, "gc.var.source_bead") == source_id:
+            return bead
+        if bead.workflow_root_id == source_id:
+            return bead
+        if _is_truthy_flag(metadata.get("gc.synthetic")) and source_id in bead.source_dependencies:
             return bead
     return None
+
+
+def _source_work_associated(source: Bead) -> bool:
+    """Whether the source carries an `execution.work_associated` claim event.
+
+    This is the claim signal the work-briefed path actually writes (#212/#228):
+    the association lands here (and on the minted molecule), NEVER as a source
+    `assignee`. Reading it lets the claim observer recognise a real handoff.
+    """
+    value = _bead_metadata(source).get("execution.work_associated")
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value not in (None, False, "", [], {})
+
+
+def _has_dispatch_provenance(ctx: MctlContext, source_id: str) -> bool:
+    """Whether this source already carries a dispatch-provenance record.
+
+    Swallows a malformed-provenance error as "already dispatched" for WALK
+    purposes: the walk must not silently re-sling a source whose provenance
+    merely failed to parse. The selected source's own path re-surfaces that
+    error as a real blocker.
+    """
+    try:
+        return read_dispatch_provenance(ctx, source_id, required=False) is not None
+    except ProvenanceError:
+        return True
+
+
+def _source_dispatchable(
+    ctx: MctlContext, beads: tuple[Bead, ...], source: Bead | None, source_id: str
+) -> bool:
+    """Whether this source can be slung right now -- not already in flight.
+
+    A source is NOT dispatchable when it is missing, closed, already claimed,
+    already has an open child molecule/convoy, or already carries dispatch
+    provenance. The resolver walks PAST such sources to the next candidate.
+    """
+    if source is None or not source.is_open:
+        return False
+    if source.has_active_assignee:
+        return False
+    if _open_child_workflow(beads, source_id) is not None:
+        return False
+    if _has_dispatch_provenance(ctx, source_id):
+        return False
+    return True
+
+
+def _select_dispatch_source(
+    ctx: MctlContext,
+    beads: tuple[Bead, ...],
+    bead_by_id: Mapping[str, Bead],
+    sources: tuple[str, ...],
+) -> tuple[str, tuple[str, ...]]:
+    """Walk a brief's sources, skipping any already being worked (#228).
+
+    Returns the first dispatchable source and the sources skipped to reach it.
+    When EVERY source is already in flight the brief has nothing new to
+    dispatch: it falls back to the first source so its own blocker (MWRK002 /
+    MWRK001 / already-dispatched) is reported and re-dispatch is refused --
+    P1.21 honoured. The skipped list is surfaced so the skip is named, not
+    silent.
+    """
+    skipped: list[str] = []
+    for source_id in sources:
+        if _source_dispatchable(ctx, beads, bead_by_id.get(source_id), source_id):
+            return source_id, tuple(skipped)
+        skipped.append(source_id)
+    return sources[0], tuple(sources[1:])
 
 
 def _doctor_report(
