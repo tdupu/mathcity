@@ -237,3 +237,93 @@ def test_the_unlisted_sentence_is_not_shown_when_the_registry_is_missing():
         {"registry_present": False, "operations": [], "awaiting_emitter": []}
     )
     assert "could not" in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# queue (#113): six populations, next_up labeled a prediction, unreachable
+# rendered as unknown rather than zero -- per-population, not just for the
+# whole panel.
+# ---------------------------------------------------------------------------
+
+
+def test_a_failed_core_read_renders_the_whole_queue_as_unknown_not_zero():
+    payload = {
+        "state": "unreachable",
+        "ready_unclaimed": None,
+        "blocked": None,
+        "tail": None,
+        "starved": None,
+        "deferred": None,
+        "next_up": None,
+        "next_up_is_prediction": True,
+        "diagnostics": [
+            {"code": "MQUE_QUEUE_UNREACHABLE", "message": "bd ready --explain unavailable: timeout"}
+        ],
+    }
+    html = city_screen.queue(payload)
+    low = html.lower()
+    assert "unknown" in low
+    assert "MQUE_QUEUE_UNREACHABLE" in html
+    assert "0" not in html
+
+
+def test_a_populated_queue_reports_each_population_and_labels_next_up_a_prediction():
+    payload = {
+        "state": "healthy",
+        "ready_unclaimed": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "blocked": [
+            {"bead_id": "mc-2", "title": "Blocked work", "blocked_on": "mc-9", "blocked_on_title": "The dependency"}
+        ],
+        "tail": [],
+        "starved": [],
+        "deferred": [{"bead_id": "mc-3", "title": "Parked", "until": "2026-09-01T00:00:00Z"}],
+        "next_up": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "next_up_is_prediction": True,
+        "diagnostics": [],
+    }
+    html = city_screen.queue(payload)
+    assert "mc-1" in html
+    assert "mc-2" in html
+    assert "mc-9" in html, "blocked_on must render, not just the blocked bead itself"
+    assert "2026-09-01T00:00:00Z" in html, "a deferred item's expiry must render"
+    assert "predict" in html.lower(), "next_up must be explicitly labeled a prediction"
+
+
+def test_a_genuinely_empty_queue_reports_zero_not_unknown():
+    payload = {
+        "state": "healthy",
+        "ready_unclaimed": [],
+        "blocked": [],
+        "tail": [],
+        "starved": [],
+        "deferred": [],
+        "next_up": [],
+        "next_up_is_prediction": True,
+        "diagnostics": [],
+    }
+    html = city_screen.queue(payload)
+    assert "unknown" not in html.lower()
+    assert "0" in html
+
+
+def test_one_failed_population_renders_as_unknown_without_hiding_the_rest():
+    """A partial failure (#113: `deferred` unreachable, everything else read
+    fine) must not collapse the whole panel to "unknown" -- that would be
+    exactly as dishonest in the other direction as printing zero."""
+    payload = {
+        "state": "degraded",
+        "ready_unclaimed": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "blocked": [],
+        "tail": [],
+        "starved": [],
+        "deferred": None,
+        "next_up": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "next_up_is_prediction": True,
+        "diagnostics": [
+            {"code": "MQUE_DEFERRED_UNREACHABLE", "message": "bd list --deferred unavailable: timeout"}
+        ],
+    }
+    html = city_screen.queue(payload)
+    assert "mc-1" in html, "the successfully-read ready_unclaimed population must still render"
+    assert "MQUE_DEFERRED_UNREACHABLE" in html
+    assert "unknown" in html.lower()

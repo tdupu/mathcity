@@ -533,6 +533,19 @@ def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
     return formulas_catalog(city_reader(ctx.city_root))
 
 
+def _handle_queue_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """The QUEUE column: six populations, city-scoped to one rig's `bd` store (#113).
+
+    `queue_status`/`city_reader` live in `mctl_core/queue.py`, shaped from
+    `bd`'s own `ready --explain` / `ready --unassigned` / `list --deferred`
+    reads rather than a hand-rolled dependency walk -- see that module's
+    docstring for the measurement backing each population.
+    """
+    from .queue import city_reader, queue_status
+
+    return queue_status(city_reader(ctx.rig_root))
+
+
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     payload = dict(ctx.to_dict())
     payload["diagnostics"] = [warning.to_dict() for warning in ctx.warnings]
@@ -1315,6 +1328,105 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["state", "total", "formulas"],
         ),
         handler=_handle_formulas_catalog,
+    ),
+    ToolSpec(
+        name="queue_status",
+        title="Queue status",
+        description=(
+            "The rig's work queue as six populations: ready+unclaimed, blocked "
+            "(with what it waits on), tail (ready but never dispatched), starved "
+            "(blocked and idle), deferred (deliberately parked, with its expiry), "
+            "and a predicted next-up order. `next_up_is_prediction` is always "
+            "true -- the dispatcher discards priority at dispatch, so order is "
+            "reproducible but arbitrary, never a guarantee."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "next_up_is_prediction": {"type": "boolean"},
+                "ready_unclaimed": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "priority": {"type": ["integer", "null"]},
+                        },
+                    },
+                },
+                "blocked": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "blocked_on": {"type": ["string", "null"]},
+                            "blocked_on_title": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+                "tail": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "priority": {"type": ["integer", "null"]},
+                        },
+                    },
+                },
+                "starved": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "blocked_on": {"type": ["string", "null"]},
+                            "blocked_on_title": {"type": ["string", "null"]},
+                            "idle_seconds": {"type": ["number", "null"]},
+                        },
+                    },
+                },
+                "deferred": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "until": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+                "next_up": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "priority": {"type": ["integer", "null"]},
+                        },
+                    },
+                },
+            },
+            [
+                "state",
+                "next_up_is_prediction",
+                "ready_unclaimed",
+                "blocked",
+                "tail",
+                "starved",
+                "deferred",
+                "next_up",
+            ],
+        ),
+        handler=_handle_queue_status,
     ),
     ToolSpec(
         name="context_resolve",

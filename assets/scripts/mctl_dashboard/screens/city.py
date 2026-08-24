@@ -298,6 +298,87 @@ def blast_radius(payload: Mapping[str, Any]) -> str:
     return _panel("Blast radius", body, region="city-blast-radius")
 
 
+#: `queue_status` (#113): a diagnostic here means one of the six populations
+#: (or all of them) could not be read. Distinct from `PROBE_FAILURE_CODES`
+#: above -- those are `gc`-probe failures; these are `bd`-read failures with a
+#: narrower, per-population blast radius (see `mctl_core/queue.py`).
+QUEUE_FAILURE_CODES: frozenset[str] = frozenset(
+    {
+        "MQUE_QUEUE_UNREACHABLE",
+        "MQUE_UNCLAIMED_UNREACHABLE",
+        "MQUE_DEFERRED_UNREACHABLE",
+        "MQUE_ROUTED_UNREACHABLE",
+    }
+)
+
+_QUEUE_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("ready_unclaimed", "Ready, unclaimed"),
+    ("blocked", "Blocked"),
+    ("tail", "Tail (ready, never dispatched, idle)"),
+    ("starved", "Starved (blocked and idle)"),
+    ("deferred", "Deferred (deliberately parked)"),
+    ("next_up", "Next up (predicted — dispatch order is arbitrary)"),
+)
+
+
+def _queue_section(payload: Mapping[str, Any], key: str, label: str) -> str:
+    rows: Sequence[Mapping[str, Any]] | None = payload.get(key)
+    if rows is None:
+        # This ONE population's read failed -- distinct from the whole panel
+        # being unreachable (handled before this is ever called). Still not a
+        # zero: a null population is unknown, not empty.
+        codes = tuple(c for c in _codes(payload) if c in QUEUE_FAILURE_CODES)
+        return (
+            f"<h3>{_e(label)}</h3>"
+            f'<p class="lede"><strong>{_e(label)} is unknown.</strong> This read '
+            "failed independently of the rest of this panel.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else "")
+        )
+    if not rows:
+        return f'<h3>{_e(label)}</h3><p class="lede">{_e(label)}: <strong>0</strong>.</p>'
+    items = []
+    for row in rows[:20]:
+        line = (
+            f'<span class="mono">{_e(str(row.get("bead_id")))}</span> — '  # single-shape-ok: queue_status row, not a brief
+            f'{_e(str(row.get("title")))}'  # single-shape-ok: queue_status row, not a brief
+        )
+        if row.get("blocked_on"):
+            line += f' <span class="muted">(blocked on <span class="mono">{_e(str(row.get("blocked_on")))}</span>)</span>'
+        if row.get("until"):
+            line += f' <span class="muted">(until {_e(str(row.get("until")))})</span>'
+        items.append(f"<li>{line}</li>")
+    return (
+        f"<h3>{_e(label)}</h3>"
+        f'<p class="lede"><strong>{len(rows)}</strong> item{"" if len(rows) == 1 else "s"}.</p>'
+        f'<ul class="reason-list">{"".join(items)}</ul>'
+    )
+
+
+def queue(payload: Mapping[str, Any]) -> str:
+    """The QUEUE column: six populations, `next_up` explicitly labeled a prediction.
+
+    `state == "unreachable"` means the core `bd ready --explain` read itself
+    failed -- every population is unknown, never zero, and this panel says so
+    once rather than six times. A population that is individually `None`
+    (one of the three auxiliary reads failed, the core read did not) is
+    handled per-section by `_queue_section` instead, so a real `blocked` list
+    is not thrown away because `deferred` could not be read.
+    """
+    state = str(payload.get("state") or "unknown")
+    if state == "unreachable":
+        codes = _codes(payload)
+        return _panel(
+            "Queue",
+            '<p class="lede"><strong>The queue is unknown.</strong> The bead '
+            "store could not be read, so this is not a city with an empty "
+            "queue — it is a queue we could not look at.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else ""),
+            region="city-queue",
+        )
+    body = "".join(_queue_section(payload, key, label) for key, label in _QUEUE_SECTIONS)
+    return _panel("Queue", body, region="city-queue")
+
+
 def unwired(tool: str, *, module: str, issue: int) -> str:
     """A surface whose backend exists and which no page can call.
 
