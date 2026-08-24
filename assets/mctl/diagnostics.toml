@@ -792,6 +792,23 @@ severity = "WARN"
 meaning = "The routed-metadata lookup (`bd list --has-metadata-key`) could not be read, so 'never dispatched' cannot be determined; tail is null. ready_unclaimed/blocked/starved/deferred/next_up are unaffected."
 module = "queue.py"
 
+# MCOS: costs_summary reads (#118). Token bucketing + the meta-work ratio,
+# shaped from the city's local `.gc/usage.jsonl`. A read failure makes the
+# whole tool unreachable (there is one data source, not four independent
+# ones like MQUE); a successful read that still cannot attribute every token
+# to a rig side reports that gap as an INFO diagnostic rather than folding it
+# silently into either side of the ratio.
+
+[MCOS_USAGE_UNREACHABLE]
+severity = "WARN"
+meaning = "`.gc/usage.jsonl` could not be read; the state is unreachable and every total (total_tokens, worker_hours, unpriced_count, the ratio's numerator/denominator) is null, never zero."
+module = "costs.py"
+
+[MCOS_RIG_UNRESOLVED]
+severity = "INFO"
+meaning = "One or more usage facts could not be attributed to a rig on either side of the meta-work ratio -- the recovered rig matched neither the meta nor the math prefix list, or the recording worker's session name carried no rig/agent structure to recover a rig from. Reported in unclassified_tokens, never folded into either side."
+module = "costs.py"
+
 [MMAY_HANDOFFS_NOT_FOUND]
 severity = "WARN"
 meaning = "mayor_boot's handoff-chain query returned no rows; the diagnostic names the store searched (hq) and the query applied, so an empty recent_handoffs is auditable as 'not found by my query' rather than 'no handoffs exist' (#205, P6.2)."

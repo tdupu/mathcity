@@ -327,3 +327,94 @@ def test_one_failed_population_renders_as_unknown_without_hiding_the_rest():
     assert "mc-1" in html, "the successfully-read ready_unclaimed population must still render"
     assert "MQUE_DEFERRED_UNREACHABLE" in html
     assert "unknown" in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# costs (#118): token totals + worker-hours + the meta-work ratio with its
+# numerator/denominator, unpriced_count stated explicitly, unreachable
+# rendered as unknown rather than zero.
+# ---------------------------------------------------------------------------
+
+
+def test_an_unreachable_costs_read_renders_as_unknown_not_zero():
+    payload = {
+        "state": "unreachable",
+        "total_tokens": None,
+        "worker_hours": None,
+        "unpriced_count": None,
+        "unclassified_tokens": None,
+        "meta_work_ratio": {"numerator": None, "denominator": None, "ratio": None},
+        "windows": None,
+        "diagnostics": [
+            {"code": "MCOS_USAGE_UNREACHABLE", "message": "usage facts unavailable: no such file"}
+        ],
+    }
+    html = city_screen.costs(payload)
+    low = html.lower()
+    assert "unknown" in low
+    assert "MCOS_USAGE_UNREACHABLE" in html
+    assert "0" not in html
+
+
+def test_a_populated_costs_summary_reports_totals_and_the_ratio_with_its_parts():
+    payload = {
+        "state": "healthy",
+        "total_tokens": 300,
+        "worker_hours": 2.5,
+        "unpriced_count": 3,
+        "unclassified_tokens": 10,
+        "meta_work_ratio": {"numerator": 200, "denominator": 100, "ratio": 2.0},
+        "windows": [
+            {
+                "window": "2026-08-20",
+                "total_tokens": 300,
+                "meta_tokens": 200,
+                "math_tokens": 100,
+                "unclassified_tokens": 10,
+                "worker_hours": 2.5,
+                "unpriced_count": 3,
+                "meta_work_ratio": 2.0,
+            }
+        ],
+        "diagnostics": [],
+    }
+    html = city_screen.costs(payload)
+    assert "300" in html, "total tokens must render"
+    assert "2.5" in html, "worker-hours must render beside the tokens"
+    assert "200" in html and "100" in html, "the ratio's numerator and denominator must both render"
+    assert "3" in html, "unpriced_count must be stated explicitly"
+    assert "2026-08-20" in html, "the per-window series must render for the trend"
+
+
+def test_a_genuinely_empty_costs_summary_reports_zero_not_unknown():
+    payload = {
+        "state": "healthy",
+        "total_tokens": 0,
+        "worker_hours": 0.0,
+        "unpriced_count": 0,
+        "unclassified_tokens": 0,
+        "meta_work_ratio": {"numerator": 0, "denominator": 0, "ratio": None},
+        "windows": [],
+        "diagnostics": [],
+    }
+    html = city_screen.costs(payload)
+    assert "unknown" not in html.lower()
+    assert "0" in html
+
+
+def test_unpriced_count_never_renders_as_folded_into_the_token_total():
+    """#118 honesty specifics: unpriced runs are a separate, explicit count --
+    never valued at zero and never silently merged into total_tokens."""
+    payload = {
+        "state": "healthy",
+        "total_tokens": 500,
+        "worker_hours": 1.0,
+        "unpriced_count": 7,
+        "unclassified_tokens": 0,
+        "meta_work_ratio": {"numerator": 500, "denominator": 0, "ratio": None},
+        "windows": [],
+        "diagnostics": [],
+    }
+    html = city_screen.costs(payload)
+    assert "7" in html
+    assert "unpriced" in html.lower()

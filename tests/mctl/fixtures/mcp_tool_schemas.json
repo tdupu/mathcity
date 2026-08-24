@@ -7765,6 +7765,279 @@
     },
     "title": "List registered rigs"
   },
+  "costs_summary": {
+    "description": "Token spend bucketed by window, with the meta-work ratio (city/meta effort vs mathematics effort, classified by rig prefix) as the headline measure. Unit is tokens, with worker-hours beside it -- never bead count. Runs whose price is unknown are counted in `unpriced_count`, never valued at zero; a rig matching neither side of the ratio is its own `unclassified_tokens` bucket, never folded into either. `windows` is a per-window series so the ratio's TREND is renderable, not just its latest value.",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "meta_work_ratio": {
+          "additionalProperties": false,
+          "description": "City/meta tokens over math tokens, with both parts carried alongside the computed value.",
+          "properties": {
+            "denominator": {
+              "description": "Math-side tokens.",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "numerator": {
+              "description": "City/meta-side tokens.",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ratio": {
+              "description": "numerator/denominator; null when denominator is 0, never a fabricated value.",
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "numerator",
+            "denominator",
+            "ratio"
+          ],
+          "title": "MetaWorkRatio",
+          "type": "object"
+        },
+        "state": {
+          "type": "string"
+        },
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        },
+        "unclassified_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "unpriced_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "windows": {
+          "description": "One entry per calendar-day window, oldest first -- the trend series.",
+          "items": {
+            "properties": {
+              "math_tokens": {
+                "type": "integer"
+              },
+              "meta_tokens": {
+                "type": "integer"
+              },
+              "meta_work_ratio": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "total_tokens": {
+                "type": "integer"
+              },
+              "unclassified_tokens": {
+                "type": "integer"
+              },
+              "unpriced_count": {
+                "type": "integer"
+              },
+              "window": {
+                "type": "string"
+              },
+              "worker_hours": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "worker_hours": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "diagnostics",
+        "meta_work_ratio",
+        "state",
+        "total_tokens",
+        "trace_id",
+        "unclassified_tokens",
+        "unpriced_count",
+        "windows",
+        "worker_hours"
+      ],
+      "type": "object"
+    },
+    "title": "Costs summary"
+  },
   "create_defect_bead": {
     "description": "Mint an OPEN task bead recording a defect that has no GitHub issue yet (#185) -- the 'not conversely' case of the owner's rule that issues are always paired with a bead but beads need not have issues. Carries metadata.defect_report=true and no gh.issue key, and maps a priority/pN label to bd priority. Refuses to mint an orphan duplicate of an open defect of the same title. Dry run by default.",
     "external_ready": false,

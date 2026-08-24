@@ -48,6 +48,7 @@ DECLARED_TOOLS = (
     "commission_brief",
     "context_resolve",
     "context_rigs",
+    "costs_summary",
     "create_defect_bead",
     "create_github_issue",
     "create_issue_bead",

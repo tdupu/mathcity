@@ -546,6 +546,20 @@ def _handle_queue_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict
     return queue_status(city_reader(ctx.rig_root))
 
 
+def _handle_costs_summary(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Token bucketing + the meta-work ratio, city-scoped to `.gc/usage.jsonl` (#118).
+
+    `costs_summary`/`city_reader` live in `mctl_core/costs.py`, reading the
+    same local usage log `gc costs` reads -- `gc costs` declares no JSON
+    output, so this reads the file directly rather than parsing a tabwriter
+    table, exactly as `_handle_orders_status` reads `.gc/events.jsonl`
+    directly instead of shelling to a slow `gc` subcommand.
+    """
+    from .costs import city_reader, costs_summary
+
+    return costs_summary(city_reader(ctx.city_root))
+
+
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     payload = dict(ctx.to_dict())
     payload["diagnostics"] = [warning.to_dict() for warning in ctx.warnings]
@@ -1427,6 +1441,71 @@ TOOLS: tuple[ToolSpec, ...] = (
             ],
         ),
         handler=_handle_queue_status,
+    ),
+    ToolSpec(
+        name="costs_summary",
+        title="Costs summary",
+        description=(
+            "Token spend bucketed by window, with the meta-work ratio (city/meta effort vs "
+            "mathematics effort, classified by rig prefix) as the headline measure. Unit is "
+            "tokens, with worker-hours beside it -- never bead count. Runs whose price is "
+            "unknown are counted in `unpriced_count`, never valued at zero; a rig matching "
+            "neither side of the ratio is its own `unclassified_tokens` bucket, never folded "
+            "into either. `windows` is a per-window series so the ratio's TREND is renderable, "
+            "not just its latest value."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total_tokens": {"type": ["integer", "null"]},
+                "worker_hours": {"type": ["number", "null"]},
+                "unpriced_count": {"type": ["integer", "null"]},
+                "unclassified_tokens": {"type": ["integer", "null"]},
+                "meta_work_ratio": {
+                    "type": "object",
+                    "title": "MetaWorkRatio",
+                    "description": "City/meta tokens over math tokens, with both parts carried alongside the computed value.",
+                    "properties": {
+                        "numerator": {"type": ["integer", "null"], "description": "City/meta-side tokens."},
+                        "denominator": {"type": ["integer", "null"], "description": "Math-side tokens."},
+                        "ratio": {
+                            "type": ["number", "null"],
+                            "description": "numerator/denominator; null when denominator is 0, never a fabricated value.",
+                        },
+                    },
+                    "required": ["numerator", "denominator", "ratio"],
+                    "additionalProperties": False,
+                },
+                "windows": {
+                    "type": ["array", "null"],
+                    "description": "One entry per calendar-day window, oldest first -- the trend series.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "window": {"type": "string"},
+                            "total_tokens": {"type": "integer"},
+                            "meta_tokens": {"type": "integer"},
+                            "math_tokens": {"type": "integer"},
+                            "unclassified_tokens": {"type": "integer"},
+                            "worker_hours": {"type": "number"},
+                            "unpriced_count": {"type": "integer"},
+                            "meta_work_ratio": {"type": ["number", "null"]},
+                        },
+                    },
+                },
+            },
+            [
+                "state",
+                "total_tokens",
+                "worker_hours",
+                "unpriced_count",
+                "unclassified_tokens",
+                "meta_work_ratio",
+                "windows",
+            ],
+        ),
+        handler=_handle_costs_summary,
     ),
     ToolSpec(
         name="context_resolve",

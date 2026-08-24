@@ -379,6 +379,82 @@ def queue(payload: Mapping[str, Any]) -> str:
     return _panel("Queue", body, region="city-queue")
 
 
+#: `costs_summary` (#118): a single local-file read backs the whole tool, so
+#: a diagnostic here means the read itself failed -- distinct from
+#: `MCOS_RIG_UNRESOLVED`, which is informational and fires on a SUCCESSFUL
+#: read that still could not attribute every token to a rig side.
+COSTS_FAILURE_CODES: frozenset[str] = frozenset({"MCOS_USAGE_UNREACHABLE"})
+
+
+def _fmt_ratio(value: Any) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{value:.2f}"
+    return "n/a (no math-side spend yet)"
+
+
+def costs(payload: Mapping[str, Any]) -> str:
+    """Token totals + worker-hours + the meta-work ratio, with its
+    numerator/denominator, and `unpriced_count` stated explicitly (#118).
+
+    `state == "unreachable"` means the local usage log itself could not be
+    read -- every total is unknown, never zero. A successful read that still
+    could not attribute every token to a rig side reports that gap as
+    `unclassified_tokens`, a measurement, not a failure.
+    """
+    state = str(payload.get("state") or "unknown")
+    if state == "unreachable":
+        codes = tuple(c for c in _codes(payload) if c in COSTS_FAILURE_CODES)
+        return _panel(
+            "Costs",
+            '<p class="lede"><strong>Token spend is unknown.</strong> The usage '
+            "log could not be read, so this is not a city that spent nothing — "
+            "it is spend we could not look at.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else ""),
+            region="city-costs",
+        )
+
+    total_tokens = payload.get("total_tokens") or 0
+    worker_hours = payload.get("worker_hours") or 0.0
+    unpriced_count = payload.get("unpriced_count") or 0
+    unclassified_tokens = payload.get("unclassified_tokens") or 0
+    ratio: Mapping[str, Any] = payload.get("meta_work_ratio") or {}
+    numerator = ratio.get("numerator")
+    denominator = ratio.get("denominator")
+
+    body = (
+        f'<p class="lede"><strong>{total_tokens:,}</strong> token'
+        f'{"" if total_tokens == 1 else "s"} this window, '
+        f'<strong>{worker_hours:.1f}</strong> worker-hour'
+        f'{"" if worker_hours == 1 else "s"} beside it.</p>'
+        f'<p class="lede">Meta-work ratio: <strong>{_e(_fmt_ratio(ratio.get("ratio")))}</strong> '
+        f'(<span class="mono">{_e(str(numerator) if numerator is not None else "unknown")}</span> meta '
+        f'/ <span class="mono">{_e(str(denominator) if denominator is not None else "unknown")}</span> math)'
+        "  — city/meta effort over mathematics effort, by rig.</p>"
+        f'<p class="lede"><strong>{unpriced_count}</strong> run'
+        f'{"" if unpriced_count == 1 else "s"} unpriced — excluded from any dollar '
+        "estimate, never valued at zero.</p>"
+    )
+    if unclassified_tokens:
+        body += (
+            f'<p class="note"><strong>{unclassified_tokens:,}</strong> token'
+            f'{"" if unclassified_tokens == 1 else "s"} could not be attributed to '
+            "either side of the ratio (the rig matched neither list, or its worker "
+            "could not be resolved to a rig) and are reported separately, never "
+            "folded into meta or math.</p>"
+        )
+
+    windows: Sequence[Mapping[str, Any]] = payload.get("windows") or []
+    if windows:
+        rows = "".join(
+            f'<li><span class="mono">{_e(str(w.get("window")))}</span> — '  # single-shape-ok: costs_summary window row
+            f'{int(w.get("total_tokens") or 0):,} tokens, ratio {_e(_fmt_ratio(w.get("meta_work_ratio")))}</li>'
+            for w in windows[-30:]
+        )
+        body += f'<h3>By window (trend)</h3><ul class="reason-list">{rows}</ul>'
+
+    return _panel("Costs", body, region="city-costs")
+
+
 def unwired(tool: str, *, module: str, issue: int) -> str:
     """A surface whose backend exists and which no page can call.
 
