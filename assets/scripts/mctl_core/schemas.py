@@ -699,6 +699,15 @@ WORK_ITEM_SCHEMA: Schema = {
         "brief_id": {"type": "string"},
         "provenance": {"type": ["object", "null"]},
         "readiness": {"type": "string"},
+        "skipped_sources": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Sources the multi-source resolver walked past because they "
+                "were already being worked (#228). Empty for a single-source "
+                "brief or when the first source was dispatchable."
+            ),
+        },
         "title": {"type": "string"},
     },
 }

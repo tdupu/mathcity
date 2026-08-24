@@ -1363,6 +1363,15 @@ _BRIEF_ID = {"type": "string", "description": "Canonical brief bead id."}
 _EFFECT_RESPONSE = {
     "applied": {"type": "boolean", "description": "False for a dry run."},
     "actual_effects": {"type": "array", "description": "Effects that really landed."},
+    "claim": {
+        "type": "string",
+        "enum": ["observed", "pending"],
+        "description": (
+            "For an applied work dispatch: whether the claim has been observed "
+            "yet. `pending` is a successful dispatch whose claim has not landed "
+            "(recheck with work_status), NOT a failure (#212)."
+        ),
+    },
     "effect_plan": EFFECT_PLAN_SCHEMA,
 }
 

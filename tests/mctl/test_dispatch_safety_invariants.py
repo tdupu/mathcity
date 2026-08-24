@@ -205,8 +205,17 @@ def test_dispatch_is_blocked_while_the_bead_is_claimed(tmp_path: Path):
     assert "MWRK_DISPATCH_BLOCKED" in result.stderr
 
 
-def test_mwrk003_fires_when_the_sling_does_not_claim_the_bead(tmp_path: Path):
-    """A sling that exits 0 without claiming the bead is a silent lost claim."""
+def test_mwrk003_is_a_pending_claim_not_a_fatal(tmp_path: Path):
+    """#212: a sling that exits 0 DISPATCHED. The claim landing is separate.
+
+    The claim does NOT arrive as a source-bead assignee -- work-briefed
+    associates it on the minted molecule and the source's
+    `execution.work_associated` event, ~210s after the sling. Reading the
+    (never-set) assignee and raising MWRK003 FATAL reported every successful
+    live dispatch as failed, and -- raising before provenance was written --
+    made the retry mint a duplicate convoy (#213). The dispatch now succeeds
+    with claim=`pending` and a NON-FATAL MWRK003 naming the recheck.
+    """
     city_root, _rig, bin_dir, fixture = runtime(
         tmp_path, approved_pair(), sling_assigns=False
     )
@@ -216,8 +225,12 @@ def test_mwrk003_fires_when_the_sling_does_not_claim_the_bead(tmp_path: Path):
         bin_dir=bin_dir, fixture=fixture, arm=True,
     )
 
-    assert result.returncode != 0
-    assert "MWRK003" in result.stderr, result.stderr
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["applied"] is True
+    assert payload["claim"] == "pending"
+    warnings = {d["code"]: d["severity"] for d in payload.get("diagnostics", [])}
+    assert warnings.get("MWRK003") == "WARN", payload
 
 
 def test_verified_dispatch_succeeds(tmp_path: Path):
