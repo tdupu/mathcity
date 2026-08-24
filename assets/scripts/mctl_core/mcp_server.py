@@ -64,6 +64,7 @@ from .city import (
     merge_outcomes,
 )
 from .context import CityScope, ContextError, MctlContext, resolve_city, resolve_context
+from . import gc_events
 from .diagnostics import Diagnostic, Severity
 from .payloads import (
     brief_filters as _filters,
@@ -713,15 +714,37 @@ def _handle_commission_brief(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
 
 
 def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    brief_id = arguments["brief_id"]
     plan = plan_adjudication(
         ctx,
-        arguments["brief_id"],
+        brief_id,
         verdict=arguments.get("verdict"),
         reason=arguments.get("reason"),
         option=arguments.get("option"),
         adjudicated_by=arguments.get("adjudicated_by"),
     )
-    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+    def _emit_brief_decided(_payload: dict[str, object]) -> Diagnostic | None:
+        """Ring `brief.decided` for a just-recorded verdict (Plan C, #202).
+
+        Payload carries the verdict AND the adjudicator: brief-decision-dispatch
+        branches on approve/reject/revise/defer, and post-#152 the adjudicator
+        is recorded so a decision can be attributed. `decision`/`brief_slug` are
+        the same keys the skill path (brief-record-decision.toml) uses, so the
+        event is shape-indistinguishable. Best-effort -- a failed doorbell is a
+        WARN advisory, never a FATAL.
+        """
+        return gc_events.emit(
+            "brief.decided",
+            brief_id,
+            {
+                "brief_slug": brief_id,
+                "decision": arguments.get("verdict"),
+                "adjudicated_by": arguments.get("adjudicated_by"),
+            },
+        )
+
+    return _effect_payload(ctx, plan, _dry_run(arguments), on_apply=_emit_brief_decided)
 
 
 def _handle_briefs_defer(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -914,6 +937,20 @@ def _handle_briefs_present(ctx: MctlContext, arguments: Mapping[str, Any]) -> di
     return payload
 
 
+def _emit_brief_submitted(payload: dict[str, object]) -> Diagnostic | None:
+    """Ring `brief.submitted` for a just-deposited brief (Plan C, #202).
+
+    The subject is the minted brief id, so the event is indistinguishable in
+    shape from the skill path's and `brief-shuffle-on-submit` (trigger = event:
+    brief.submitted) fires within seconds. Best-effort: a failed doorbell is a
+    WARN advisory, never a FATAL -- the condition backstop recovers it.
+    """
+    brief_id = _minted_brief_id(payload)
+    if not brief_id:
+        return None
+    return gc_events.emit("brief.submitted", brief_id, {"brief_slug": brief_id})
+
+
 def _handle_briefs_create(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     plan = plan_create_brief(
         ctx,
@@ -925,7 +962,7 @@ def _handle_briefs_create(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
             sources=tuple(arguments.get("sources") or ()),
         ),
     )
-    return _effect_payload(ctx, plan, _dry_run(arguments))
+    return _effect_payload(ctx, plan, _dry_run(arguments), on_apply=_emit_brief_submitted)
 
 
 def _handle_create_issue_bead(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -1078,8 +1115,27 @@ def _dry_run(arguments: Mapping[str, Any]) -> bool:
     return bool(arguments.get("dry_run", True))
 
 
-def _effect_payload(ctx: MctlContext, plan, dry_run: bool) -> dict[str, object]:
-    payload = dry_run_payload(plan) if dry_run else apply_effect_plan(ctx, plan).to_dict()
+def _effect_payload(
+    ctx: MctlContext,
+    plan,
+    dry_run: bool,
+    *,
+    on_apply: Callable[[dict[str, object]], Diagnostic | None] | None = None,
+) -> dict[str, object]:
+    if dry_run:
+        payload = dry_run_payload(plan)
+    else:
+        payload = apply_effect_plan(ctx, plan).to_dict()
+        # Ring the city doorbell AFTER the canonical write lands, and ONLY on a
+        # live apply -- a dry run is a preview and must have no side effects,
+        # events included (#188). Emission is best-effort (Plan C, #202): the
+        # callback returns a WARN advisory on a failed doorbell, never raises,
+        # and the advisory rides along in `diagnostics` -- a diagnostic object
+        # the served schema already allows -- without perturbing the shape.
+        if on_apply is not None:
+            advisory = on_apply(payload)
+            if advisory is not None:
+                payload["diagnostics"] = list(payload.get("diagnostics", [])) + [advisory.to_dict()]
     payload["diagnostics"] = _diagnostics(ctx, ()) + list(payload.get("diagnostics", []))
     return payload
 
