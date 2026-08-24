@@ -710,15 +710,37 @@ def _handle_commission_brief(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
 
 
 def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    brief_id = arguments["brief_id"]
     plan = plan_adjudication(
         ctx,
-        arguments["brief_id"],
+        brief_id,
         verdict=arguments.get("verdict"),
         reason=arguments.get("reason"),
         option=arguments.get("option"),
         adjudicated_by=arguments.get("adjudicated_by"),
     )
-    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+    def _emit_brief_decided(_payload: dict[str, object]) -> Diagnostic | None:
+        """Ring `brief.decided` for a just-recorded verdict (Plan C, #202).
+
+        Payload carries the verdict AND the adjudicator: brief-decision-dispatch
+        branches on approve/reject/revise/defer, and post-#152 the adjudicator
+        is recorded so a decision can be attributed. `decision`/`brief_slug` are
+        the same keys the skill path (brief-record-decision.toml) uses, so the
+        event is shape-indistinguishable. Best-effort -- a failed doorbell is a
+        WARN advisory, never a FATAL.
+        """
+        return gc_events.emit(
+            "brief.decided",
+            brief_id,
+            {
+                "brief_slug": brief_id,
+                "decision": arguments.get("verdict"),
+                "adjudicated_by": arguments.get("adjudicated_by"),
+            },
+        )
+
+    return _effect_payload(ctx, plan, _dry_run(arguments), on_apply=_emit_brief_decided)
 
 
 def _handle_briefs_defer(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
