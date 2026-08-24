@@ -276,12 +276,14 @@ Do not adjudicate them yourself — surface them so USER can drain the pile.
 
 ## 6. Session toolkit
 
-- **`mcp__mctl__*` (16 typed tools)** — the target control surface: brief
+- **`mcp__mctl__*` (the typed mctl tools)** — the target control surface: brief
   reads (`briefs_list`, `briefs_show`, `briefs_doctor`), work reads
-  (`work_ready`, `work_status`), trace reads (`trace_show`), and four gated
+  (`work_ready`, `work_status`), trace reads (`trace_show`), and gated
   mutations. Use them **when they appear in your tool list**; they are absent by
-  default and their absence is not an error. Full tool↔CLI mapping and the
-  rollout gate: `template-fragments/mctl-entry-point.md`.
+  default and their absence is not an error. The canonical live roster is
+  `tools/list` (mirrored by `tests/mctl/fixtures/mcp_tool_schemas.json`); never
+  trust a hand-written count (`#162`). Full tool↔CLI mapping and the rollout
+  gate: `template-fragments/mctl-entry-point.md`.
 - **`bin/mctl`** — the same core behind a CLI: the bridge, always present, never
   wrong, and the fallback whenever the MCP is not connected.
   Direct reads are always safe and are the fastest orientation available:

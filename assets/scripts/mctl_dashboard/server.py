@@ -117,6 +117,20 @@ def make_server(
     return httpd, f"http://{bound_host}:{bound_port}"
 
 
+def internal_tool_count() -> int:
+    """How many tools an `internal` MCP client sees, read from the LIVE roster.
+
+    `#162`: the banner below hard-coded `16` and printed it on every dashboard
+    start, long after the surface had grown -- a stale count reinforced dozens
+    of times a night (see `#154`). Deriving it from `mcp_server.TOOLS` means it
+    can never disagree with the roster it describes (CT13.3's own pass
+    condition: defer to a live enumeration, never name one).
+    """
+    from mctl_core import mcp_server
+
+    return len(mcp_server.TOOLS)
+
+
 def serve_from_args(args: argparse.Namespace) -> int:
     """Entry point for `mctl dashboard serve`, wired from mctl_core.cli."""
     # `--rig` omitted means city-wide. The MCP server is then started without
@@ -136,7 +150,11 @@ def serve_from_args(args: argparse.Namespace) -> int:
         f"  scope: {'city-wide (every registered rig)' if city_wide else 'rig ' + args.rig}",
         file=sys.stderr,
     )
-    print(f"  MCP client class: internal (all 16 tools); server: {' '.join(client.command)}", file=sys.stderr)
+    print(
+        f"  MCP client class: internal (all {internal_tool_count()} tools); "
+        f"server: {' '.join(client.command)}",
+        file=sys.stderr,
+    )
 
     # #207: stamp this process so dashboard_status/dashboard_restart can see it.
     # Best-effort and never fatal to serving: the stamp names pid, the bound
