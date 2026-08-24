@@ -48,6 +48,7 @@ DECLARED_TOOLS = (
     "commission_brief",
     "context_resolve",
     "context_rigs",
+    "costs_summary",
     "create_defect_bead",
     "create_github_issue",
     "create_issue_bead",
@@ -63,6 +64,7 @@ DECLARED_TOOLS = (
     "molecules_list",
     "molecules_show",
     "orders_status",
+    "queue_status",
     "standardize_github_issue",
     "trace_replay_preview",
     "trace_show",
@@ -72,6 +74,7 @@ DECLARED_TOOLS = (
     "work_provenance",
     "work_ready",
     "work_status",
+    "worktrees_status",
 )
 
 READ_TOOLS = (

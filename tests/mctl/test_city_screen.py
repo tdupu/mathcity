@@ -237,3 +237,313 @@ def test_the_unlisted_sentence_is_not_shown_when_the_registry_is_missing():
         {"registry_present": False, "operations": [], "awaiting_emitter": []}
     )
     assert "could not" in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# queue (#113): six populations, next_up labeled a prediction, unreachable
+# rendered as unknown rather than zero -- per-population, not just for the
+# whole panel.
+# ---------------------------------------------------------------------------
+
+
+def test_a_failed_core_read_renders_the_whole_queue_as_unknown_not_zero():
+    payload = {
+        "state": "unreachable",
+        "ready_unclaimed": None,
+        "blocked": None,
+        "tail": None,
+        "starved": None,
+        "deferred": None,
+        "next_up": None,
+        "next_up_is_prediction": True,
+        "diagnostics": [
+            {"code": "MQUE_QUEUE_UNREACHABLE", "message": "bd ready --explain unavailable: timeout"}
+        ],
+    }
+    html = city_screen.queue(payload)
+    low = html.lower()
+    assert "unknown" in low
+    assert "MQUE_QUEUE_UNREACHABLE" in html
+    assert "0" not in html
+
+
+def test_a_populated_queue_reports_each_population_and_labels_next_up_a_prediction():
+    payload = {
+        "state": "healthy",
+        "ready_unclaimed": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "blocked": [
+            {"bead_id": "mc-2", "title": "Blocked work", "blocked_on": "mc-9", "blocked_on_title": "The dependency"}
+        ],
+        "tail": [],
+        "starved": [],
+        "deferred": [{"bead_id": "mc-3", "title": "Parked", "until": "2026-09-01T00:00:00Z"}],
+        "next_up": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "next_up_is_prediction": True,
+        "diagnostics": [],
+    }
+    html = city_screen.queue(payload)
+    assert "mc-1" in html
+    assert "mc-2" in html
+    assert "mc-9" in html, "blocked_on must render, not just the blocked bead itself"
+    assert "2026-09-01T00:00:00Z" in html, "a deferred item's expiry must render"
+    assert "predict" in html.lower(), "next_up must be explicitly labeled a prediction"
+
+
+def test_a_genuinely_empty_queue_reports_zero_not_unknown():
+    payload = {
+        "state": "healthy",
+        "ready_unclaimed": [],
+        "blocked": [],
+        "tail": [],
+        "starved": [],
+        "deferred": [],
+        "next_up": [],
+        "next_up_is_prediction": True,
+        "diagnostics": [],
+    }
+    html = city_screen.queue(payload)
+    assert "unknown" not in html.lower()
+    assert "0" in html
+
+
+def test_one_failed_population_renders_as_unknown_without_hiding_the_rest():
+    """A partial failure (#113: `deferred` unreachable, everything else read
+    fine) must not collapse the whole panel to "unknown" -- that would be
+    exactly as dishonest in the other direction as printing zero."""
+    payload = {
+        "state": "degraded",
+        "ready_unclaimed": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "blocked": [],
+        "tail": [],
+        "starved": [],
+        "deferred": None,
+        "next_up": [{"bead_id": "mc-1", "title": "Ready work", "priority": 1}],
+        "next_up_is_prediction": True,
+        "diagnostics": [
+            {"code": "MQUE_DEFERRED_UNREACHABLE", "message": "bd list --deferred unavailable: timeout"}
+        ],
+    }
+    html = city_screen.queue(payload)
+    assert "mc-1" in html, "the successfully-read ready_unclaimed population must still render"
+    assert "MQUE_DEFERRED_UNREACHABLE" in html
+    assert "unknown" in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# costs (#118): token totals + worker-hours + the meta-work ratio with its
+# numerator/denominator, unpriced_count stated explicitly, unreachable
+# rendered as unknown rather than zero.
+# ---------------------------------------------------------------------------
+
+
+def test_an_unreachable_costs_read_renders_as_unknown_not_zero():
+    payload = {
+        "state": "unreachable",
+        "total_tokens": None,
+        "worker_hours": None,
+        "unpriced_count": None,
+        "unclassified_tokens": None,
+        "meta_work_ratio": {"numerator": None, "denominator": None, "ratio": None},
+        "windows": None,
+        "diagnostics": [
+            {"code": "MCOS_USAGE_UNREACHABLE", "message": "usage facts unavailable: no such file"}
+        ],
+    }
+    html = city_screen.costs(payload)
+    low = html.lower()
+    assert "unknown" in low
+    assert "MCOS_USAGE_UNREACHABLE" in html
+    assert "0" not in html
+
+
+def test_a_populated_costs_summary_reports_totals_and_the_ratio_with_its_parts():
+    payload = {
+        "state": "healthy",
+        "total_tokens": 300,
+        "worker_hours": 2.5,
+        "unpriced_count": 3,
+        "unclassified_tokens": 10,
+        "meta_work_ratio": {"numerator": 200, "denominator": 100, "ratio": 2.0},
+        "windows": [
+            {
+                "window": "2026-08-20",
+                "total_tokens": 300,
+                "meta_tokens": 200,
+                "math_tokens": 100,
+                "unclassified_tokens": 10,
+                "worker_hours": 2.5,
+                "unpriced_count": 3,
+                "meta_work_ratio": 2.0,
+            }
+        ],
+        "diagnostics": [],
+    }
+    html = city_screen.costs(payload)
+    assert "300" in html, "total tokens must render"
+    assert "2.5" in html, "worker-hours must render beside the tokens"
+    assert "200" in html and "100" in html, "the ratio's numerator and denominator must both render"
+    assert "3" in html, "unpriced_count must be stated explicitly"
+    assert "2026-08-20" in html, "the per-window series must render for the trend"
+
+
+def test_a_genuinely_empty_costs_summary_reports_zero_not_unknown():
+    payload = {
+        "state": "healthy",
+        "total_tokens": 0,
+        "worker_hours": 0.0,
+        "unpriced_count": 0,
+        "unclassified_tokens": 0,
+        "meta_work_ratio": {"numerator": 0, "denominator": 0, "ratio": None},
+        "windows": [],
+        "diagnostics": [],
+    }
+    html = city_screen.costs(payload)
+    assert "unknown" not in html.lower()
+    assert "0" in html
+
+
+def test_unpriced_count_never_renders_as_folded_into_the_token_total():
+    """#118 honesty specifics: unpriced runs are a separate, explicit count --
+    never valued at zero and never silently merged into total_tokens."""
+    payload = {
+        "state": "healthy",
+        "total_tokens": 500,
+        "worker_hours": 1.0,
+        "unpriced_count": 7,
+        "unclassified_tokens": 0,
+        "meta_work_ratio": {"numerator": 500, "denominator": 0, "ratio": None},
+        "windows": [],
+        "diagnostics": [],
+    }
+    html = city_screen.costs(payload)
+    assert "7" in html
+    assert "unpriced" in html.lower()
+
+
+# ---------------------------------------------------------------------------
+# worktrees (#120): inventory keyed by path, created_by/step/molecule render
+# `-` when unrecorded, is_orphan/is_registered stay separate, unreachable
+# renders as unknown rather than empty.
+# ---------------------------------------------------------------------------
+
+
+def test_an_unreachable_worktrees_read_renders_as_unknown_not_zero():
+    payload = {
+        "state": "unreachable",
+        "total": None,
+        "orphans": None,
+        "harvestable_count": None,
+        "worktrees": None,
+        "diagnostics": [
+            {"code": "MWKT_WORKTREES_UNREACHABLE", "message": "rig roster unavailable: timeout"}
+        ],
+    }
+    html = city_screen.worktrees(payload)
+    low = html.lower()
+    assert "unknown" in low
+    assert "MWKT_WORKTREES_UNREACHABLE" in html
+    assert "0" not in html
+
+
+def test_a_genuinely_empty_worktrees_read_reports_zero_not_unknown():
+    payload = {
+        "state": "healthy",
+        "total": 0,
+        "orphans": None,
+        "harvestable_count": 0,
+        "worktrees": [],
+        "diagnostics": [],
+    }
+    html = city_screen.worktrees(payload)
+    assert "unknown" not in html.lower()
+    assert "0" in html
+
+
+def test_a_populated_worktrees_table_renders_unrecorded_distinctly_from_a_real_value():
+    payload = {
+        "state": "healthy",
+        "total": 2,
+        "orphans": None,
+        "harvestable_count": 1,
+        "worktrees": [
+            {
+                "path": "/rigs/mathcity/w1",
+                "rig": "mathcity",
+                "branch": "dash-city",
+                "molecule": "unrecorded",
+                "created_by": "unrecorded",
+                "step": "unrecorded",
+                "merged": False,
+                "age_seconds": 86400.0,
+                "size_bytes": 2048,
+                "is_orphan": None,
+                "is_registered": True,
+                "harvestable": False,
+                "commits": 3,
+                "url": "file:///rigs/mathcity/w1",
+            },
+            {
+                "path": "/rigs/mathcity/gone",
+                "rig": "mathcity",
+                "branch": None,
+                "molecule": "unrecorded",
+                "created_by": "molecule-runner",
+                "step": "unrecorded",
+                "merged": None,
+                "age_seconds": None,
+                "size_bytes": None,
+                "is_orphan": None,
+                "is_registered": True,
+                "harvestable": True,
+                "commits": None,
+                "url": "file:///rigs/mathcity/gone",
+            },
+        ],
+        "diagnostics": [
+            {"code": "MWKT_ORPHAN_UNDERIVABLE", "message": "is_orphan is null for every row"},
+            {"code": "MWKT_CREATED_BY_UNRECORDED", "message": "created_by/step/molecule are unrecorded"},
+        ],
+    }
+    html = city_screen.worktrees(payload)
+    assert "/rigs/mathcity/w1" in html
+    assert "/rigs/mathcity/gone" in html
+    assert "molecule-runner" in html, "a real recorded created_by must render as itself"
+    # The unrecorded sentinel renders distinctly (an em/en-dash placeholder),
+    # never as the literal word the row carries and never as a blank cell.
+    assert "—" in html or "&mdash;" in html or "&#8212;" in html
+    table = html[html.index("<table>") : html.index("</table>")]
+    assert "unrecorded" not in table.lower(), (
+        "the raw sentinel string must not leak into a table cell (diagnostic codes below the "
+        "table may legitimately contain the word, e.g. MWKT_CREATED_BY_UNRECORDED)"
+    )
+
+
+def test_harvestable_and_registered_and_orphan_render_as_separate_signals():
+    payload = {
+        "state": "healthy",
+        "total": 1,
+        "orphans": None,
+        "harvestable_count": 1,
+        "worktrees": [
+            {
+                "path": "/rigs/mathcity/gone",
+                "rig": "mathcity",
+                "branch": None,
+                "molecule": "unrecorded",
+                "created_by": "unrecorded",
+                "step": "unrecorded",
+                "merged": None,
+                "age_seconds": None,
+                "size_bytes": None,
+                "is_orphan": None,
+                "is_registered": True,
+                "harvestable": True,
+                "commits": None,
+                "url": None,
+            }
+        ],
+        "diagnostics": [],
+    }
+    html = city_screen.worktrees(payload)
+    assert "harvestable" in html.lower()
+    assert "registered" in html.lower()

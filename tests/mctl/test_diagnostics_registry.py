@@ -35,11 +35,13 @@ NOT_CODES = {
 # Families are a union: MDTB is decisions-to-briefs (#177), MISS/MCMS came
 # from main, MORD is orders_status/formulas_catalog reads (#203), MMAY is the
 # mayor_boot handoff-chain honesty family (#205), MGHW is the GitHub-write intake
-# surfaces (#185), MEVT is mctl event participation (#202). A family missing from
-# this allowlist is invisible to the scanner, so its codes read as "registered
-# but never emitted" however they are written.
+# surfaces (#185), MEVT is mctl event participation (#202), MQUE is queue_status
+# reads (#113), MCOS is costs_summary reads (#118), MWKT is worktrees_status
+# reads (#120). A family missing from this allowlist is invisible to the
+# scanner, so its codes read as "registered but never emitted" however they
+# are written.
 CODE_PATTERN = re.compile(
-    r'"(MBRF\d{3}|MBRF_[A-Z_]+|MCMS_[A-Z_]+|MCTL_[A-Z_]+|MDSH_[A-Z_]+|MDTB\d{3}|MEVT_[A-Z_]+|MGHW_[A-Z_]+|MISS\d{3}|MMAY_[A-Z_]+|MOPT\d{3}|MORD_[A-Z_]+|MWRK\d{3}|MWRK_[A-Z_]+)"'
+    r'"(MBRF\d{3}|MBRF_[A-Z_]+|MCMS_[A-Z_]+|MCOS_[A-Z_]+|MCTL_[A-Z_]+|MDSH_[A-Z_]+|MDTB\d{3}|MEVT_[A-Z_]+|MGHW_[A-Z_]+|MISS\d{3}|MMAY_[A-Z_]+|MOPT\d{3}|MORD_[A-Z_]+|MQUE_[A-Z_]+|MWKT_[A-Z_]+|MWRK\d{3}|MWRK_[A-Z_]+)"'
 )
 
 VALID_SEVERITIES = {"INFO", "WARN", "ERROR", "FATAL"}

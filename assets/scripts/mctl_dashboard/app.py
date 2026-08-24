@@ -52,6 +52,7 @@ from .screens import panel as panel_screen
 from .screens import pipeline as pipeline_screen
 from .screens import priority as priority_screen
 from .screens import city as city_screen
+from .screens import molecules as molecules_screen
 from .screens import stack
 from .aggregate import CityView, is_deferred as _agg_is_deferred
 from .client import McpClient, ToolFailure, ToolResponse
@@ -1201,6 +1202,9 @@ class Dashboard:
             ("city_health", city_screen.health),
             ("gates_status", city_screen.gates),
             ("blast_radius_registry", city_screen.blast_radius),
+            ("queue_status", city_screen.queue),
+            ("costs_summary", city_screen.costs),
+            ("worktrees_status", city_screen.worktrees),
         )
         outcomes = fan_out(self.client, [(tool, self._args(rig)) for tool, _ in surfaces])
 
@@ -1247,6 +1251,85 @@ class Dashboard:
             sections.append(city_screen.unwired(tool, module=module, issue=issue))
 
         return self._page("City", "/city", context, sections, context_bar="")
+
+    def _molecules(self, request: Request) -> Response:
+        """Molecules (#109, #115, #153): one row per workflow RUN, with the
+        keystone evidence core -- declared-vs-actual artifacts, three-valued
+        `is_complete`, and honest evidence links -- on the detail page.
+
+        `molecules_list`/`molecules_show` are rig-scoped tools (no
+        `CITY_SCOPE`), so a city-wide dashboard with no rig chosen cannot call
+        either; it shows a rig picker instead of a guaranteed
+        `MCTL_CONTEXT_RIG_REQUIRED` failure.
+        """
+        rig = self._rig_for(request)
+        if self.city_wide and not rig:
+            picker = (
+                '<section class="panel" data-region="molecules-rig-picker"><h2>Molecules</h2>'
+                '<p class="lede">Molecules are read per rig. Choose one.</p>'
+                '<form class="operation" method="get" action="/molecules">'
+                + render.rig_filter_field(self._rig_ids(), rig)
+                + '<div><button type="submit" class="secondary">Show molecules</button></div>'
+                "</form></section>"
+            )
+            return self._page(
+                "Molecules", "/molecules", None, [picker], context_bar=self._city_bar()
+            )
+        context = self._scope_context(rig)
+        try:
+            payload = self.client.call("molecules_list", self._args(rig)).payload
+        except ToolFailure as failure:
+            sections = [
+                render.notice_panel(
+                    "molecules_list did not answer",
+                    "The molecule roster could not be read.",
+                    failure.diagnostics,
+                    region="molecules-failed",
+                )
+            ]
+            return self._page("Molecules", "/molecules", context, sections, context_bar="")
+        sections = [molecules_screen.molecules_list(payload, rig=rig if self.city_wide else None)]
+        return self._page("Molecules", "/molecules", context, sections, context_bar="")
+
+    def _molecule(self, molecule_id: str, request: Request) -> Response:
+        """One molecule's steps, with the #115 evidence core rendered per step."""
+        rig = self._rig_for(request)
+        if self.city_wide and not rig:
+            return self._page(
+                f"Molecule {molecule_id}",
+                "/molecules",
+                None,
+                [
+                    render.notice_panel(
+                        "A rig is required",
+                        "A molecule id is rig-scoped; pick a rig from the Molecules page first.",
+                        [],
+                        region="molecule-no-rig",
+                    )
+                ],
+                context_bar=self._city_bar(),
+            )
+        context = self._scope_context(rig)
+        try:
+            payload = self.client.call(
+                "molecules_show", self._args(rig, molecule_id=molecule_id)
+            ).payload
+        except ToolFailure as failure:
+            sections = [
+                render.notice_panel(
+                    "molecules_show did not answer",
+                    f"Molecule {molecule_id} could not be read.",
+                    failure.diagnostics,
+                    region="molecule-failed",
+                )
+            ]
+            return self._page(
+                f"Molecule {molecule_id}", "/molecules", context, sections, context_bar=""
+            )
+        sections = [molecules_screen.molecule_detail(payload)]
+        return self._page(
+            f"Molecule {molecule_id}", "/molecules", context, sections, context_bar=""
+        )
 
     def _diagnostics(self, request: Request) -> Response:
         if self.city_wide:
@@ -1577,6 +1660,10 @@ class Dashboard:
             return self._brief(request.path[len("/briefs/") :], request)
         if request.path == "/city":
             return self._city_operations(request)
+        if request.path == "/molecules":
+            return self._molecules(request)
+        if request.path.startswith("/molecules/"):
+            return self._molecule(request.path[len("/molecules/") :], request)
         if request.path == "/diagnostics":
             return self._diagnostics(request)
         if request.path == "/work":

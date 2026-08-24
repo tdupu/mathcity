@@ -768,6 +768,80 @@ severity = "WARN"
 meaning = "The city event log could not be read, so order outcomes could not be folded; outcomes are reported unreachable rather than as failures."
 module = "orders.py"
 
+# MQUE: queue_status reads (#113). Each of the four `bd` reads that build the
+# six queue populations degrades independently -- a failure nulls only the
+# population(s) that read feeds, never collapses to a silent empty list.
+
+[MQUE_QUEUE_UNREACHABLE]
+severity = "WARN"
+meaning = "`bd ready --explain` could not be read; the whole queue is unreachable and every population is null, never an empty list."
+module = "queue.py"
+
+[MQUE_UNCLAIMED_UNREACHABLE]
+severity = "WARN"
+meaning = "`bd ready --unassigned` could not be read; ready_unclaimed, tail, and next_up (all claim-dependent) are null, while blocked/starved/deferred still report if their own reads succeeded."
+module = "queue.py"
+
+[MQUE_DEFERRED_UNREACHABLE]
+severity = "WARN"
+meaning = "`bd list --deferred` could not be read; the deferred population is null. Other populations are unaffected."
+module = "queue.py"
+
+[MQUE_ROUTED_UNREACHABLE]
+severity = "WARN"
+meaning = "The routed-metadata lookup (`bd list --has-metadata-key`) could not be read, so 'never dispatched' cannot be determined; tail is null. ready_unclaimed/blocked/starved/deferred/next_up are unaffected."
+module = "queue.py"
+
+# MCOS: costs_summary reads (#118). Token bucketing + the meta-work ratio,
+# shaped from the city's local `.gc/usage.jsonl`. A read failure makes the
+# whole tool unreachable (there is one data source, not four independent
+# ones like MQUE); a successful read that still cannot attribute every token
+# to a rig side reports that gap as an INFO diagnostic rather than folding it
+# silently into either side of the ratio.
+
+[MCOS_USAGE_UNREACHABLE]
+severity = "WARN"
+meaning = "`.gc/usage.jsonl` could not be read; the state is unreachable and every total (total_tokens, worker_hours, unpriced_count, the ratio's numerator/denominator) is null, never zero."
+module = "costs.py"
+
+[MCOS_RIG_UNRESOLVED]
+severity = "INFO"
+meaning = "One or more usage facts could not be attributed to a rig on either side of the meta-work ratio -- the recovered rig matched neither the meta nor the math prefix list, or the recording worker's session name carried no rig/agent structure to recover a rig from. Reported in unclassified_tokens, never folded into either side."
+module = "costs.py"
+
+# MWKT: worktrees_status reads (#120). Worktree inventory, keyed by path, over
+# git worktree list --porcelain per registered rig. A roster read failure (or
+# every rig's own read failing) makes the whole tool unreachable; a single
+# rig's failure degrades only that rig without discarding rows other rigs
+# produced. The remaining codes are INFO: real, standing honesty gaps in
+# today's data model (no worktree-to-session join, no worktree-to-bead
+# recording), not read failures.
+
+[MWKT_WORKTREES_UNREACHABLE]
+severity = "WARN"
+meaning = "The registered-rig roster could not be read; the state is unreachable and total/worktrees/orphans/harvestable_count are all null, never zero or an empty list."
+module = "worktrees.py"
+
+[MWKT_RIG_UNREACHABLE]
+severity = "WARN"
+meaning = "`git worktree list --porcelain` failed for one registered rig; that rig's rows are omitted (named in facts.rig_name) while rows from other, successfully-read rigs still render. If every rig fails, the whole tool reports unreachable instead."
+module = "worktrees.py"
+
+[MWKT_SIZE_UNKNOWN]
+severity = "INFO"
+meaning = "One or more worktrees could not be sized (`du` failed or timed out); those rows report size_bytes=null rather than a fabricated size or a zero."
+module = "worktrees.py"
+
+[MWKT_ORPHAN_UNDERIVABLE]
+severity = "INFO"
+meaning = "is_orphan is null for every row: `gc session list` carries no working-directory field to join a worktree path to a live session by, and no bead metadata records which worktree it owns. orphans (the row-count summary) is null for the same reason."
+module = "worktrees.py"
+
+[MWKT_CREATED_BY_UNRECORDED]
+severity = "INFO"
+meaning = "created_by/step/molecule are the literal string 'unrecorded' for every row: nothing records them at worktree-creation time today. Distinct from null (a read failure) and from a real empty owner (\"\")."
+module = "worktrees.py"
+
 [MMAY_HANDOFFS_NOT_FOUND]
 severity = "WARN"
 meaning = "mayor_boot's handoff-chain query returned no rows; the diagnostic names the store searched (hq) and the query applied, so an empty recent_handoffs is auditable as 'not found by my query' rather than 'no handoffs exist' (#205, P6.2)."

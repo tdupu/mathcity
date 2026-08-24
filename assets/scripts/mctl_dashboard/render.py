@@ -755,6 +755,17 @@ def brief_href(brief_id: object, rig: str | None = None) -> str:
     return f"{href}?rig={quote(str(rig), safe='')}" if rig else href
 
 
+def molecule_href(molecule_id: object, rig: str | None = None) -> str:
+    """The one place a molecule detail link is built (#115, #153).
+
+    Same reasoning as `brief_href`: a molecule id is rig-scoped, and in a
+    city-wide list dropping the rig would leave the detail view guessing
+    which bead store to open.
+    """
+    href = f"/molecules/{_e(molecule_id)}"
+    return f"{href}?rig={quote(str(rig), safe='')}" if rig else href
+
+
 def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -> str:
     rows = []
     for brief in briefs:

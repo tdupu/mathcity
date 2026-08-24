@@ -298,6 +298,287 @@ def blast_radius(payload: Mapping[str, Any]) -> str:
     return _panel("Blast radius", body, region="city-blast-radius")
 
 
+#: `queue_status` (#113): a diagnostic here means one of the six populations
+#: (or all of them) could not be read. Distinct from `PROBE_FAILURE_CODES`
+#: above -- those are `gc`-probe failures; these are `bd`-read failures with a
+#: narrower, per-population blast radius (see `mctl_core/queue.py`).
+QUEUE_FAILURE_CODES: frozenset[str] = frozenset(
+    {
+        "MQUE_QUEUE_UNREACHABLE",
+        "MQUE_UNCLAIMED_UNREACHABLE",
+        "MQUE_DEFERRED_UNREACHABLE",
+        "MQUE_ROUTED_UNREACHABLE",
+    }
+)
+
+_QUEUE_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("ready_unclaimed", "Ready, unclaimed"),
+    ("blocked", "Blocked"),
+    ("tail", "Tail (ready, never dispatched, idle)"),
+    ("starved", "Starved (blocked and idle)"),
+    ("deferred", "Deferred (deliberately parked)"),
+    ("next_up", "Next up (predicted — dispatch order is arbitrary)"),
+)
+
+
+def _queue_section(payload: Mapping[str, Any], key: str, label: str) -> str:
+    rows: Sequence[Mapping[str, Any]] | None = payload.get(key)
+    if rows is None:
+        # This ONE population's read failed -- distinct from the whole panel
+        # being unreachable (handled before this is ever called). Still not a
+        # zero: a null population is unknown, not empty.
+        codes = tuple(c for c in _codes(payload) if c in QUEUE_FAILURE_CODES)
+        return (
+            f"<h3>{_e(label)}</h3>"
+            f'<p class="lede"><strong>{_e(label)} is unknown.</strong> This read '
+            "failed independently of the rest of this panel.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else "")
+        )
+    if not rows:
+        return f'<h3>{_e(label)}</h3><p class="lede">{_e(label)}: <strong>0</strong>.</p>'
+    items = []
+    for row in rows[:20]:
+        line = (
+            f'<span class="mono">{_e(str(row.get("bead_id")))}</span> — '  # single-shape-ok: queue_status row, not a brief
+            f'{_e(str(row.get("title")))}'  # single-shape-ok: queue_status row, not a brief
+        )
+        if row.get("blocked_on"):
+            line += f' <span class="muted">(blocked on <span class="mono">{_e(str(row.get("blocked_on")))}</span>)</span>'
+        if row.get("until"):
+            line += f' <span class="muted">(until {_e(str(row.get("until")))})</span>'
+        items.append(f"<li>{line}</li>")
+    return (
+        f"<h3>{_e(label)}</h3>"
+        f'<p class="lede"><strong>{len(rows)}</strong> item{"" if len(rows) == 1 else "s"}.</p>'
+        f'<ul class="reason-list">{"".join(items)}</ul>'
+    )
+
+
+def queue(payload: Mapping[str, Any]) -> str:
+    """The QUEUE column: six populations, `next_up` explicitly labeled a prediction.
+
+    `state == "unreachable"` means the core `bd ready --explain` read itself
+    failed -- every population is unknown, never zero, and this panel says so
+    once rather than six times. A population that is individually `None`
+    (one of the three auxiliary reads failed, the core read did not) is
+    handled per-section by `_queue_section` instead, so a real `blocked` list
+    is not thrown away because `deferred` could not be read.
+    """
+    state = str(payload.get("state") or "unknown")
+    if state == "unreachable":
+        codes = _codes(payload)
+        return _panel(
+            "Queue",
+            '<p class="lede"><strong>The queue is unknown.</strong> The bead '
+            "store could not be read, so this is not a city with an empty "
+            "queue — it is a queue we could not look at.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else ""),
+            region="city-queue",
+        )
+    body = "".join(_queue_section(payload, key, label) for key, label in _QUEUE_SECTIONS)
+    return _panel("Queue", body, region="city-queue")
+
+
+#: `costs_summary` (#118): a single local-file read backs the whole tool, so
+#: a diagnostic here means the read itself failed -- distinct from
+#: `MCOS_RIG_UNRESOLVED`, which is informational and fires on a SUCCESSFUL
+#: read that still could not attribute every token to a rig side.
+COSTS_FAILURE_CODES: frozenset[str] = frozenset({"MCOS_USAGE_UNREACHABLE"})
+
+
+def _fmt_ratio(value: Any) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{value:.2f}"
+    return "n/a (no math-side spend yet)"
+
+
+def costs(payload: Mapping[str, Any]) -> str:
+    """Token totals + worker-hours + the meta-work ratio, with its
+    numerator/denominator, and `unpriced_count` stated explicitly (#118).
+
+    `state == "unreachable"` means the local usage log itself could not be
+    read -- every total is unknown, never zero. A successful read that still
+    could not attribute every token to a rig side reports that gap as
+    `unclassified_tokens`, a measurement, not a failure.
+    """
+    state = str(payload.get("state") or "unknown")
+    if state == "unreachable":
+        codes = tuple(c for c in _codes(payload) if c in COSTS_FAILURE_CODES)
+        return _panel(
+            "Costs",
+            '<p class="lede"><strong>Token spend is unknown.</strong> The usage '
+            "log could not be read, so this is not a city that spent nothing — "
+            "it is spend we could not look at.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else ""),
+            region="city-costs",
+        )
+
+    total_tokens = payload.get("total_tokens") or 0
+    worker_hours = payload.get("worker_hours") or 0.0
+    unpriced_count = payload.get("unpriced_count") or 0
+    unclassified_tokens = payload.get("unclassified_tokens") or 0
+    ratio: Mapping[str, Any] = payload.get("meta_work_ratio") or {}
+    numerator = ratio.get("numerator")
+    denominator = ratio.get("denominator")
+
+    body = (
+        f'<p class="lede"><strong>{total_tokens:,}</strong> token'
+        f'{"" if total_tokens == 1 else "s"} this window, '
+        f'<strong>{worker_hours:.1f}</strong> worker-hour'
+        f'{"" if worker_hours == 1 else "s"} beside it.</p>'
+        f'<p class="lede">Meta-work ratio: <strong>{_e(_fmt_ratio(ratio.get("ratio")))}</strong> '
+        f'(<span class="mono">{_e(str(numerator) if numerator is not None else "unknown")}</span> meta '
+        f'/ <span class="mono">{_e(str(denominator) if denominator is not None else "unknown")}</span> math)'
+        "  — city/meta effort over mathematics effort, by rig.</p>"
+        f'<p class="lede"><strong>{unpriced_count}</strong> run'
+        f'{"" if unpriced_count == 1 else "s"} unpriced — excluded from any dollar '
+        "estimate, never valued at zero.</p>"
+    )
+    if unclassified_tokens:
+        body += (
+            f'<p class="note"><strong>{unclassified_tokens:,}</strong> token'
+            f'{"" if unclassified_tokens == 1 else "s"} could not be attributed to '
+            "either side of the ratio (the rig matched neither list, or its worker "
+            "could not be resolved to a rig) and are reported separately, never "
+            "folded into meta or math.</p>"
+        )
+
+    windows: Sequence[Mapping[str, Any]] = payload.get("windows") or []
+    if windows:
+        rows = "".join(
+            f'<li><span class="mono">{_e(str(w.get("window")))}</span> — '  # single-shape-ok: costs_summary window row
+            f'{int(w.get("total_tokens") or 0):,} tokens, ratio {_e(_fmt_ratio(w.get("meta_work_ratio")))}</li>'
+            for w in windows[-30:]
+        )
+        body += f'<h3>By window (trend)</h3><ul class="reason-list">{rows}</ul>'
+
+    return _panel("Costs", body, region="city-costs")
+
+
+#: `worktrees_status` (#120): the rig roster (or every registered rig's own
+#: `git worktree list`) failed -- distinct from `MWKT_ORPHAN_UNDERIVABLE` /
+#: `MWKT_CREATED_BY_UNRECORDED` / `MWKT_SIZE_UNKNOWN`, which are informational
+#: and fire on a SUCCESSFUL read that still carries honest gaps.
+WORKTREES_FAILURE_CODES: frozenset[str] = frozenset({"MWKT_WORKTREES_UNREACHABLE"})
+
+#: The typed sentinel `mctl_core.worktrees.UNRECORDED` uses for "nothing
+#: records this field today" -- distinct from a real (possibly empty) value
+#: and distinct from a read failure. Duplicated here rather than imported so
+#: this render module has no import-time dependency on `mctl_core` (matching
+#: every other renderer in this file).
+_UNRECORDED = "unrecorded"
+
+
+def _owner_cell(value: Any) -> str:
+    """The unrecorded sentinel renders as an em dash -- visually distinct
+    from a real recorded value, which may itself legitimately be empty."""
+    if value == _UNRECORDED:
+        return "—"
+    text = str(value) if value not in (None, "") else "(empty)"
+    return _e(text)
+
+
+def _fmt_tri(value: Any) -> str:
+    """A three-valued flag (`True`/`False`/`None`), rendered as `yes`/`no`/
+    `unknown` -- `None` is a real "we do not know", never treated as `False`."""
+    if value is True:
+        return "yes"
+    if value is False:
+        return "no"
+    return "unknown"
+
+
+def _fmt_age(seconds: Any) -> str:
+    if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+        return "unknown"
+    return f"{seconds / 86400.0:.1f}d"
+
+
+def _fmt_size(size_bytes: Any) -> str:
+    if not isinstance(size_bytes, (int, float)) or isinstance(size_bytes, bool):
+        return "unknown"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def worktrees(payload: Mapping[str, Any]) -> str:
+    """Worktree inventory keyed by path, or an honest statement that it is
+    unknown (#120).
+
+    `state == "unreachable"` means the rig roster itself -- or every
+    registered rig's own `git worktree list` -- could not be read: every
+    count is unknown, never zero. `created_by`/`step`/`molecule` render as an
+    em dash when the row carries the `unrecorded` sentinel, kept visually
+    distinct from a real (possibly empty) value. `is_orphan` and
+    `is_registered` render as two separate columns -- never folded into one,
+    per the brief: different problems, different remedies.
+    """
+    state = str(payload.get("state") or "unknown")
+    if state == "unreachable":
+        codes = tuple(c for c in _codes(payload) if c in WORKTREES_FAILURE_CODES)
+        return _panel(
+            "Worktrees",
+            '<p class="lede"><strong>The worktree inventory is unknown.</strong> The rig '
+            "roster — or every registered rig's own read — could not be answered, so "
+            "this is not a city with no worktrees, it is worktrees we could not look "
+            "at.</p>"
+            + (f'<p class="mono">{_e(" · ".join(codes))}</p>' if codes else ""),
+            region="city-worktrees",
+        )
+
+    rows: Sequence[Mapping[str, Any]] = payload.get("worktrees") or []
+    total = payload.get("total") or 0
+    harvestable_count = payload.get("harvestable_count")
+
+    body = (
+        f'<p class="lede"><strong>{total}</strong> worktree{"" if total == 1 else "s"} '
+        "across every registered rig, keyed by path.</p>"
+    )
+    if harvestable_count is not None:
+        body += (
+            f'<p class="lede"><strong>{harvestable_count}</strong> harvestable '
+            "(git itself reports the directory gone).</p>"
+        )
+
+    if not rows:
+        return _panel("Worktrees", body, region="city-worktrees")
+
+    header = (
+        "<thead><tr><th>Path</th><th>Rig</th><th>Branch</th><th>Molecule</th>"
+        "<th>Created by</th><th>Step</th><th>Merged</th><th>Age</th><th>Size</th>"
+        "<th>Orphan</th><th>Registered</th><th>Harvestable</th><th>Commits</th></tr></thead>"
+    )
+    body_rows = []
+    for row in rows:
+        path = str(row.get("path") or "")
+        url = row.get("url")
+        path_cell = f'<a href="{_e(str(url))}">{_e(path)}</a>' if url else _e(path)
+        branch = row.get("branch")
+        body_rows.append(
+            "<tr>"
+            f'<td class="mono">{path_cell}</td>'  # single-shape-ok: worktrees_status row, not a brief
+            f'<td>{_e(str(row.get("rig") or "unknown"))}</td>'
+            f'<td class="mono">{_e(str(branch)) if branch else "(detached)"}</td>'
+            f"<td>{_owner_cell(row.get('molecule'))}</td>"
+            f"<td>{_owner_cell(row.get('created_by'))}</td>"
+            f"<td>{_owner_cell(row.get('step'))}</td>"
+            f"<td>{_fmt_tri(row.get('merged'))}</td>"
+            f"<td>{_fmt_age(row.get('age_seconds'))}</td>"
+            f"<td>{_fmt_size(row.get('size_bytes'))}</td>"
+            f"<td>{_fmt_tri(row.get('is_orphan'))}</td>"
+            f"<td>{_fmt_tri(row.get('is_registered'))}</td>"
+            f"<td>{_fmt_tri(row.get('harvestable'))}</td>"
+            f'<td>{row.get("commits") if row.get("commits") is not None else "unknown"}</td>'
+            "</tr>"
+        )
+    body += f'<div class="scroll-x"><table>{header}<tbody>{"".join(body_rows)}</tbody></table></div>'
+
+    codes = _codes(payload)
+    if codes:
+        body += f'<p class="mono">{_e(" · ".join(codes))}</p>'
+
+    return _panel("Worktrees", body, region="city-worktrees")
+
+
 def unwired(tool: str, *, module: str, issue: int) -> str:
     """A surface whose backend exists and which no page can call.
 

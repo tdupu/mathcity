@@ -534,6 +534,48 @@ def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
     return formulas_catalog(city_reader(ctx.city_root))
 
 
+def _handle_queue_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """The QUEUE column: six populations, city-scoped to one rig's `bd` store (#113).
+
+    `queue_status`/`city_reader` live in `mctl_core/queue.py`, shaped from
+    `bd`'s own `ready --explain` / `ready --unassigned` / `list --deferred`
+    reads rather than a hand-rolled dependency walk -- see that module's
+    docstring for the measurement backing each population.
+    """
+    from .queue import city_reader, queue_status
+
+    return queue_status(city_reader(ctx.rig_root))
+
+
+def _handle_costs_summary(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Token bucketing + the meta-work ratio, city-scoped to `.gc/usage.jsonl` (#118).
+
+    `costs_summary`/`city_reader` live in `mctl_core/costs.py`, reading the
+    same local usage log `gc costs` reads -- `gc costs` declares no JSON
+    output, so this reads the file directly rather than parsing a tabwriter
+    table, exactly as `_handle_orders_status` reads `.gc/events.jsonl`
+    directly instead of shelling to a slow `gc` subcommand.
+    """
+    from .costs import city_reader, costs_summary
+
+    return costs_summary(city_reader(ctx.city_root))
+
+
+def _handle_worktrees_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Worktree inventory across every registered rig, keyed by path (#120).
+
+    `worktrees_status`/`city_reader` live in `mctl_core/worktrees.py`, reading
+    `git worktree list --porcelain` once per registered rig -- the same
+    read-only enumeration a caller could run by hand, never a filesystem walk
+    that could reach the frozen `~/gt/hecke/` orphans (which have zero
+    overlap with `git worktree list` and so are structurally unreachable from
+    this tool).
+    """
+    from .worktrees import city_reader, worktrees_status
+
+    return worktrees_status(city_reader(scope))
+
+
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     payload = dict(ctx.to_dict())
     payload["diagnostics"] = [warning.to_dict() for warning in ctx.warnings]
@@ -1432,6 +1474,257 @@ TOOLS: tuple[ToolSpec, ...] = (
         handler=_handle_formulas_catalog,
     ),
     ToolSpec(
+        name="queue_status",
+        title="Queue status",
+        description=(
+            "The rig's work queue as six populations: ready+unclaimed, blocked "
+            "(with what it waits on), tail (ready but never dispatched), starved "
+            "(blocked and idle), deferred (deliberately parked, with its expiry), "
+            "and a predicted next-up order. `next_up_is_prediction` is always "
+            "true -- the dispatcher discards priority at dispatch, so order is "
+            "reproducible but arbitrary, never a guarantee."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "next_up_is_prediction": {"type": "boolean"},
+                "ready_unclaimed": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "priority": {"type": ["integer", "null"]},
+                        },
+                    },
+                },
+                "blocked": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "blocked_on": {"type": ["string", "null"]},
+                            "blocked_on_title": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+                "tail": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "priority": {"type": ["integer", "null"]},
+                        },
+                    },
+                },
+                "starved": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "blocked_on": {"type": ["string", "null"]},
+                            "blocked_on_title": {"type": ["string", "null"]},
+                            "idle_seconds": {"type": ["number", "null"]},
+                        },
+                    },
+                },
+                "deferred": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "until": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+                "next_up": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "bead_id": {"type": ["string", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "priority": {"type": ["integer", "null"]},
+                        },
+                    },
+                },
+            },
+            [
+                "state",
+                "next_up_is_prediction",
+                "ready_unclaimed",
+                "blocked",
+                "tail",
+                "starved",
+                "deferred",
+                "next_up",
+            ],
+        ),
+        handler=_handle_queue_status,
+    ),
+    ToolSpec(
+        name="costs_summary",
+        title="Costs summary",
+        description=(
+            "Token spend bucketed by window, with the meta-work ratio (city/meta effort vs "
+            "mathematics effort, classified by rig prefix) as the headline measure. Unit is "
+            "tokens, with worker-hours beside it -- never bead count. Runs whose price is "
+            "unknown are counted in `unpriced_count`, never valued at zero; a rig matching "
+            "neither side of the ratio is its own `unclassified_tokens` bucket, never folded "
+            "into either. `windows` is a per-window series so the ratio's TREND is renderable, "
+            "not just its latest value."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total_tokens": {"type": ["integer", "null"]},
+                "worker_hours": {"type": ["number", "null"]},
+                "unpriced_count": {"type": ["integer", "null"]},
+                "unclassified_tokens": {"type": ["integer", "null"]},
+                "meta_work_ratio": {
+                    "type": "object",
+                    "title": "MetaWorkRatio",
+                    "description": "City/meta tokens over math tokens, with both parts carried alongside the computed value.",
+                    "properties": {
+                        "numerator": {"type": ["integer", "null"], "description": "City/meta-side tokens."},
+                        "denominator": {"type": ["integer", "null"], "description": "Math-side tokens."},
+                        "ratio": {
+                            "type": ["number", "null"],
+                            "description": "numerator/denominator; null when denominator is 0, never a fabricated value.",
+                        },
+                    },
+                    "required": ["numerator", "denominator", "ratio"],
+                    "additionalProperties": False,
+                },
+                "windows": {
+                    "type": ["array", "null"],
+                    "description": "One entry per calendar-day window, oldest first -- the trend series.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "window": {"type": "string"},
+                            "total_tokens": {"type": "integer"},
+                            "meta_tokens": {"type": "integer"},
+                            "math_tokens": {"type": "integer"},
+                            "unclassified_tokens": {"type": "integer"},
+                            "worker_hours": {"type": "number"},
+                            "unpriced_count": {"type": "integer"},
+                            "meta_work_ratio": {"type": ["number", "null"]},
+                        },
+                    },
+                },
+            },
+            [
+                "state",
+                "total_tokens",
+                "worker_hours",
+                "unpriced_count",
+                "unclassified_tokens",
+                "meta_work_ratio",
+                "windows",
+            ],
+        ),
+        handler=_handle_costs_summary,
+    ),
+    ToolSpec(
+        name="worktrees_status",
+        title="Worktree inventory",
+        description=(
+            "Every git worktree across every registered rig, keyed by PATH (not id -- "
+            "measured 2026-08-20, two ids repeat under different parents). `is_orphan` (no "
+            "live session, no open bead) and `is_registered` (git still knows it) are "
+            "separate flags, never merged; `is_orphan` is null today because no data source "
+            "joins a worktree path to a live session or a bead (see MWKT_ORPHAN_UNDERIVABLE). "
+            "`created_by`/`step`/`molecule` are the literal string 'unrecorded' -- nothing "
+            "records them at creation time yet, and 'unrecorded' is a distinct sentinel from "
+            "both null (a read failure) and a real empty owner. `harvestable` and `merged`/"
+            "`commits` are real, computed git facts (prunable flag; ancestry against the "
+            "rig's primary branch). Sourced from `git worktree list --porcelain` only, so the "
+            "frozen orphan directories under ~/gt/hecke/ (zero overlap with that listing) are "
+            "structurally unreachable from this tool, never walked."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "total": {"type": ["integer", "null"]},
+                "orphans": {
+                    "type": ["integer", "null"],
+                    "description": "Always null today -- is_orphan is undeterminable per row; see MWKT_ORPHAN_UNDERIVABLE.",
+                },
+                "harvestable_count": {"type": ["integer", "null"]},
+                "worktrees": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": ["string", "null"]},
+                            "rig": {"type": ["string", "null"]},
+                            "branch": {"type": ["string", "null"]},
+                            "molecule": {
+                                "type": "string",
+                                "description": "'unrecorded' today for every row; see tool description.",
+                            },
+                            "created_by": {
+                                "type": "string",
+                                "description": "'unrecorded' today for every row; see tool description.",
+                            },
+                            "step": {
+                                "type": "string",
+                                "description": "'unrecorded' today for every row; see tool description.",
+                            },
+                            "merged": {"type": ["boolean", "null"]},
+                            "age_seconds": {"type": ["number", "null"]},
+                            "size_bytes": {"type": ["integer", "null"]},
+                            "is_orphan": {
+                                "type": ["boolean", "null"],
+                                "description": "Always null today; see MWKT_ORPHAN_UNDERIVABLE.",
+                            },
+                            "is_registered": {
+                                "type": "boolean",
+                                "description": "Always true today by construction -- see tool description.",
+                            },
+                            "harvestable": {"type": "boolean"},
+                            "commits": {"type": ["integer", "null"]},
+                            "url": {"type": ["string", "null"]},
+                        },
+                        "required": [
+                            "path",
+                            "rig",
+                            "branch",
+                            "molecule",
+                            "created_by",
+                            "step",
+                            "merged",
+                            "age_seconds",
+                            "size_bytes",
+                            "is_orphan",
+                            "is_registered",
+                            "harvestable",
+                            "commits",
+                            "url",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            ["state", "total", "orphans", "harvestable_count", "worktrees"],
+        ),
+        handler=_handle_worktrees_status,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
         name="context_resolve",
         title="Resolve runtime context",
         description="Resolve one registered Gas City rig, exactly as `mctl context --json` does.",
@@ -1796,10 +2089,15 @@ TOOLS: tuple[ToolSpec, ...] = (
             "says otherwise -- building the edge from that sentence reverses it. "
             "Re-dispatching one source bead mints a NEW root, so four attempts are four "
             "molecules, which is what makes repeated attempts visible. "
-            "NO `state` FIELD: advancing/stalled/stranded need the evidence chain (#115), "
-            "which records nothing today, and a row showing a state it cannot derive would "
-            "be worse than one that omits it. An unreadable store yields a diagnostic and "
-            "no rows -- never a bare empty list."
+            "NO `state` FIELD: advancing/stalled/stranded need the FULL evidence chain, ruled "
+            "not buildable as specified (#115: four of five links have no emitter). When "
+            "`with_steps` is set, each step DOES carry the buildable slice: `is_complete` "
+            "(three-valued `complete`/`incomplete`/`unknown`, derived ONLY from declared "
+            "`expected_artifacts` (#142) versus actual `artifacts`, never from bead status), "
+            "and `evidence.links` -- all five links (claimed/agent_active/commit/artifact/"
+            "step_closed), each `recorded`/`not_yet`/`not_recorded`. `not_recorded` names a "
+            "link with no emitter in this city today; `evidence.broken_at` NEVER names one. "
+            "An unreadable store yields a diagnostic and no rows -- never a bare empty list."
         ),
         input_schema=request_schema(
             {
@@ -1822,7 +2120,12 @@ TOOLS: tuple[ToolSpec, ...] = (
             "One molecule with its steps, by root bead id. A missing id and an id that "
             "exists but is not a molecule root are DIFFERENT diagnostics: 'no such molecule' "
             "is an answer, 'that is a step, not a run' is a different answer, and neither is "
-            "an empty result."
+            "an empty result. Always includes steps, each carrying the #115 evidence core: "
+            "`expected_artifacts` (declared, #142, or null -- no declaration), `artifacts` "
+            "(actual, from `gc.build.*`), the three-valued `is_complete` derived from the two "
+            "(NEVER from bead status), and `evidence.links` for all five links with an honest "
+            "tri-state (`not_recorded` for claimed/agent_active/commit, which have no emitter "
+            "today; `evidence.broken_at` never names one of those three)."
         ),
         input_schema=request_schema(
             {"molecule_id": {"type": "string", "description": "The molecule's ROOT bead id."}},

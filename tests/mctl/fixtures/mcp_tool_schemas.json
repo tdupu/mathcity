@@ -7953,6 +7953,279 @@
     },
     "title": "List registered rigs"
   },
+  "costs_summary": {
+    "description": "Token spend bucketed by window, with the meta-work ratio (city/meta effort vs mathematics effort, classified by rig prefix) as the headline measure. Unit is tokens, with worker-hours beside it -- never bead count. Runs whose price is unknown are counted in `unpriced_count`, never valued at zero; a rig matching neither side of the ratio is its own `unclassified_tokens` bucket, never folded into either. `windows` is a per-window series so the ratio's TREND is renderable, not just its latest value.",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "meta_work_ratio": {
+          "additionalProperties": false,
+          "description": "City/meta tokens over math tokens, with both parts carried alongside the computed value.",
+          "properties": {
+            "denominator": {
+              "description": "Math-side tokens.",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "numerator": {
+              "description": "City/meta-side tokens.",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ratio": {
+              "description": "numerator/denominator; null when denominator is 0, never a fabricated value.",
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "numerator",
+            "denominator",
+            "ratio"
+          ],
+          "title": "MetaWorkRatio",
+          "type": "object"
+        },
+        "state": {
+          "type": "string"
+        },
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        },
+        "unclassified_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "unpriced_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "windows": {
+          "description": "One entry per calendar-day window, oldest first -- the trend series.",
+          "items": {
+            "properties": {
+              "math_tokens": {
+                "type": "integer"
+              },
+              "meta_tokens": {
+                "type": "integer"
+              },
+              "meta_work_ratio": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "total_tokens": {
+                "type": "integer"
+              },
+              "unclassified_tokens": {
+                "type": "integer"
+              },
+              "unpriced_count": {
+                "type": "integer"
+              },
+              "window": {
+                "type": "string"
+              },
+              "worker_hours": {
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "worker_hours": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "diagnostics",
+        "meta_work_ratio",
+        "state",
+        "total_tokens",
+        "trace_id",
+        "unclassified_tokens",
+        "unpriced_count",
+        "windows",
+        "worker_hours"
+      ],
+      "type": "object"
+    },
+    "title": "Costs summary"
+  },
   "create_defect_bead": {
     "description": "Mint an OPEN task bead recording a defect that has no GitHub issue yet (#185) -- the 'not conversely' case of the owner's rule that issues are always paired with a bead but beads need not have issues. Carries metadata.defect_report=true and no gh.issue key, and maps a priority/pN label to bd priority. Refuses to mint an orphan duplicate of an open defect of the same title. Dry run by default.",
     "external_ready": false,
@@ -12461,7 +12734,7 @@
     "title": "Mayor: conservation check"
   },
   "molecules_list": {
-    "description": "Every molecule in this rig -- one row per RUN, not per work item. A molecule is a workflow root bead (`gc.kind == \"workflow\"`, an EXACT match: every step kind also startswith `workflow`). Its steps are the beads that point AT it via `gc.root_bead_id`; the root does NOT carry that key, and the dashboard handoff says otherwise -- building the edge from that sentence reverses it. Re-dispatching one source bead mints a NEW root, so four attempts are four molecules, which is what makes repeated attempts visible. NO `state` FIELD: advancing/stalled/stranded need the evidence chain (#115), which records nothing today, and a row showing a state it cannot derive would be worse than one that omits it. An unreadable store yields a diagnostic and no rows -- never a bare empty list.",
+    "description": "Every molecule in this rig -- one row per RUN, not per work item. A molecule is a workflow root bead (`gc.kind == \"workflow\"`, an EXACT match: every step kind also startswith `workflow`). Its steps are the beads that point AT it via `gc.root_bead_id`; the root does NOT carry that key, and the dashboard handoff says otherwise -- building the edge from that sentence reverses it. Re-dispatching one source bead mints a NEW root, so four attempts are four molecules, which is what makes repeated attempts visible. NO `state` FIELD: advancing/stalled/stranded need the FULL evidence chain, ruled not buildable as specified (#115: four of five links have no emitter). When `with_steps` is set, each step DOES carry the buildable slice: `is_complete` (three-valued `complete`/`incomplete`/`unknown`, derived ONLY from declared `expected_artifacts` (#142) versus actual `artifacts`, never from bead status), and `evidence.links` -- all five links (claimed/agent_active/commit/artifact/step_closed), each `recorded`/`not_yet`/`not_recorded`. `not_recorded` names a link with no emitter in this city today; `evidence.broken_at` NEVER names one. An unreadable store yields a diagnostic and no rows -- never a bare empty list.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -12639,7 +12912,7 @@
     "title": "List molecules"
   },
   "molecules_show": {
-    "description": "One molecule with its steps, by root bead id. A missing id and an id that exists but is not a molecule root are DIFFERENT diagnostics: 'no such molecule' is an answer, 'that is a step, not a run' is a different answer, and neither is an empty result.",
+    "description": "One molecule with its steps, by root bead id. A missing id and an id that exists but is not a molecule root are DIFFERENT diagnostics: 'no such molecule' is an answer, 'that is a step, not a run' is a different answer, and neither is an empty result. Always includes steps, each carrying the #115 evidence core: `expected_artifacts` (declared, #142, or null -- no declaration), `artifacts` (actual, from `gc.build.*`), the three-valued `is_complete` derived from the two (NEVER from bead status), and `evidence.links` for all five links with an honest tri-state (`not_recorded` for claimed/agent_active/commit, which have no emitter today; `evidence.broken_at` never names one of those three).",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -13043,6 +13316,378 @@
       "type": "object"
     },
     "title": "Order status with outcomes"
+  },
+  "queue_status": {
+    "description": "The rig's work queue as six populations: ready+unclaimed, blocked (with what it waits on), tail (ready but never dispatched), starved (blocked and idle), deferred (deliberately parked, with its expiry), and a predicted next-up order. `next_up_is_prediction` is always true -- the dispatcher discards priority at dispatch, so order is reproducible but arbitrary, never a guarantee.",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "blocked": {
+          "items": {
+            "properties": {
+              "bead_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "blocked_on": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "blocked_on_title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "deferred": {
+          "items": {
+            "properties": {
+              "bead_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "until": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "next_up": {
+          "items": {
+            "properties": {
+              "bead_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "priority": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "next_up_is_prediction": {
+          "type": "boolean"
+        },
+        "ready_unclaimed": {
+          "items": {
+            "properties": {
+              "bead_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "priority": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "starved": {
+          "items": {
+            "properties": {
+              "bead_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "blocked_on": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "blocked_on_title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "idle_seconds": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "state": {
+          "type": "string"
+        },
+        "tail": {
+          "items": {
+            "properties": {
+              "bead_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "priority": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "blocked",
+        "deferred",
+        "diagnostics",
+        "next_up",
+        "next_up_is_prediction",
+        "ready_unclaimed",
+        "starved",
+        "state",
+        "tail",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Queue status"
   },
   "standardize_github_issue": {
     "description": "Make an existing GitHub issue hygienic in place (#185/#52) by APPENDING a '## Standardized restatement' section. Additive only: every existing byte of the body is preserved -- never consolidated, because an agent-tracker's issue history is evidence. Idempotent: a second run detects the marker and no-ops. Dry run by default, and posts nothing on a preview.",
@@ -16216,5 +16861,300 @@
       "type": "object"
     },
     "title": "Show work readiness"
+  },
+  "worktrees_status": {
+    "description": "Every git worktree across every registered rig, keyed by PATH (not id -- measured 2026-08-20, two ids repeat under different parents). `is_orphan` (no live session, no open bead) and `is_registered` (git still knows it) are separate flags, never merged; `is_orphan` is null today because no data source joins a worktree path to a live session or a bead (see MWKT_ORPHAN_UNDERIVABLE). `created_by`/`step`/`molecule` are the literal string 'unrecorded' -- nothing records them at creation time yet, and 'unrecorded' is a distinct sentinel from both null (a read failure) and a real empty owner. `harvestable` and `merged`/`commits` are real, computed git facts (prunable flag; ancestry against the rig's primary branch). Sourced from `git worktree list --porcelain` only, so the frozen orphan directories under ~/gt/hecke/ (zero overlap with that listing) are structurally unreachable from this tool, never walked.",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "harvestable_count": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "orphans": {
+          "description": "Always null today -- is_orphan is undeterminable per row; see MWKT_ORPHAN_UNDERIVABLE.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "type": "string"
+        },
+        "total": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        },
+        "worktrees": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "age_seconds": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "branch": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "commits": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "created_by": {
+                "description": "'unrecorded' today for every row; see tool description.",
+                "type": "string"
+              },
+              "harvestable": {
+                "type": "boolean"
+              },
+              "is_orphan": {
+                "description": "Always null today; see MWKT_ORPHAN_UNDERIVABLE.",
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "is_registered": {
+                "description": "Always true today by construction -- see tool description.",
+                "type": "boolean"
+              },
+              "merged": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "molecule": {
+                "description": "'unrecorded' today for every row; see tool description.",
+                "type": "string"
+              },
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "size_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "step": {
+                "description": "'unrecorded' today for every row; see tool description.",
+                "type": "string"
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "rig",
+              "branch",
+              "molecule",
+              "created_by",
+              "step",
+              "merged",
+              "age_seconds",
+              "size_bytes",
+              "is_orphan",
+              "is_registered",
+              "harvestable",
+              "commits",
+              "url"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "diagnostics",
+        "harvestable_count",
+        "orphans",
+        "state",
+        "total",
+        "trace_id",
+        "worktrees"
+      ],
+      "type": "object"
+    },
+    "title": "Worktree inventory"
   }
 }
