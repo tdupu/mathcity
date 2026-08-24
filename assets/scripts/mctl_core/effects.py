@@ -723,7 +723,32 @@ def plan_adjudication(
     verdict: str | None,
     reason: str | None,
     option: str | None = None,
+    adjudicated_by: str | None = None,
 ) -> EffectPlan:
+    """Record a verdict on a brief bead.
+
+    `adjudicated_by` is the RECORDING half of #152. Three MCP calls compose
+    into self-authorisation -- `briefs_create`, `briefs_adjudicate(approve)`,
+    `work_dispatch` -- because step 2 supplies the approving verdict step 3
+    demands. The rule that a reviewer must not be the author is enforced
+    socially on branches and by nothing at all here.
+
+    This does NOT refuse self-adjudication; that is a policy decision with its
+    own blast radius. It makes self-adjudication VISIBLE, which is #152's own
+    stated minimum: silent self-approval is the unacceptable case.
+
+    `requested_by` is written at create and `adjudicated_by` is written here,
+    onto the SAME bead -- so an auditor derives "did the author approve their
+    own brief?" at read time. It is deliberately not computed at write time:
+    that needs the bead's own metadata, `_beads()` is not cached, and every
+    adjudication would pay a second `bd` subprocess (9-11s on the largest rig)
+    to answer a question nobody is asking at that moment.
+
+    Omitting it is allowed and LOUD: an adjudication with no recorded
+    adjudicator is unattributable, so it emits MBRF_ADJUDICATOR_UNRECORDED at
+    WARN. WARN and not ERROR because an ERROR would become a precondition and
+    block the write, which is the gate half.
+    """
     normalized = _normalize_verdict(ctx, verdict, brief_id)
     reason = _require_reason(ctx, reason, brief_id)
     observed = show_brief(ctx, brief_id)
@@ -786,6 +811,29 @@ def plan_adjudication(
     }
     if option:
         metadata["verdict_option"] = option
+    # Pairs with `requested_by`, written at create. Both on one bead is what
+    # makes self-approval auditable -- see this function's docstring.
+    if adjudicated_by and adjudicated_by.strip():
+        metadata["adjudicated_by"] = adjudicated_by.strip()
+    else:
+        # Loud, not blocking -- so it is an ADVISORY, not a precondition.
+        # `diagnostics` is already frozen to a tuple by here and feeds
+        # `preconditions`, which BLOCKS the mutation; appending there would
+        # have made the recording half refuse writes, i.e. silently become the
+        # gate half. An unattributable adjudication is the case #152 calls
+        # unacceptable when it happens SILENTLY -- the fix is noise, not a
+        # refusal.
+        returned_advisories = [
+            *returned_advisories,
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MBRF_ADJUDICATOR_UNRECORDED",
+                "This verdict records no adjudicator, so it cannot be attributed "
+                "and self-approval cannot be detected. Pass adjudicated_by.",
+                brief_id=brief_id,
+            ),
+        ]
     cache_fields = {
         "adjudicated_at": now,
         "status": "adjudicated",
