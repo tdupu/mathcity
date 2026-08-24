@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import os
 from pathlib import Path
 import re
 import sys
@@ -136,11 +137,36 @@ def serve_from_args(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     print(f"  MCP client class: internal (all 16 tools); server: {' '.join(client.command)}", file=sys.stderr)
+
+    # #207: stamp this process so dashboard_status/dashboard_restart can see it.
+    # Best-effort and never fatal to serving: the stamp names pid, the bound
+    # port, and the commit THIS process imported (serving.SERVING_COMMIT,
+    # captured once at import -- the #210 semantic). Removed on shutdown so a
+    # dead stamp cannot masquerade as a live dashboard (#154).
+    from pathlib import Path as _Path
+    from mctl_core import dashboards as _dashboards, serving as _serving
+
+    bound_port = httpd.server_address[1]
+    stamp_city = _Path(args.city) if args.city else _Path.cwd()
+    try:
+        _dashboards.write_stamp(
+            stamp_city,
+            pid=os.getpid(),
+            host=args.host,
+            port=bound_port,
+            url=url,
+            rig=args.rig,
+            serving_commit=_serving.SERVING_COMMIT,
+            started_at=_serving.SERVER_STARTED_AT,
+        )
+    except OSError:
+        pass  # a dashboard that cannot stamp itself still serves
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        _dashboards.remove_stamp(stamp_city, os.getpid())
         httpd.server_close()
         client.close()
     return 0

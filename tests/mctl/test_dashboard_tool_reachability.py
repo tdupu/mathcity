@@ -46,6 +46,8 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
         "surface would let the dashboard mint approved work with no record of "
         "who asked (v2 R8.2). Same footing as briefs_create, one step further."
     ),
+    "dashboard_status": "reports which dashboards are running; a Mayor's lifecycle read (#207), not something a dashboard calls about itself",
+    "dashboard_restart": "mutating lifecycle action -- a Mayor stops and re-serves a stale dashboard deliberately (#207); a page does not restart itself",
     "mayor_boot": "a lifecycle action, not a read the page performs",
     "mayor_conservation": "not yet surfaced; no screen consumes it",
     "mayor_city_state": "not yet surfaced; no screen consumes it",
