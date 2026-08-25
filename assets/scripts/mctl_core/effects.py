@@ -12,7 +12,7 @@ import re
 import tempfile
 import tomllib
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from .beads import (
     BD_LIST_ARGS,
@@ -46,6 +46,7 @@ from .briefs import (
     validate_brief_input,
 )
 from .context import MctlContext
+from .commission import brief_labels, tracker_metadata, validate_commission
 from .diagnostics import Diagnostic, Severity
 from .events import append_jsonl
 from .materialize_plan import FRONTMATTER_LINE
@@ -856,7 +857,7 @@ def plan_commission_brief(
     parallel implementation.
     """
     validate_commission(
-        sources=(bead_id,), bead_rig=bead_rig, brief_rig=ctx.rig_name
+        sources=(bead_id,), bead_rig=bead_rig, brief_rig=ctx.rig_id
     )
     metadata = (
         tracker_metadata(issue_url=issue_url, labels=issue_labels) if issue_url else {}

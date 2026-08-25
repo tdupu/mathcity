@@ -37,6 +37,10 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from mctl_core import commission  # noqa: E402
+from mctl_core.context import resolve_context  # noqa: E402
+from mctl_core.effects import plan_commission_brief  # noqa: E402
+
+from test_mcp_server import empty_rig_fixture  # noqa: E402
 
 
 class TestSourcesAreMandatory:
@@ -149,6 +153,36 @@ class TestPileOnly:
             if "layout.stack" in line or "stack_index" in line
         ]
         assert not offenders, f"B2.10: commission_brief must not write the stack: {offenders}"
+
+
+def test_plan_commission_brief_carries_commission_semantics_into_the_effect_plan(tmp_path):
+    city_root, rig_root = empty_rig_fixture(tmp_path)
+    ctx = resolve_context(
+        city_root,
+        city=city_root,
+        rig="mathcity",
+        require_runtime_city=True,
+        env={"MCTL_BEADS_FIXTURE": str(rig_root / ".beads" / "issues.jsonl")},
+    )
+
+    plan = plan_commission_brief(
+        ctx,
+        bead_id="mc-source",
+        title="Commission the source bead",
+        body=(
+            "## What is being decided\n\nProceed.\n\n"
+            "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+        ),
+        issue_url="https://github.com/tdupu/mathcity/issues/190",
+        issue_labels=("kind/feature", "priority/p1"),
+        bead_rig="mathcity",
+    )
+
+    create = plan.bead_creates[0]
+    assert create.labels == ("commission",)
+    assert create.sources == ("mc-source",)
+    assert create.metadata["gh.issue"] == "tdupu/mathcity#190"
+    assert create.metadata["gh.labels"] == "kind/feature,priority/p1"
 
 
 class TestMetadataReachesTheBead:
