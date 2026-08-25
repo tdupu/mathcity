@@ -267,9 +267,9 @@ h1, h2, h3 { font-family: var(--font-heading); font-weight: 600; }
    "a fact about this whole page", so both get the same banner treatment
    rather than the inset `.review-note` paragraph style, which is for notes
    inside a panel. The base is the quiet, neutral line the provenance banner
-   uses for "live data"; `.mc-banner-alert` is the loud accent variant it
-   uses when the news must stop the reader (fixtures, stale code, an unknown
-   age). Shared here so the two banners cannot drift apart. */
+   uses for a clean live-source note; `.mc-banner-alert` is the loud accent
+   variant it uses when the news must stop the reader (fixtures, stale code,
+   an unknown age). Shared here so the two banners cannot drift apart. */
 .mc-banner {
   padding: 7px 12px;
   font-family: var(--font-mono);
