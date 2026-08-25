@@ -264,6 +264,51 @@ def test_approve_other_records_a_revise_with_the_proposal(tmp_path):
 # --- §2: reason optional, labelled ------------------------------------------
 
 
+# --- §6.3: pages that read the listing pass the counts they read ------------
+
+
+def _nav_count(html: str, label_fragment: str) -> str:
+    """The count the sidebar renders next to the nav row whose label matches."""
+    rows = re.findall(
+        r'mc-navlink[^>]*>.*?<span>([^<]+)</span>.*?<span class="mono"[^>]*>(.*?)</span>',
+        html,
+        re.S,
+    )
+    for label, value in rows:
+        if label_fragment in label:
+            return "—" if "mdash" in value else re.sub(r"<[^>]+>", "", value).strip()
+    raise AssertionError(f"no nav row matching {label_fragment!r}")
+
+
+def test_the_briefs_list_page_counts_the_lanes_it_already_read(tmp_path):
+    """The /briefs page reads the whole listing, so it can count -- and must.
+
+    It rendered em dashes for stack/adjudicated/malformed even though it had the
+    briefs in hand; only pile/errors/nobrainer (no source, issue #66) stay dashed.
+    """
+    dashboard, _, _ = dashboard_for(tmp_path)
+
+    html = dashboard.handle(Request.get("/briefs")).body
+
+    assert _nav_count(html, "Stack").isdigit(), "stack was read; it must show a number"
+    assert _nav_count(html, "Adjudicated").isdigit()
+    assert _nav_count(html, "Malformed").isdigit()
+    # the honest dashes stay dashed -- those lanes have no source
+    assert _nav_count(html, "Pile") == "—"
+    assert _nav_count(html, "Error") == "—"
+    assert _nav_count(html, "No-brainer") == "—"
+
+
+def test_the_brief_detail_page_counts_the_lanes_it_already_read(tmp_path):
+    dashboard, _, _ = dashboard_for(tmp_path)
+
+    html = dashboard.handle(Request.get("/briefs/mc-open")).body
+
+    assert _nav_count(html, "Stack").isdigit()
+    assert _nav_count(html, "Adjudicated").isdigit()
+    assert _nav_count(html, "Pile") == "—"
+
+
 def test_the_reason_is_labelled_optional_and_has_no_minlength():
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel

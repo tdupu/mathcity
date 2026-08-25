@@ -870,7 +870,12 @@ class Dashboard:
             + "</section>",
             render.artifact_trust_panel(listing.artifact_trust, rig=self.rig),
         ]
-        return self._page("Briefs", "/briefs", context, sections)
+        # This page already read the whole listing, so it can count the lanes
+        # that have a source (#66-6.3). Passing the counts it already has stops
+        # the header/sidebar rendering em dashes for stack/adjudicated/malformed
+        # on a page that could measure them; pile/errors/nobrainer stay dashed
+        # because they genuinely have no source.
+        return self._page("Briefs", "/briefs", context, sections, counts=self._counts(briefs))
 
     def _city_briefs(self, request: Request, status: str | None, label: str | None) -> Response:
         selected = self._rig_for(request)
@@ -1029,6 +1034,15 @@ class Dashboard:
                 heading="Brief diagnostics",
             ),
         ]
+        # The detail page already fanned in the whole listing (for "brief N of
+        # M" and prev/next), so it can count the lanes that have a source
+        # (#66-6.3) instead of leaving the header/sidebar in em dashes. When the
+        # listing read failed it degrades to no counts rather than a wrong one.
+        counts = (
+            self._counts(list(listing.payload.get("briefs") or ()))
+            if listing is not None
+            else None
+        )
         return self._page(
             str(attr(brief, "title") or brief_id),
             "/briefs",
@@ -1039,6 +1053,7 @@ class Dashboard:
             # here is a third copy that pushes the title -- and the status
             # banner telling you whether you can act at all -- below the fold.
             context_bar="",
+            counts=counts,
         )
 
     def _rig_required(self, brief_id: str) -> Response:
