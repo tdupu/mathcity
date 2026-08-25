@@ -630,14 +630,22 @@ def test_the_no_brainer_flag_survives_refusal():
     assert 'name="no_brainer"' in html
 
 
-def test_a_reason_is_required():
-    """No bare verdict -- the reason is what a future reader actually reads."""
+def test_a_reason_is_optional():
+    """mc-qlmh: `reason` is ['string','null'] in briefs_adjudicate's schema and the
+    handler defaults it to '' -- a bare verdict is a call the tool accepts. The form
+    used to mark the reason textarea `required`, so a LEGAL state was unexpressible
+    through the only mutation path. The form must not add a mandatory constraint the
+    schema does not."""
+    import re
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
-    assert "required" in html
     assert 'name="reason"' in html
+    tag = re.search(r'<textarea name="reason"[^>]*>', html)
+    assert tag, "reason textarea present"
+    assert "required" not in tag.group(0), "reason must not be a required field (mc-qlmh)"
+    assert "minlength" not in tag.group(0), "no minimum length gate on an optional reason (mc-qlmh)"
 
 
 def test_the_verdict_set_stays_an_open_tuple_not_a_closed_enum():

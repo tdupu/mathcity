@@ -1,7 +1,10 @@
 """The adjudication panel: where a verdict is actually recorded.
 
 This is a **form**, not a widget. Verdict and disposition are radio inputs, the
-reason is a required textarea, and submitting posts to the existing `/preview`
+reason is an OPTIONAL textarea (briefs_adjudicate types `reason` as
+`["string", "null"]` and the handler defaults it to `""`, so a bare verdict is a
+legal call -- the form must not force what the schema does not; mc-qlmh), and
+submitting posts to the existing `/preview`
 route -- which already renders the DRY RUN effect plan, mints a single-use
 token and holds the three-fingerprint staleness guard. Reusing that path rather
 than building a parallel one is why the panel works with scripting disabled,
@@ -594,7 +597,7 @@ def entry(
         + _disposition_control(brief, rig=rig, selected=adopt_letter)
         +         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
-        '<textarea name="reason" required minlength="3" rows="3" '
+        '<textarea name="reason" rows="3" '
         'placeholder="Why this verdict — recorded on the brief bead." '
 
         'style="width: 100%; font-family: var(--font-body); font-size: 13px; '
