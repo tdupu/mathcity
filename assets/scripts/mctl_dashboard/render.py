@@ -302,8 +302,16 @@ def masthead(
     mapping, so a chip cannot come to disagree with its destination.
     """
     city = context.get("city_root") or context.get("city_active") or "—"
-    rig = context.get("rig_id") or "all rigs"  # single-shape-ok: context_resolve payload
-    store = context.get("rig_db") or ".beads"
+    rig_id = context.get("rig_id")  # single-shape-ok: context_resolve payload
+    rig = rig_id or "all rigs"
+    # `context_resolve` defaults `rig_db` to the rig id when no distinct bead
+    # store is configured (see test_context_defaults_rig_db_to_rig_id...), so a
+    # plain `rig_db` here prints the rig name as if it were the store -- the
+    # running instance showed `store mathcity`. When `rig_db` is only the rig id
+    # echoed back it is not a store, so show the honest bead store, `.beads`; a
+    # genuinely distinct configured store name is real information and is kept.
+    rig_db = context.get("rig_db")
+    store = rig_db if (rig_db and rig_db != rig_id) else ".beads"
     # City-wide the rig is a choice, so it is a control; pinned to one rig it
     # is a fact, so it is text. Offering a picker on a single-rig dashboard
     # would imply a choice the deployment already made.
@@ -532,7 +540,12 @@ def page(
             *sections,
             "</main>",
             "</div>",
-            footer(trace_id),
+            # The footer trace is a correlation id for the request. Lane and
+            # brief pages never passed one explicitly, so the footer dropped it;
+            # but the shell already holds the `context_resolve` payload, which
+            # carries a `trace_id`. Fall back to it so those pages carry a trace
+            # too. An explicit trace_id (preview/apply) still wins.
+            footer(trace_id or str(context.get("trace_id") or "")),
             f"<script>{SCRIPT}</script>",
             "</body>",
             "</html>",

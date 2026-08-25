@@ -78,27 +78,38 @@ def read_head(repo: Path, *, timeout: float = HEAD_READ_TIMEOUT_SECONDS) -> str 
 
 
 def banner(state: Staleness) -> str:
-    """One line, always emitted, saying what code this page came from."""
+    """One line, always emitted, saying what code this page came from.
+
+    A full-width shell banner (theme's `.mc-banner`), matching the provenance
+    banner one row above it in the shell -- both are a fact about the whole
+    page, so both get banner treatment rather than the inset `.review-note`
+    paragraph style, which is for notes inside a panel. `.mc-banner-alert` is
+    the loud accent variant, used when the news must stop the reader: an
+    unknown age or older code. A clean match is quiet, like the provenance
+    banner's "live data" line.
+    """
     if not state.is_known:
         return (
-            '<p class="review-note" data-region="served-code" data-stale="unknown">'
+            '<div class="mc-banner mc-banner-alert" data-region="served-code" '
+            'data-stale="unknown" role="alert">'
             "<strong>The age of this code is unknown.</strong> The checkout's "
             "current commit could not be read, so this page cannot tell you "
             "whether the process is behind it — that is a statement about the "
-            "check, not a clean bill of health.</p>"
+            "check, not a clean bill of health.</div>"
         )
     if state.is_stale:
         return (
-            '<p class="review-note" data-region="served-code" data-stale="yes">'
+            '<div class="mc-banner mc-banner-alert" data-region="served-code" '
+            'data-stale="yes" role="alert">'
             f"<strong>This process is serving older code.</strong> Started from "
             f'<span class="mono">{_e(state.served or "")}</span>; the checkout is '
             f'now at <span class="mono">{_e(state.current or "")}</span>. '
             "Anything merged since is <em>not on this page</em> — it will render "
             "exactly as if it had never been built. <strong>Restart the dashboard "
-            "to pick it up.</strong></p>"
+            "to pick it up.</strong></div>"
         )
     return (
-        '<p class="review-note" data-region="served-code" data-stale="no">'
+        '<div class="mc-banner" data-region="served-code" data-stale="no">'
         f'Serving <span class="mono">{_e(state.served or "")}</span>, which matches '
-        "the checkout. Nothing merged is missing from this page.</p>"
+        "the checkout. Nothing merged is missing from this page.</div>"
     )

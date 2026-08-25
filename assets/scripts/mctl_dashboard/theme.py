@@ -261,6 +261,29 @@ h1, h2, h3 { font-family: var(--font-heading); font-weight: 600; }
   border-left-color: var(--color-accent-600);
 }
 
+/* --- shell banners ------------------------------------------------------ */
+/* Full-width strips that live in the document flow above the masthead --
+   the provenance banner and the served-code (staleness) banner. Both are
+   "a fact about this whole page", so both get the same banner treatment
+   rather than the inset `.review-note` paragraph style, which is for notes
+   inside a panel. The base is the quiet, neutral line the provenance banner
+   uses for "live data"; `.mc-banner-alert` is the loud accent variant it
+   uses when the news must stop the reader (fixtures, stale code, an unknown
+   age). Shared here so the two banners cannot drift apart. */
+.mc-banner {
+  padding: 7px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-700);
+  border-bottom: 1px solid var(--color-divider);
+}
+.mc-banner-alert {
+  background: var(--color-accent-200);
+  color: var(--color-accent-900);
+  border-bottom: 2px solid var(--color-accent-600);
+}
+
 /* --- tables: LMFDB .ntdata metrics -------------------------------------- */
 table.ntdata { border-collapse: collapse; width: 100%; }
 table.ntdata td {
