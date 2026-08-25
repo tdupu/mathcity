@@ -483,6 +483,66 @@ def test_the_decision_section_is_flagged_when_it_is_not_first():
     assert "decision-at-top" in html.lower()
 
 
+def test_section_marker_is_not_doubled_when_the_heading_carries_it():
+    """Present-it briefs author their headings as `## §1 — What is being decided`,
+    so the section's own `heading` already contains the § marker. The renderer
+    also prepends a computed `§1` marker, which produced `§1§1 — ...` on every
+    live brief. The marker must appear exactly once.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    payload = {
+        "bead_id": "mc-1",
+        "title": "t",
+        "sections": [
+            {"section_index": 1, "section_key": "what_is_being_decided",
+             "heading": "§1 — What is being decided", "body": "Pick A.",
+             "match": "heading"},
+        ],
+        "body_diagnostics": [],
+    }
+    html = brief.detail(payload, state.ViewState())
+    assert "§1§1" not in html, "the section number must not be doubled"
+    assert "What is being decided" in html
+    assert html.count("§1") == 1, "the § marker must appear exactly once"
+
+
+def test_a_section_mapped_twice_renders_once_and_states_the_collapse():
+    """Some bodies carry §4 twice — a human `§4 — Alternatives named` and an
+    appended machine `§4 — Options`, both classified to slot 4 — so the detail
+    drew the §4 heading twice (the "doubled body"). A present-it slot is
+    singular: render the first section that fills it, drop the later duplicate,
+    and say a duplicate heading was collapsed rather than hide it silently.
+    """
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import brief
+
+    payload = {
+        "bead_id": "mc-2",
+        "title": "t",
+        "sections": [
+            {"section_index": 1, "section_key": "what_is_being_decided",
+             "heading": "§1 — What is being decided", "body": "Pick A.",
+             "match": "heading"},
+            {"section_index": 4, "section_key": "alternatives_named",
+             "heading": "§4 — Alternatives named", "body": "The human list.",
+             "match": "explicit"},
+            {"section_index": 4, "section_key": "alternatives_named",
+             "heading": "§4 — Options", "body": "The machine appendix.",
+             "match": "explicit"},
+        ],
+        "body_diagnostics": [],
+    }
+    html = brief.detail(payload, state.ViewState())
+    # the §4 marker span is drawn once, not twice
+    assert html.count(">§4</span>") == 1, "the §4 heading must render once"
+    assert "The human list." in html, "the first §4 section is the one kept"
+    assert "collapse" in html.lower() or "duplicate" in html.lower(), (
+        "the collapse must be stated, not silent"
+    )
+
+
 def test_brief_detail_escapes_body_content():
     from mctl_dashboard import state
     from mctl_dashboard.screens import brief

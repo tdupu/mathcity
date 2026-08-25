@@ -204,3 +204,31 @@ def test_parser_ignores_bold_parens_outside_an_options_section():
 
     body = "# Brief\n\n## §2 — Analysis\n\n- **(A) Not an option.** Just prose.\n"
     assert parse_decision_options(body) == ()
+
+
+def test_a_doubled_options_section_yields_each_label_once():
+    """Some brief bodies carry §4 twice — a human `§4 — Alternatives named` and
+    an appended machine `§4 — Options` — so both sections enumerate A/B/C and the
+    parser produced six options (A,B,C,A,B,C). A label identifies an option, so a
+    repeat is a duplicate, not a new choice: each distinct label appears once,
+    keeping its first occurrence.
+    """
+    sys.path.insert(0, str(REPO_ROOT / "assets" / "scripts"))
+    from mctl_core.briefs import parse_decision_options
+
+    body = (
+        "# Brief\n\n"
+        "## §4 — Alternatives named\n\n"
+        "- **(A) Approve behind the spike.** *(recommended)*\n"
+        "- **(B) Reference-only interim.**\n"
+        "- **(C) Defer.**\n\n"
+        "## §4 — Options\n\n"
+        "- **(A) Approve behind the spike** *(recommended)* Fuller restatement.\n"
+        "- **(B) Reference-only interim** Restated.\n"
+        "- **(C) Defer** Park.\n"
+    )
+    options = parse_decision_options(body)
+
+    assert [o.label for o in options] == ["A", "B", "C"]
+    # first occurrence wins — the human alternatives heading, not the appendix
+    assert options[0].heading == "Approve behind the spike."

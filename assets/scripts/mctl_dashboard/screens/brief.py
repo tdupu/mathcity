@@ -32,6 +32,7 @@ core reports, which is the failure `client.py` exists to prevent.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Mapping, Sequence
 
 from mctl_dashboard import fields, knowl
@@ -39,6 +40,12 @@ from mctl_dashboard.reading import attr
 from mctl_dashboard.render import esc as _e
 from mctl_dashboard.state import ViewState
 from mctl_dashboard.theme import STOP
+
+#: A leading present-it section marker in an author's heading: `§4`, `§4 —`,
+#: `§4 -`. Present-it briefs write `## §4 — Alternatives named`, so the heading
+#: the core hands us already carries the marker; we render our own beside it and
+#: must not print both (`§4§4 — ...`).
+_LEADING_SECTION_MARKER = re.compile(r"^\s*§\s*\d+\s*[—–-]?\s*")
 
 #: §-number to the design's heading. From `mctl_core.briefs.PRESENT_IT_SECTIONS`.
 SECTION_LABELS: dict[int, str] = {
@@ -63,7 +70,10 @@ def _section_heading(section: Mapping[str, Any]) -> tuple[str, str]:
     index = section.get("section_index")
     heading = str(section.get("heading") or "").strip()
     if index in SECTION_LABELS:
-        return heading or SECTION_LABELS[int(index)], f"§{int(index)}"
+        # Drop the author's own `§N —` prefix so it is not doubled beside the
+        # marker we render; keep whatever titles the section after it.
+        titled = _LEADING_SECTION_MARKER.sub("", heading).strip()
+        return titled or SECTION_LABELS[int(index)], f"§{int(index)}"
     return heading or "Untitled section", ""
 
 
@@ -104,6 +114,27 @@ def _decision_at_top_notice(sections: Sequence[Mapping[str, Any]]) -> str:
         "<strong>Decision-at-Top not satisfied.</strong> This brief states what "
         "is being decided, but not first — the reader has to reconstruct the "
         "question before they can answer it. Rendered in the author's order.</p>"
+    )
+
+
+def _collapsed_sections_note(markers: Sequence[str]) -> str:
+    """Say a duplicate numbered section was collapsed, rather than hide it.
+
+    A body that repeats a present-it slot -- most often a machine `§4 — Options`
+    appended beside a human `§4 — Alternatives named` -- had its heading drawn
+    twice. Rendering only the first is correct, but silently dropping the second
+    would read as if the body were clean; the duplication is a body defect that
+    should be repaired at the source.
+    """
+    if not markers:
+        return ""
+    listed = ", ".join(markers)
+    plural = "s" if len(markers) > 1 else ""
+    return (
+        '<p class="review-note" data-region="sections-collapsed">'
+        f"This brief's body repeats the {listed} section{plural}; each is shown "
+        "once, keeping the first. The duplication is in the brief bead's body and "
+        "should be repaired there.</p>"
     )
 
 
@@ -300,6 +331,26 @@ def detail(
     diagnostics = list(brief.get("body_diagnostics") or ())
     bead = str(attr(brief, "bead_id") or "")
 
+    # A present-it slot is singular. When a body carries the same numbered
+    # section twice -- a human `§4 — Alternatives named` and an appended machine
+    # `§4 — Options`, both classified to slot 4 -- render the first and drop the
+    # rest, so the detail does not show the section (the "doubled body") twice.
+    # Unmapped sections (no slot) are always the author's own and never merged.
+    seen_indices: set[int] = set()
+    collapsed_markers: list[str] = []
+    kept_sections: list[Mapping[str, Any]] = []
+    for section in sections:
+        index = section.get("section_index")
+        if index in SECTION_LABELS:
+            if index in seen_indices:
+                marker = f"§{int(index)}"
+                if marker not in collapsed_markers:
+                    collapsed_markers.append(marker)
+                continue
+            seen_indices.add(int(index))
+        kept_sections.append(section)
+    sections = kept_sections
+
     blocks: list[str] = []
     for position, section in enumerate(sections):
         heading, marker = _section_heading(section)
@@ -359,6 +410,7 @@ def detail(
         + _decision_at_top_notice(sections)
         + _parse_notice(diagnostics)
         + "".join(blocks)
+        + _collapsed_sections_note(collapsed_markers)
         + "</div>"
     )
     return (

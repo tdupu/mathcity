@@ -1188,6 +1188,7 @@ def parse_decision_options(
     """
     lines = markdown.splitlines()
     options: list[BriefDecisionOption] = []
+    seen_labels: set[str] = set()
     for section in parse_brief_sections(markdown):
         if section.section_index != 4 and not _heading_names_options(section.heading):
             continue
@@ -1199,12 +1200,21 @@ def parse_decision_options(
             first_body_line += 1
         matches = list(_OPTION_ITEM.finditer(body))
         for position, match in enumerate(matches):
+            label = match.group("label")
+            # A label identifies an option, so a repeat is a duplicate, not a
+            # new choice. Bodies that carry §4 twice -- a human "Alternatives
+            # named" and an appended machine "Options" -- otherwise enumerate
+            # A/B/C twice. Keep the first occurrence of each label.
+            key = label.strip().upper()
+            if key in seen_labels:
+                continue
+            seen_labels.add(key)
             end_in_body = (
                 matches[position + 1].start() if position + 1 < len(matches) else len(body)
             )
             options.append(
                 BriefDecisionOption(
-                    label=match.group("label"),
+                    label=label,
                     heading=match.group("heading").strip(),
                     start_line=first_body_line + body.count("\n", 0, match.start()),
                     end_line=first_body_line + body.count("\n", 0, end_in_body),
