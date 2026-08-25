@@ -430,3 +430,38 @@ def test_the_applied_page_does_not_claim_a_refused_write_as_past_tense(tmp_path:
     assert "brief_frontmatter" in response.body, (
         "the plan panel itself should still be there, honestly titled -- not removed"
     )
+
+
+# --- mc-qlmh: the empty "accept the recommendation" option must be legal -------
+
+
+def _give_options(rig_root: Path, brief_id: str) -> None:
+    """Append a two-option §4 section (A recommended) to a fixture brief's body."""
+    rows = beads(rig_root)
+    for row in rows:
+        if row["id"] == brief_id:
+            row["description"] = (row.get("description") or "") + (
+                "\n\n## §4 — Options\n\n"
+                "- **(A) Ship it** *(recommended)*\n  Do the thing now.\n"
+                "- **(B) Wait**\n  Hold off a week.\n"
+            )
+    write_beads(rig_root, rows)
+
+
+def test_accept_the_recommendation_resolves_the_empty_option_to_the_recommended_one(tmp_path: Path):
+    """mc-qlmh: the panel's default disposition, "Accept the recommendation as
+    filed", submits an EMPTY option. On a multi-option approve that reaches the
+    runtime as an unnamed option and is refused (MOPT001) -- an always-failing
+    legal-looking choice. The empty option must resolve to the brief's own
+    recommendation so the default disposition is a legal call."""
+    dashboard, _, rig_root = dashboard_for(tmp_path)
+    _give_options(rig_root, "mc-open")
+
+    # approve with NO explicit option (the "accept the recommendation" default)
+    response = preview(dashboard)
+
+    assert response.status == 200, (
+        "the empty option must resolve to the recommendation, not fail as unnamed; "
+        f"got HTTP {response.status}: {strip_tags(response.body)[:400]}"
+    )
+    assert "MOPT001" not in response.body, "a resolved recommendation must not trip the unnamed-option gate"

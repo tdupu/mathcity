@@ -1770,9 +1770,52 @@ class Dashboard:
                 rig=rig,
             )
         arguments = _arguments_for(operation, brief_id, request.form, rig)
+        arguments = self._resolve_recommendation(operation, brief_id, rig, arguments)
         return self._render_preview(
             operation, brief_id, rig, arguments, heading="Dry-run preview"
         )
+
+    def _recommendation(self, brief_id: str, rig: str | None) -> str | None:
+        """The label of the option this brief marks recommended, or None.
+
+        briefs_show carries `recommendation` on the brief record (the label of the
+        option the author starred). Read failures degrade to None -- the caller
+        then leaves the option unresolved and the runtime block, if any, stands.
+        """
+        try:
+            shown = self.client.call("briefs_show", self._args(rig, brief_id=brief_id))
+        except ToolFailure:
+            return None
+        brief = dict(shown.payload.get("brief") or {})
+        recommended = brief.get("recommendation")
+        return str(recommended).strip() if recommended else None
+
+    def _resolve_recommendation(
+        self,
+        operation: Operation,
+        brief_id: str | None,
+        rig: str | None,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """mc-qlmh: the panel's default disposition, "Accept the recommendation as
+        filed", submits an EMPTY option, which `_arguments_for` drops. On an APPROVE
+        of a multi-option brief that reaches the runtime as an unnamed option and is
+        refused (MOPT001) -- so the default choice always fails. Resolve the empty
+        option to the brief's own recommendation, making the default a legal call.
+        Absent a recommendation the option stays unresolved and the runtime's
+        "name one" block is honest.
+        """
+        if (
+            operation.name != "adjudicate"
+            or (arguments.get("verdict") or "").strip().lower() != "approve"
+            or "option" in arguments
+            or not brief_id
+        ):
+            return arguments
+        recommended = self._recommendation(brief_id, rig)
+        if not recommended:
+            return arguments
+        return {**arguments, "option": recommended}
 
     def _blocking_option(
         self, brief_id: str | None, rig: str | None, operation: Operation
