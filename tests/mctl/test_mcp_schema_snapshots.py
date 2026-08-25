@@ -99,7 +99,7 @@ def test_every_artifact_bearing_output_schema_requires_artifact_trust():
     "briefs_show",
         "briefs_doctor",
         "briefs_validate",
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         "briefs_defer",
         "briefs_create",
     }
@@ -114,9 +114,9 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
 
     mutating = [name for name, entry in snapshot.items() if entry["mutating"]]
     assert sorted(mutating) == [
-        "briefs_adjudicate",
         "briefs_create",
         "briefs_defer",
+        "briefs_relay_adjudication",
         "commission_brief",
         "create_defect_bead",
         "create_github_issue",

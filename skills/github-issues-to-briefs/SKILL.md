@@ -52,7 +52,7 @@ Schedule one firing per hour (offset minute, e.g. `:23`). Each firing:
    (fetch first — stale-at-filing is the modal error):
    - **ALREADY-RESOLVED / MOOT** → close via `gh issue close` with a hygienic
      comment citing the fixing commit or measurement, AND record the hygienic
-     adjudication: if a brief/bead exists for it, `mcp__mctl__briefs_adjudicate`
+     adjudication: if a brief/bead exists for it, `mcp__mctl__briefs_relay_adjudication`
      with the evidence as reason; if none exists, the close comment is the
      record. Never close what could not be verified — report `unknown` instead.
    - **WRONG LAYER** (e.g. platform-core defects on the pack tracker) →

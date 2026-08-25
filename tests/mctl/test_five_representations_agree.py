@@ -26,7 +26,7 @@ WHY THIS IS NOT HYPOTHETICAL: driving a real adjudication through the MCP on
 2026-08-21 produced `MCTL_BRIEF_FRONTMATTER_UNWRITABLE` — the bead recorded
 `reject` while the brief document's frontmatter was never updated, because
 `briefs_create` had written a document with no frontmatter block for
-`briefs_adjudicate` to rewrite. Four of five representations agreed and one was
+`briefs_relay_adjudication` to rewrite. Four of five representations agreed and one was
 silently stale, at WARN, with the operation reporting success. No test caught it,
 and these two holes are why.
 

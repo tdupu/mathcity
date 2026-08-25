@@ -1,6 +1,6 @@
 """A typed verdict rings the `brief.decided` doorbell (Plan C, #202, Task 3).
 
-`briefs_adjudicate`'s LIVE apply path emits `brief.decided` exactly once, with
+`briefs_relay_adjudication`'s LIVE apply path emits `brief.decided` exactly once, with
 the brief id as the event subject, so `brief-decision-dispatch` and
 `post-decision-file-or-sendback` (both trigger = event: brief.decided) fire
 within seconds -- the mc-f045 adjudication (2026-08-23) rang nothing, the live
@@ -61,7 +61,7 @@ def _adjudicate(city_root, rig_root, *, dry_run, verdict="approve", adjudicated_
     }
     if dry_run is not None:
         args["dry_run"] = dry_run
-    return call(server(city_root, rig_root), "briefs_adjudicate", args)["result"]
+    return call(server(city_root, rig_root), "briefs_relay_adjudication", args)["result"]
 
 
 class TestLiveVerdictRingsTheBell:

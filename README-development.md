@@ -336,7 +336,7 @@ Fifteen typed domain tools are registered:
 | --- | --- |
 | context | `context_resolve` |
 | briefs (read) | `briefs_list`, `briefs_show`, `briefs_options`, `briefs_doctor`, `briefs_validate` |
-| briefs (mutating) | `briefs_adjudicate`, `briefs_defer`, `briefs_create` |
+| briefs (mutating) | `briefs_relay_adjudication`, `briefs_defer`, `briefs_create` |
 | work | `work_ready`, `work_status`, `work_provenance`, `work_dispatch` |
 | trace | `trace_show`, `trace_replay_preview` |
 
@@ -569,7 +569,7 @@ path -- a real `mctl mcp serve` subprocess over stdio behind a real
 | `GET /validate` | `context_resolve`, `briefs_validate` |
 | `GET /work` | `context_resolve`, `work_ready` |
 | `GET /trace` | `context_resolve`, `trace_show`, `trace_replay_preview` |
-| `POST /preview` | `briefs_adjudicate` / `briefs_defer` / `work_dispatch` / `briefs_create`, always `dry_run: true` |
+| `POST /preview` | `briefs_relay_adjudication` / `briefs_defer` / `work_dispatch` / `briefs_create`, always `dry_run: true` |
 | `POST /apply` | the same tool with `dry_run: false`, only after the freshness check |
 
 `POST /preview` and `POST /apply` are the only routes that can write anything.
@@ -587,7 +587,7 @@ Slice 6 defaults external clients to **zero tools**, and mutating tools stay
 `external_ready = false` however the environment is set. So an `external`
 dashboard could not list a brief, let alone adjudicate one. The dashboard
 spawns its MCP server with `--client-class internal` and therefore sees all
-fifteen tools including the mutating four (`briefs_adjudicate`, `briefs_defer`,
+fifteen tools including the mutating four (`briefs_relay_adjudication`, `briefs_defer`,
 `briefs_create`, `work_dispatch`). That is the only class in which it
 can do its job, and it is why the bind address matters: the safety story is
 "loopback, plus a preview-first confirm path", not the rollout gate. Do not

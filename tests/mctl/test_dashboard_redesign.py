@@ -695,7 +695,7 @@ def test_the_no_brainer_flag_survives_refusal():
 
 
 def test_a_reason_is_optional():
-    """mc-qlmh: `reason` is ['string','null'] in briefs_adjudicate's schema and the
+    """mc-qlmh: `reason` is ['string','null'] in briefs_relay_adjudication's schema and the
     handler defaults it to '' -- a bare verdict is a call the tool accepts. The form
     used to mark the reason textarea `required`, so a LEGAL state was unexpressible
     through the only mutation path. The form must not add a mandatory constraint the

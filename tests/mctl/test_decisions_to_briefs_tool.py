@@ -114,7 +114,7 @@ def test_it_becomes_dispatchable_once_a_human_adjudicates(tmp_path: Path):
 
     #194 removes the tool's self-approval. If nothing else could supply that
     verdict the pipeline would be severed, so this proves the human gate --
-    `briefs_adjudicate`, which exists for exactly this -- closes the gap.
+    `briefs_relay_adjudication`, which exists for exactly this -- closes the gap.
 
     Together with the previous test this is a strictly stronger guarantee than
     the assertion it replaced: the old one proved a brief could reach `ready`,
@@ -127,7 +127,7 @@ def test_it_becomes_dispatchable_once_a_human_adjudicates(tmp_path: Path):
 
     call(
         server(city_root, rig_root),
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         {
             "brief_id": brief_id,
             "verdict": "approve",

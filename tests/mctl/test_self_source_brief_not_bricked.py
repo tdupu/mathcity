@@ -11,7 +11,7 @@ configuration:
                       ...
                       _closed_source_blockers()   <- MINE. requires the source OPEN
 
-`briefs_adjudicate` closes the brief, because closing it is what adjudication IS.
+`briefs_relay_adjudication` closes the brief, because closing it is what adjudication IS.
 The brief is then its own closed source, MWRK013 fires, and the brief can never
 be dispatched. CT4.5 MANDATES adjudicating before dispatch, so the prescribed
 workflow walks into it.

@@ -122,7 +122,7 @@ existence against that, never against a number written here.
 | `mcp__mctl__briefs_options` | `mctl briefs options` | no |
 | `mcp__mctl__briefs_doctor` | `mctl briefs doctor` | no |
 | `mcp__mctl__briefs_validate` | `mctl briefs validate` | no |
-| `mcp__mctl__briefs_adjudicate` | `mctl briefs adjudicate` | **yes** |
+| `mcp__mctl__briefs_relay_adjudication` | `mctl briefs adjudicate` | **yes** |
 | `mcp__mctl__briefs_defer` | `mctl briefs defer` | **yes** |
 | `mcp__mctl__briefs_create` | `mctl briefs create` | **yes** |
 | `mcp__mctl__work_ready` | `mctl work ready` | no |

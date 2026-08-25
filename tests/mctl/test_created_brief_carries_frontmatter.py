@@ -1,7 +1,7 @@
 """A brief mctl creates must be one mctl can later adjudicate into.
 
 `briefs_create` wrote the raw body as the pile document. Nothing reads a brief's
-status from a body, so `briefs_adjudicate` had no header to rewrite and raised
+status from a body, so `briefs_relay_adjudication` had no header to rewrite and raised
 `BriefFrontmatterUnwritable` -- at WARN, AFTER the verdict had landed on the bead.
 The operation reported success with one representation silently stale.
 

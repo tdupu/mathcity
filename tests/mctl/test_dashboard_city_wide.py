@@ -237,7 +237,7 @@ def test_a_mutation_started_from_the_aggregate_view_targets_the_briefs_own_rig(t
     )
     assert previewed.status == 200, strip_tags(previewed.body)
     for name, arguments in client.calls:
-        if name in {"briefs_adjudicate", "briefs_show", "briefs_options"}:
+        if name in {"briefs_relay_adjudication", "briefs_show", "briefs_options"}:
             assert arguments.get("rig") == "gascity_packs", (
                 f"{name} was planned without naming the owning rig"
             )

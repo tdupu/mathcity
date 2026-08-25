@@ -294,7 +294,7 @@ def _pile_document(body: str) -> str:
     """The created document, WITH a frontmatter block adjudication can write into.
 
     Created documents used to be the raw body. Nothing reads a brief's status from
-    the body, so `briefs_adjudicate` had no header to rewrite and raised
+    the body, so `briefs_relay_adjudication` had no header to rewrite and raised
     `BriefFrontmatterUnwritable` -- at WARN, after the verdict had already landed
     on the bead. The operation reported success with one representation silently
     stale, and `classify_tier` (materialize_plan.py:292-298), which reads verdict,
@@ -365,7 +365,7 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
         # the operator without blocking -- and warning did not stop the brick.
         #
         # A brief created without a source is made its OWN source bead at
-        # dispatch time (work.py:636); `briefs_adjudicate` then closes that bead,
+        # dispatch time (work.py:636); `briefs_relay_adjudication` then closes that bead,
         # because closing the brief is what adjudication IS. So approving the
         # brief is what makes it permanently undispatchable -- and CT4.5
         # MANDATES adjudicating before dispatch. The tool was minting briefs
@@ -889,7 +889,7 @@ def plan_adjudication(
     """Record a verdict on a brief bead.
 
     `adjudicated_by` is the RECORDING half of #152. Three MCP calls compose
-    into self-authorisation -- `briefs_create`, `briefs_adjudicate(approve)`,
+    into self-authorisation -- `briefs_create`, `briefs_relay_adjudication(approve)`,
     `work_dispatch` -- because step 2 supplies the approving verdict step 3
     demands. The rule that a reviewer must not be the author is enforced
     socially on branches and by nothing at all here.

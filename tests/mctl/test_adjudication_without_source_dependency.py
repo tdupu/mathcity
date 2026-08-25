@@ -3,7 +3,7 @@
 THE DEFECT
 ----------
 `MBRF004` ("Brief bead has no source dependency", B2.1) is severity **ERROR**, and
-the mutation path blocks on ERROR or FATAL. So `briefs_adjudicate` on such a brief
+the mutation path blocks on ERROR or FATAL. So `briefs_relay_adjudication` on such a brief
 returns `MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS` and **the verdict cannot be written
 at all**. A producer omitting a field makes the brief permanently unadjudicable —
 the gap between a queue Taylor can read and a decision he can record.

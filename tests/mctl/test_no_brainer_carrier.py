@@ -1,4 +1,4 @@
-"""briefs_adjudicate carries the no-brainer signal as typed metadata (#208 Part 2).
+"""briefs_relay_adjudication carries the no-brainer signal as typed metadata (#208 Part 2).
 
 The classifier signal "this reached me and should not have" had no typed write
 path: the dashboard folded it into the verdict reason behind a marker string,
@@ -53,7 +53,7 @@ class TestTheParametersExist:
     def test_the_tool_exposes_them_and_does_not_require_them(self):
         from mctl_core.mcp_server import TOOLS_BY_NAME
 
-        schema = TOOLS_BY_NAME["briefs_adjudicate"].input_schema
+        schema = TOOLS_BY_NAME["briefs_relay_adjudication"].input_schema
         assert "no_brainer" in schema["properties"]
         assert "no_brainer_reason" in schema["properties"]
         assert "no_brainer" not in schema.get("required", [])
@@ -67,7 +67,7 @@ class TestTheSignalReachesTheBead:
 
         plan = call(
             server(city, rig),
-            "briefs_adjudicate",
+            "briefs_relay_adjudication",
             {
                 "brief_id": brief_id,
                 "verdict": "revise",
@@ -89,7 +89,7 @@ class TestTheSignalReachesTheBead:
 
         plan = call(
             server(city, rig),
-            "briefs_adjudicate",
+            "briefs_relay_adjudication",
             {"brief_id": brief_id, "verdict": "approve", "reason": "r", "dry_run": True},
         )["result"]["structuredContent"]["effect_plan"]
 
@@ -105,7 +105,7 @@ class TestTheSignalReachesTheBead:
 
         plan = call(
             server(city, rig),
-            "briefs_adjudicate",
+            "briefs_relay_adjudication",
             {
                 "brief_id": brief_id,
                 "verdict": "revise",

@@ -333,7 +333,7 @@ def test_all_rigs_on_a_mutating_tool_is_a_schema_violation(tmp_path: Path):
             "id": 900,
             "method": "tools/call",
             "params": {
-                "name": "briefs_adjudicate",
+                "name": "briefs_relay_adjudication",
                 "arguments": {"brief_id": "mc-open", "all_rigs": True},
             },
         }

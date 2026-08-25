@@ -1,7 +1,7 @@
 """The adjudication panel: where a verdict is actually recorded.
 
 This is a **form**, not a widget. Verdict and disposition are radio inputs, the
-reason is an OPTIONAL textarea (briefs_adjudicate types `reason` as
+reason is an OPTIONAL textarea (briefs_relay_adjudication types `reason` as
 `["string", "null"]` and the handler defaults it to `""`, so a bare verdict is a
 legal call -- the form must not force what the schema does not; mc-qlmh), and
 submitting posts to the existing `/preview`
