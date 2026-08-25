@@ -27,10 +27,11 @@ with JavaScript off. Data arrives over `mctl` MCP tool calls, never shell.
 - **Briefs:** [`briefs/`](./briefs/) — `design_handoff_brief_manager/` (the latest
   Claude-design "Brief Manager" handoff, session 1) plus
   `2026-08-19-briefs-dashboard-redesign.md` (the vertical-slice implementation
-  plan). An **older** briefs design exists at
-  `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/`; it is
-  superseded by `design_handoff_brief_manager/` and is being retired — do not build
-  from it.
+  plan). An **older** briefs design at
+  `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/` was
+  **retired and removed 2026-08-24**, superseded by `design_handoff_brief_manager/`.
+  The Brief Manager design is now the only briefs-dashboard design — there is no
+  second one to confuse it with.
 
 ## Implementation status — what is built vs. designed-not-built (as of origin/main 326083d, 2026-08-23)
 

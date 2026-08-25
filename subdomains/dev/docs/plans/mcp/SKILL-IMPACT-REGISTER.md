@@ -847,15 +847,17 @@ The owner called it "sort of deprecated". That is close to right, and the
 register records the reasoning rather than a polish job:
 
 - **Superseded in mechanism.** The dashboard designed in
-  `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/` is
-  described in its own README as "a clerk-facing dashboard for adjudicating
-  MathCity briefs", and covers this skill's entire loop: pile and stack views,
+  `docs/superpowers/plans/dashboards/briefs/design_handoff_brief_manager/` (the
+  canonical "Brief Manager" design; the older
+  `claude-design-briefs-dashboard-2026-08-19/` it replaced was retired 2026-08-24) is
+  described as a clerk-facing dashboard for adjudicating
+  MathCity briefs, and covers this skill's entire loop: pile and stack views,
   `unlock_count` ranking, the `present-it` full and compact forms with
   Decision-at-Top, a dry-run effect plan, and a two-step submit. When a human
   adjudicates directly from that surface, an agent whose job is reading briefs
   aloud and typing verdicts back is largely redundant.
 - **Not yet superseded in fact.** The dashboard is a design mockup
-  (`Briefs-Dashboard.dc.html` + README), not shipped code, and
+  (`Brief Manager Dashboard.dc.html` + README), not shipped code, and
   adjudication-by-conversation is still how verdicts get recorded today.
 - **Two parts are not superseded at all** and would have to move somewhere if
   the skill were retired: STEP 0, the mandatory agent-inbox channel to the Mayor

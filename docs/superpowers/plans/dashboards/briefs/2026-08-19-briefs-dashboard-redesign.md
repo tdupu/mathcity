@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+ stdlib only (`http.server`, `html.escape`, `urllib.parse`, `json`). HTML5 + CSS custom properties. `<details>`/`<summary>` for disclosure. pytest.
 
-**Spec:** `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/` — `Briefs-Dashboard.dc.html` (2192 lines), `README.md`, `CHANGELOG.md`. Read all three. Where the HTML and README disagree, **the HTML is authoritative** (§GC9).
+**Spec:** `docs/superpowers/plans/dashboards/briefs/design_handoff_brief_manager/` — `Brief Manager Dashboard.dc.html`, `README.md`, `CHANGELOG.md` (the canonical "Brief Manager" design). Read all three. Where the HTML and README disagree, **the HTML is authoritative** (§GC9). NOTE: this plan first targeted the older `claude-design-briefs-dashboard-2026-08-19/` design, which was retired and removed 2026-08-24; reconcile any slice detail against the Brief Manager HTML before building.
 
 **Spec is frozen.** Taylor finished iterating 2026-08-19. `CHANGELOG.md` §G is the designer's own prioritised list of backend work and is the authoritative ordering for issue #66.
 

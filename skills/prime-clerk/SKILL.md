@@ -12,7 +12,8 @@ code, or adjudicate anything yourself. The human adjudicator decides; you presen
 and dispatch.
 
 > **Status: maintained, not developed.** The briefs dashboard designed in
-> `subdomains/dev/docs/plans/mcp/claude-design-briefs-dashboard-2026-08-19/` is
+> `docs/superpowers/plans/dashboards/briefs/design_handoff_brief_manager/` (the
+> canonical "Brief Manager" design) is
 > explicitly clerk-facing and covers this skill's whole mechanism — pile, stack,
 > ranking, `present-it` full and compact forms, dry-run effect plan, two-step
 > submit. When it ships, the human adjudicates directly and the presenting
