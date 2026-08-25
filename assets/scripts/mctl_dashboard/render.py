@@ -125,7 +125,7 @@ def _dash(key: str) -> str:
         else "not counted on this page"
     )
     return (
-        f' <span class="mono" style="color: var(--color-neutral-500);" '
+        f'<span class="mono" style="color: var(--color-neutral-500);" '
         f'title="{_e(reason)}">&mdash;</span>'
     )
 

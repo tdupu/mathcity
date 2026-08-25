@@ -128,3 +128,40 @@ def test_no_trace_anywhere_leaves_the_footer_without_one():
     html = render.page("x", "/queue", [], context={"rig_id": "mathcity"})
     footer = html.split('data-region="footer"', 1)[1]
     assert "trace " not in footer
+
+
+# --- restart button in the staleness banner (Taylor: "a restart button would be nice") ---
+
+
+def test_stale_banner_offers_a_one_click_restart():
+    """When the served code is behind the checkout, the banner carries a real
+    restart control -- a plain POST form to /restart (JS-off), not just prose."""
+    from mctl_dashboard import staleness
+
+    html = staleness.banner(staleness.compare(served="aaaaaaa", current="bbbbbbb"))
+    assert 'action="/restart"' in html
+    assert 'method="post"' in html
+    assert 'data-region="restart"' in html
+
+
+def test_unknown_age_banner_also_offers_restart():
+    from mctl_dashboard import staleness
+
+    html = staleness.banner(staleness.compare(served="aaaaaaa", current=None))
+    assert 'action="/restart"' in html
+
+
+def test_clean_banner_has_no_restart_button():
+    """A process that matches its checkout needs no restart affordance."""
+    from mctl_dashboard import staleness
+
+    html = staleness.banner(staleness.compare(served="aaaaaaa", current="aaaaaaa"))
+    assert "/restart" not in html
+
+
+def test_restart_is_not_a_mutation_route():
+    """The restart is a server-lifecycle action, not a brief write; the two
+    brief-write routes stay exactly what they were."""
+    from mctl_dashboard.app import Dashboard
+
+    assert Dashboard.MUTATION_ROUTES == ("/preview", "/apply")

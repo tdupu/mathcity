@@ -20,6 +20,8 @@ import os
 from pathlib import Path
 import re
 import sys
+import threading
+import time
 from http import HTTPStatus
 from typing import Any
 
@@ -29,6 +31,18 @@ from .theme import FONT_DIR
 
 
 MAX_BODY_BYTES = 256 * 1024
+
+#: The page the /restart button lands on while the process re-execs. It refreshes
+#: itself, so once the re-exec'd server rebinds the port the operator's browser
+#: reconnects to the fresh page without another click.
+_RESTART_PAGE = (
+    "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+    "<meta http-equiv=\"refresh\" content=\"2\"><title>Restarting…</title></head>"
+    "<body style=\"font-family: Georgia, serif; padding: 2rem; color: #2d2b2b;\">"
+    "<h1 style=\"font-size: 1.05rem;\">Restarting the dashboard…</h1>"
+    "<p>The server is re-execing to pick up the current checkout. "
+    "This page reconnects in a moment.</p></body></html>"
+)
 
 #: The only filenames `/fonts/` will serve. A whitelist rather than a
 #: traversal check, because this is the one path whose target is chosen by the
@@ -77,7 +91,37 @@ def make_handler(dashboard: Dashboard) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler contract
             length = min(int(self.headers.get("Content-Length") or 0), MAX_BODY_BYTES)
             body = self.rfile.read(length).decode("utf-8") if length else ""
+            if self.path == "/restart":
+                self._restart()
+                return
             self._respond(Request.from_wire("POST", self.path, body))
+
+        def _restart(self) -> None:
+            """Re-exec this serving process so it picks up the current checkout.
+
+            The dashboard imports its code at process start, so a merge is
+            invisible until it restarts (#210). This is a server-LIFECYCLE action,
+            not a brief write, so it lives in the wrapper rather than in the pure
+            `Dashboard.handle` -- `MUTATION_ROUTES` stays exactly ("/preview",
+            "/apply"). Respond first, then replace the process image: the listening
+            socket is close-on-exec (PEP 446), so the port frees on exec and the
+            re-exec'd `mctl dashboard serve` (same argv) binds it fresh. Loopback
+            only, so a lifecycle endpoint here is safe.
+            """
+            payload = _RESTART_PAGE.encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+            self.wfile.flush()
+
+            def _reexec() -> None:
+                time.sleep(0.4)  # let the response finish flushing to the client
+                os.execv(sys.executable, [sys.executable, *sys.argv])
+
+            threading.Thread(target=_reexec, daemon=True).start()
 
         def _respond(self, request: Request) -> None:
             response = dashboard.handle(request)

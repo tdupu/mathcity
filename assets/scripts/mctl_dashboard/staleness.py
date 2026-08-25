@@ -77,6 +77,24 @@ def read_head(repo: Path, *, timeout: float = HEAD_READ_TIMEOUT_SECONDS) -> str 
     return result.stdout.strip() or None
 
 
+def _restart_form() -> str:
+    """A one-click restart, for the banner cases where restarting is the fix.
+
+    POSTs to `/restart`, which the server wrapper re-execs on -- so the running
+    process picks up the current checkout, the staleness this banner reports.
+    A plain form (no JavaScript), inline-styled so it needs no theme change;
+    the dashboard is loopback-only, so a lifecycle button here is safe. It is
+    NOT a brief mutation, so `MUTATION_ROUTES` stays exactly ("/preview","/apply").
+    """
+    return (
+        '<form method="post" action="/restart" style="display: inline;">'
+        '<button type="submit" data-region="restart" '
+        'style="margin-left: 10px; font: inherit; font-size: 11px; padding: 2px 10px; '
+        "border: 1px solid currentColor; border-radius: 4px; background: transparent; "
+        'color: inherit; cursor: pointer;">Restart dashboard &#x21bb;</button></form>'
+    )
+
+
 def banner(state: Staleness) -> str:
     """One line, always emitted, saying what code this page came from.
 
@@ -95,7 +113,7 @@ def banner(state: Staleness) -> str:
             "<strong>The age of this code is unknown.</strong> The checkout's "
             "current commit could not be read, so this page cannot tell you "
             "whether the process is behind it — that is a statement about the "
-            "check, not a clean bill of health.</div>"
+            "check, not a clean bill of health. " + _restart_form() + "</div>"
         )
     if state.is_stale:
         return (
@@ -105,8 +123,9 @@ def banner(state: Staleness) -> str:
             f'<span class="mono">{_e(state.served or "")}</span>; the checkout is '
             f'now at <span class="mono">{_e(state.current or "")}</span>. '
             "Anything merged since is <em>not on this page</em> — it will render "
-            "exactly as if it had never been built. <strong>Restart the dashboard "
-            "to pick it up.</strong></div>"
+            "exactly as if it had never been built. <strong>Restart to pick it up.</strong>"
+            + _restart_form()
+            + "</div>"
         )
     return (
         '<div class="mc-banner" data-region="served-code" data-stale="no">'
