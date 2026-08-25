@@ -338,6 +338,28 @@ def _disposition_control(
     that" -- and that is a real verdict, not an absence of one.
     """
     options = list(attr(brief, "decision_options") or ())
+    # A brief whose body carries its options section more than once parses each
+    # letter repeatedly, so the picker would offer '', A, B, C, A, B, C, other
+    # (mc-13e0, mc-kij9). Collapse to one move per distinct label, and remember
+    # which labels repeated so the cause can be stated -- the duplication is in the
+    # brief bead's body (a doubled §4), not invented here.
+    _seen: set[str] = set()
+    _unique: list[Mapping[str, Any]] = []
+    duplicated_labels: list[str] = []
+    for entry in options:
+        if not isinstance(entry, Mapping):
+            continue
+        label = str(entry.get("label") or "").strip()
+        if not label:
+            continue
+        key = label.upper()
+        if key in _seen:
+            if label not in duplicated_labels:
+                duplicated_labels.append(label)
+            continue
+        _seen.add(key)
+        _unique.append(entry)
+    options = _unique
     rows: list[str] = []
 
     def _chip(value: str, label: str, *, checked: bool = False, adopt: str = "") -> str:
@@ -388,13 +410,24 @@ def _disposition_control(
         if options
         else "Disposition &mdash; this brief names no options"
     )
+    cause_note = (
+        '<p data-region="options-deduped" style="font-size: 11px; '
+        'color: var(--color-warn, #8f6a1f); margin: -3px 0 9px;">'
+        f"This brief&rsquo;s body repeats its options section, so "
+        f"{_e(', '.join(duplicated_labels))} appeared more than once; each move is "
+        "shown here once. The duplication is in the brief bead&rsquo;s body (a "
+        "doubled &sect;4) and should be repaired there.</p>"
+        if duplicated_labels
+        else ""
+    )
     return (
         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         f'color: var(--color-neutral-600); margin-bottom: 5px;">{label_text}</div>'
         '<div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">'
         + "".join(rows)
         + "</div>"
-        '<textarea name="option_other" rows="2" '
+        + cause_note
+        + '<textarea name="option_other" rows="2" '
         'placeholder="If you chose Other: describe the disposition you want. Recorded as a '
         'proposed option on the brief bead." '
         'style="width: 100%; font-family: var(--font-body); font-size: 12.5px; '

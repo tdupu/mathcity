@@ -1990,3 +1990,29 @@ def test_the_priority_list_counts_one_brief_correctly():
 
     html = priority.screen([{"brief_id": "gt-1", "title": "one"}])
     assert "1 briefs" not in html
+
+
+def test_duplicate_option_letters_are_collapsed_with_the_cause_stated():
+    """A brief whose body carries its §4 options section twice parses each letter
+    twice, so the picker offered '', A, B, C, A, B, C, other (mc-13e0, mc-kij9).
+    Collapse to one move per distinct label and STATE the cause -- the duplication
+    is in the brief's body, not hidden here."""
+    import re
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    brief = {
+        "bead_id": "he-dup",
+        "decision_options": [
+            {"label": "A", "heading": "Merge as filed"},
+            {"label": "B", "heading": "Rework first"},
+            {"label": "A", "heading": "Merge as filed"},   # doubled §4
+            {"label": "B", "heading": "Rework first"},
+        ],
+    }
+    html = panel.entry(brief, _option(True), state.ViewState())
+
+    values = re.findall(r'<input type="radio" name="option" value="([^"]*)"', html)
+    assert values.count("A") == 1, f"A must render once, got {values}"
+    assert values.count("B") == 1, f"B must render once, got {values}"
+    assert "repeats its options section" in html, "the cause must be stated"
