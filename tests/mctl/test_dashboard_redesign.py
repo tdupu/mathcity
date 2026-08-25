@@ -1013,6 +1013,29 @@ def test_empty_attributes_render_nothing_rather_than_an_empty_shell():
     assert fields.attributes({}) == ""
 
 
+def test_the_properties_box_does_not_dump_options_or_recommendation():
+    """Issue-49 render bug: `decision_options` and `recommendation` are presentation
+    payloads shown in §4 and the disposition control. Left out of SUPPRESSED they
+    stringified as Python reprs in the properties sidebar -- the exact "agent
+    exhaust" SUPPRESSED exists to stop -- so each option label appeared repeatedly.
+    They must not render as attribute rows."""
+    from mctl_dashboard import fields
+
+    payload = {
+        "bead_id": "he-1",
+        "decision_options": [
+            {"id": "A", "label": "Formalize both", "description": "do it"},
+            {"id": "B", "label": "Problem 3 only", "description": "skip"},
+        ],
+        "recommendation": "A",
+    }
+    html = fields.attributes(**fields.unpack(payload), region="properties")
+    assert "Formalize both" not in html, "decision_options must not render in the properties box"
+    assert "Problem 3 only" not in html
+    assert "decision_options" not in html
+    assert "recommendation" not in html.lower()
+
+
 # --------------------------------------------------------------------------
 # city-wide scope
 # --------------------------------------------------------------------------
