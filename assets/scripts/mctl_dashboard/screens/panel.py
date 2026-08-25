@@ -123,49 +123,6 @@ def panel_state(options: Sequence[Mapping[str, Any]]) -> tuple[str, Mapping[str,
     return "held", reason
 
 
-def _verdict_control(
-    name: str, label: str, *, state: str, disabled: bool, checked: bool = False
-) -> str:
-    struck = state == "held" and disabled
-    style = (
-        "font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; "
-        "border-radius: var(--radius-md); display: flex; align-items: baseline; "
-        "gap: 7px; border: 1px solid "
-    )
-    if struck:
-        # "This would be wrong." Reserved for a real violation.
-        style += (
-            "var(--color-neutral-300); color: var(--color-neutral-400); "
-            "text-decoration: line-through; cursor: not-allowed;"
-        )
-    elif disabled:
-        # "You may not, yet." Nothing is condemned.
-        style += "var(--color-neutral-300); color: var(--color-neutral-500); cursor: not-allowed;"
-    else:
-        style += "var(--color-divider); color: var(--color-neutral-800); cursor: pointer;"
-    attrs = ' disabled aria-disabled="true"' if disabled else ""
-    if checked and not disabled:
-        attrs += " checked"
-    # The one-line meaning hint (ADR 0002 D3). It carries the same
-    # line-through under HELD as the label, so a struck verdict reads as
-    # struck whole rather than a crossed word beside a live gloss.
-    hint = VERDICT_HINTS.get(name, "")
-    hint_html = (
-        f'<span data-region="verdict-hint" style="font-family: var(--font-body); '
-        f"font-size: 11px; color: var(--color-neutral-600); flex: 1 1 auto; "
-        f'min-width: 0;">{_e(hint)}</span>'
-        if hint
-        else ""
-    )
-    return (
-        f'<label data-verdict="{_e(name)}" style="{style}">'
-        f'<input type="radio" name="verdict" value="{_e(name)}"{attrs} '
-        'style="accent-color: var(--color-accent-600); margin: 0; flex: none;">'
-        f'<span style="flex: none; font-weight: 600;">{_e(label)}</span>'
-        f"{hint_html}</label>"
-    )
-
-
 def _refusal_notice(state: str, reason: Mapping[str, Any]) -> str:
     code = str(reason.get("code") or "")
     message = str(reason.get("message") or "")
@@ -258,182 +215,292 @@ def _option_meta(entry: Mapping[str, Any]) -> str:
     )
 
 
-def _adopt_reason(brief: Mapping[str, Any], letter: str) -> str:
-    """The reason text a one-click adopt pre-quotes for option `letter`.
+def _dedup_options(brief: Mapping[str, Any]) -> tuple[list[Mapping[str, Any]], list[str]]:
+    """The brief's named options, one per distinct label, plus the repeats.
 
-    Quoting the option the operator adopted, rather than leaving the box blank,
-    is the point of click-to-adopt: the recorded reason then says which of the
-    brief's own alternatives the verdict took, in the brief's own words. The
-    human still confirms it through the preview before anything is written.
+    A brief whose body carries its options section more than once parses each
+    letter repeatedly, so the moves would offer A, B, C, A, B, C (mc-13e0,
+    mc-kij9). Collapse to one move per distinct label and remember which labels
+    repeated so the cause can be stated -- the duplication is in the brief
+    bead's body (a doubled §4), not invented here.
     """
+    seen: set[str] = set()
+    unique: list[Mapping[str, Any]] = []
+    duplicated: list[str] = []
     for entry in attr(brief, "decision_options") or ():
-        if isinstance(entry, Mapping) and str(entry.get("label") or "").strip() == letter:
-            title = _option_title(entry)
-            return (
-                f"Adopting option {letter}: {title}." if title
-                else f"Adopting option {letter} as filed."
-            )
-    return f"Adopting option {letter}."
-
-
-def _adopt_href(brief: Mapping[str, Any], letter: str, *, rig: str | None) -> str:
-    """One click to adopt an option: reload the panel with it pre-filled.
-
-    A link rather than script, so click-to-adopt works with JavaScript off --
-    it lands the same `?prefill=adopt:{letter}` the server already forwards to
-    this panel, which then checks approve, selects the option and quotes it in
-    the reason. Preview-first is untouched: adopting fills the form, it does not
-    record anything.
-    """
-    brief_id = str(attr(brief, "brief_id") or attr(brief, "bead_id") or "")
-    query = f"?prefill=adopt:{_e(letter)}" + (f"&rig={_e(rig)}" if rig else "")
-    return f"/briefs/{_e(brief_id)}{query}#mc-adjudicate"
-
-
-def _defer_window(*, disabled: bool = False) -> str:
-    """The defer window (days), used only when the verdict is `defer`.
-
-    Defer is a verdict here (ADR 0002 D3), but the `briefs_defer` tool it
-    routes to needs a window the other verdicts do not. Rather than a second
-    form, the panel carries one small field the dashboard reads only when
-    `verdict=defer` is submitted (`app._preview` translates it, `_arguments_for`
-    reads `days`). Left blank it defers for the tool's own default. It stays
-    out of the way for the common approve/revise/reject path -- a labelled,
-    optional day count, not a step.
-    """
-    dis = " disabled" if disabled else ""
-    return (
-        '<div data-region="defer-window" style="display: flex; align-items: baseline; '
-        'gap: 7px; margin: -4px 0 12px; padding-left: 2px;">'
-        '<label style="font-family: var(--font-mono); font-size: 10.5px; '
-        'color: var(--color-neutral-600);">defer window (days)</label>'
-        f'<input type="text" name="days" inputmode="numeric" placeholder="7"{dis} '
-        'style="width: 58px; font-family: var(--font-mono); font-size: 11.5px; '
-        "padding: 3px 6px; border: 1px solid var(--color-divider); "
-        'border-radius: var(--radius-sm); box-sizing: border-box;">'
-        '<span style="font-family: var(--font-body); font-size: 10.5px; '
-        'color: var(--color-neutral-500);">only applies when the verdict is '
-        "<strong>defer</strong>; blank defers for the default window</span>"
-        "</div>"
-    )
-
-
-def _disposition_control(
-    brief: Mapping[str, Any], *, rig: str | None = None, selected: str | None = None
-) -> str:
-    """Which option the verdict adopts, offered as the brief's own options.
-
-    A bare "option letter" text box asks the operator to remember what the
-    letters were and to retype one correctly; the brief already states them,
-    so the panel can offer them. Where a brief names no options the box is
-    honest about that instead of demanding a letter that does not exist.
-
-    Each named option also carries an **adopt** link -- one click that fills
-    the whole form for that option (approve, the option selected, the reason
-    quoting it) so the common case is a click, not three separate inputs. The
-    radios remain for picking without committing the verdict.
-
-    The last choice is always to propose something else. A decision-maker who
-    can only pick from the options as filed cannot say "none of these, do
-    that" -- and that is a real verdict, not an absence of one.
-    """
-    options = list(attr(brief, "decision_options") or ())
-    # A brief whose body carries its options section more than once parses each
-    # letter repeatedly, so the picker would offer '', A, B, C, A, B, C, other
-    # (mc-13e0, mc-kij9). Collapse to one move per distinct label, and remember
-    # which labels repeated so the cause can be stated -- the duplication is in the
-    # brief bead's body (a doubled §4), not invented here.
-    _seen: set[str] = set()
-    _unique: list[Mapping[str, Any]] = []
-    duplicated_labels: list[str] = []
-    for entry in options:
         if not isinstance(entry, Mapping):
             continue
         label = str(entry.get("label") or "").strip()
         if not label:
             continue
         key = label.upper()
-        if key in _seen:
-            if label not in duplicated_labels:
-                duplicated_labels.append(label)
+        if key in seen:
+            if label not in duplicated:
+                duplicated.append(label)
             continue
-        _seen.add(key)
-        _unique.append(entry)
-    options = _unique
+        seen.add(key)
+        unique.append(entry)
+    return unique, duplicated
+
+
+def _refusal_tag(reason: Mapping[str, Any]) -> str:
+    """The disabled_reason a refused move carries beside itself.
+
+    A refused move is disabled where it sits, with the code and message that
+    refused it right there -- not hidden behind a banner, and not struck
+    through (struck is reserved for a real gate violation). The operator reads
+    why *this* move is unavailable without leaving the move.
+    """
+    code = str(reason.get("code") or "").strip()
+    message = str(reason.get("message") or "").strip()
+    if not code and not message:
+        return ""
+    body = f'<code class="diagnostic-code">{_e(code)}</code>' if code else ""
+    if message:
+        body += f' {_e(message)}' if body else _e(message)
+    return (
+        '<span data-region="move-refusal" class="mono" style="font-size: 10px; '
+        'color: var(--color-neutral-600); padding-left: 2px;">' + body + "</span>"
+    )
+
+
+def _move_button(
+    value: str,
+    label_html: str,
+    *,
+    disabled: bool,
+    struck: bool,
+    verdict: str = "",
+    option: str = "",
+) -> str:
+    """One legal move, rendered as a submit button.
+
+    The button *is* the control: pressing it posts the whole form (its `move`
+    value carries both the verdict and the option together) to `/preview`, so
+    an illegal verdict×option pair is unexpressible and one press is one
+    dry-run -- no radio, no separate Submit, and it works with scripting off.
+    """
+    style = (
+        "font-family: var(--font-mono); font-size: 11px; padding: 5px 10px; "
+        "border-radius: var(--radius-md); display: flex; align-items: baseline; "
+        "gap: 7px; text-align: left; width: 100%; box-sizing: border-box; "
+        "border: 1px solid "
+    )
+    if struck:
+        # "This would be wrong." Reserved for a real violation.
+        style += (
+            "var(--color-neutral-300); color: var(--color-neutral-400); "
+            "text-decoration: line-through; cursor: not-allowed; "
+            "background: var(--color-neutral-050);"
+        )
+    elif disabled:
+        # "You may not, yet." Nothing is condemned.
+        style += (
+            "var(--color-neutral-300); color: var(--color-neutral-500); "
+            "cursor: not-allowed; background: var(--color-neutral-050);"
+        )
+    else:
+        style += (
+            "var(--color-divider); color: var(--color-neutral-800); "
+            "cursor: pointer; background: var(--color-surface, #ffffff);"
+        )
+    attrs = ' disabled aria-disabled="true"' if disabled else ""
+    opt_attr = f' data-option="{_e(option)}"' if option else ""
+    hint = VERDICT_HINTS.get(verdict, "")
+    hint_html = (
+        f'<span data-region="verdict-hint" style="font-family: var(--font-body); '
+        f"font-size: 11px; color: var(--color-neutral-600); flex: 1 1 auto; "
+        f'min-width: 0;">{_e(hint)}</span>'
+        if hint
+        else ""
+    )
+    return (
+        f'<button type="submit" name="move" value="{_e(value)}" '
+        f'data-move="{_e(value)}"{opt_attr}{attrs} style="{style}">'
+        f"{label_html}{hint_html}</button>"
+    )
+
+
+def _defer_window() -> str:
+    """The defer window (days), shown with -- and only with -- the defer move.
+
+    Defer is a move here, but the `briefs_defer` tool it routes to needs a
+    window the other moves do not. Rather than a second form, the defer move
+    carries one small field the dashboard reads only when the defer move is
+    pressed (`app._preview` translates it, `_arguments_for` reads `days`). Left
+    blank it defers for the tool's own default. It rides in the defer move's
+    own group, not at form level for every verdict.
+    """
+    return (
+        '<div data-region="defer-window" style="display: flex; align-items: baseline; '
+        'gap: 7px; margin: 2px 0 0; padding-left: 26px;">'
+        '<label style="font-family: var(--font-mono); font-size: 10.5px; '
+        'color: var(--color-neutral-600);">defer window (days)</label>'
+        '<input type="text" name="days" inputmode="numeric" placeholder="7" '
+        'style="width: 58px; font-family: var(--font-mono); font-size: 11.5px; '
+        "padding: 3px 6px; border: 1px solid var(--color-divider); "
+        'border-radius: var(--radius-sm); box-sizing: border-box;">'
+        '<span style="font-family: var(--font-body); font-size: 10.5px; '
+        'color: var(--color-neutral-500);">blank defers for the default window</span>'
+        "</div>"
+    )
+
+
+def _option_other_box() -> str:
+    """The free-text box shown with -- and only with -- the Approve (other…) move.
+
+    A decision-maker who can only pick from the options as filed cannot say
+    "none of these, do that". That is a real verdict, not an absence of one;
+    the dashboard records it as a proposed option (a revise carrying the text).
+    """
+    return (
+        '<textarea name="option_other" rows="2" '
+        'placeholder="Describe the disposition you want. Recorded as a proposed option '
+        'on the brief bead." '
+        'style="width: calc(100% - 26px); margin: 2px 0 0 26px; font-family: var(--font-body); '
+        "font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--color-divider); "
+        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
+        "</textarea>"
+    )
+
+
+def _move_group(value: str, button: str, *, extra: str = "", refusal: str = "") -> str:
+    return (
+        f'<div data-move-group="{_e(value)}" '
+        'style="display: flex; flex-direction: column; gap: 3px;">'
+        f"{button}{refusal}{extra}</div>"
+    )
+
+
+def _moves(
+    brief: Mapping[str, Any],
+    *,
+    state: str,
+    reason: Mapping[str, Any],
+) -> str:
+    """The one control: the legal moves for this brief, as submit buttons.
+
+    Its members ARE the legal verdict×option pairs -- Approve A, Approve B,
+    Approve (other…), Revise, Reject, Defer -- so the two illegal states the
+    old verdict×disposition product allowed (approve + a blank option on a
+    multi-option brief -> MOPT001; reject + a named option) cannot be posted.
+
+    Ratifying moves (each Approve, and Defer) are gated when the brief is not
+    open: struck through under a real gate failure (HELD), disabled-not-struck
+    under a refusal that is only under review. Returning moves (revise, reject)
+    are NEVER gated -- refusal restricts what you may ratify, not what you may
+    send back.
+    """
+    options, duplicated = _dedup_options(brief)
+    ratify_disabled = state != "open"
+    struck = state == "held"
+    refusal = _refusal_tag(reason) if ratify_disabled else ""
+
     rows: list[str] = []
-
-    def _chip(value: str, label: str, *, checked: bool = False, adopt: str = "") -> str:
-        return (
-            '<label style="display: flex; gap: 7px; align-items: baseline; '
-            "font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; "
-            "border: 1px solid var(--color-divider); border-radius: var(--radius-md); "
-            'cursor: pointer;">'
-            f'<input type="radio" name="option" value="{_e(value)}"'
-            f'{" checked" if checked else ""} '
-            'style="accent-color: var(--color-accent-600); margin: 0; flex: none;">'
-            f'<span style="min-width: 0; flex: 1 1 auto;">{label}</span>'
-            f"{adopt}</label>"
+    if options:
+        for entry in options:
+            label = str(entry.get("label") or "").strip()
+            if not label:
+                continue
+            title = _option_title(entry)
+            head = f"Approve {_e(label)}"
+            if title:
+                head += f" &middot; {_e(title)}"
+            label_html = (
+                f'<span style="flex: none; font-weight: 600;">{head}</span>'
+                f"{_option_meta(entry)}"
+            )
+            button = _move_button(
+                f"approve:{label}",
+                label_html,
+                disabled=ratify_disabled,
+                struck=struck,
+                verdict="approve",
+                option=label,
+            )
+            rows.append(_move_group(f"approve:{label}", button, refusal=refusal))
+        # "none of these, do that" -- an approve that proposes its own option.
+        other_button = _move_button(
+            "approve:other",
+            '<span style="flex: none; font-weight: 600;">Approve (other&hellip;)</span>'
+            '<span style="font-family: var(--font-body); font-size: 11px; '
+            'color: var(--color-neutral-600); flex: 1 1 auto; min-width: 0;">'
+            "propose your own disposition</span>",
+            disabled=ratify_disabled,
+            struck=struck,
+            verdict="approve",
         )
+        rows.append(
+            _move_group(
+                "approve:other",
+                other_button,
+                extra=_option_other_box(),
+                refusal=refusal,
+            )
+        )
+    else:
+        # A brief that names no options: Approve carries no option at all, so
+        # there is nothing for MOPT001 to be about.
+        approve_button = _move_button(
+            "approve",
+            '<span style="flex: none; font-weight: 600;">Approve</span>',
+            disabled=ratify_disabled,
+            struck=struck,
+            verdict="approve",
+        )
+        rows.append(_move_group("approve", approve_button, refusal=refusal))
 
+    # Returning moves -- never gated, in any state.
+    for name in ("revise", "reject"):
+        button = _move_button(
+            name,
+            f'<span style="flex: none; font-weight: 600;">{name.capitalize()}</span>',
+            disabled=False,
+            struck=False,
+            verdict=name,
+        )
+        rows.append(_move_group(name, button))
+
+    # Defer -- a ratifying-side move (it parks rather than returns), so gated.
+    defer_button = _move_button(
+        "defer",
+        '<span style="flex: none; font-weight: 600;">Defer</span>',
+        disabled=ratify_disabled,
+        struck=struck,
+        verdict="defer",
+    )
     rows.append(
-        _chip("", "Accept the recommendation as filed", checked=selected is None)
-    )
-    for entry in options:
-        if not isinstance(entry, Mapping):
-            continue
-        label = str(entry.get("label") or "").strip()
-        title = _option_title(entry)
-        if not label:
-            continue
-        text = f"{_e(label)} &middot; {_e(title)}" if title else _e(label)
-        text += _option_meta(entry)
-        adopt = (
-            f'<a class="mc-adopt" data-region="adopt-option" '
-            f'data-option="{_e(label)}" href="{_adopt_href(brief, label, rig=rig)}" '
-            'style="flex: none; font-family: var(--font-mono); font-size: 10.5px; '
-            "padding: 1px 7px; border: 1px solid var(--color-accent-600); "
-            "border-radius: var(--radius-md); color: var(--color-accent-800); "
-            'white-space: nowrap;">adopt &rarr;</a>'
-        )
-        rows.append(_chip(label, text, checked=label == selected, adopt=adopt))
-
-    rows.append(
-        _chip(
-            "other",
-            "Other &mdash; propose your own",
-            checked=selected == "other",
+        _move_group(
+            "defer",
+            defer_button,
+            extra="" if ratify_disabled else _defer_window(),
+            refusal=refusal,
         )
     )
 
-    label_text = (
-        "Disposition"
-        if options
-        else "Disposition &mdash; this brief names no options"
-    )
     cause_note = (
         '<p data-region="options-deduped" style="font-size: 11px; '
-        'color: var(--color-warn, #8f6a1f); margin: -3px 0 9px;">'
+        'color: var(--color-warn, #8f6a1f); margin: 6px 0 0;">'
         f"This brief&rsquo;s body repeats its options section, so "
-        f"{_e(', '.join(duplicated_labels))} appeared more than once; each move is "
+        f"{_e(', '.join(duplicated))} appeared more than once; each move is "
         "shown here once. The duplication is in the brief bead&rsquo;s body (a "
         "doubled &sect;4) and should be repaired there.</p>"
-        if duplicated_labels
+        if duplicated
         else ""
+    )
+    label_text = (
+        "Choose a move"
+        if options
+        else "Choose a move &mdash; this brief names no options"
     )
     return (
         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
         f'color: var(--color-neutral-600); margin-bottom: 5px;">{label_text}</div>'
-        '<div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;">'
+        '<div data-region="moves" style="display: flex; flex-direction: column; '
+        'gap: 6px; margin-bottom: 12px;">'
         + "".join(rows)
         + "</div>"
         + cause_note
-        + '<textarea name="option_other" rows="2" '
-        'placeholder="If you chose Other: describe the disposition you want. Recorded as a '
-        'proposed option on the brief bead." '
-        'style="width: 100%; font-family: var(--font-body); font-size: 12.5px; '
-        "padding: 5px 8px; margin-bottom: 12px; border: 1px solid var(--color-divider); "
-        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        "</textarea>"
     )
 
 
@@ -571,35 +638,25 @@ def entry(
     rig: str | None = None,
     prefill: str | None = None,
 ) -> str:
-    """The adjudication form."""
+    """The adjudication form.
+
+    ONE control -- the legal moves -- posts through the existing `/preview`
+    route. Each move is a submit button, so pressing it runs that move's own
+    dry-run (verdict AND option posted together) with no JavaScript and no
+    separate Submit step. The reason, the no-brainer flag and the browser-local
+    draft ride the same form.
+    """
     state, reason = panel_state(options)
     brief_id = str(attr(brief, "brief_id") or attr(brief, "bead_id") or "")
 
+    # The only pre-fill the panel still honours is the empty-brief standing
+    # return (`?prefill=incomplete`): it fills the reason and ticks no-brainer,
+    # and the operator presses Revise. Adopting a named option is no longer a
+    # pre-fill -- pressing that option's Approve move IS the adoption, and it
+    # goes straight to the move's dry-run.
     filled = prefill == "incomplete"
-    # `?prefill=adopt:{letter}` is one-click adoption of a named option: it
-    # arrives from the option's adopt link and pre-fills approve + that option
-    # + a reason quoting it. Parsed here, not in the router, so the panel owns
-    # the whole pre-fill and the app just forwards the raw prefill value.
-    adopt_letter = (
-        prefill.split(":", 1)[1].strip()
-        if prefill and prefill.startswith("adopt:")
-        else None
-    )
-    adopting = bool(adopt_letter)
-    controls = "".join(
-        _verdict_control(
-            name,
-            label,
-            state=state,
-            disabled=state != "open" and name not in RETURN_VERDICTS,
-            checked=(filled and name == "revise") or (adopting and name == "approve"),
-        )
-        for name, label in VERDICTS
-    )
 
     locked = state != "open"
-    # `locked` still drives the refusal notice and the styling, but no longer
-    # disables the form itself -- a return verdict is always recordable.
     bar_bg = STOP["error"]["edge"] if state == "held" else "var(--color-neutral-900)"
     bar_fg = STOP["error"]["bg"] if state == "held" else "var(--color-accent-200)"
     body_bg = LOCKED_BODY if state == "held" else "var(--color-neutral-100)"
@@ -622,39 +679,27 @@ def entry(
         f'<input type="hidden" name="operation" value="adjudicate">'
         f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">'
         f"{rig_field}"
-        '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
-        'color: var(--color-neutral-600); margin-bottom: 5px;">Verdict</div>'
-        f'<div data-region="verdict-set" style="display: flex; flex-direction: column; '
-        f'gap: 5px; margin-bottom: 12px;">{controls}</div>'
-        + _defer_window(disabled=locked)
-        + _disposition_control(brief, rig=rig, selected=adopt_letter)
-        +         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
-        'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
+        + _moves(brief, state=state, reason=reason)
+        + '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
+        'color: var(--color-neutral-600); margin-bottom: 5px;">Reason &mdash; optional</div>'
         '<textarea name="reason" rows="3" '
-        'placeholder="Why this verdict — recorded on the brief bead." '
-
+        'placeholder="Why this move — recorded on the brief bead. Optional." '
         'style="width: 100%; font-family: var(--font-body); font-size: 13px; '
         "padding: 6px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        + (
-            _e(INCOMPLETE_REASON) if filled
-            else _e(_adopt_reason(brief, adopt_letter)) if adopting
-            else ""
-        )
+        + (_e(INCOMPLETE_REASON) if filled else "")
         + "</textarea>"
         + _no_brainer_control(
             checked=filled, reason=INCOMPLETE_NO_BRAINER if filled else ""
         )
         + _save_draft_control(brief_id)
-        + '<div style="display: flex; gap: 9px; align-items: center; margin-top: 13px;">'
-        '<button class="btn btn-primary" type="submit">'
-        "Submit verdict &rarr;</button>"
+        + '<div style="margin-top: 13px;">'
         '<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
         + (
-            "approve is unavailable here — you can still revise or reject"
+            "approve and defer are unavailable here — you can still revise or reject"
             if locked
-            else "one click — submitting records this verdict; the dry-run effect "
-            "plan below shows what it does"
+            else "one click — pressing a move runs its dry run below; nothing is "
+            "written until you confirm it"
         )
         + "</span></div>"
         "</form>"

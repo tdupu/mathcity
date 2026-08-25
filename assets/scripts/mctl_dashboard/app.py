@@ -58,6 +58,7 @@ from .aggregate import CityView, is_deferred as _agg_is_deferred
 from .client import McpClient, ToolFailure, ToolResponse
 from .fanout import fan_out
 from .reading import attr
+from .review import UNDER_REVIEW_CODES
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
 #: The no-brainer box once folded a marker into the verdict reason because the
@@ -869,7 +870,12 @@ class Dashboard:
             + "</section>",
             render.artifact_trust_panel(listing.artifact_trust, rig=self.rig),
         ]
-        return self._page("Briefs", "/briefs", context, sections)
+        # This page already read the whole listing, so it can count the lanes
+        # that have a source (#66-6.3). Passing the counts it already has stops
+        # the header/sidebar rendering em dashes for stack/adjudicated/malformed
+        # on a page that could measure them; pile/errors/nobrainer stay dashed
+        # because they genuinely have no source.
+        return self._page("Briefs", "/briefs", context, sections, counts=self._counts(briefs))
 
     def _city_briefs(self, request: Request, status: str | None, label: str | None) -> Response:
         selected = self._rig_for(request)
@@ -1028,6 +1034,15 @@ class Dashboard:
                 heading="Brief diagnostics",
             ),
         ]
+        # The detail page already fanned in the whole listing (for "brief N of
+        # M" and prev/next), so it can count the lanes that have a source
+        # (#66-6.3) instead of leaving the header/sidebar in em dashes. When the
+        # listing read failed it degrades to no counts rather than a wrong one.
+        counts = (
+            self._counts(list(listing.payload.get("briefs") or ()))
+            if listing is not None
+            else None
+        )
         return self._page(
             str(attr(brief, "title") or brief_id),
             "/briefs",
@@ -1038,6 +1053,7 @@ class Dashboard:
             # here is a third copy that pushes the title -- and the status
             # banner telling you whether you can act at all -- below the fold.
             context_bar="",
+            counts=counts,
         )
 
     def _rig_required(self, brief_id: str) -> Response:
@@ -1704,6 +1720,24 @@ class Dashboard:
 
     def _preview(self, request: Request) -> Response:
         operation = OPERATIONS.get(request.form.get("operation", "").strip())
+        # The adjudication panel posts ONE field, `move`, whose value carries
+        # BOTH the verdict and the option -- `approve:A`, `approve:other`,
+        # `approve`, `revise`, `reject`, `defer`. Splitting it here (rather than
+        # letting a verdict radio and an option radio disagree) is what makes an
+        # illegal verdict×option pair unexpressible: there is only one field, so
+        # approve-with-a-blank-option on a multi-option brief (MOPT001) cannot
+        # be posted. A form that posts `verdict`/`option` directly (tests, and
+        # any non-panel caller) still works -- `move` is only read when present.
+        form: dict[str, str] = dict(request.form)
+        move = (form.get("move") or "").strip()
+        if move and operation is not None and operation.name == "adjudicate":
+            verdict, _, option = move.partition(":")
+            form["verdict"] = verdict.strip()
+            option = option.strip()
+            if option:
+                form["option"] = option
+            else:
+                form.pop("option", None)
         # ADR 0002 D3: `defer` is a verdict on the adjudication panel, not a
         # second form. The panel posts it through the adjudicate form, and the
         # dashboard translates it to the existing `briefs_defer` tool here --
@@ -1714,7 +1748,7 @@ class Dashboard:
         if (
             operation is not None
             and operation.name == "adjudicate"
-            and (request.form.get("verdict", "") or "").strip() == "defer"  # single-shape-ok: form field
+            and (form.get("verdict", "") or "").strip() == "defer"  # single-shape-ok: form field
         ):
             operation = OPERATIONS["defer"]
         if operation is None:
@@ -1753,7 +1787,7 @@ class Dashboard:
                 ],
                 rig=None,
             )
-        brief_id = request.form.get("brief_id", "").strip() or None  # single-shape-ok: form field
+        brief_id = form.get("brief_id", "").strip() or None  # single-shape-ok: form field
         if operation.needs_brief and not brief_id:
             return self._mutation_notice(
                 "No target brief",
@@ -1769,53 +1803,10 @@ class Dashboard:
                 ],
                 rig=rig,
             )
-        arguments = _arguments_for(operation, brief_id, request.form, rig)
-        arguments = self._resolve_recommendation(operation, brief_id, rig, arguments)
+        arguments = _arguments_for(operation, brief_id, form, rig)
         return self._render_preview(
             operation, brief_id, rig, arguments, heading="Dry-run preview"
         )
-
-    def _recommendation(self, brief_id: str, rig: str | None) -> str | None:
-        """The label of the option this brief marks recommended, or None.
-
-        briefs_show carries `recommendation` on the brief record (the label of the
-        option the author starred). Read failures degrade to None -- the caller
-        then leaves the option unresolved and the runtime block, if any, stands.
-        """
-        try:
-            shown = self.client.call("briefs_show", self._args(rig, brief_id=brief_id))
-        except ToolFailure:
-            return None
-        brief = dict(shown.payload.get("brief") or {})
-        recommended = brief.get("recommendation")
-        return str(recommended).strip() if recommended else None
-
-    def _resolve_recommendation(
-        self,
-        operation: Operation,
-        brief_id: str | None,
-        rig: str | None,
-        arguments: Mapping[str, Any],
-    ) -> Mapping[str, Any]:
-        """mc-qlmh: the panel's default disposition, "Accept the recommendation as
-        filed", submits an EMPTY option, which `_arguments_for` drops. On an APPROVE
-        of a multi-option brief that reaches the runtime as an unnamed option and is
-        refused (MOPT001) -- so the default choice always fails. Resolve the empty
-        option to the brief's own recommendation, making the default a legal call.
-        Absent a recommendation the option stays unresolved and the runtime's
-        "name one" block is honest.
-        """
-        if (
-            operation.name != "adjudicate"
-            or (arguments.get("verdict") or "").strip().lower() != "approve"
-            or "option" in arguments
-            or not brief_id
-        ):
-            return arguments
-        recommended = self._recommendation(brief_id, rig)
-        if not recommended:
-            return arguments
-        return {**arguments, "option": recommended}
 
     def _blocking_option(
         self, brief_id: str | None, rig: str | None, operation: Operation
@@ -1859,12 +1850,51 @@ class Dashboard:
         try:
             planned = self.client.call(operation.tool, {**arguments, "dry_run": True})
         except ToolFailure as failure:
-            # The refusal names its blocking code in `facts`, but the operator
-            # needs the whole set: the state-level block comes first, then the
-            # refusal itself, then the brief's own diagnostics -- each with its
-            # code, so "blocked" is a diagnosis rather than a wall.
+            # The operator needs the whole set, but each panel must name the
+            # thing that actually fired -- not dress one refusal as another.
             blocking = self._blocking_option(brief_id, rig, operation)
             doctor = self._doctor(brief_id, rig) if brief_id else None
+            blocking_code = str(blocking[0].get("code") or "") if blocking else ""
+            # A REAL state lock is a `_blocking_option` disabled reason whose
+            # code is a genuine gate/state failure. `MBRF004`/`MBRF005`/`MBRF021`
+            # are under review (review.py) -- structural or instrumentation, not
+            # "the state forbids this" -- so they must not be dressed in the
+            # hard state-lock wording ("does not permit", "no way of filling in
+            # the form would change this"). That wording is reserved here for an
+            # actual lock; an under-review block gets an under-review headline,
+            # and the refusal that fired is reported with its own code.
+            state_locked = bool(blocking) and blocking_code not in UNDER_REVIEW_CODES
+            fired = _primary_diagnostic(failure.diagnostics)
+            fired_code = str(fired.get("code") or "") if fired else ""
+            fired_field = (
+                str((fired.get("facts") or {}).get("field") or "") if fired else ""
+            )
+            if state_locked:
+                lead = render.notice_panel(
+                    f"This brief's state does not permit {operation.title}",
+                    "Nothing was written. No way of filling in the form would change this "
+                    "answer -- the bead's own state blocks the operation. The refusal that "
+                    "came back from the typed tool is below.",
+                    blocking,
+                    region="state-blocked",
+                )
+            elif blocking:
+                lead = render.notice_panel(
+                    f"{operation.title.capitalize()} is not available yet"
+                    + (f" — {blocking_code}" if blocking_code else ""),
+                    "Nothing was written. This check is under review: it does not mean the "
+                    "brief is wrong, and it is not a permanent state lock -- it is why the "
+                    "typed tool will not plan the mutation yet. The code that fired is below.",
+                    blocking,
+                    region="under-review-block",
+                )
+            else:
+                lead = ""
+            refused_headline = f"{operation.title.capitalize()} was refused"
+            if fired_field:
+                refused_headline += f": {fired_field}"
+            if fired_code:
+                refused_headline += f" — {fired_code}"
             return self._page(
                 "Blocked",
                 "/briefs",
@@ -1875,20 +1905,11 @@ class Dashboard:
                     # the diagnostic list sorts by severity and code, so a
                     # merged list would order the operator's real answer by
                     # alphabetical accident.
+                    lead,
                     render.notice_panel(
-                        f"This brief's state does not permit {operation.title}",
-                        "Nothing was written. No way of filling in the form would change this "
-                        "answer -- the bead's own state blocks the operation. The refusal that "
-                        "came back from the typed tool is below.",
-                        blocking,
-                        region="state-blocked",
-                    )
-                    if blocking
-                    else "",
-                    render.notice_panel(
-                        f"{operation.title.capitalize()} is blocked",
-                        "Nothing was written. The typed tool refused to plan this mutation, and "
-                        "the diagnostic code behind the refusal is below.",
+                        refused_headline,
+                        "Nothing was written. The typed tool refused to plan this mutation; "
+                        "the field and diagnostic code behind the refusal are below.",
                         failure.diagnostics,
                         region="blocked",
                     ),
@@ -2179,6 +2200,26 @@ def _blockers(items: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     for item in items:
         blockers.extend(item.get("blockers") or ())
     return blockers
+
+
+def _primary_diagnostic(diagnostics: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    """The single diagnostic that best represents why a mutation was refused.
+
+    A refusal comes back as a list; the operator's headline should name the one
+    that actually fired, most-severe first, so the 409 says what is wrong rather
+    than a generic wall. FATAL beats ERROR beats everything else; ties keep the
+    order the tool reported.
+    """
+    order = {"FATAL": 0, "ERROR": 1, "WARN": 2, "WARNING": 2, "INFO": 3}
+    best: Mapping[str, Any] | None = None
+    best_rank = 99
+    for diagnostic in diagnostics or ():
+        if not isinstance(diagnostic, Mapping):
+            continue
+        rank = order.get(str(diagnostic.get("severity") or "").upper(), 9)
+        if best is None or rank < best_rank:
+            best, best_rank = diagnostic, rank
+    return best
 
 
 def _arguments_for(

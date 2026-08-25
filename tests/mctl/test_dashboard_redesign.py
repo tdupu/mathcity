@@ -569,7 +569,8 @@ def test_a_real_gate_failure_is_held_and_strikes_every_verdict_but_reject():
     )
     assert 'data-panel-state="held"' in html
     assert "line-through" in html
-    allowed = re.search(r'<input[^>]*value="reject"[^>]*>', html)
+    # The reject move stays usable -- sending it back never ratifies anything.
+    allowed = re.search(r'<button[^>]*value="reject"[^>]*>', html)
     assert allowed and "disabled" not in allowed.group(0)
 
 
@@ -578,9 +579,10 @@ def test_refusal_gates_ratifying_but_never_returning():
 
     The earlier version of this test asserted that *every* verdict went dark in
     a refused state. That encoded a real defect: on the body-less briefs the
-    only sensible verdict is "revise, go add fields", and gating it left the
-    adjudicator with no move at all. `approve` stays gated -- ratifying an
-    unreadable brief is exactly what refusal is for.
+    only sensible move is "revise, go add fields", and gating it left the
+    adjudicator with no move at all. The Approve move stays gated -- ratifying
+    an unreadable brief is exactly what refusal is for -- while revise and
+    reject stay live.
     """
     import re
 
@@ -590,23 +592,25 @@ def test_refusal_gates_ratifying_but_never_returning():
     for code in ("MBRF004", "MBRF999"):
         html = panel.entry({"bead_id": "he-1"}, _option(False, code), state.ViewState())
 
-        approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
+        approve = re.search(r'<button[^>]*value="approve"[^>]*>', html)
         assert approve and "disabled" in approve.group(0), (code, "approve must stay gated")
 
         for verdict in ("revise", "reject"):
-            found = re.search(rf'<input[^>]*value="{verdict}"[^>]*>', html)
+            found = re.search(rf'<button[^>]*value="{verdict}"[^>]*>', html)
             assert found and "disabled" not in found.group(0), (code, verdict)
 
 
 def test_a_returnable_brief_has_a_usable_form():
-    """Freeing the radio is pointless if the reason box and submit stay locked."""
+    """Freeing the move is pointless if the reason box or the returning moves stay locked."""
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _option(False, "MBRF004"), state.ViewState())
     assert '<textarea name="reason"' in html
     assert "disabled" not in html.split('name="reason"')[1].split(">")[0]
-    assert '<button class="btn btn-primary" type="submit">' in html
+    # The returning moves are live submit buttons -- the form still records a verdict.
+    revise = re.search(r'<button[^>]*value="revise"[^>]*>', html)
+    assert revise and "disabled" not in revise.group(0)
 
 
 def test_the_no_brainer_flag_is_present_and_is_not_a_verdict():
@@ -1609,9 +1613,11 @@ def test_the_disposition_control_offers_the_briefs_own_options():
                               {"label": "B", "title": "Split first"}]},
         _option(True), state.ViewState(),
     )
-    assert 'value="A"' in html and "Merge as filed" in html
-    assert 'value="B"' in html and "Split first" in html
-    assert 'value="other"' in html
+    # Each named option is an Approve move carrying its own title.
+    assert 'value="approve:A"' in html and "Merge as filed" in html
+    assert 'value="approve:B"' in html and "Split first" in html
+    # ...plus the "none of these, propose your own" escape.
+    assert 'value="approve:other"' in html
     assert 'name="option_other"' in html
 
 
@@ -1621,7 +1627,10 @@ def test_a_brief_with_no_options_says_so_rather_than_demanding_a_letter():
 
     html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
     assert "names no options" in html
-    assert 'value="other"' in html
+    # With no options there is nothing to "approve other" against: a bare
+    # Approve move, and no letter or other move at all.
+    assert 'value="approve"' in html.replace('value="approve:', "value=X")
+    assert "approve:" not in html
 
 
 # --------------------------------------------------------------------------
@@ -1693,16 +1702,19 @@ def test_the_prefill_fills_the_form_and_records_nothing():
         {"bead_id": "he-1", "body": ""}, _option(True), state.ViewState(),
         prefill="incomplete",
     )
-    revise = re.search(r'<input[^>]*value="revise"[^>]*>', html)
-    assert revise and "checked" in revise.group(0)
+    # The standing return is a REVISE: the reason box arrives with the return
+    # text and the no-brainer flag is ticked. The operator presses the live
+    # Revise move to record it.
     assert "required fields" in html
     assert 'name="no_brainer" value="1" checked' in html
+    revise = re.search(r'<button[^>]*value="revise"[^>]*>', html)
+    assert revise and "disabled" not in revise.group(0)
     # The offer is gone once taken, and the form is still a form.
     assert 'data-region="prefill-offer"' not in html
-    assert '<button class="btn btn-primary" type="submit">' in html
 
 
 def test_the_prefill_does_not_preselect_approve():
+    """The standing return fills a revise reason -- it never implies an approve."""
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
@@ -1710,8 +1722,11 @@ def test_the_prefill_does_not_preselect_approve():
         {"bead_id": "he-1", "body": ""}, _option(True), state.ViewState(),
         prefill="incomplete",
     )
-    approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
-    assert approve and "checked" not in approve.group(0)
+    # No move is pre-pressed or auto-focused; the reason box carries the return
+    # text, which is a revise reason, not an approval.
+    approve = re.search(r'<button[^>]*value="approve"[^>]*>', html)
+    assert approve and "autofocus" not in approve.group(0)
+    assert "Returned as incomplete" in html
 
 
 def test_the_brief_page_has_only_one_adjudication_form():
@@ -2012,7 +2027,7 @@ def test_duplicate_option_letters_are_collapsed_with_the_cause_stated():
     }
     html = panel.entry(brief, _option(True), state.ViewState())
 
-    values = re.findall(r'<input type="radio" name="option" value="([^"]*)"', html)
-    assert values.count("A") == 1, f"A must render once, got {values}"
-    assert values.count("B") == 1, f"B must render once, got {values}"
+    values = re.findall(r'<button type="submit" name="move" value="([^"]*)"', html)
+    assert values.count("approve:A") == 1, f"A must render once, got {values}"
+    assert values.count("approve:B") == 1, f"B must render once, got {values}"
     assert "repeats its options section" in html, "the cause must be stated"
