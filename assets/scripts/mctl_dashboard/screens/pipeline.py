@@ -124,6 +124,62 @@ def pile() -> str:
     )
 
 
+def error_briefs_notice() -> str:
+    """Invariant-error briefs. No source exists: they are not filed as briefs.
+
+    The lane is empty because its SOURCE does not exist, not because the rig is
+    clean. Falling through to the generic stack table would render "produced
+    briefs land in the pile and are promoted by the gates", which reads as an
+    empty rig whose briefs are waiting -- a measurement nobody took. Error
+    briefs are not filed as briefs at all yet (CHANGELOG §G1), so there is
+    nothing here to read.
+    """
+    return (
+        '<section data-region="errors">'
+        + _heading("Invariant errors", "no source — error briefs are not filed as briefs yet")
+        + _gap(
+            "<strong>This lane is empty because its source does not exist, not "
+            "because the rig is clean.</strong> Invariant errors are "
+            "<strong>not filed as briefs at all</strong> yet (CHANGELOG §G1), so "
+            "there is nothing here for this screen to read. An empty stack table "
+            "would say &ldquo;no error briefs are waiting in the pile&rdquo; — a "
+            "measurement nobody took, because the briefs were never produced. "
+            f'Tracked as <a href="{ISSUE_66}">issue #66</a>.'
+        )
+        + '<p class="lede">Filing invariant violations as briefs is backend work '
+        "on the write path, not a second reader here — until it lands, this lane "
+        "has no source to display.</p>"
+        "</section>"
+    )
+
+
+def no_brainer_notice() -> str:
+    """No-brainer briefs. The classifier writes no bead state: nothing to read.
+
+    Empty for the same "no source" reason as the errors lane. The no-brainer
+    classifier records no bead state, so the typed surface carries nothing to
+    read; the generic stack table would falsely say briefs are waiting in the
+    pile.
+    """
+    return (
+        '<section data-region="nobrainer">'
+        + _heading("No-brainers", "no source — the classifier writes no bead state")
+        + _gap(
+            "<strong>This lane is empty because its source does not exist, not "
+            "because the rig has none.</strong> The no-brainer classifier "
+            "<strong>writes no bead state</strong>, so there is nothing here for "
+            "this screen to read. An empty stack table would say no-brainers are "
+            "waiting in the pile — a measurement nobody took, because no "
+            "classifier verdict was ever recorded on a bead. "
+            f'Tracked as <a href="{ISSUE_66}">issue #66</a>.'
+        )
+        + '<p class="lede">Persisting the classifier signal as bead state is '
+        "backend work, not a second classifier here — until it lands, this lane "
+        "has no source to display.</p>"
+        "</section>"
+    )
+
+
 def _count(briefs: Sequence[Mapping[str, Any]]) -> str:
     """"1 brief", not "1 briefs" -- these lanes now legitimately hold one."""
     n = len(briefs)

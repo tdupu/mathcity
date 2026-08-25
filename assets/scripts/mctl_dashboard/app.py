@@ -802,14 +802,28 @@ class Dashboard:
             + "</div>"
             '<div style="height: 2px; background: var(--color-neutral-900); '
             'margin: 8px 0 0;"></div>',
-            stack.column_picker(view) if columns_open else "",
-            stack.table(briefs, view, queued=(), elsewhere=elsewhere),
-            stack.junk_count_note(held_back, len(briefs) + len(held_back)),
-            stack.empty_sort_note(briefs, view),
-            stack.key_legend(),
-            stack.unfed_note(briefs),
-            *city_extra,
         ]
+        # The errors and no-brainer lanes have no source at all: error briefs
+        # are not filed as briefs (CHANGELOG §G1) and the no-brainer classifier
+        # writes no bead state, so `_scoped` returns an empty list for both.
+        # The generic stack table would then draw its empty_notice ("produced
+        # briefs land in the pile..."), which misreads a lane with NO source as
+        # an empty rig whose briefs are waiting. Render the dedicated notice
+        # that names the actual kind of absence instead.
+        if view.scope == "errors":
+            sections.append(pipeline_screen.error_briefs_notice())
+        elif view.scope == "nobrainer":
+            sections.append(pipeline_screen.no_brainer_notice())
+        else:
+            sections += [
+                stack.column_picker(view) if columns_open else "",
+                stack.table(briefs, view, queued=(), elsewhere=elsewhere),
+                stack.junk_count_note(held_back, len(briefs) + len(held_back)),
+                stack.empty_sort_note(briefs, view),
+                stack.key_legend(),
+                stack.unfed_note(briefs),
+            ]
+        sections += [*city_extra]
         # Counts come from the whole listing, not the scoped slice: the
         # sidebar has to report every lane, not just the one being viewed.
         return self._page(

@@ -859,6 +859,40 @@ def test_malformed_briefs_are_surfaced_with_their_caveat():
     assert "read this count carefully" in html.lower()
 
 
+def test_the_errors_lane_names_its_missing_source_rather_than_an_empty_rig():
+    """Invariant-error briefs are not filed as briefs at all (CHANGELOG §G1).
+
+    The lane is empty because the SOURCE does not exist, not because the rig is
+    clean. An empty stack table would say the briefs are waiting in the pile,
+    which is a measurement nobody took.
+    """
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.error_briefs_notice()
+    text = html.lower()
+    assert "not filed" in text, "error briefs are not filed as briefs yet"
+    assert "g1" in text, "reference CHANGELOG §G1"
+    assert "source" in text, "the absence is a missing source"
+    assert "#66" in html
+    assert "land in the pile" not in text
+
+
+def test_the_no_brainer_lane_names_the_classifier_writing_no_state():
+    """The no-brainer classifier writes no bead state, so nothing to read.
+
+    Empty for the same "no source" reason as the errors lane, tracked under #66.
+    """
+    from mctl_dashboard.screens import pipeline
+
+    html = pipeline.no_brainer_notice()
+    text = html.lower()
+    assert "classifier" in text
+    assert "bead state" in text or "no bead" in text
+    assert "source" in text
+    assert "#66" in html
+    assert "land in the pile" not in text
+
+
 # --------------------------------------------------------------------------
 # priority list
 # --------------------------------------------------------------------------

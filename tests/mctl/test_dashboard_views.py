@@ -510,6 +510,54 @@ def test_the_pile_page_shows_the_sibling_lane_counts_while_its_own_chip_stays_da
         assert count == _navlink_count(deferred, href), (
             f"{href} count on /pile disagrees with the sibling-lane page"
         )
+# --- error / no-brainer lanes have no source (issue #66) ---------------------
+
+
+def test_the_errors_lane_says_its_source_does_not_exist(tmp_path: Path):
+    """`/queue?scope=errors` is empty because error briefs are not filed at all.
+
+    Falling through to the generic stack table renders "produced briefs land in
+    the pile and are promoted by the gates" — which reads as an empty rig whose
+    briefs are waiting, not as a lane with NO source. The correct kind of
+    absence (not filed as briefs; CHANGELOG §G1) has to be on the screen.
+    """
+    dashboard, _, _, _ = dashboard_for(tmp_path)
+
+    html = body(dashboard, "/queue", scope="errors")
+    text = strip_tags(html).lower()
+
+    assert 'data-region="brief-stack-empty"' not in html, (
+        "the generic stack empty_notice misrepresents this lane"
+    )
+    assert "promoted by the gates" not in text, "the generic stack-empty copy must not appear"
+    assert 'data-region="errors"' in html, "the dedicated error-lane notice must render"
+    assert "not filed" in text, "the lane is empty because error briefs are not filed as briefs"
+    assert "§g1" in text or "g1" in text, "reference CHANGELOG §G1"
+    assert "source" in text, "the absence is a missing source, not an empty rig"
+    assert "#66" in html
+
+
+def test_the_no_brainer_lane_says_the_classifier_writes_no_bead_state(tmp_path: Path):
+    """`/queue?scope=nobrainer` is empty because the classifier writes no state.
+
+    Same defect as the errors lane: the generic stack table would claim briefs
+    are waiting in the pile. There is no source — the no-brainer classifier
+    records no bead state, so there is nothing to read.
+    """
+    dashboard, _, _, _ = dashboard_for(tmp_path)
+
+    html = body(dashboard, "/queue", scope="nobrainer")
+    text = strip_tags(html).lower()
+
+    assert 'data-region="brief-stack-empty"' not in html, (
+        "the generic stack empty_notice misrepresents this lane"
+    )
+    assert "promoted by the gates" not in text, "the generic stack-empty copy must not appear"
+    assert 'data-region="nobrainer"' in html, "the dedicated no-brainer notice must render"
+    assert "classifier" in text, "the reason is the classifier writing no bead state"
+    assert "bead state" in text or "no bead" in text
+    assert "source" in text
+    assert "#66" in html
 
 
 # --- responsive shell --------------------------------------------------------
