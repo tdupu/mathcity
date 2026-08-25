@@ -293,3 +293,71 @@ def test_the_panel_ships_no_inline_event_handlers():
     html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState()).lower()
     for banned in ("onclick", "onchange", "onsubmit", "javascript:"):
         assert banned not in html
+
+
+# --------------------------------------------------------------------------
+# Consolidation: at rest the panel shows ONE text box; the option-other and
+# no-brainer-why boxes ride behind native <details> disclosures (JS-off-safe).
+# --------------------------------------------------------------------------
+
+
+def _multi_option_brief():
+    return {
+        "bead_id": "he-1",
+        "decision_options": [
+            {"label": "A", "title": "Do it", "heading": "Do it", "recommended": True},
+            {"label": "B", "title": "Do not", "heading": "Do not"},
+        ],
+    }
+
+
+def test_at_rest_only_the_reason_box_is_an_open_text_input():
+    """The no-brainer 'why' box is collapsed behind a <details>, so the panel
+    does not present a stack of open textareas."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
+    # the no-brainer control is a disclosure, collapsed by default
+    nb = re.search(r'<details[^>]*data-region="no-brainer"[^>]*>', html)
+    assert nb, "the no-brainer control must be a <details> disclosure"
+    assert " open" not in nb.group(0), "no-brainer must be collapsed at rest"
+    # its field is still in the DOM, so it submits with scripting off
+    assert 'name="no_brainer_reason"' in html
+    assert 'name="no_brainer"' in html
+
+
+def test_option_other_is_collapsed_behind_a_disclosure():
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(_multi_option_brief(), _open_option(), state.ViewState())
+    oo = re.search(r'<details[^>]*data-region="option-other"[^>]*>', html)
+    assert oo, "option-other must be a <details> disclosure"
+    assert " open" not in oo.group(0), "option-other must be collapsed at rest"
+    # still present so it posts with the Approve (other…) move when typed
+    assert 'name="option_other"' in html
+
+
+def test_the_prefilled_no_brainer_disclosure_is_open():
+    """The empty-brief standing return ticks no-brainer and fills its reason,
+    so that disclosure must arrive open — a pre-filled value hidden in a
+    collapsed box would read as if nothing were set."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(
+        {"bead_id": "he-1"}, _open_option(), state.ViewState(), prefill="incomplete"
+    )
+    nb = re.search(r'<details[^>]*data-region="no-brainer"[^>]*>', html)
+    assert nb and " open" in nb.group(0), "a prefilled no-brainer must be open"
+
+
+def test_the_disclosures_use_no_scripting():
+    """<details> is native HTML; the collapse must not depend on JavaScript."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry(_multi_option_brief(), _open_option(), state.ViewState()).lower()
+    for banned in ("onclick", "onchange", "onsubmit", "javascript:"):
+        assert banned not in html

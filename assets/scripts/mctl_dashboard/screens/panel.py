@@ -352,15 +352,25 @@ def _option_other_box() -> str:
     A decision-maker who can only pick from the options as filed cannot say
     "none of these, do that". That is a real verdict, not an absence of one;
     the dashboard records it as a proposed option (a revise carrying the text).
+
+    It rides behind a native `<details>` disclosure, collapsed by default, so the
+    panel does not stack an always-open textarea under a move nobody is taking.
+    `<details>` is HTML, not script, so it collapses with scripting off, and the
+    field stays in the DOM either way -- it posts with the Approve (other…) move.
     """
     return (
+        '<details data-region="option-other" style="margin: 3px 0 0 26px;">'
+        '<summary style="font-family: var(--font-body); font-size: 11.5px; '
+        'color: var(--color-neutral-600); cursor: pointer;">'
+        "propose your own disposition</summary>"
         '<textarea name="option_other" rows="2" '
         'placeholder="Describe the disposition you want. Recorded as a proposed option '
         'on the brief bead." '
-        'style="width: calc(100% - 26px); margin: 2px 0 0 26px; font-family: var(--font-body); '
+        'style="width: 100%; margin: 5px 0 0; font-family: var(--font-body); '
         "font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
         "</textarea>"
+        "</details>"
     )
 
 
@@ -513,17 +523,28 @@ def _no_brainer_control(*, checked: bool = False, reason: str = "") -> str:
     brief. Taylor's standing rule is that a no-brainer reaching the adjudicator
     at all is the defect -- so the flag has to be capturable at the moment of
     adjudication, when the judgement is fresh, or it never gets captured.
+
+    It rides behind a native `<details>` disclosure so the panel shows one open
+    text box, not a stack. Collapsed by default; `open` when the flag is already
+    set (the empty-brief standing return), because a pre-filled value hidden in a
+    shut box would read as unset. `<details>` needs no script, and both fields
+    stay in the DOM collapsed, so they post with whatever move is pressed.
     """
     return (
-        '<div style="margin-top: 12px; padding: 9px 11px; '
+        '<details data-region="no-brainer"'
+        + (" open" if checked else "")
+        + ' style="margin-top: 12px; padding: 9px 11px; '
         "border: 1px dashed var(--color-neutral-300); "
         'border-radius: var(--radius-sm); background: var(--color-neutral-050);">'
+        '<summary style="font-size: 12.5px; cursor: pointer;">'
+        "<strong>No-brainer</strong> &mdash; flag if this should not have needed you"
+        "</summary>"
         '<label style="display: flex; align-items: center; gap: 7px; '
-        'font-size: 12.5px; cursor: pointer;">'
+        'font-size: 12px; cursor: pointer; margin-top: 8px;">'
         '<input type="checkbox" name="no_brainer" value="1"'
         + (" checked" if checked else "")
         + ' style="accent-color: var(--color-accent-600); margin: 0;">'
-        "<strong>No-brainer</strong> &mdash; this should not have needed me"
+        "this brief should not have reached me"
         "</label>"
         '<textarea name="no_brainer_reason" rows="2" '
         'placeholder="Why was this a no-brainer? Recorded as a classifier signal, '
@@ -533,7 +554,7 @@ def _no_brainer_control(*, checked: bool = False, reason: str = "") -> str:
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
         + _e(reason)
         + "</textarea>"
-        "</div>"
+        "</details>"
     )
 
 
