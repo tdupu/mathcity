@@ -432,7 +432,14 @@ def test_the_applied_page_does_not_claim_a_refused_write_as_past_tense(tmp_path:
     )
 
 
-# --- mc-qlmh: the empty "accept the recommendation" option must be legal -------
+# --- multi-option approve names an option, so MOPT001 cannot be reached -------
+#
+# The `_resolve_recommendation` shim (mc-qlmh, 42f63d7) that used to back-fill an
+# empty option with the brief's recommendation was removed with the panel
+# rework: the legal-moves control never posts an approve-with-empty-option on a
+# multi-option brief, so there is nothing to resolve. `_give_options` stays here
+# as a shared fixture helper (used by test_dashboard_panel_moves.py); the move
+# control's own coverage of the unnamed-option combo lives in that file.
 
 
 def _give_options(rig_root: Path, brief_id: str) -> None:
@@ -446,22 +453,3 @@ def _give_options(rig_root: Path, brief_id: str) -> None:
                 "- **(B) Wait**\n  Hold off a week.\n"
             )
     write_beads(rig_root, rows)
-
-
-def test_accept_the_recommendation_resolves_the_empty_option_to_the_recommended_one(tmp_path: Path):
-    """mc-qlmh: the panel's default disposition, "Accept the recommendation as
-    filed", submits an EMPTY option. On a multi-option approve that reaches the
-    runtime as an unnamed option and is refused (MOPT001) -- an always-failing
-    legal-looking choice. The empty option must resolve to the brief's own
-    recommendation so the default disposition is a legal call."""
-    dashboard, _, rig_root = dashboard_for(tmp_path)
-    _give_options(rig_root, "mc-open")
-
-    # approve with NO explicit option (the "accept the recommendation" default)
-    response = preview(dashboard)
-
-    assert response.status == 200, (
-        "the empty option must resolve to the recommendation, not fail as unnamed; "
-        f"got HTTP {response.status}: {strip_tags(response.body)[:400]}"
-    )
-    assert "MOPT001" not in response.body, "a resolved recommendation must not trip the unnamed-option gate"

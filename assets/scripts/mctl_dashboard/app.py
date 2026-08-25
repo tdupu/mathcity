@@ -1704,6 +1704,24 @@ class Dashboard:
 
     def _preview(self, request: Request) -> Response:
         operation = OPERATIONS.get(request.form.get("operation", "").strip())
+        # The adjudication panel posts ONE field, `move`, whose value carries
+        # BOTH the verdict and the option -- `approve:A`, `approve:other`,
+        # `approve`, `revise`, `reject`, `defer`. Splitting it here (rather than
+        # letting a verdict radio and an option radio disagree) is what makes an
+        # illegal verdict×option pair unexpressible: there is only one field, so
+        # approve-with-a-blank-option on a multi-option brief (MOPT001) cannot
+        # be posted. A form that posts `verdict`/`option` directly (tests, and
+        # any non-panel caller) still works -- `move` is only read when present.
+        form: dict[str, str] = dict(request.form)
+        move = (form.get("move") or "").strip()
+        if move and operation is not None and operation.name == "adjudicate":
+            verdict, _, option = move.partition(":")
+            form["verdict"] = verdict.strip()
+            option = option.strip()
+            if option:
+                form["option"] = option
+            else:
+                form.pop("option", None)
         # ADR 0002 D3: `defer` is a verdict on the adjudication panel, not a
         # second form. The panel posts it through the adjudicate form, and the
         # dashboard translates it to the existing `briefs_defer` tool here --
@@ -1714,7 +1732,7 @@ class Dashboard:
         if (
             operation is not None
             and operation.name == "adjudicate"
-            and (request.form.get("verdict", "") or "").strip() == "defer"  # single-shape-ok: form field
+            and (form.get("verdict", "") or "").strip() == "defer"  # single-shape-ok: form field
         ):
             operation = OPERATIONS["defer"]
         if operation is None:
@@ -1753,7 +1771,7 @@ class Dashboard:
                 ],
                 rig=None,
             )
-        brief_id = request.form.get("brief_id", "").strip() or None  # single-shape-ok: form field
+        brief_id = form.get("brief_id", "").strip() or None  # single-shape-ok: form field
         if operation.needs_brief and not brief_id:
             return self._mutation_notice(
                 "No target brief",
@@ -1769,53 +1787,10 @@ class Dashboard:
                 ],
                 rig=rig,
             )
-        arguments = _arguments_for(operation, brief_id, request.form, rig)
-        arguments = self._resolve_recommendation(operation, brief_id, rig, arguments)
+        arguments = _arguments_for(operation, brief_id, form, rig)
         return self._render_preview(
             operation, brief_id, rig, arguments, heading="Dry-run preview"
         )
-
-    def _recommendation(self, brief_id: str, rig: str | None) -> str | None:
-        """The label of the option this brief marks recommended, or None.
-
-        briefs_show carries `recommendation` on the brief record (the label of the
-        option the author starred). Read failures degrade to None -- the caller
-        then leaves the option unresolved and the runtime block, if any, stands.
-        """
-        try:
-            shown = self.client.call("briefs_show", self._args(rig, brief_id=brief_id))
-        except ToolFailure:
-            return None
-        brief = dict(shown.payload.get("brief") or {})
-        recommended = brief.get("recommendation")
-        return str(recommended).strip() if recommended else None
-
-    def _resolve_recommendation(
-        self,
-        operation: Operation,
-        brief_id: str | None,
-        rig: str | None,
-        arguments: Mapping[str, Any],
-    ) -> Mapping[str, Any]:
-        """mc-qlmh: the panel's default disposition, "Accept the recommendation as
-        filed", submits an EMPTY option, which `_arguments_for` drops. On an APPROVE
-        of a multi-option brief that reaches the runtime as an unnamed option and is
-        refused (MOPT001) -- so the default choice always fails. Resolve the empty
-        option to the brief's own recommendation, making the default a legal call.
-        Absent a recommendation the option stays unresolved and the runtime's
-        "name one" block is honest.
-        """
-        if (
-            operation.name != "adjudicate"
-            or (arguments.get("verdict") or "").strip().lower() != "approve"
-            or "option" in arguments
-            or not brief_id
-        ):
-            return arguments
-        recommended = self._recommendation(brief_id, rig)
-        if not recommended:
-            return arguments
-        return {**arguments, "option": recommended}
 
     def _blocking_option(
         self, brief_id: str | None, rig: str | None, operation: Operation

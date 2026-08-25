@@ -69,18 +69,17 @@ def _locked_option(code: str, severity: str = "ERROR"):
 # --------------------------------------------------------------------------
 
 
-def test_rec_and_other_synthetics_render_even_with_no_options():
+def test_a_no_option_brief_offers_a_bare_approve_no_letter_required():
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
-    # REC: accept the recommendation as filed, preselected, records no letter.
-    assert "Accept the recommendation as filed" in html
-    assert re.search(r'name="option" value=""[^>]*checked', html)
-    # OTHER: propose your own, with a free-text box.
-    assert "propose your own" in html
-    assert 'name="option" value="other"' in html
-    assert 'name="option_other"' in html
+    # A brief that names no options offers Approve · Revise · Reject · Defer.
+    # Approve carries no option, so there is no synthetic "recommendation" or
+    # "other" letter to pick and nothing MOPT001 could be about.
+    assert re.search(r'name="move" value="approve"', html)
+    assert "approve:" not in html
+    assert 'name="option_other"' not in html
 
 
 def test_approve_is_never_blocked_by_a_missing_alternative():
@@ -90,7 +89,7 @@ def test_approve_is_never_blocked_by_a_missing_alternative():
 
     # A brief that names no options still offers approve, un-disabled.
     html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
-    approve = re.search(r'<input[^>]*value="approve"[^>]*>', html)
+    approve = re.search(r'<button[^>]*value="approve"[^>]*>', html)
     assert approve and "disabled" not in approve.group(0)
 
 
@@ -99,14 +98,14 @@ def test_approve_is_never_blocked_by_a_missing_alternative():
 # --------------------------------------------------------------------------
 
 
-def test_all_four_verdict_radios_render_with_a_one_line_hint():
+def test_all_four_move_kinds_render_with_a_one_line_hint():
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
-    for verdict in ("approve", "revise", "reject", "defer"):
-        assert re.search(rf'<input[^>]*name="verdict" value="{verdict}"', html), verdict
-    # Each verdict carries its meaning hint, rendered.
+    for move in ("approve", "revise", "reject", "defer"):
+        assert re.search(rf'<button[^>]*name="move" value="{move}"', html), move
+    # Each move carries its meaning hint, rendered.
     assert html.count('data-region="verdict-hint"') == 4
     for hint in panel.VERDICT_HINTS.values():
         assert hint in html
@@ -126,8 +125,8 @@ def test_the_submit_is_one_click_not_a_review_step():
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
-    # The button submits a verdict; it is no longer a "Review" step.
-    assert "Submit verdict" in html
+    # Each move is its own submit button; there is no separate Submit/Review step.
+    assert '<button type="submit" name="move"' in html
     assert "Review verdict" not in html
     # Still posts through the existing preview route (preview-first, D2).
     assert 'action="/preview"' in html
@@ -171,12 +170,12 @@ def test_held_strikes_approve_and_defer_from_the_typed_disabled_reason():
     assert "line-through" in html
     # The coded reason from BriefOption.disabled_reason is shown.
     assert "MBRF999" in html
-    # Ratifying verdicts are struck/inert; returning verdicts stay usable.
+    # Ratifying moves are struck/inert; returning moves stay usable.
     for gated in ("approve", "defer"):
-        found = re.search(rf'<input[^>]*value="{gated}"[^>]*>', html)
+        found = re.search(rf'<button[^>]*value="{gated}"[^>]*>', html)
         assert found and "disabled" in found.group(0), gated
     for usable in ("revise", "reject"):
-        found = re.search(rf'<input[^>]*value="{usable}"[^>]*>', html)
+        found = re.search(rf'<button[^>]*value="{usable}"[^>]*>', html)
         assert found and "disabled" not in found.group(0), usable
 
 

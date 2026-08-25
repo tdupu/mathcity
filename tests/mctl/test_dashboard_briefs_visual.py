@@ -102,7 +102,7 @@ def test_the_shell_emits_the_provenance_region_on_every_page():
 
 
 # --------------------------------------------------------------------------
-# §4 click-to-adopt
+# §4 options are Approve moves (one click = one dry-run)
 # --------------------------------------------------------------------------
 
 
@@ -120,54 +120,38 @@ def _open_option():
     return [{"id": "adjudicate", "enabled": True}]
 
 
-def test_each_named_option_carries_an_adopt_link():
+def test_each_named_option_is_its_own_approve_move():
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry(_BRIEF, _open_option(), state.ViewState(), rig="hecke")
-    assert 'data-region="adopt-option"' in html
-    assert "prefill=adopt:A" in html and "prefill=adopt:B" in html
-    # The adopt link is a link, not a script hook, and lands on the panel.
-    assert "#mc-adjudicate" in html
+    # No separate adopt link -- the option's Approve move IS the adoption.
+    assert "prefill=adopt" not in html
+    assert 'value="approve:A"' in html and "Merge as filed" in html
+    assert 'value="approve:B"' in html and "Split first" in html
 
 
-def test_adopting_an_option_fills_approve_the_option_and_a_quoted_reason():
+def test_an_approve_move_carries_both_the_verdict_and_the_option():
+    """Adopting an option is one press: the move value carries approve AND the letter."""
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
-    html = panel.entry(
-        _BRIEF, _open_option(), state.ViewState(), rig="hecke", prefill="adopt:B"
-    )
-    # Verdict approve is preselected...
-    assert re.search(r'value="approve"[^>]*checked', html)
-    # ...the option radio for B is selected...
-    assert re.search(r'name="option" value="B"[^>]*checked', html)
-    # ...and the reason quotes the option in the brief's own words.
-    assert "Adopting option B: Split first." in html
+    html = panel.entry(_BRIEF, _open_option(), state.ViewState(), rig="hecke")
+    move = re.search(r'<button type="submit" name="move" value="approve:B"[^>]*>', html)
+    assert move, "the B option must be an approve:B submit button"
+    # It records the option too, so the two can never be posted apart.
+    assert 'data-option="B"' in move.group(0)
 
 
-def test_adopt_preselects_only_its_own_option_not_accept_as_filed():
+def test_pressing_an_approve_move_stays_preview_first():
+    """A move press runs a dry run through /preview; it never writes."""
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
-    html = panel.entry(
-        _BRIEF, _open_option(), state.ViewState(), prefill="adopt:A"
-    )
-    # "Accept the recommendation as filed" (value="") must NOT be checked when
-    # a specific option was adopted.
-    assert not re.search(r'name="option" value=""[^>]*checked', html)
-    assert re.search(r'name="option" value="A"[^>]*checked', html)
-
-
-def test_click_to_adopt_stays_preview_first():
-    """Adopting fills the form; it never writes. The form still posts /preview."""
-    from mctl_dashboard import state
-    from mctl_dashboard.screens import panel
-
-    html = panel.entry(_BRIEF, _open_option(), state.ViewState(), prefill="adopt:A")
+    html = panel.entry(_BRIEF, _open_option(), state.ViewState(), rig="hecke")
     assert 'action="/preview"' in html
-    # No adopt link points at a mutation route.
-    assert 'href="/apply' not in html and 'href="/preview' not in html
+    # No move button points at the apply route.
+    assert '/apply' not in html
 
 
 # --------------------------------------------------------------------------
