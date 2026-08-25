@@ -23,3 +23,6 @@ CONTEXT.md
 
 # Local MCP client registration — session-specific, not shared config.
 .mcp.json
+
+# Salvage scratch — recovered//staging material, not shared history.
+docs/salvage/
