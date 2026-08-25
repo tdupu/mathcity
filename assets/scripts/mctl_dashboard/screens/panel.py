@@ -499,9 +499,9 @@ def _moves(
         else ""
     )
     label_text = (
-        "Choose a move"
+        "The moves this brief permits"
         if options
-        else "Choose a move &mdash; this brief names no options"
+        else "The moves this brief permits &mdash; it names no options"
     )
     return (
         '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
@@ -719,8 +719,9 @@ def entry(
         + (
             "approve and defer are unavailable here — you can still revise or reject"
             if locked
-            else "one click — pressing a move runs its dry run below; nothing is "
-            "written until you confirm it"
+            else "pressing a move IS the verdict — one press records the verdict "
+            "and its option together; the dry run below and its confirm are the "
+            "only step left, not a second decision"
         )
         + "</span></div>"
         "</form>"

@@ -361,3 +361,17 @@ def test_the_disclosures_use_no_scripting():
     html = panel.entry(_multi_option_brief(), _open_option(), state.ViewState()).lower()
     for banned in ("onclick", "onchange", "onsubmit", "javascript:"):
         assert banned not in html
+
+
+def test_move_control_is_labelled_the_moves_this_brief_permits():
+    """Copy: the move control frames the buttons as the moves the brief permits,
+    not a bare "Choose a move" — and a move-press IS the whole verdict."""
+    from mctl_dashboard import state
+    from mctl_dashboard.screens import panel
+
+    html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
+    # (a) the new label frames the control as the permitted moves.
+    assert "moves this brief permits" in html
+    assert "Choose a move" not in html
+    # (b) the framing states that pressing a move records the verdict itself.
+    assert "records the verdict" in html
