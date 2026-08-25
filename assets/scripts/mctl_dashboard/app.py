@@ -824,11 +824,20 @@ class Dashboard:
                 stack.unfed_note(briefs),
             ]
         sections += [*city_extra]
+        # Stack, Error briefs and No-brainers are all this route, split by
+        # `?scope=`, and the sidebar marks the current tab by matching its href
+        # exactly. A bare "/queue" would match only the Stack nav item, so the
+        # scoped lanes must carry their scope in `current` or every one of them
+        # highlights Stack. Kept in step with `render.NAV`'s hrefs.
+        current_tab = {
+            "errors": "/queue?scope=errors",
+            "nobrainer": "/queue?scope=nobrainer",
+        }.get(view.scope, "/queue")
         # Counts come from the whole listing, not the scoped slice: the
         # sidebar has to report every lane, not just the one being viewed.
         return self._page(
             heading,
-            "/queue",
+            current_tab,
             context,
             sections,
             counts=self._counts(all_briefs),

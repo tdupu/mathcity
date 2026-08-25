@@ -560,6 +560,37 @@ def test_the_no_brainer_lane_says_the_classifier_writes_no_bead_state(tmp_path: 
     assert "#66" in html
 
 
+# --- pipeline sidebar active tab --------------------------------------------
+
+
+def test_the_active_pipeline_tab_tracks_the_scope_not_just_the_path(tmp_path: Path):
+    """Stack, Error briefs and No-brainers all live on /queue, split by ?scope=.
+    The sidebar marks the current tab by matching its href against `current`, so
+    a `current` of bare "/queue" highlights Stack on every one of them — clicking
+    Error briefs or No-brainers leaves the highlight stuck on Stack.
+    """
+    dashboard, _, _, _ = dashboard_for(tmp_path)
+
+    stack = body(dashboard, "/queue")
+    assert 'href="/queue" aria-current="page"' in stack, "Stack must be current on /queue"
+
+    errors = body(dashboard, "/queue", scope="errors")
+    assert 'href="/queue?scope=errors" aria-current="page"' in errors, (
+        "Error briefs must be the current tab under scope=errors"
+    )
+    assert 'href="/queue" aria-current="page"' not in errors, (
+        "Stack must not be highlighted while viewing the errors lane"
+    )
+
+    nobrainer = body(dashboard, "/queue", scope="nobrainer")
+    assert 'href="/queue?scope=nobrainer" aria-current="page"' in nobrainer, (
+        "No-brainers must be the current tab under scope=nobrainer"
+    )
+    assert 'href="/queue" aria-current="page"' not in nobrainer, (
+        "Stack must not be highlighted while viewing the no-brainer lane"
+    )
+
+
 # --- responsive shell --------------------------------------------------------
 
 
