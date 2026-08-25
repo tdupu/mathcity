@@ -350,6 +350,33 @@ def test_a_blocked_preview_shows_the_blocking_code_and_offers_no_apply(tmp_path:
     assert 'action="/apply"' not in response.body
 
 
+def test_an_under_review_block_is_not_dressed_as_a_hard_state_lock(tmp_path: Path):
+    """§5: the 409 headline must name the refusal that fired, not mislabel it.
+
+    `mc-closed` is blocked by MBRF005 -- an UNDER-REVIEW code ("closed with no
+    verdict field", an instrumentation artifact per review.py), not a hard
+    state lock. The page used to headline every `_blocking_option` result
+    "This brief's state does not permit adjudication" and say "No way of filling
+    in the form would change this answer" -- the hard-state-lock wording -- over
+    a refusal that is explicitly under review. Reserve that wording for a real
+    state lock; here, name the code that actually fired.
+    """
+    dashboard, _, _ = dashboard_for(tmp_path)
+
+    response = preview(dashboard, brief_id="mc-closed")
+
+    assert response.status == 409
+    text = strip_tags(response.body)
+    # the code that fired is named
+    assert "MBRF005" in text
+    # ...but NOT dressed as a permanent state lock
+    assert "does not permit" not in text, (
+        "an under-review refusal must not claim the brief's state forbids adjudication"
+    )
+    assert "No way of filling in the form" not in text
+    assert 'action="/apply"' not in response.body
+
+
 def test_an_empty_reason_is_refused_at_preview_time(tmp_path: Path):
     dashboard, _, rig_root = dashboard_for(tmp_path)
 

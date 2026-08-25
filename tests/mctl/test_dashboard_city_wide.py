@@ -498,15 +498,17 @@ def test_a_rig_scoped_dashboard_ignores_a_rig_query_parameter(tmp_path: Path):
 # --- a blocked mutation leads with the answer, not the form error -----------
 
 
-def test_a_blocked_preview_names_the_state_block_alongside_the_form_error(tmp_path: Path):
-    """A bead that cannot be adjudicated says so before it complains about a field.
+def test_a_blocked_preview_names_the_block_alongside_the_form_error(tmp_path: Path):
+    """A bead that cannot be adjudicated says WHY before it complains about a field.
 
     Previewing with an empty Reason returns `MCTL_MUTATION_REASON_REQUIRED`,
-    which is correct but is not the operator's real answer: `mc-closed` cannot
-    be adjudicated however the form is filled in. Leading with the field error
-    makes an impossible operation look like a fixable typo, so the state-level
-    block is rendered first -- which is also what the form's own promise that
-    "a preview will show the blocking diagnostic code" means.
+    which is correct but is not the operator's real answer: `mc-closed` is
+    blocked by MBRF005 whatever the form says. The block is rendered first, so a
+    field error does not bury the real answer.
+
+    But MBRF005 is UNDER REVIEW (review.py), not a hard state lock, so the block
+    must NOT wear the state-lock wording (§5): it leads as an under-review block
+    that names its code, not as "this brief's state does not permit ...".
     """
     dashboard, _, fixture = rig_dashboard(tmp_path)
 
@@ -518,11 +520,13 @@ def test_a_blocked_preview_names_the_state_block_alongside_the_form_error(tmp_pa
     text = strip_tags(response.body)
     assert "MCTL_MUTATION_REASON_REQUIRED" in text, "the field error is still reported"
     # `mc-closed` is blocked by MBRF005 whatever the form says.
-    assert "MBRF005" in text, "the state-level block must be reported too"
-    assert response.body.index('data-region="state-blocked"') < response.body.index(
+    assert "MBRF005" in text, "the block must be reported too"
+    # The under-review block leads; a field error first buries the real answer.
+    assert response.body.index('data-region="under-review-block"') < response.body.index(
         'data-region="blocked"'
-    ), "the state block must lead; a field error first buries the real answer"
-    assert "does not permit" in text
+    )
+    # ...but the hard state-lock wording is reserved for an actual state lock.
+    assert "does not permit" not in text
     assert "Nothing was written" in text
     assert 'action="/apply"' not in response.body
     assert bead(fixture, "mathcity", "mc-closed")["status"] == "closed"

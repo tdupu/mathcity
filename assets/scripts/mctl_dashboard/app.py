@@ -58,6 +58,7 @@ from .aggregate import CityView, is_deferred as _agg_is_deferred
 from .client import McpClient, ToolFailure, ToolResponse
 from .fanout import fan_out
 from .reading import attr
+from .review import UNDER_REVIEW_CODES
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
 #: The no-brainer box once folded a marker into the verdict reason because the
@@ -1834,12 +1835,51 @@ class Dashboard:
         try:
             planned = self.client.call(operation.tool, {**arguments, "dry_run": True})
         except ToolFailure as failure:
-            # The refusal names its blocking code in `facts`, but the operator
-            # needs the whole set: the state-level block comes first, then the
-            # refusal itself, then the brief's own diagnostics -- each with its
-            # code, so "blocked" is a diagnosis rather than a wall.
+            # The operator needs the whole set, but each panel must name the
+            # thing that actually fired -- not dress one refusal as another.
             blocking = self._blocking_option(brief_id, rig, operation)
             doctor = self._doctor(brief_id, rig) if brief_id else None
+            blocking_code = str(blocking[0].get("code") or "") if blocking else ""
+            # A REAL state lock is a `_blocking_option` disabled reason whose
+            # code is a genuine gate/state failure. `MBRF004`/`MBRF005`/`MBRF021`
+            # are under review (review.py) -- structural or instrumentation, not
+            # "the state forbids this" -- so they must not be dressed in the
+            # hard state-lock wording ("does not permit", "no way of filling in
+            # the form would change this"). That wording is reserved here for an
+            # actual lock; an under-review block gets an under-review headline,
+            # and the refusal that fired is reported with its own code.
+            state_locked = bool(blocking) and blocking_code not in UNDER_REVIEW_CODES
+            fired = _primary_diagnostic(failure.diagnostics)
+            fired_code = str(fired.get("code") or "") if fired else ""
+            fired_field = (
+                str((fired.get("facts") or {}).get("field") or "") if fired else ""
+            )
+            if state_locked:
+                lead = render.notice_panel(
+                    f"This brief's state does not permit {operation.title}",
+                    "Nothing was written. No way of filling in the form would change this "
+                    "answer -- the bead's own state blocks the operation. The refusal that "
+                    "came back from the typed tool is below.",
+                    blocking,
+                    region="state-blocked",
+                )
+            elif blocking:
+                lead = render.notice_panel(
+                    f"{operation.title.capitalize()} is not available yet"
+                    + (f" — {blocking_code}" if blocking_code else ""),
+                    "Nothing was written. This check is under review: it does not mean the "
+                    "brief is wrong, and it is not a permanent state lock -- it is why the "
+                    "typed tool will not plan the mutation yet. The code that fired is below.",
+                    blocking,
+                    region="under-review-block",
+                )
+            else:
+                lead = ""
+            refused_headline = f"{operation.title.capitalize()} was refused"
+            if fired_field:
+                refused_headline += f": {fired_field}"
+            if fired_code:
+                refused_headline += f" — {fired_code}"
             return self._page(
                 "Blocked",
                 "/briefs",
@@ -1850,20 +1890,11 @@ class Dashboard:
                     # the diagnostic list sorts by severity and code, so a
                     # merged list would order the operator's real answer by
                     # alphabetical accident.
+                    lead,
                     render.notice_panel(
-                        f"This brief's state does not permit {operation.title}",
-                        "Nothing was written. No way of filling in the form would change this "
-                        "answer -- the bead's own state blocks the operation. The refusal that "
-                        "came back from the typed tool is below.",
-                        blocking,
-                        region="state-blocked",
-                    )
-                    if blocking
-                    else "",
-                    render.notice_panel(
-                        f"{operation.title.capitalize()} is blocked",
-                        "Nothing was written. The typed tool refused to plan this mutation, and "
-                        "the diagnostic code behind the refusal is below.",
+                        refused_headline,
+                        "Nothing was written. The typed tool refused to plan this mutation; "
+                        "the field and diagnostic code behind the refusal are below.",
                         failure.diagnostics,
                         region="blocked",
                     ),
@@ -2154,6 +2185,26 @@ def _blockers(items: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     for item in items:
         blockers.extend(item.get("blockers") or ())
     return blockers
+
+
+def _primary_diagnostic(diagnostics: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    """The single diagnostic that best represents why a mutation was refused.
+
+    A refusal comes back as a list; the operator's headline should name the one
+    that actually fired, most-severe first, so the 409 says what is wrong rather
+    than a generic wall. FATAL beats ERROR beats everything else; ties keep the
+    order the tool reported.
+    """
+    order = {"FATAL": 0, "ERROR": 1, "WARN": 2, "WARNING": 2, "INFO": 3}
+    best: Mapping[str, Any] | None = None
+    best_rank = 99
+    for diagnostic in diagnostics or ():
+        if not isinstance(diagnostic, Mapping):
+            continue
+        rank = order.get(str(diagnostic.get("severity") or "").upper(), 9)
+        if best is None or rank < best_rank:
+            best, best_rank = diagnostic, rank
+    return best
 
 
 def _arguments_for(
