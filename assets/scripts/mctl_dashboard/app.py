@@ -544,9 +544,19 @@ class Dashboard:
         context = self._scope_context(rig)
 
         if lane == "pile":
-            # Nothing to read: no tool reports pile membership.
+            # Pile membership itself has no typed source, so the screen still
+            # says "not readable" and `_counts()` omits a pile key (its chip
+            # stays a dash). But the sibling-lane chips -- stack, deferred,
+            # adjudicated, malformed -- are measurable from the ordinary
+            # listing, so read it and fill them like every other lane does.
+            briefs, _city, city_extra = self._read_briefs(rig)
             return self._page(
-                "Pile", "/pile", context, [pipeline_screen.pile()], context_bar=""
+                "Pile",
+                "/pile",
+                context,
+                [pipeline_screen.pile(), *city_extra],
+                counts=self._counts(briefs),
+                context_bar="",
             )
 
         briefs, _city, city_extra = self._read_briefs(rig)

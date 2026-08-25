@@ -461,6 +461,57 @@ def test_the_trace_view_previews_a_replay_without_applying_it(tmp_path: Path):
     assert 'action="/apply"' not in response.body, "a replay view must offer nothing to apply"
 
 
+# --- the pile page fills the sibling-lane counts it can already measure ------
+
+
+def _navlink_count(html: str, href: str) -> str:
+    """The count string a sidebar navlink shows for `href`.
+
+    The navlink is `<a class="mc-navlink" href="...">...<span class="mono">N
+    </span></a>`; the last mono span carries the count (a number, or the raw
+    `&mdash;` when nothing measured it here).
+    """
+    sidebar = html[html.index('data-region="sidebar"') :]
+    sidebar = sidebar[: sidebar.index("</nav>")]
+    match = re.search(
+        r'<a class="mc-navlink" href="' + re.escape(href) + r'"[^>]*>(.*?)</a>',
+        sidebar,
+        re.S,
+    )
+    assert match, f"no navlink for {href}"
+    if "&mdash;" in match.group(1):
+        return "&mdash;"
+    return strip_tags(match.group(1)).split()[-1]
+
+
+def test_the_pile_page_shows_the_sibling_lane_counts_while_its_own_chip_stays_dashed(
+    tmp_path: Path,
+):
+    """Issue #66 item 1: /pile rendered every masthead/nav count as an em-dash,
+    including the sibling lanes (stack, adjudicated, malformed) the listing can
+    already measure -- because the pile branch returned before reading briefs
+    and so passed no `counts`. The pile's own chip must stay a dash (pile
+    membership is not readable through the typed surface), but the siblings must
+    carry the same real numbers every other lane shows.
+    """
+    dashboard, _, _, _ = dashboard_for(tmp_path)
+
+    pile = body(dashboard, "/pile")
+    deferred = body(dashboard, "/deferred")
+
+    # The pile's own chip stays a dash: pile membership has no typed source.
+    assert _navlink_count(pile, "/pile") == "&mdash;"
+
+    # The sibling lanes carry real numbers -- the same ones a sibling lane page
+    # measures from the very listing /pile now also reads.
+    for href in ("/queue", "/adjudicated", "/malformed"):
+        count = _navlink_count(pile, href)
+        assert count.isdigit(), f"{href} chip on /pile is not a number: {count!r}"
+        assert count == _navlink_count(deferred, href), (
+            f"{href} count on /pile disagrees with the sibling-lane page"
+        )
+
+
 # --- responsive shell --------------------------------------------------------
 
 
