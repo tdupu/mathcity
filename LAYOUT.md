@@ -39,7 +39,8 @@ mathcity/
 ├── gates/                 # gate policy registry (*.toml)
 ├── template-fragments/    # reusable doc/prompt fragments included by skills
 ├── tests/                 # smoke tests (one directory per behavior)
-├── docs/                  # reference docs, ADRs, filters, rule-prefix registry
+├── docs/                  # reference docs, plans/specs, ADRs, filters,
+│                          #   rule-prefix registry
 ├── assets/                # scripts, images, and other static assets
 ├── bin/                   # executable entry points (thin shims, e.g. mctl)
 ├── scripts/               # repo-level maintenance scripts
@@ -58,11 +59,28 @@ mathcity/
 | `gates/` | `*.toml` gate definitions | The gate policy registry (e.g. `test-execution.toml`, `test-evidence.toml`, `stale-claim.toml`). Gate entries cite rule IDs per `POLICY-POLICY.md` PP4.x. |
 | `template-fragments/` | Reusable Markdown fragments | Canonical blocks included by multiple skills (e.g. `dolt-preflight.md`, `escalation-protocol.md`). |
 | `tests/` | One directory per behavior, each with a `smoke_test.sh` | Fast, self-contained checks; keep green before any push. |
-| `docs/` | Reference material | ADRs under `docs/adr/`, repair filters under `docs/filters/`, and the authoritative `docs/rule-prefix-registry.md`. |
+| `docs/` | Reference material and planning artifacts | Active plans and specs live under `docs/superpowers/`; ADRs live under `docs/adr/`; repair filters live under `docs/filters/`; `docs/rule-prefix-registry.md` is authoritative for rule prefixes. |
 | `assets/` | Static assets | Scripts, images, and other non-source support files. |
 | `bin/` | Executable entry points | Thin shims callers invoke by path (e.g. `bin/mctl` over `assets/scripts/mctl.py`). Logic belongs in `assets/`, not here. |
 | `scripts/` | Repo maintenance scripts | e.g. `dolt-remotes-sync.sh`. |
 | `.github/` | Issue templates + `LABELS.md` | GitHub-side scaffolding for the mathcity-owned issue workflow. |
+
+## Plans and specs
+
+Use the Superpowers tree as the single intake point for new planning artifacts:
+
+| Path | Holds | Notes |
+| --- | --- | --- |
+| `docs/superpowers/plans/` | Exploratory plans, implementation plans, PERTs, handoffs, triage packets, evidence bundles | This is the default home for new planning work, including cross-cutting formula, MCP, skill, dashboard, and workflow reworks. Prefer date-prefixed filenames. |
+| `docs/superpowers/specs/` | Approved or stabilized design specs | Use this after an exploratory plan has converged into a design that should guide implementation. If a spec is later moved to a subdomain as durable reference material, leave a pointer at the original Superpowers path. |
+| `docs/superpowers/plans/<topic>/` | Large plan clusters with prototypes or multiple handoff files | Use a topic subdirectory only when one flat file would be hard to navigate. Examples include dashboard design handoffs. |
+
+Do not add new planning trees under `subdomains/dev/docs/plans/` or directly
+under a subdomain `docs/` directory. Existing plan-looking files in those
+locations are historical placement; when they are touched, either leave them as
+history or replace them with pointers to the canonical Superpowers location.
+Subdomain `docs/` directories remain the right place for durable reference
+documentation owned by that subdomain, not for new exploratory planning packets.
 
 ## Subdomain pack model
 
