@@ -17,6 +17,10 @@ if common_dir="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-di
   PACK_HOME="$(cd "$common_dir/.." && pwd)"
 fi
 
+# The import itself is the pinned GitHub source (asserted against pack.toml and
+# packs.lock below). This static check runs offline, so pack CONTENTS are read
+# from a local checkout standing in for that source: $SUPERPOWERS_PACK if set,
+# else a gascity-packs clone sitting next to the primary checkout.
 if [ -n "${SUPERPOWERS_PACK:-}" ]; then
   SUPERPOWERS_ROOT="$SUPERPOWERS_PACK"
 else
@@ -39,12 +43,16 @@ has_line() {
 }
 
 [ -f "$ROOT/pack.toml" ] || fail "missing $ROOT/pack.toml"
-[ -d "$SUPERPOWERS_ROOT" ] || fail "missing Superpowers pack at $SUPERPOWERS_ROOT"
+[ -f "$ROOT/packs.lock" ] || fail "missing $ROOT/packs.lock"
+[ -d "$SUPERPOWERS_ROOT" ] || fail "missing Superpowers pack at $SUPERPOWERS_ROOT (clone gascity-packs next to the primary checkout, or set SUPERPOWERS_PACK to a superpowers pack root)"
 [ -f "$SUPERPOWERS_ROOT/pack.toml" ] || fail "missing Superpowers pack.toml"
 
-python3 - "$ROOT/pack.toml" <<'PY'
+python3 - "$ROOT/pack.toml" "$ROOT/packs.lock" <<'PY'
+import re
 import sys
 import tomllib
+
+EXPECTED_SOURCE = "https://github.com/gastownhall/gascity-packs/tree/main/superpowers"
 
 with open(sys.argv[1], "rb") as handle:
     data = tomllib.load(handle)
@@ -55,8 +63,27 @@ if not superpowers:
     raise SystemExit("missing [imports.superpowers]")
 
 source = superpowers.get("source")
-if source != "../gascity-packs/superpowers":
+if source != EXPECTED_SOURCE:
     raise SystemExit(f"unexpected Superpowers source: {source!r}")
+
+version = superpowers.get("version")
+if not isinstance(version, str) or not re.fullmatch(r"sha:[0-9a-f]{40}", version):
+    raise SystemExit(f"Superpowers import is not commit-pinned: {version!r}")
+
+with open(sys.argv[2], "rb") as handle:
+    lock = tomllib.load(handle)
+
+locked = lock.get("packs", {}).get(EXPECTED_SOURCE)
+if not locked:
+    raise SystemExit(f"packs.lock has no entry for {EXPECTED_SOURCE}")
+if locked.get("version") != version:
+    raise SystemExit(
+        f"packs.lock version {locked.get('version')!r} does not match the pack.toml pin {version!r}"
+    )
+if f"sha:{locked.get('commit')}" != version:
+    raise SystemExit(
+        f"packs.lock commit {locked.get('commit')!r} does not match the pack.toml pin {version!r}"
+    )
 PY
 
 expected_formulas="$(cat <<'EOF'
