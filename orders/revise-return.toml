@@ -14,7 +14,7 @@
 #   - THIS order (revise-return) is the sole RE-DEPOSITOR for a revise — it
 #     produces the fresh, revised brief in the pile. No double-deposit.
 #
-# `brief.decided` is rung by briefs_adjudicate's LIVE apply path (Plan C, #202,
+# `brief.decided` is rung by briefs_relay_adjudication's LIVE apply path (Plan C, #202,
 # landed 83962df) with the verdict + adjudicator in the payload, and by the
 # skill path (brief-record-decision). This order fires within seconds of a
 # verdict, so a revise comes back around unattended.

@@ -23,3 +23,14 @@ CONTEXT.md
 
 # Local MCP client registration — session-specific, not shared config.
 .mcp.json
+
+# Salvage scratch — recovered//staging material, not shared history.
+docs/salvage/
+
+# Codex harness state — machine-local config + agent run reports.
+.codex/
+
+# Path-bug artifact: a relative write from inside the repo created a nested
+# ~/gt/mathcity/mathcity/.codex/. Root-anchored so a legitimately-named
+# mathcity/ subdirectory elsewhere in the tree is unaffected.
+/mathcity/

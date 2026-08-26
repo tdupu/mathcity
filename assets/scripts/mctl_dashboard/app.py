@@ -62,7 +62,7 @@ from .review import UNDER_REVIEW_CODES
 from .preview import Preview, PreviewStore, context_fingerprint, stable_digest, target_fingerprint
 
 #: The no-brainer box once folded a marker into the verdict reason because the
-#: core had no field for it. #208 Part 2 gave `briefs_adjudicate` typed
+#: core had no field for it. #208 Part 2 gave `briefs_relay_adjudication` typed
 #: `no_brainer`/`no_brainer_reason` params (#76 Field 7), so the form maps the
 #: checkbox to those directly -- the marker stopgap is gone.
 
@@ -148,7 +148,7 @@ class Operation:
 
 OPERATIONS: dict[str, Operation] = {
     "adjudicate": Operation(
-        "adjudicate", "briefs_adjudicate", "adjudication", option_id="adjudicate"
+        "adjudicate", "briefs_relay_adjudication", "adjudication", option_id="adjudicate"
     ),
     "defer": Operation("defer", "briefs_defer", "deferral", option_id="defer"),
     "dispatch": Operation("dispatch", "work_dispatch", "work dispatch", option_id="dispatch-work"),

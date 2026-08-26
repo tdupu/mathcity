@@ -1,7 +1,7 @@
 """Adjudications record WHO adjudicated (#152, the recording half).
 
 THE HOLE. Three MCP calls compose into self-authorisation: `briefs_create`,
-`briefs_adjudicate(verdict="approve")`, `work_dispatch(dry_run=false)`. Step 2
+`briefs_relay_adjudication(verdict="approve")`, `work_dispatch(dry_run=false)`. Step 2
 supplies the approving verdict that step 3 demands, so an agent can manufacture
 its own authorisation for arbitrary work. The rule that a reviewer must not be
 the author is enforced socially on branches and by nothing at all here.
@@ -54,7 +54,7 @@ class TestTheParameterExists:
     def test_the_mcp_tool_exposes_it(self):
         from mctl_core.mcp_server import TOOLS_BY_NAME
 
-        schema = TOOLS_BY_NAME["briefs_adjudicate"].input_schema
+        schema = TOOLS_BY_NAME["briefs_relay_adjudication"].input_schema
         assert "adjudicated_by" in schema["properties"], (
             "the tool that supplies the approving verdict must be able to say who supplied it"
         )
@@ -62,7 +62,7 @@ class TestTheParameterExists:
     def test_the_tool_does_NOT_require_it(self):
         from mctl_core.mcp_server import TOOLS_BY_NAME
 
-        schema = TOOLS_BY_NAME["briefs_adjudicate"].input_schema
+        schema = TOOLS_BY_NAME["briefs_relay_adjudication"].input_schema
         assert "adjudicated_by" not in schema.get("required", [])
 
 

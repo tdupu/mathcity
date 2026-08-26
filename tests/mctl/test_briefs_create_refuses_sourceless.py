@@ -3,7 +3,7 @@
 A refusal at creation is CT13.4 working. A brick at approval is the failure mode.
 
 WHY REFUSING IS RIGHT, not merely ruled. A brief created without a source is made
-its OWN source bead at dispatch time (work.py:636), and `briefs_adjudicate` closes
+its OWN source bead at dispatch time (work.py:636), and `briefs_relay_adjudication` closes
 that bead -- so approving it is what makes it permanently undispatchable. CT4.5
 MANDATES adjudicating before dispatch. The tool was minting briefs whose
 prescribed next step destroys them, and reporting it as a WARN nobody blocks on.

@@ -96,7 +96,7 @@ that does not come back.
 
 **Held (2026-08-22):** four MCP refusals in one session —
 `MCTL_LIVE_DISPATCH_DISARMED`, `MBRF034`'s `bd link` remedy, a harness block on
-`briefs_adjudicate`, and `MBRF035` on a rig that cannot accept briefs. All four
+`briefs_relay_adjudication`, and `MBRF035` on a rig that cannot accept briefs. All four
 were reported, none routed around. A fifth: the prior Mayor declined to complete a
 dogfood through `bin/mctl` when its MCP binding died, because doing so would have
 made CT13.4 worthless on the day it landed.

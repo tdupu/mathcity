@@ -110,7 +110,7 @@ def test_the_authored_options_are_seen_by_the_adjudication_reader(tmp_path: Path
 
     adjudicated = call(
         server(city, rig),
-        "briefs_adjudicate",
+        "briefs_relay_adjudication",
         {"brief_id": brief_id, "verdict": "approve", "reason": "r", "dry_run": False},
     )["result"]["structuredContent"]
     blocking = {

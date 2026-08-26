@@ -89,7 +89,7 @@ Check your own tool list once, at session start:
   hold up a session over a missing MCP.
 
 Mutations are a special case worth knowing: the four mutating tools
-(`briefs_adjudicate`, `briefs_defer`, `briefs_create`, `work_dispatch`) are
+(`briefs_relay_adjudication`, `briefs_defer`, `briefs_create`, `work_dispatch`) are
 **never** exposed to external clients at all. In practice you record verdicts
 through `adjudicate-brief` and dispatch through `mathcity.work` either way —
 those skills own the write path, and which front door they use is their

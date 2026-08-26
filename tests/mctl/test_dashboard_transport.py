@@ -121,7 +121,7 @@ def test_the_dashboard_speaks_stdio_to_a_real_mctl_mcp_serve_subprocess(tmp_path
 
     assert len(tools) == len(TOOLS), "an external client would see a narrower surface here"
     assert len(tools) > len([t for t in TOOLS if t.external_ready]), "not the internal surface"
-    assert "briefs_adjudicate" in tools
+    assert "briefs_relay_adjudication" in tools
 
 
 def test_an_operator_can_preview_and_apply_a_verdict_over_http(tmp_path: Path):

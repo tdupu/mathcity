@@ -889,7 +889,7 @@ def _handle_commission_brief(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
     return _effect_payload(ctx, plan, _dry_run(arguments))
 
 
-def _handle_briefs_adjudicate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+def _handle_briefs_relay_adjudication(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     brief_id = arguments["brief_id"]
     plan = plan_adjudication(
         ctx,
@@ -1025,7 +1025,7 @@ def _handle_decisions_to_briefs(
 
     This tool does NOT return a dispatchable brief, and must not. A brief it creates
     reports `readiness: "blocked"` on exactly `MWRK010` -- no approving verdict --
-    until a human adjudicates it through `briefs_adjudicate`. That single blocker is
+    until a human adjudicates it through `briefs_relay_adjudication`. That single blocker is
     the contract: well-formed in every other respect, missing only the judgement that
     is not ours to supply.
 
@@ -1126,7 +1126,7 @@ def _handle_decisions_to_briefs(
     # CONSEQUENCE, stated so no caller is surprised: this tool NO LONGER
     # guarantees a dispatchable brief. That guarantee was what produced verdicts
     # no human gave. A caller holding a real decision records it the honest way,
-    # through `briefs_adjudicate`, which is the gate that exists for it.
+    # through `briefs_relay_adjudication`, which is the gate that exists for it.
     return {
         "applied": True,
         "brief_id": brief_id,
@@ -2312,9 +2312,19 @@ TOOLS: tuple[ToolSpec, ...] = (
         external_ready=False,
     ),
     ToolSpec(
-        name="briefs_adjudicate",
-        title="Record a brief verdict",
-        description="Record a verdict through the shared effect plan. Dry run by default.",
+        name="briefs_relay_adjudication",
+        title="Relay a human adjudication onto a brief",
+        description=(
+            "RELAY a verdict the human adjudicator has already made. This tool does NOT "
+            "confer authority to adjudicate: calling it does not make you the adjudicator, "
+            "it records a decision someone else reached. It was renamed from "
+            "`briefs_adjudicate` for that reason (#175) -- the old name read as a grant of "
+            "authority it never carried, and #152 describes what an agent can compose when "
+            "it believes it holds one: create a brief, approve it, dispatch the work. "
+            "Pass `adjudicated_by` naming WHO decided; omitting it warns, because an "
+            "unattributed verdict cannot be checked against its author. "
+            "Dry run by default."
+        ),
         input_schema=request_schema(
             {
                 "brief_id": _BRIEF_ID,
@@ -2344,7 +2354,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         output_schema=response_schema(
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
-        handler=_handle_briefs_adjudicate,
+        handler=_handle_briefs_relay_adjudication,
         mutating=True,
         external_ready=False,
         artifact_state=True,
@@ -2377,7 +2387,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         description=(
             "Deposit one decision that still NEEDS making as a hygienic brief, "
             "UNDECIDED, on the pile -- for the no-brainer cycle to triage or a "
-            "human to adjudicate through `briefs_adjudicate`. Read the name as "
+            "human to adjudicate through `briefs_relay_adjudication`. Read the name as "
             "'decisions TO BE MADE -> briefs': it does NOT adjudicate (records no "
             "verdict) and does NOT return a dispatchable brief. The brief stays "
             "blocked on MWRK010 -- the missing verdict -- until a human supplies the "

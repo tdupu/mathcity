@@ -390,7 +390,7 @@ def test_create_without_a_source_is_REFUSED_not_warned(tmp_path: Path):
     """RENAMED AND INVERTED (#173, Taylor's ruling). This asserted a WARN.
 
     A warning did not stop the brick: a brief created without a source becomes
-    its own source bead at dispatch (work.py:636), `briefs_adjudicate` closes
+    its own source bead at dispatch (work.py:636), `briefs_relay_adjudication` closes
     that bead, and the brief is permanently undispatchable -- via the workflow
     CT4.5 MANDATES. Creation now refuses instead.
 
