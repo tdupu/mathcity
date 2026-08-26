@@ -78,6 +78,7 @@ from .payloads import (
     require_trace as _require_trace,
 )
 from .commission import CommissionRefused
+from .bead_comments import BeadCommentInput, plan_bead_comment
 from .defect_beads import DefectBeadCreateInput, plan_create_defect_bead
 from .issue_standardize import StandardizeIssueInput, plan_standardize_github_issue
 from .effects import (
@@ -1214,6 +1215,17 @@ def _handle_create_defect_bead(ctx: MctlContext, arguments: Mapping[str, Any]) -
             title=arguments.get("title") or "",
             body=arguments.get("body") or "",
             labels=tuple(arguments.get("labels") or ()),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_bead_comment(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_bead_comment(
+        ctx,
+        BeadCommentInput(
+            bead_id=arguments.get("bead_id") or "",
+            text=arguments.get("comment") or "",
         ),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
@@ -2552,6 +2564,42 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_create_defect_bead,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="bead_comment",
+        title="Append a comment to an existing bead",
+        description=(
+            "Append an append-only comment to ANY existing bead (mc-ilia). This is "
+            "the typed surface's one way to CORRECT a record without rewriting it: "
+            "the bead's description is never edited, so a claim later refuted stays "
+            "readable beside its correction (P1.19 / P5.4). It wraps `bd comment`, "
+            "which stamps its own author and timestamp -- use it to carry e.g. "
+            "'superseded in part by mc-XXXX, see §1-2' on the bead being corrected, "
+            "rather than filing a whole second bead the reader must know to find. "
+            "Refuses an empty comment (MBCM_EMPTY_COMMENT) and a comment on a bead "
+            "that does not exist (MBCM_NO_SUCH_BEAD). Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {"type": "string", "description": "The bead to comment on."},
+                "comment": {
+                    "type": "string",
+                    "description": (
+                        "The comment text, appended verbatim. The bead's description "
+                        "is never edited -- this only adds a note beside it."
+                    ),
+                },
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["bead_id", "comment"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_bead_comment,
         mutating=True,
         external_ready=False,
         artifact_state=True,

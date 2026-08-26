@@ -32,6 +32,8 @@ BRIEF_STATE = FIXTURES / "brief_state"
 WORK_STATE = FIXTURES / "work_state"
 
 DECLARED_TOOLS = (
+    # mc-ilia: the surface's only append-only correction path for an existing bead.
+    "bead_comment",
     # #110 shipped mctl_core/blast_radius.py with no tool, so no page could
     # reach it. Exposed as a reporting surface that states registry presence.
     "blast_radius_registry",

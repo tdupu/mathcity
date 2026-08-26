@@ -22,6 +22,7 @@ from .beads import (
     BeadRelate,
     BeadUpdate,
     BeadWriteError,
+    apply_bead_comment,
     apply_bead_create,
     apply_bead_relate,
     apply_bead_update,
@@ -186,6 +187,28 @@ class JsonlWrite:
 
 
 @dataclass(frozen=True)
+class BeadComment:
+    """An append-only comment on an existing bead (mc-ilia).
+
+    The typed surface's one way to CORRECT a record without rewriting it: the
+    bead's description is never touched, so a refuted claim stays readable beside
+    its correction rather than being silently overwritten. Wraps `bd comment`,
+    which stamps its own author and time. `text` is carried in full so a dry-run
+    shows exactly what would be appended.
+    """
+
+    bead_id: str
+    text: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "bead_id": self.bead_id,
+            "text": self.text,
+            "text_bytes": len(self.text.encode("utf-8")),
+        }
+
+
+@dataclass(frozen=True)
 class EffectPlan:
     trace_id: str
     operation: str
@@ -207,10 +230,15 @@ class EffectPlan:
     # GitHub tracker writes (#185). Empty for every bead/brief mutation; the
     # only effects that leave the city.
     github_writes: tuple[GithubWrite, ...] = ()
+    # Append-only comments on existing beads (mc-ilia). Empty for every create
+    # and every brief verdict; the only effect that corrects a record in place
+    # without editing it.
+    bead_comments: tuple[BeadComment, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
             "advisories": [diagnostic.to_dict() for diagnostic in self.advisories],
+            "bead_comments": [comment.to_dict() for comment in self.bead_comments],
             "bead_creates": [create.to_dict() for create in self.bead_creates],
             "bead_relates": [relate.to_dict() for relate in self.bead_relates],
             "bead_updates": [update.to_dict() for update in self.bead_updates],
@@ -1193,6 +1221,28 @@ def _apply_effects(
                 )
             ) from error
         actual.append({"kind": "bead_update", "target": update.id, "result": result})
+    for comment in plan.bead_comments:
+        try:
+            result = apply_bead_comment(
+                ctx.rig_root, comment.bead_id, comment.text, fixture_path=ctx.beads_fixture
+            )
+        except BeadWriteError as error:
+            append_aborted(
+                trace_file,
+                plan.trace_id,
+                [{"code": "MCTL_BEAD_COMMENT_FAILED", "detail": str(error)}],
+            )
+            raise MutationError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MCTL_BEAD_COMMENT_FAILED",
+                    f"Appending a comment to {comment.bead_id!r} failed; nothing was written.",
+                    brief_id=comment.bead_id,
+                    detail=str(error),
+                )
+            ) from error
+        actual.append({"kind": "bead_comment", "target": comment.bead_id, "result": result})
     for relate in plan.bead_relates:
         _apply_bead_relation(ctx, plan, relate, minted, actual, trace_file)
     for write in plan.github_writes:

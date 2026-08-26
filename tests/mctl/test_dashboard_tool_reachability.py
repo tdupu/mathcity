@@ -55,6 +55,7 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
     "create_issue_bead": "mints a bead from an external GitHub issue; not a read the dashboard performs (#170)",
     "create_github_issue": "files a GitHub issue against an external tracker; a mutation, not a read the dashboard performs (#185)",
     "create_defect_bead": "mints a defect bead with no GitHub issue; a mutation, not a read the dashboard performs (#185)",
+    "bead_comment": "appends an append-only comment to an existing bead; an agent correction mutation, not a read the dashboard performs (mc-ilia)",
     "standardize_github_issue": "edits an external GitHub issue body; a mutation, not a read the dashboard performs (#185/#52)",
 }
 

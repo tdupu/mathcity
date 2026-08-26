@@ -47,6 +47,7 @@ from mctl_core.schemas import schema_errors
 MCTL = SCRIPTS_ROOT / "mctl.py"
 
 EXPECTED_TOOLS = (
+    "bead_comment",
     "blast_radius_registry",
     "briefs_relay_adjudication",
     "briefs_create",

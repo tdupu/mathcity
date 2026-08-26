@@ -114,6 +114,7 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
 
     mutating = [name for name, entry in snapshot.items() if entry["mutating"]]
     assert sorted(mutating) == [
+        "bead_comment",
         "briefs_create",
         "briefs_defer",
         "briefs_relay_adjudication",

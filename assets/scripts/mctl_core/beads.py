@@ -418,6 +418,58 @@ def apply_bead_relate(
     return _apply_bd_relate(rig_root, relate, timeout or bd_timeout_seconds())
 
 
+def apply_bead_comment(
+    rig_root: Path,
+    bead_id: str,
+    text: str,
+    *,
+    fixture_path: Path | None = None,
+    timeout: int | None = None,
+) -> dict[str, object]:
+    """Append one comment to an existing bead through the fixture seam or bd.
+
+    Append-only by construction (mc-ilia): it wraps `bd comment`, which adds a
+    comment with its own author and timestamp and NEVER touches the bead's
+    description. There is no in-place edit path here on purpose -- the record of
+    what was believed and when is the thing worth keeping (P1.19 / P5.4).
+    """
+    if fixture_path is not None:
+        return _apply_fixture_comment(fixture_path, bead_id, text)
+    return _apply_bd_comment(rig_root, bead_id, text, timeout or bd_timeout_seconds())
+
+
+def _apply_fixture_comment(path: Path, bead_id: str, text: str) -> dict[str, object]:
+    rows = list(_read_jsonl(path))
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    changed = False
+    rewritten: list[dict[str, object]] = []
+    for row in rows:
+        mutable = dict(row)
+        if mutable.get("id") == bead_id:
+            comments = list(mutable.get("comments") or ())
+            comments.append({"text": text, "created_by": "mctl", "created_at": now})
+            mutable["comments"] = comments
+            changed = True
+        rewritten.append(mutable)
+    if not changed:
+        raise BeadWriteError(f"No bead named {bead_id!r} exists in {path}")
+    path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rewritten),
+        encoding="utf-8",
+    )
+    return {"id": bead_id, "mode": "fixture", "comment_bytes": len(text.encode("utf-8"))}
+
+
+def _apply_bd_comment(rig_root: Path, bead_id: str, text: str, timeout: int) -> dict[str, object]:
+    _run_bd_command(
+        rig_root,
+        ["bd", "comment", bead_id, text],
+        timeout,
+        f"Could not comment on bead {bead_id}",
+    )
+    return {"id": bead_id, "mode": "bd", "comment_bytes": len(text.encode("utf-8"))}
+
+
 def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
     try:
         with path.open(encoding="utf-8") as handle:

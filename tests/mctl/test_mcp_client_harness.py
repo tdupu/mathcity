@@ -97,7 +97,7 @@ def test_the_harness_asserts_the_expected_tool_names(tmp_path: Path):
     # Deliberate literal: here the count IS the assertion, an independent
     # statement of expected surface size. Registry-relative would be
     # tautological -- the harness asserting what the harness says.
-    assert len(listing["evidence"]["tools"]) == 41  # 36 base + create_github_issue/create_defect_bead/standardize_github_issue (#185) + dashboard_status/dashboard_restart (#207) + queue_status/costs_summary/worktrees_status (#113/#118/#120)
+    assert len(listing["evidence"]["tools"]) == 42  # 36 base + create_github_issue/create_defect_bead/standardize_github_issue (#185) + dashboard_status/dashboard_restart (#207) + queue_status/costs_summary/worktrees_status (#113/#118/#120) + bead_comment (mc-ilia)
     # + briefs_present + decisions_to_briefs (#177)
     assert "briefs_list" in listing["evidence"]["tools"]
     assert listing["evidence"]["missing"] == []
@@ -141,8 +141,8 @@ def test_the_harness_exercises_the_rollout_gate_rather_than_bypassing_it(tmp_pat
 
     check = next(check for check in report["checks"] if check["name"] == "rollout_gate")
     assert check["passed"] is True
-    assert check["evidence"]["internal_tool_count"] == 41  # 36 base + #185 (3) + #207 (2) + #113/#118/#120 (3)
-    # + briefs_present + decisions_to_briefs (#177)
+    assert check["evidence"]["internal_tool_count"] == 42  # 36 base + #185 (3) + #207 (2) + #113/#118/#120 (3)
+    # + briefs_present + decisions_to_briefs (#177) + bead_comment (mc-ilia)
     assert check["evidence"]["external_tool_count"] == 0
     assert check["evidence"]["external_call_diagnostic"] == "MCTL_MCP_TOOL_DISABLED"
 

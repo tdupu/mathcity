@@ -872,6 +872,21 @@ severity = "FATAL"
 meaning = "An OPEN defect bead of the same title already exists; create_defect_bead refuses to mint an orphan duplicate at scale (a CLOSED duplicate does not block)."
 module = "defect_beads.py"
 
+[MBCM_EMPTY_COMMENT]
+severity = "FATAL"
+meaning = "bead_comment was asked to append an empty comment; a note that says nothing is not a correction, so the append is refused (mc-ilia)."
+module = "bead_comments.py"
+
+[MBCM_NO_SUCH_BEAD]
+severity = "FATAL"
+meaning = "bead_comment names a bead id that does not exist in the rig store; a correction with nothing to attach to is refused (mc-ilia)."
+module = "bead_comments.py"
+
+[MCTL_BEAD_COMMENT_FAILED]
+severity = "FATAL"
+meaning = "Appending a comment to an existing bead failed at apply time (bd comment errored); nothing was written (mc-ilia)."
+module = "effects.py"
+
 [MGHW_ALREADY_STANDARDIZED]
 severity = "INFO"
 meaning = "The issue body already carries a '## Standardized restatement' section; standardize_github_issue no-ops (applied:false) rather than appending a second one, preserving the additive #52 contract."
