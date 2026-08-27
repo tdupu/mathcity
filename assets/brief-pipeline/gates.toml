@@ -222,6 +222,17 @@ evidence_key = "G16 Master-current"
 repair_kind = "unassigned"
 description = "Test evidence that depends on main/master state must record the base ref used."
 
+[[gates]]
+id = "G17"
+name = "section-discipline"
+kind = "mechanical"
+required = true
+rules = ["B1.1", "B1.9"]
+evidence_key = "G17 Section-discipline"
+repair_kind = "unassigned"
+policy = "section-discipline.toml"
+description = "\u00a71 carries the question and no evidence (file:line, sha, issue ref, measured count); every explicit \u00a7N appears exactly once; \u00a72 is present, non-empty, opens with no null answer, and names a decision verb. Scoped to bodies carrying an explicit \u00a71 heading. Enforced at creation: C1/C2 refuse (MBRF037/MBRF038), C3 is a WARN advisory (MBRF039) pending the B1.9(c)-vs-#194 adjudication on mc-qbs6j. Source: mc-qbs6j, from mc-67snh."
+
 [profiles.standard]
 gates = [
   "G1",
@@ -241,6 +252,7 @@ gates = [
   "G14",
   "G15",
   "G16",
+  "G17",
 ]
 
 [profiles.no_brainer]

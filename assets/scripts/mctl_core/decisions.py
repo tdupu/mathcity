@@ -139,7 +139,14 @@ def dispatchability_refusals(
     return tuple(refusals)
 
 
-def brief_body(decision: str, *, source_bead_id: str, checks_passed: tuple[str, ...]) -> str:
+def brief_body(
+    decision: str,
+    *,
+    source_bead_id: str,
+    checks_passed: tuple[str, ...],
+    options_follow: bool = False,
+    recommendation: str | None = None,
+) -> str:
     """The `present-it` full-form body: §1 Decision-at-Top through §7 gates.
 
     #208 part 3. The old body was a hardcoded `## Decision` / `## Source` /
@@ -171,21 +178,51 @@ def brief_body(decision: str, *, source_bead_id: str, checks_passed: tuple[str, 
     """
     decision_text = decision.strip()
     evidence_lines = "\n".join(f"- {check}" for check in checks_passed)
+    # G17/C3 (mc-qbs6j). The old §2 opened "None recorded", which is the null
+    # answer the gate refuses -- and Taylor's REVISE on `mc-67snh` was, in as
+    # many words, "we need a recommendation". When the caller supplies one it
+    # goes here, stated as the advisory it is (#194 keeps the marker prose, not
+    # a verdict). When the caller supplies none there is nothing honest to put
+    # here, and the creation gate refuses the brief rather than inventing one.
+    advised = str(recommendation or "").strip()
+    if advised:
+        section_two = (
+            f"Adopt option ({advised}) — advisory only. `decisions_to_briefs` "
+            "records the author's recommendation and deposits the brief "
+            "UNDECIDED (#194); the human adjudicator supplies the verdict."
+        )
+    else:
+        section_two = (
+            "None recorded. This brief transports a question to be decided; "
+            "`decisions_to_briefs` deposits it UNDECIDED (#194) and the human "
+            "adjudicator supplies the verdict."
+        )
+    # G17/C2. The composer used to emit this §4 placeholder unconditionally and
+    # the caller then APPENDED its own `## §4 — Options`, so every brief that
+    # carried options carried §4 twice -- 49 of the 178 live brief files, and
+    # all 11 in-scope briefs this tool produced. `parse_decision_options` was
+    # taught to de-duplicate around it (`seen_labels`) rather than the writer
+    # being taught not to emit it. When options follow, the appended block IS
+    # §4 and this placeholder is dropped.
+    section_four = (
+        ""
+        if options_follow
+        else (
+            "## §4 — Alternatives named\n\n"
+            "None enumerated at composition. The adjudicator may propose "
+            "one.\n\n"
+        )
+    )
     return (
         "## §1 — What is being decided\n\n"
         f"{decision_text}\n\n"
         "## §2 — Recommended answer\n\n"
-        "None recorded. This brief transports a question to be decided; "
-        "`decisions_to_briefs` deposits it UNDECIDED (#194) and the human "
-        "adjudicator supplies the verdict.\n\n"
+        f"{section_two}\n\n"
         "## §3 — Assumptions surfaced\n\n"
         "None surfaced at composition -- this brief was composed from a "
         "decision statement and its open source bead, not from a reviewed "
         "artifact.\n\n"
-        "## §4 — Alternatives named\n\n"
-        "None enumerated at composition. Authored decision options, when "
-        "present, appear in the Options section below; the adjudicator may "
-        "propose another.\n\n"
+        f"{section_four}"
         "## §5 — Risks foregrounded\n\n"
         "None surfaced at composition. The decision has not yet been reviewed "
         "for breakage or downstream commitment; that is the adjudication.\n\n"

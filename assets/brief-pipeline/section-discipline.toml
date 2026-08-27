@@ -1,0 +1,121 @@
+# G17 — section discipline. The rule that `mc-67snh` failed, as data.
+#
+# WHY THIS EXISTS. `mc-67snh` carried every mandated heading and still hid its
+# findings. Measured on the live bead body (6022 chars):
+#
+#     graphroute.go:562-588  -> filed under `## §1 — What is being decided`
+#     runtime.go:297         -> filed under §1
+#     #2763 (twice)          -> filed under §1
+#     ~35, "24 of 25"        -> filed under §1
+#     kindsets.go:113-118    -> filed under the SECOND `## §4`
+#
+# It was adjudicated REVISE with "We need evidence. We need a recommendation."
+# Both were present; both were misfiled. Nine minutes later `mc-wg331` approved
+# one of the directions `mc-67snh` was still deciding, that approval was refuted
+# at source, and an hour went into refuting it. §1 is where a reader looks for
+# the QUESTION. Burying measured findings there makes them invisible to exactly
+# the scan the section structure exists to support.
+#
+# WHY DATA. Same reason as `required-sections.toml` (#169): a vocabulary that
+# lives in code gets a second copy the first time another checker needs it, and
+# two independently written structural checkers drift — which is what #35 was
+# about. The evidence classes and the §2 vocabulary are tuned by editing this
+# file, not by editing a regex inside a 1500-line module.
+#
+# SCOPE. These rules apply only to a body that carries an EXPLICIT `§1` heading
+# — the present-it full form. Compact-form briefs have no numbered sections and
+# are not in scope; on the 178-file live corpus that is 59 files.
+
+[registry]
+name = "brief-section-discipline"
+version = 1
+gate = "G17"
+scope = "bodies carrying an explicit §1 heading (present-it full form)"
+
+# BLOCKING AT CREATION. C1 and C2 are FATAL: they refuse the write. C3 is
+# computed, reported, and printed by `brief-section-discipline.sh` exactly like
+# the other two, but at creation it is a WARN advisory rather than a refusal —
+# and that is a DECLARED POLICY CONFLICT, not a softened rule.
+#
+# B1.9(c) says §2 must name a recommended action. #194 says `decisions_to_briefs`
+# deposits a transported decision UNDECIDED and must not invent a recommendation
+# nobody gave. Both are adopted. Measured on the full suite: making C3 FATAL
+# turns 9 tests red across test_decisions_to_briefs_tool.py,
+# test_decision_options_authoring.py and test_no_brainer_carrier.py — four of
+# which assert #194's undecided deposit directly. So the two rules cannot both
+# hold, and which one moves is Taylor's call, not this gate's.
+#
+# What is NOT done here, deliberately: reword the composer's §2 into something
+# that satisfies the verb test. `mc-67snh` §2 read "None recorded. This brief
+# transports a question to be decided…" — a reword to "Defer to the adjudicator"
+# would pass C3 while changing nothing about the brief Taylor sent back. A gate a
+# machine can satisfy by rephrasing is not a gate.
+#
+# `mc-67snh` is refused at creation on C1 and C2 regardless of how C3 lands.
+blocking_conditions = ["C1", "C2"]
+advisory_conditions = ["C3"]
+conflict_bead = "mc-qbs6j"
+
+# --- C1: §1 states the question, and carries no evidence ---------------------
+#
+# Every class below is here because it was OBSERVED in the §1 of a live brief,
+# not because it seemed plausible. `independent_effect` records how many briefs
+# in the 178-file corpus measured on 2026-08-27 would flip verdict on this class
+# ALONE — a class that has never independently decided anything is declared as
+# such rather than presented as a check that is doing work (P6.2).
+
+[[evidence_class]]
+id = "file-line"
+pattern = '\b[\w./-]+\.(?:go|py|sh|md|toml|ts|tsx|js|rs|c|h|hpp|cpp|json|ya?ml|txt|tex)\b:\d+(?:-\d+)?'
+description = "a file:line citation"
+observed_in = "mc-67snh §1: graphroute.go:562-588, runtime.go:297"
+remedy = "move the citation to §6 — Supporting evidence; §1 keeps the question"
+
+[[evidence_class]]
+id = "commit-sha"
+pattern = '(?<![\w/])(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}(?![\w])'
+description = "a commit sha"
+observed_in = "live stack brief 'f4f72ed — Add .github/ISSUE_TEMPLATE/ forms'"
+remedy = "move the sha to §6 — Supporting evidence"
+
+[[evidence_class]]
+id = "issue-ref"
+pattern = '(?<![\w#])#\d+\b'
+description = "an issue or PR reference"
+observed_in = "mc-67snh §1: #2763, twice"
+remedy = "move the reference to §6 — Supporting evidence"
+
+[[evidence_class]]
+id = "measured-count"
+pattern = '~\s?\d+|\b\d+\s+of\s+\d+\b|\b\d+%'
+description = "a measured count or proportion"
+observed_in = "mc-67snh §1: ~35 open steps, 24 of 25 divergence beads"
+remedy = "move the measurement to §6 — Supporting evidence"
+# Fires on 14 of the 119 in-scope briefs, and on 0 of them is it the only
+# failing class — every brief it catches is already caught by another. Kept
+# because it is falsifiable and because it is one of the four things `mc-67snh`
+# misfiled; recorded here so nobody later reports it as load-bearing.
+independent_effect = 0
+
+# --- C3: §2 is a recommendation ----------------------------------------------
+#
+# A §2 that restates the question is what "we need a recommendation" meant on a
+# brief whose §2 was not empty. Two tests, both needed: the body must not OPEN
+# with a null answer, and it must somewhere name a decision verb.
+
+[section_two]
+# Anchored at the start of §2's body, after any bold/italic/list punctuation.
+null_answer_pattern = '^\s*[*_`\-\s]*(?:none\b|no\b|n/?a\b|tbd\b|to be decided\b|not supplied\b|not recorded\b|not yet\b|see (?:below|§|section)|pending\b|unknown\b|undecided\b)'
+# Observed live: "None recorded. This brief transports a question to be decided"
+# (11 briefs, all from `decisions_to_briefs`) and "NOT SUPPLIED — arrived in
+# compact form." (7 briefs).
+verbs = [
+  "abandon", "accept", "adopt", "add", "approve", "authorize", "block",
+  "build", "choose", "chose", "close", "decline", "defer", "delete",
+  "disable", "drop", "enable", "escalate", "extend", "file", "fix",
+  "gate", "go with", "hold", "implement", "investigate", "keep", "land",
+  "leave", "merge", "migrate", "move", "pick", "proceed", "promote",
+  "publish", "rebuild", "recommend", "reject", "remove", "rename",
+  "repair", "replace", "restore", "restrict", "retire", "revert",
+  "route", "ship", "split", "stop", "switch", "take", "use", "wire",
+]

@@ -38,7 +38,7 @@ from .manifest import (
     SOURCE_MANIFEST,
     ManifestIssue,
 )
-from .structure import missing_sections
+from .structure import missing_sections, section_discipline_violations
 from .verdicts import (
     NON_BRIEF_MESSAGES,
     Verdict,
@@ -760,6 +760,45 @@ def validate_brief_input(
                     suggested_next_command=(
                         f"add a '## {names}' section to the body and retry"
                     ),
+                )
+            )
+        # G17 (mc-qbs6j). `missing_sections` asks whether a heading EXISTS.
+        # `mc-67snh` had every heading and still hid its findings: file:line
+        # citations, `#2763`, and a measured count all filed under `## §1 —
+        # What is being decided`, plus a duplicate `## §4` and a §2 that
+        # recorded no recommendation. It was adjudicated REVISE for "we need
+        # evidence, we need a recommendation" -- both present, both misfiled --
+        # and nine minutes later a different artifact approved one of the
+        # directions it was still deciding. That approval was refuted at source.
+        #
+        # Refused HERE, at creation, because creation is where `mc-67snh`
+        # entered (`decisions_to_briefs` -> `plan_create_brief`), and because
+        # #169 already paid for the CT13.4 lesson: a refusal at shuffle time
+        # reaches an author who was told the write succeeded.
+        #
+        # C3 is computed here too but is declared advisory in
+        # `section-discipline.toml`: B1.9(c) and #194 are both adopted and they
+        # disagree about a transported UNDECIDED decision. `plan_create_brief`
+        # reports the C3 findings as WARN advisories so they are never silent;
+        # which policy moves is Taylor's call, tracked on `mc-qbs6j`.
+        breaches = [
+            b
+            for b in section_discipline_violations(parse_brief_sections(clean_body))
+            if b.blocking
+        ]
+        if breaches:
+            first = breaches[0]
+            raise BriefError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    first.code,
+                    first.summary,
+                    policy_ref="B1.9",
+                    detail="; ".join(
+                        f"{b.condition} {b.summary} [{b.detail}]" for b in breaches
+                    ),
+                    suggested_next_command=first.remedy,
                 )
             )
     if not clean_body:

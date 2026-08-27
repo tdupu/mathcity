@@ -43,12 +43,14 @@ from .briefs import (
     decision_options,
     doctor_briefs,
     legacy_gate_diagnostics,
+    parse_brief_sections,
     show_brief,
     validate_brief_input,
 )
 from .context import MctlContext
 from .commission import brief_labels, tracker_metadata, validate_commission
 from .diagnostics import Diagnostic, Severity
+from .structure import section_discipline_violations
 from .events import append_jsonl
 from .materialize_plan import FRONTMATTER_LINE
 from .redundant_state import ArtifactLayout, artifact_layout
@@ -388,6 +390,26 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     # accept new ones.
     preconditions = _blocking_preconditions(legacy_gate_diagnostics(ctx))
     advisories: list[Diagnostic] = []
+    # G17/C3 (mc-qbs6j). `validate_brief_input` already REFUSED on C1 and C2.
+    # C3 is declared advisory in `section-discipline.toml` because B1.9(c) and
+    # #194 are both adopted and disagree about a transported UNDECIDED decision.
+    # Reported here so the finding is never silent: D2/G15's rule is that a
+    # missing thing cannot be silent, and the same applies to a rule that is
+    # measured but deliberately not blocking.
+    for breach in section_discipline_violations(parse_brief_sections(body)):
+        if breach.blocking:
+            continue
+        advisories.append(
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                breach.code,
+                breach.summary,
+                brief_id=NEW_BRIEF_ID_PLACEHOLDER,
+                policy_ref="B1.9",
+                detail=f"{breach.detail} -> {breach.remedy}",
+            )
+        )
     if not request.sources:
         # #173, Taylor's ruling. This was a WARN in `advisories` -- reported to
         # the operator without blocking -- and warning did not stop the brick.
