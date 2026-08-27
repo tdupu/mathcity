@@ -5,7 +5,7 @@ Parent: [README.md](./README.md)
 | Field | Value |
 | --- | --- |
 | Status | Adopted |
-| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency; amended 2026-08-10: standalone mathcity source checkout; amended 2026-08-11: documentation workflow) |
+| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency; amended 2026-08-10: standalone mathcity source checkout; amended 2026-08-11: documentation workflow; amended 2026-08-27: P6.3 a deadline is not a verdict) |
 | Decided | the pack owner, via grilling session (three open questions resolved; record at bottom) |
 | Applies to | All packs the human adjudicator owns in this repo — the **owned pack set** (§ Scope) |
 | Consumers | `check-hygiene` skill (to be built via skill-creator); mayor priming (`mayor-math`); any agent planning work in this repo |
@@ -551,6 +551,46 @@ inside gascity core); this is the pack-level, plan-time analogue.*
   because a rule about checks that cannot fail, drafted on the back of a search
   that could not find, is the most useful worked example this pillar has.)
 
+- **P6.3 "A deadline is not a verdict."** When a caller stops waiting, that is a
+  fact about **the caller**, not about the system it was waiting on. Rendering an
+  elapsed deadline as the probed system's failure attributes the prober's
+  impatience to the probed, and destroys the distinction between *"it answered
+  no"*, *"it answered empty"*, and *"we stopped listening"* — three different
+  facts that a downstream reader cannot recover once they are collapsed into one.
+  Any operation carrying a deadline must (a) carry a **warn threshold strictly
+  below** that deadline, which emits a visible signal naming the **elapsed time**
+  and what is being waited on, and (b) on expiry report a **distinctly-named
+  non-failure state** — `deadline_exceeded`, `slow`, `still_running` — carrying
+  elapsed. It must never render as `failed`, `did not answer`, `unknown`, absent,
+  or zero. This completes the pillar's triad: **P6.1 forbids failing silently,
+  P6.2 forbids passing blindly, P6.3 forbids failing spuriously.**
+  Allowed exceptions (precise): (a) **hard safety deadlines** — deadlock,
+  resource exhaustion, unbounded growth — may abort, but must still report
+  `deadline_exceeded` with elapsed, never `failed`; (b) **bounded interactive
+  budgets** may return a **partial** answer, explicitly labelled partial and
+  naming what was omitted (`stuck-bead-watch.py:507-517` is the in-house
+  reference implementation: non-fatal, names the store it skipped). Not an
+  exception: *"the backend is usually slow, so a timeout is effectively a
+  failure"* — that is precisely the prohibited inference.
+  Pass: every deadline path emits elapsed and a distinct non-failure state, and a
+  warn threshold below the deadline exists and has been observed to fire. Fail:
+  any path rendering an elapsed deadline as failure / unknown / zero / absent, or
+  any deadline with no warn threshold beneath it → **fail**.
+  (Origin: 2026-08-27. `mctl city_health`'s Dolt probe took **29.05s against a
+  30s deadline and PASSED**; `mctl fleet_sessions`' `gc` probe hit 30s and
+  reported `MCTL_FLEET_STATUS_PROBE_FAILED` — *"gc did not answer within 30.0s"*.
+  Same slow backend, opposite verdicts, decided by which side of an arbitrary
+  boundary the latency landed on. The Mayor propagated the second as an unknown,
+  reported a partial agent roster as authoritative, and it blocked diagnosis of a
+  live rig-inactivity incident for hours. The probe had not failed; it had been
+  interrupted. Sites in violation at adoption: `mctl_core/fleet.py:127`,
+  `mctl_core/health.py:539`, `mctl_core/city.py:283`,
+  `mctl_dashboard/screens/city.py:64`, and the `city_health` Dolt probe's
+  warn-threshold absence. Already compliant and the naming convention to follow:
+  `mctl_core/work.py:88` `MWRK_DISPATCH_TIMEOUT_UNKNOWN`, which names a timeout
+  *unknown* rather than *failed*.)
+
+
 ## Pillar 7 — Interface discipline
 
 The city has one interface. `mctl` is where repeated work lives, and it is the
@@ -875,3 +915,14 @@ Tasks which are competing should resolve gracefully." Existing stale-claim gate
 covers recovery; this rule covers prevention. Exceptions: (a) explicit the human adjudicator
 in-session re-dispatch authorization naming the bead and reason; (b) stale-claim
 gate confirmed staleness and bead was released before re-slinging.
+
+### 2026-08-27 — P6.3 added: a deadline is not a verdict
+A slow probe must warn with its elapsed time and report a distinctly-named
+non-failure state; it must never render an elapsed deadline as the probed
+system's failure, `unknown`, absent, or zero. Every deadline now requires a warn
+threshold strictly beneath it. Triggered by: the pack owner's directive after
+`fleet_sessions` converted 30s of Dolt latency into `PROBE_FAILED`, which the
+Mayor then propagated as an unknown that blocked an active diagnosis — while the
+`city_health` Dolt probe passed at 29.05s against the same 30s boundary.
+Exceptions: hard safety deadlines (must still report `deadline_exceeded`, never
+`failed`); bounded interactive budgets returning an explicitly-labelled partial.
