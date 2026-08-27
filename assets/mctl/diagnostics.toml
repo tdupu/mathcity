@@ -541,6 +541,26 @@ severity = "ERROR"
 meaning = "The bead exists but is not a molecule root (gc.kind is not 'workflow'). A step points AT its root via gc.root_bead_id; it is not one. Distinct from NO_SUCH_ID because 'that is a step' is a different answer from 'no such bead'."
 module = "molecules.py"
 
+[MCTL_MOLECULE_CANCEL_NO_SUCH_MOLECULE]
+severity = "FATAL"
+meaning = "A molecule cancel named a root bead id that does not exist in this rig. Nothing was read and nothing is written; the plan refuses rather than cancelling a molecule that is not there."
+module = "effects.py"
+
+[MCTL_MOLECULE_CANCEL_NOT_A_ROOT]
+severity = "FATAL"
+meaning = "A molecule cancel named a bead that is not a molecule root (its gc.kind is not 'workflow'); it may be a step. A molecule is cancelled by its root id, so the plan refuses."
+module = "effects.py"
+
+[MCTL_MOLECULE_CANCEL_ALREADY_CLOSED]
+severity = "ERROR"
+meaning = "The molecule's root bead is already closed/done, so there is nothing running to cancel. Distinct from a real cancel: 'already finished' is not 'refused to stop a runner'."
+module = "effects.py"
+
+[MCTL_MOLECULE_CANCEL_STEP_MID_EXECUTION]
+severity = "ERROR"
+meaning = "At least one open step of the molecule has a live assignee -- a worker is actively running it. The cancel refuses unless force=true, the blocker-vs-wedge distinction: an unattended open step is a blocker to clear, a running step is a wedge the operator must opt into unwedging (its claim is released as part of a forced cancel)."
+module = "effects.py"
+
 [MCTL_MUTATION_DEFER_UNTIL_REQUIRED]
 severity = "FATAL"
 meaning = "Deferral requires --until YYYY-MM-DD or --days N."

@@ -94,6 +94,7 @@ from .effects import (
     plan_create_github_issue,
     plan_create_issue_bead,
     plan_deferral,
+    plan_molecule_cancel,
 )
 from .fields import read_frontmatter
 from .fleet import build_fleet_sessions
@@ -1095,6 +1096,38 @@ def _handle_briefs_defer(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict
         days=arguments.get("days"),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_molecule_cancel(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Deliberately stop a running molecule (mc-x06e). Dry run by default.
+
+    The typed reverse of `work_dispatch`: it closes the molecule's open steps and
+    its root with `cancelled` metadata, releasing any live claim, and never
+    deletes. A step a worker is actively running blocks the cancel unless
+    `force`, and the city doorbell rings only on a live apply.
+    """
+    root_bead_id = arguments["root_bead_id"]
+    plan = plan_molecule_cancel(
+        ctx,
+        root_bead_id=root_bead_id,
+        reason=arguments.get("reason"),
+        force=bool(arguments.get("force", False)),
+    )
+
+    def _emit_molecule_cancelled(_payload: dict[str, object]) -> Diagnostic | None:
+        return gc_events.emit(
+            "molecule.cancelled",
+            root_bead_id,
+            {
+                "root_bead_id": root_bead_id,
+                "reason": arguments.get("reason"),
+                "forced": bool(arguments.get("force", False)),
+            },
+        )
+
+    return _effect_payload(
+        ctx, plan, _dry_run(arguments), on_apply=_emit_molecule_cancelled
+    )
 
 
 def _diagnostic(
@@ -2640,6 +2673,41 @@ TOOLS: tuple[ToolSpec, ...] = (
         mutating=True,
         external_ready=False,
         artifact_state=True,
+    ),
+    ToolSpec(
+        name="molecule_cancel",
+        title="Cancel a running molecule",
+        description=(
+            "Deliberately stop a running molecule (mc-x06e): close its OPEN steps "
+            "and its root with `cancelled` metadata, release any live claim, and "
+            "emit the event. NEVER deletes -- the record survives. Refuses when a "
+            "step is mid-execution (a live assignee) unless force=true, the "
+            "blocker-vs-wedge distinction. Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "root_bead_id": {
+                    "type": "string",
+                    "description": "The molecule's ROOT bead id (not a step id).",
+                },
+                "reason": nullable_string("Why the molecule is being cancelled."),
+                "force": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Cancel even when a step is mid-execution (a live "
+                        "assignee); the worker's claim is released as part of the "
+                        "cancel. Defaults to false."
+                    ),
+                },
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["root_bead_id"],
+        ),
+        output_schema=response_schema(_EFFECT_RESPONSE, ["applied", "effect_plan"]),
+        handler=_handle_molecule_cancel,
+        mutating=True,
+        external_ready=False,
     ),
     ToolSpec(
         name="decisions_to_briefs",

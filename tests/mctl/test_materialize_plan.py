@@ -193,6 +193,58 @@ def test_claimed_disposition_without_authorizer_stays_open():
     assert row.status == "open"
 
 
+# --------------------------------------------------------------------------
+# in-flight (pile) tier -- mc-55de2
+# --------------------------------------------------------------------------
+
+
+def test_in_flight_statuses_tier_as_pile_not_no_disposition():
+    """A brief that was dispatched/prepped/queued is IN FLIGHT, not untouched.
+
+    `present-it-pending`, `brief-prep-dispatched` and `briefed` are absent from
+    `_DISPOSED_STATUS_PREFIXES`, so before mc-55de2 they classified
+    `C-no-disposition` -- read on the dashboard as a brief nobody has touched.
+    They are neither disposed (no verdict recorded) nor untouched; the pile tier
+    is the honest third thing: parked in flight.
+    """
+    for status in ("present-it-pending", "brief-prep-dispatched", "briefed"):
+        row = row_for(frontmatter(artifact="he-xkm7u", status=status))
+        assert row.tier == plan.TIER_PILE, f"{status!r} should tier as the pile"
+        assert row.tier != plan.TIER_OPEN
+
+
+def test_pile_status_is_not_disposed_so_repair_skip_logic_is_unchanged():
+    """The shared `is_disposed` must NOT learn about the in-flight statuses.
+
+    Its docstring makes this binding: widening the disposed set would silently
+    change which briefs the B1.3 repair skips. An in-flight brief is not
+    disposed of, so `is_disposed` stays False and the repair still sees it.
+    """
+    for status in ("present-it-pending", "brief-prep-dispatched", "briefed"):
+        assert plan.is_disposed(status) is False
+
+
+def test_an_in_flight_row_does_not_carry_a_verdict_problem_class():
+    """The pile tier is non-OPEN but claims no verdict, so `P3-carries-verdict`
+    must not fire -- an in-flight brief has no disposition to preserve."""
+    row = row_for(frontmatter(artifact="he-xkm7u", status="briefed"))
+    assert plan.CLASS_VERDICT not in row.problem_classes
+    assert row.status == "open"
+
+
+def test_a_verdict_overrides_in_flight_status_and_stays_claimed():
+    """A recorded verdict is a claimed disposition regardless of a stale status.
+
+    The pile is for work with NO disposition claimed; a brief that carries a
+    verdict has claimed one, so it stays in `B-claimed-disposition` even if its
+    status string is still an in-flight one.
+    """
+    row = row_for(
+        frontmatter(artifact="he-xkm7u", status="briefed", verdict="APPROVE")
+    )
+    assert row.tier == plan.TIER_CLAIMED
+
+
 def test_tier_a_notes_round_trip_through_the_existing_verdict_adapter():
     """The plan reuses `verdicts.py`'s reader rather than inventing a format."""
     row = row_for(

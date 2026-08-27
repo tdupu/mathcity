@@ -65,6 +65,7 @@ DECLARED_TOOLS = (
     "mayor_boot",
     "mayor_city_state",
     "mayor_conservation",
+    "molecule_cancel",
     "molecules_list",
     "molecules_show",
     "orders_status",
