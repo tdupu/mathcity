@@ -58,19 +58,22 @@ _Regenerate/verify with `/update-README`._
 
 ## Imported Formula Packs
 
-MathCity imports the Superpowers pack through `pack.toml`:
+MathCity imports the Superpowers pack through `pack.toml`, pinned by commit to
+its upstream GitHub source:
 
 ```toml
 [imports.superpowers]
-source = "../gascity-packs/superpowers"
+source = "https://github.com/gastownhall/gascity-packs/tree/main/superpowers"
+version = "sha:<pinned gascity-packs commit>"
 ```
 
-Imported formulas are capabilities for MathCity dispatch planning, not
-MathCity-owned formulas, so they are not counted in the 34-row table above.
-Verify the import surface with
+The live pin is recorded in `pack.toml` and `packs.lock`; `gc pack fetch`
+refreshes it. Imported formulas are capabilities for MathCity dispatch
+planning, not MathCity-owned formulas, so they are not counted in the 34-row
+table above. Verify the import surface with
 `bash tests/superpowers-availability/smoke_test.sh`; when a live city catalog
-should be available, run `RUN_LIVE_GC=1 bash tests/superpowers-availability/smoke_test.sh`.
-The hygienic pinned-import mechanism remains tracked by `mc-fe7.1`.
+should be available, run
+`RUN_LIVE_GC=1 GC_CITY_PATH=<city-root> bash tests/superpowers-availability/smoke_test.sh`.
 
 ---
 
