@@ -15494,7 +15494,8 @@
               "enum": [
                 "planned",
                 "applied",
-                "aborted"
+                "aborted",
+                "refused"
               ],
               "type": "string"
             },

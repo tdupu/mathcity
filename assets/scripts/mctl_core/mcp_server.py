@@ -126,7 +126,14 @@ from .schemas import (
 from .mayor import boot_state as mayor_boot_state
 from .mayor import city_state as mayor_city_state
 from .mayor import conservation_report as mayor_conservation_report
-from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
+from .trace import (
+    fold,
+    new_trace_id,
+    read_rows,
+    record_refusal,
+    refusal_ledger_unwritable_diagnostic,
+    trace_not_found_diagnostic,
+)
 from .beads import read_beads
 from .decisions import brief_body, dispatchability_refusals
 from .work import (
@@ -1326,6 +1333,14 @@ def _handle_trace_replay_preview(
                 ctx,
                 source_trace_id,
                 "This trace aborted; replay it only after its blocking diagnostics are cleared.",
+            ).to_dict()
+        )
+    elif outcome == "refused":
+        blockers.append(
+            _replay_blocked(
+                ctx,
+                source_trace_id,
+                "This trace was refused before any effect was planned; there is nothing to replay.",
             ).to_dict()
         )
     return {
@@ -3061,7 +3076,21 @@ class MctlMcpServer:
         try:
             payload = tool.handler(ctx, arguments)
         except (BriefError, MutationError, WorkError, ProvenanceError) as error:
-            return _tool_error([error.diagnostic.to_dict()], ctx.trace_id)
+            # The refusal is recorded durably before it is returned and
+            # discarded -- the precondition for mc-3q4v's auto-routing
+            # (bead mc-rmqt). A failed ledger write is a distinct failure and
+            # must not mask the refusal (P6.1): it is appended as a second
+            # diagnostic, never raised over the original.
+            diagnostics = [error.diagnostic.to_dict()]
+            try:
+                record_refusal(
+                    ctx, error.diagnostic, surface=f"mcp:{tool.name}", operation=tool.name
+                )
+            except OSError as ledger_error:
+                diagnostics.append(
+                    refusal_ledger_unwritable_diagnostic(ctx, ledger_error).to_dict()
+                )
+            return _tool_error(diagnostics, ctx.trace_id)
         except Exception as error:  # noqa: BLE001 - a crash must not reach the wire raw
             diagnostic = _server_diagnostic(
                 "MCTL_MCP_INTERNAL_ERROR",
