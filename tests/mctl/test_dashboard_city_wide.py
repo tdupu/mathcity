@@ -498,17 +498,15 @@ def test_a_rig_scoped_dashboard_ignores_a_rig_query_parameter(tmp_path: Path):
 # --- a blocked mutation leads with the answer, not the form error -----------
 
 
-def test_a_blocked_preview_names_the_block_alongside_the_form_error(tmp_path: Path):
-    """A bead that cannot be adjudicated says WHY before it complains about a field.
+def test_a_blocked_preview_names_the_block_that_actually_fired(tmp_path: Path):
+    """A bead that cannot be adjudicated says WHY, and names the real block.
 
-    Previewing with an empty Reason returns `MCTL_MUTATION_REASON_REQUIRED`,
-    which is correct but is not the operator's real answer: `mc-closed` is
-    blocked by MBRF005 whatever the form says. The block is rendered first, so a
-    field error does not bury the real answer.
-
-    But MBRF005 is UNDER REVIEW (review.py), not a hard state lock, so the block
-    must NOT wear the state-lock wording (§5): it leads as an under-review block
-    that names its code, not as "this brief's state does not permit ...".
+    `mc-closed` is blocked by MBRF005 whatever the form says. (The reason is
+    optional now -- mc-qlmh -- so there is no field error to bury; the block is
+    the whole answer.) MBRF005 is UNDER REVIEW (review.py), not a hard state
+    lock, so the block must NOT wear the state-lock wording (§5): it leads as an
+    under-review block that names its code, not as "this brief's state does not
+    permit ...".
     """
     dashboard, _, fixture = rig_dashboard(tmp_path)
 
@@ -518,10 +516,11 @@ def test_a_blocked_preview_names_the_block_alongside_the_form_error(tmp_path: Pa
 
     assert response.status == 409
     text = strip_tags(response.body)
-    assert "MCTL_MUTATION_REASON_REQUIRED" in text, "the field error is still reported"
+    # An empty reason is legal now, so it is NOT what refused this.
+    assert "MCTL_MUTATION_REASON_REQUIRED" not in text
     # `mc-closed` is blocked by MBRF005 whatever the form says.
-    assert "MBRF005" in text, "the block must be reported too"
-    # The under-review block leads; a field error first buries the real answer.
+    assert "MBRF005" in text, "the block must be reported"
+    # The under-review block leads over the raw tool-refusal panel.
     assert response.body.index('data-region="under-review-block"') < response.body.index(
         'data-region="blocked"'
     )
@@ -536,18 +535,23 @@ def test_a_blocked_preview_names_the_block_alongside_the_form_error(tmp_path: Pa
 
 
 def test_a_blocked_preview_on_a_permitted_bead_still_reports_only_the_form_error(tmp_path: Path):
-    """No invented block: a bead whose state permits the operation says nothing extra."""
+    """No invented block: a bead whose state permits the operation says nothing extra.
+
+    The reason is optional now (mc-qlmh), so the field error this test needs is a
+    missing VERDICT -- still a pure form error on a permitted bead. No state
+    block may be invented for `mc-open`, whose state permits adjudication.
+    """
     dashboard, _, _ = rig_dashboard(tmp_path)
 
     response = dashboard.handle(
-        Request.post("/preview", operation="adjudicate", brief_id="mc-open", verdict="approve", reason="")
+        Request.post("/preview", operation="adjudicate", brief_id="mc-open", verdict="", reason="")
     )
 
     assert response.status == 409
     assert 'data-region="state-blocked"' not in response.body, (
         "no state block may be invented for a bead whose state permits the operation"
     )
-    assert "MCTL_MUTATION_REASON_REQUIRED" in strip_tags(response.body)
+    assert "MCTL_MUTATION_VERDICT_REQUIRED" in strip_tags(response.body)
 
 
 def test_an_unregistered_rig_in_a_link_says_so_instead_of_blaming_the_brief(tmp_path: Path):

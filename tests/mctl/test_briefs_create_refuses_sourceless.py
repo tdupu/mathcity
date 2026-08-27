@@ -82,10 +82,45 @@ def test_creating_without_a_source_is_REFUSED(tmp_path: Path):
     assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" in result.stderr
 
 
+def _without_refusal_ledger(digest: dict) -> dict:
+    """The refusal ledger (bead mc-rmqt) is the one thing a refusal now writes."""
+    return {
+        path: sha
+        for path, sha in digest.items()
+        if not str(path).startswith(".beads/mctl/traces/")
+    }
+
+
 def test_a_refused_creation_writes_NOTHING(tmp_path: Path):
-    """A refusal that half-writes is worse than the brick it prevents."""
+    """A refusal that half-writes a brief is worse than the brick it prevents.
+
+    UPDATED for the durable refusal ledger (bead mc-rmqt): a refusal now appends
+    exactly one complete, append-only `refused` row under `.beads/mctl/traces/`
+    -- the precondition for mc-3q4v's auto-routing, and the opposite of a
+    half-write. The guarantee under test is unchanged for every CANONICAL brief
+    artifact -- the bead store, the decision cache, the stack index must be
+    byte-for-byte untouched by a refused creation -- so the digest is compared
+    with the ledger excluded, and the ledger is then checked to hold precisely
+    the one refusal row and nothing more.
+    """
     result, rig_root, before = create(tmp_path)
-    assert tree_digest(rig_root) == before, "a refused creation must leave no artifact"
+    assert _without_refusal_ledger(tree_digest(rig_root)) == _without_refusal_ledger(
+        before
+    ), "a refused creation must leave no canonical artifact"
+
+    ledger = rig_root / ".beads" / "mctl" / "traces"
+    rows = [
+        json.loads(line)
+        for path in sorted(ledger.glob("*.jsonl"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert rows == [r for r in rows if r.get("phase") == "refused"], (
+        f"the ledger holds a non-refusal row after a refused creation: {rows}"
+    )
+    assert len(rows) == 1, f"a refusal must be recorded exactly once, not {len(rows)}: {rows}"
+    assert rows[0]["code"] == "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS"
+    assert rows[0]["diagnostic"]["facts"]["blocking_code"] == "MBRF034"
 
 
 def test_supplying_a_source_is_UNAFFECTED(tmp_path: Path):

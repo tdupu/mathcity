@@ -20,33 +20,75 @@ if str(ROOT / "assets" / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / "assets" / "scripts"))
 
 
-class _SlowClient:
-    """Stands in for the stdio client: one lock, one call at a time."""
+class _InFlight:
+    """A concurrency counter shared across a client and its fan-out siblings.
 
-    def __init__(self, delay: float = 0.05) -> None:
-        self.delay = delay
-        self.lock = threading.Lock()
-        self.calls: list[str] = []
-        self.max_concurrent = 0
+    `fan_out` hands each spec to a SEPARATE client (`clone()` returns a fresh
+    object), so a per-instance counter stays at one however much overlap there
+    is -- which is why the overlap test used to fall back to a wall-clock bound.
+    Sharing one counter across the pool lets the test observe overlap directly.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
         self._live = 0
-        self._guard = threading.Lock()
+        self.peak = 0
+
+    def enter(self) -> None:
+        with self._lock:
+            self._live += 1
+            self.peak = max(self.peak, self._live)
+
+    def exit(self) -> None:
+        with self._lock:
+            self._live -= 1
+
+
+class _SlowClient:
+    """Stands in for the stdio client. A shared `_InFlight` records real overlap.
+
+    `serialize_lock`, when shared across the pool, holds one lock across the
+    whole call so only one read runs at a time -- the single-pipe behaviour that
+    gives the overlap check its observed failing case (P6.2).
+    """
+
+    def __init__(
+        self,
+        delay: float = 0.05,
+        *,
+        inflight: "_InFlight | None" = None,
+        serialize_lock: "threading.Lock | None" = None,
+    ) -> None:
+        self.delay = delay
+        self.calls: list[str] = []
+        self.inflight = inflight or _InFlight()
+        self.serialize_lock = serialize_lock
+        # Retained for `test_a_single_spec_does_not_pay_for_a_pool`, which reads
+        # this instance's own peak on the single-spec path (no pool, no clone).
+        self.max_concurrent = 0
 
     def call(self, name, arguments=None):
-        with self._guard:
-            self._live += 1
-            self.max_concurrent = max(self.max_concurrent, self._live)
+        # Serialize (if asked) BEFORE counting in-flight: a thread blocked on the
+        # lock is not running, so counting it would inflate the peak.
+        if self.serialize_lock is not None:
+            self.serialize_lock.acquire()
+        self.inflight.enter()
+        self.max_concurrent = max(self.max_concurrent, self.inflight._live)
         try:
-            with self.lock:
-                time.sleep(self.delay)
+            time.sleep(self.delay)
             self.calls.append(name)
             return {"tool": name, "arguments": dict(arguments or {})}
         finally:
-            with self._guard:
-                self._live -= 1
+            self.inflight.exit()
+            if self.serialize_lock is not None:
+                self.serialize_lock.release()
 
     def clone(self):
-        # type(self) so a subclass double stays itself in the pool.
-        return type(self)(self.delay)
+        # type(self) so a subclass double stays itself in the pool; the tracker
+        # and serialization lock are SHARED so the pool measures one truth.
+        return type(self)(
+            self.delay, inflight=self.inflight, serialize_lock=self.serialize_lock
+        )
 
 
 def test_fanout_returns_results_in_request_order():
@@ -62,15 +104,43 @@ def test_fanout_returns_results_in_request_order():
 
 
 def test_fanout_actually_overlaps():
-    """Three 50ms calls should finish in well under the 150ms serial cost."""
+    """Three reads must genuinely OVERLAP -- asserted as overlap, not wall clock.
+
+    The previous form asserted `elapsed < 0.12s` for three 50ms calls. That is a
+    wall-clock threshold, and under CPU contention the `ThreadPoolExecutor`
+    threads cannot be scheduled promptly, so overlapping sleeps elapse
+    near-serially and the bound fails though the fan-out is correct -- the P6.3
+    anti-pattern ("a deadline is not a verdict"). This measures the thing itself:
+    a concurrency counter shared across the sibling pool (each `clone()` shares
+    it), which rises above one only when calls truly run at the same time.
+    """
     from mctl_dashboard.fanout import fan_out
 
-    client = _SlowClient(delay=0.05)
-    started = time.perf_counter()
-    fan_out(client, [("briefs_show", {}), ("briefs_options", {}), ("briefs_doctor", {})])
-    elapsed = time.perf_counter() - started
+    tracker = _InFlight()
+    client = _SlowClient(delay=0.05, inflight=tracker)
+    results = fan_out(
+        client, [("briefs_show", {}), ("briefs_options", {}), ("briefs_doctor", {})]
+    )
 
-    assert elapsed < 0.12, f"calls did not overlap: {elapsed:.3f}s"
+    assert [r["tool"] for r in results] == ["briefs_show", "briefs_options", "briefs_doctor"]
+    assert tracker.peak >= 2, f"calls did not overlap: peak in flight was {tracker.peak}"
+
+
+def test_a_serialized_fanout_would_fail_the_overlap_check():
+    """The observed failing case (P6.2): one shared lock => peak of exactly 1.
+
+    A single-pipe client serializes every call; the shared in-flight counter
+    then never exceeds one, which is the state `test_fanout_actually_overlaps`
+    exists to reject. Without this, `peak >= 2` would be a check with no
+    demonstrated way to fail.
+    """
+    from mctl_dashboard.fanout import fan_out
+
+    tracker = _InFlight()
+    client = _SlowClient(delay=0.05, inflight=tracker, serialize_lock=threading.Lock())
+    fan_out(client, [("briefs_show", {}), ("briefs_options", {}), ("briefs_doctor", {})])
+
+    assert tracker.peak == 1
 
 
 def test_a_failing_call_does_not_lose_the_others():

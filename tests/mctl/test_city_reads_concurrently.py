@@ -24,6 +24,7 @@ price.
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -34,53 +35,120 @@ if str(ROOT / "assets" / "scripts") not in sys.path:
 from mctl_dashboard.app import Dashboard, Request
 
 
+class _InFlight:
+    """A concurrency tracker SHARED across a client and its fan-out siblings.
+
+    The property under test is *overlap* -- were two reads ever in flight at
+    once. Measuring it directly is the whole point of mc-5p8v: the previous form
+    asserted a wall-clock bound (`elapsed < serial * 0.75`), which renders a
+    CPU-starved scheduler -- threads that could not be dispatched promptly -- as
+    a serialized handler. That is the P6.3 anti-pattern inside a test assertion
+    ("a deadline is not a verdict"): the prober's contention attributed to the
+    probed. A shared in-flight counter cannot be fooled that way -- it rises
+    above one only when calls genuinely run at the same time, however slowly.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._live = 0
+        self.peak = 0
+
+    def enter(self) -> None:
+        with self._lock:
+            self._live += 1
+            self.peak = max(self.peak, self._live)
+
+    def exit(self) -> None:
+        with self._lock:
+            self._live -= 1
+
+
 class _SlowClient:
-    """Every call sleeps. Serial => 3 units, concurrent => ~1."""
+    """Every call sleeps. A shared `_InFlight` records true overlap.
+
+    `serialize` optionally holds a shared lock across the whole call, which is
+    what a single-pipe client does -- only one read runs at a time. It exists so
+    the overlap assertion has an observed failing case (P6.2): a serialized
+    client drives the peak to exactly one.
+    """
 
     UNIT = 0.4
 
-    def __init__(self, calls: list[str] | None = None):
-        # Siblings SHARE the log. `fan_out` hands work to clones, so a
-        # per-instance list would record only the share this object happened to
-        # take -- and the test would then be asserting which worker ran what,
-        # which is not the property under test.
+    def __init__(
+        self,
+        calls: list[str] | None = None,
+        *,
+        inflight: "_InFlight | None" = None,
+        serialize_lock: "threading.Lock | None" = None,
+    ):
+        # Siblings SHARE the log AND the tracker. `fan_out` hands work to clones,
+        # so a per-instance counter would stay at one however much overlap there
+        # was -- which is exactly why the old test could not measure overlap and
+        # fell back to the wall clock.
         self.calls: list[str] = [] if calls is None else calls
+        self.inflight = inflight or _InFlight()
+        self.serialize_lock = serialize_lock
 
     def call(self, name, arguments=None):
-        self.calls.append(name)
-        time.sleep(self.UNIT)
+        # Acquire the serialization lock BEFORE counting as in-flight: a thread
+        # blocked on the lock is not running, so counting it would inflate the
+        # peak and hide the very serialization this models.
+        if self.serialize_lock is not None:
+            self.serialize_lock.acquire()
+        self.inflight.enter()
+        try:
+            self.calls.append(name)
+            time.sleep(self.UNIT)
 
-        class _R:
-            payload = {"slots": [], "diagnostics": [], "data_plane": "healthy",
-                       "per_rig": [], "gates": [], "gates_readable": True}
+            class _R:
+                payload = {"slots": [], "diagnostics": [], "data_plane": "healthy",
+                           "per_rig": [], "gates": [], "gates_readable": True}
 
-        return _R()
+            return _R()
+        finally:
+            self.inflight.exit()
+            if self.serialize_lock is not None:
+                self.serialize_lock.release()
 
     def clone(self):
-        return _SlowClient(self.calls)
+        return _SlowClient(
+            self.calls, inflight=self.inflight, serialize_lock=self.serialize_lock
+        )
 
     def list_tools(self):
         return []
 
 
 def test_the_city_page_does_not_serialize_its_three_reads():
-    """The property, stated as time rather than as implementation.
+    """The property, stated as OVERLAP observed directly -- not a wall clock.
 
-    Serial would be >= 3 units. Concurrent should land near 1. The threshold is
-    deliberately loose -- this asserts "not serialized", not a latency budget.
+    A serialized handler drives the shared in-flight peak to one; a fan-out
+    lets two or more reads run at once and the peak rises above one. This holds
+    under CPU contention, where the old wall-clock threshold spuriously failed.
     """
-    client = _SlowClient()
+    tracker = _InFlight()
+    client = _SlowClient(inflight=tracker)
     app = Dashboard(client, city_wide=True, rig=None)
 
-    started = time.monotonic()
     app.handle(Request.get("/city"))
-    elapsed = time.monotonic() - started
 
-    serial = 3 * _SlowClient.UNIT
-    assert elapsed < serial * 0.75, (
-        f"{elapsed:.2f}s against a {serial:.2f}s serial floor -- the reads are "
-        "still running in sequence"
+    assert tracker.peak >= 2, (
+        f"peak of {tracker.peak} in flight -- the reads are still running in sequence"
     )
+
+
+def test_a_serialized_handler_would_fail_the_overlap_check():
+    """The observed failing case (P6.2): serialize every read and the peak is 1.
+
+    This is the state the overlap assertion above exists to reject. Holding a
+    single lock across each call is what a one-pipe client does, and it drives
+    the shared in-flight counter to exactly one -- so `peak >= 2` is falsifiable,
+    not a check that cannot fail.
+    """
+    tracker = _InFlight()
+    client = _SlowClient(inflight=tracker, serialize_lock=threading.Lock())
+    Dashboard(client, city_wide=True, rig=None).handle(Request.get("/city"))
+    assert tracker.peak == 1
 
 
 def test_all_three_surfaces_are_still_read():
