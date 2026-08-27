@@ -11218,6 +11218,231 @@
     },
     "title": "Deliberately restart a dashboard onto current code"
   },
+  "dashboard_serve": {
+    "description": "Start an `mctl dashboard serve` instance for this city (mc-lj0sh) -- the create verb #207 left on the CLI, so an MCP-only Mayor asked to launch a dashboard from a cold start could only report the gap (dashboard_restart cannot substitute: it rebinds a NAMED, stamped instance, and from a cold start there is nothing to name). Mirrors the CLI (host, port, rig); dry run by default previews the port and commit it would serve and touches nothing. A start onto a port that already has a stamped dashboard is refused MDSH_PORT_IN_USE, symmetric with restart's MDSH_NO_INSTANCE -- never a silent double-bind (the #164/#210 no-swap safety that gates restart does NOT apply: starting where none runs swaps no contract). A live call confirms the child bound its port and stamped itself: a child that exits first is MDSH_SERVE_FAILED with applied=false; one still coming up at the deadline is reported state=still_starting with elapsed (P6.3), never a failed start.",
+    "external_ready": false,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "default": true,
+          "description": "Preview the effect plan without applying it. Defaults to true.",
+          "type": "boolean"
+        },
+        "host": {
+          "description": "Bind address (default 127.0.0.1).",
+          "type": "string"
+        },
+        "port": {
+          "description": "The port to serve the dashboard on.",
+          "type": "integer"
+        },
+        "rig": {
+          "description": "The rig to pin the dashboard to, or null for city-wide.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "port"
+      ],
+      "type": "object"
+    },
+    "mutating": true,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "applied": {
+          "description": "False for a dry run or a refusal.",
+          "type": "boolean"
+        },
+        "confirmed": {
+          "description": "True when the started instance bound its port and stamped itself within the deadline.",
+          "type": "boolean"
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "elapsed_seconds": {
+          "description": "How long confirmation took (P6.3 carries elapsed).",
+          "type": "number"
+        },
+        "host": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "plan": {
+          "description": "The dry-run preview: port, host, rig, and the commit it would serve.",
+          "type": "object"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "serving_commit": {
+          "description": "The commit the fresh instance imported.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "confirmed | still_starting on a live start (P6.3).",
+          "type": "string"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The URL the fresh instance is bound to.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "applied",
+        "diagnostics",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Start a dashboard from the typed surface"
+  },
   "dashboard_status": {
     "description": "Which `mctl dashboard serve` instances are running for this city, and whether each is serving current code (#207). Reads the stamp every dashboard leaves at startup -- pid, port, and the commit its code imported (the #210/#164 stamp made queryable) -- prunes stamps whose process is gone, and compares each live instance against the checkout's current HEAD. Emits a WARN per stale instance. Reports only; it never restarts anything. `current_commit` is null when the checkout HEAD cannot be read (P6.2): staleness is then unknown, never falsely 'current'.",
     "external_ready": true,
@@ -11465,6 +11690,214 @@
       "type": "object"
     },
     "title": "Report running dashboards and their serving commits"
+  },
+  "dashboard_teardown": {
+    "description": "Stop live `mctl dashboard serve` instances for this city and clear their stamps (#154/mc-lj0sh) -- the stop verb, previously CLI-only, so an MCP-only operator could bring nothing down. Dry run by default: a preview names exactly which live instances would be stopped (all, or the one on `port`) and touches nothing. A live call stops each target; a stop that does not take leaves its stamp IN PLACE and is reported MDSH_TEARDOWN_FAILED (P6.2), so a torn-down count never includes a process that may still be up. Dead stamps are reaped in passing, so this also clears the strays #154 was filed against.",
+    "external_ready": false,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "default": true,
+          "description": "Preview the effect plan without applying it. Defaults to true.",
+          "type": "boolean"
+        },
+        "port": {
+          "description": "Stop only the instance on this port; omit to stop all for this city.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": true,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "applied": {
+          "description": "False for a dry run.",
+          "type": "boolean"
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "failed": {
+          "description": "Instances that would not stop; their stamps were left in place.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "plan": {
+          "description": "The dry-run preview: which instances would be stopped.",
+          "type": "object"
+        },
+        "requested_port": {
+          "description": "The port filter, or null for all instances.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stopped": {
+          "description": "Instances stopped and unstamped.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "applied",
+        "diagnostics",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Stop running dashboards for this city"
   },
   "decisions_to_briefs": {
     "description": "Deposit one decision that still NEEDS making as a hygienic brief, UNDECIDED, on the pile -- for the no-brainer cycle to triage or a human to adjudicate through `briefs_relay_adjudication`. Read the name as 'decisions TO BE MADE -> briefs': it does NOT adjudicate (records no verdict) and does NOT return a dispatchable brief. The brief stays blocked on MWRK010 -- the missing verdict -- until a human supplies the judgement this tool never mints (#194). Refuses before writing if the named source bead would make the brief undispatchable. Dry run by default.",

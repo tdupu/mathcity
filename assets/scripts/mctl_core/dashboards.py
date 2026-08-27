@@ -41,6 +41,18 @@ STAMP_SUBDIR = (".mctl", "dashboards")
 #: SIGKILL. Short: a local dashboard is an `http.server`, not a database.
 STOP_TIMEOUT_SECONDS = 10.0
 
+#: `dashboard_serve` (start) waits this long for a freshly-spawned instance to
+#: bind its port and write its stamp before it STOPS waiting. A local
+#: `http.server` binds in well under a second; this budget is generous. `P6.3`:
+#: reaching it is `still_starting` -- a distinct non-failure state carrying
+#: elapsed, NEVER rendered as `failed`.
+START_CONFIRM_TIMEOUT_SECONDS = 5.0
+
+#: A warn threshold STRICTLY beneath the start deadline (`P6.3`): crossing it
+#: means the start is slow, and the elapsed time is surfaced, before the
+#: deadline itself is ever reached.
+START_CONFIRM_WARN_SECONDS = 2.0
+
 
 def stamp_dir(city_root: Path) -> Path:
     return Path(city_root).joinpath(*STAMP_SUBDIR)
@@ -300,3 +312,41 @@ def start_instance(*, city_root: Path, host: str, port: int, rig: str | None) ->
         "started_at": serving.SERVER_STARTED_AT,
         "url": f"http://{host}:{port}",
     }
+
+
+def confirm_started(
+    city_root: Path,
+    *,
+    pid: int,
+    timeout: float = START_CONFIRM_TIMEOUT_SECONDS,
+    warn: float = START_CONFIRM_WARN_SECONDS,
+) -> dict[str, object]:
+    """Turn a freshly-spawned dashboard's bare pid into three-valued evidence.
+
+    `start_instance` returns the child's pid immediately -- before the child has
+    imported its code, bound its port, or written its stamp. This waits for the
+    child to PROVE it came up, honoring the fail-loud / deadline triad:
+
+    - ``confirmed`` -- the child wrote its stamp within the deadline, which
+      `server.serve_from_args` does only AFTER binding the port. A real start.
+    - ``died`` -- the child process exited before stamping (`P6.1`): the port
+      did not bind, or the import blew up. A genuine failure the caller renders
+      loudly, never as a start that took.
+    - ``still_starting`` -- the deadline elapsed with the process still alive
+      but not yet stamped (`P6.3`): the CALLER stopped waiting; this is not a
+      verdict on the child. It carries ``elapsed`` and is named distinctly so a
+      slow start is never collapsed into a dead one.
+
+    ``slow`` is True once ``warn`` (strictly below ``timeout``) is crossed, so
+    the caller can surface the elapsed time before the deadline is reached.
+    """
+    started = time.monotonic()
+    while True:
+        elapsed = time.monotonic() - started
+        if stamp_path(city_root, pid).exists():
+            return {"state": "confirmed", "elapsed": elapsed, "slow": elapsed >= warn}
+        if not pid_alive(pid):
+            return {"state": "died", "elapsed": elapsed, "slow": elapsed >= warn}
+        if elapsed >= timeout:
+            return {"state": "still_starting", "elapsed": elapsed, "slow": True}
+        time.sleep(0.05)

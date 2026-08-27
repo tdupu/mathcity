@@ -54,12 +54,21 @@ down.**
 
 - Every `mctl dashboard serve` now stamps itself under `<city>/.mctl/dashboards/`
   (pid, port, and the commit it imported); dead stamps self-prune.
+- **All four lifecycle verbs are typed** (mc-lj0sh): an MCP-only Mayor can now
+  drive the whole lifecycle without dropping to the CLI.
 - **See what is running:** the `dashboard_status` MCP tool (or read the stamp
   dir) — pid, port, serving commit, and staleness per instance.
-- **Tear it down at session end / when parking a branch:**
-  `mctl dashboard teardown --city <root>` stops every dashboard for that city
-  and clears its stamp; `--port N` stops just one. It exits non-zero if a stop
-  did not take, so it is safe in a session-end hook.
+- **Start one:** the `dashboard_serve` MCP tool (or `mctl dashboard serve`) —
+  dry-run by default; refuses `MDSH_PORT_IN_USE` rather than double-binding a
+  port that already has a stamped dashboard, and confirms the child bound its
+  port before reporting success (a child that dies first is `MDSH_SERVE_FAILED`;
+  one still coming up at the deadline is `still_starting`, never a failure).
+- **Tear it down at session end / when parking a branch:** the
+  `dashboard_teardown` MCP tool (or `mctl dashboard teardown --city <root>`)
+  stops every dashboard for that city and clears its stamp; `--port N` stops
+  just one. A stop that did not take is reported (`MDSH_TEARDOWN_FAILED` / a
+  non-zero CLI exit) with the stamp left in place, so it is safe in a
+  session-end hook.
 - Restarting the canonical instance onto current code is a **deliberate**
   `dashboard_restart` (#207) — never an automatic reload (#164/#210).
 

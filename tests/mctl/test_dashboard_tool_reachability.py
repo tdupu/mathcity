@@ -48,6 +48,8 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
     ),
     "dashboard_status": "reports which dashboards are running; a Mayor's lifecycle read (#207), not something a dashboard calls about itself",
     "dashboard_restart": "mutating lifecycle action -- a Mayor stops and re-serves a stale dashboard deliberately (#207); a page does not restart itself",
+    "dashboard_serve": "mutating lifecycle action -- a Mayor starts a dashboard from a cold start (mc-lj0sh); a page cannot start the server it is served by",
+    "dashboard_teardown": "mutating lifecycle action -- a Mayor stops dashboards for this city (#154/mc-lj0sh); a page does not tear down the server serving it",
     "mayor_boot": "a lifecycle action, not a read the page performs",
     "mayor_conservation": "not yet surfaced; no screen consumes it",
     "mayor_city_state": "not yet surfaced; no screen consumes it",
