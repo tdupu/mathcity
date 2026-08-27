@@ -1161,6 +1161,191 @@ def plan_deferral(
     )
 
 
+def plan_molecule_cancel(
+    ctx: MctlContext,
+    *,
+    root_bead_id: str,
+    reason: str | None = None,
+    force: bool = False,
+) -> EffectPlan:
+    """Deliberately stop a running molecule (mc-x06e).
+
+    Closes the molecule's OPEN steps and its root with `cancelled` metadata, and
+    releases any live claim so no worker is left holding a dead lease. It NEVER
+    deletes -- the record survives, which is the whole point of a typed cancel
+    over a session kill or a hand-closed bead.
+
+    Refuses -- an ERROR precondition, so the dry run and the apply both stop --
+    when a step is mid-execution (a live assignee) unless `force`. That is the
+    blocker-vs-wedge distinction from the #204 remediation: an unattended open
+    step is a blocker to clear, a step a worker is actively running is a wedge
+    the operator must opt into unwedging.
+    """
+    from .molecules import (
+        MOLECULE_BEAD_TYPE,
+        is_closed_status,
+        is_molecule_root,
+        open_steps_of,
+    )
+
+    beads = read_beads(
+        ctx.rig_root, fixture_path=ctx.beads_fixture, issue_type=MOLECULE_BEAD_TYPE
+    )
+    root = next((bead for bead in beads if bead.id == root_bead_id), None)
+
+    if root is None:
+        return _molecule_cancel_plan(
+            ctx,
+            root_bead_id,
+            (
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MCTL_MOLECULE_CANCEL_NO_SUCH_MOLECULE",
+                    f"No molecule root {root_bead_id!r} in this rig -- nothing was read "
+                    "and nothing will be written.",
+                    brief_id=root_bead_id,
+                    bead_id=root_bead_id,
+                    suggested_next_command="mctl molecules list",
+                ),
+            ),
+            (),
+        )
+    if not is_molecule_root(root):
+        return _molecule_cancel_plan(
+            ctx,
+            root_bead_id,
+            (
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MCTL_MOLECULE_CANCEL_NOT_A_ROOT",
+                    f"{root_bead_id!r} is not a molecule root (its gc.kind is not "
+                    "'workflow'); it may be a STEP. Cancel the molecule by its root id.",
+                    brief_id=root_bead_id,
+                    bead_id=root_bead_id,
+                ),
+            ),
+            (),
+        )
+    if is_closed_status(root.status):
+        return _molecule_cancel_plan(
+            ctx,
+            root_bead_id,
+            (
+                _diagnostic(
+                    ctx,
+                    Severity.ERROR,
+                    "MCTL_MOLECULE_CANCEL_ALREADY_CLOSED",
+                    f"Molecule {root_bead_id!r} is already {root.status!r}; there is "
+                    "nothing running to cancel.",
+                    brief_id=root_bead_id,
+                    bead_id=root_bead_id,
+                ),
+            ),
+            (),
+        )
+
+    open_steps = open_steps_of(root_bead_id, beads)
+    mid_execution = tuple(step for step in open_steps if step.has_active_assignee)
+
+    preconditions: list[Diagnostic] = []
+    if mid_execution and not force:
+        named = ", ".join(f"{step.id} (assignee {step.assignee})" for step in mid_execution)
+        preconditions.append(
+            _diagnostic(
+                ctx,
+                Severity.ERROR,
+                "MCTL_MOLECULE_CANCEL_STEP_MID_EXECUTION",
+                f"{len(mid_execution)} step(s) are mid-execution: {named}. Refusing to "
+                "cancel a molecule a worker is actively running; pass force=true to "
+                "cancel anyway (the claim is released as part of the cancel).",
+                brief_id=root_bead_id,
+                bead_id=root_bead_id,
+                suggested_next_command="molecule_cancel force=true dry_run=false",
+            )
+        )
+
+    cancelled_at = _now()
+    reason_text = (reason or "").strip() or "cancelled from the dashboard"
+    cancel_metadata = {
+        "gc.cancelled": "true",
+        "gc.cancel_reason": reason_text,
+        "gc.cancelled_at": cancelled_at,
+        "mctl_trace_id": ctx.trace_id,
+    }
+    updates: list[BeadUpdate] = []
+    # Steps first, root last: bd refuses to close a bead with an open child, so
+    # the root's close must follow its steps'. Each step that a worker holds is
+    # unclaimed (assignee="") as it closes, so the cancel leaves no dead lease.
+    for step in open_steps:
+        updates.append(
+            BeadUpdate(
+                step.id,
+                status="closed",
+                metadata=cancel_metadata,
+                assignee="" if step.has_active_assignee else None,
+                if_status=step.status,
+            )
+        )
+    updates.append(
+        BeadUpdate(
+            root_bead_id,
+            status="closed",
+            metadata=cancel_metadata,
+            assignee="" if root.has_active_assignee else None,
+            if_status=root.status,
+        )
+    )
+    return _molecule_cancel_plan(ctx, root_bead_id, tuple(preconditions), tuple(updates))
+
+
+def _molecule_cancel_plan(
+    ctx: MctlContext,
+    root_bead_id: str,
+    preconditions: tuple[Diagnostic, ...],
+    updates: tuple[BeadUpdate, ...],
+) -> EffectPlan:
+    planned_effects = [update.to_dict() for update in updates]
+    event_row = {
+        "brief_id": root_bead_id,
+        "operation": "molecule.cancel",
+        "planned_effects": planned_effects,
+        "trace_id": ctx.trace_id,
+    }
+    trace_row = {
+        "brief_id": root_bead_id,
+        "city_path": str(ctx.city_root),
+        "operation": "molecule.cancel",
+        "planned_effects": planned_effects,
+        "rig_name": ctx.rig_id,
+        "trace_id": ctx.trace_id,
+    }
+    today = date.today().isoformat()
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="molecule.cancel",
+        target_brief_id=root_bead_id,
+        preconditions=preconditions,
+        bead_updates=updates,
+        cache_updates=(),
+        event_writes=(
+            JsonlWrite(
+                "event_write",
+                ctx.rig_root / ".beads" / "mctl" / "events" / f"{today}.jsonl",
+                event_row,
+            ),
+        ),
+        trace_writes=(
+            JsonlWrite(
+                "trace_write",
+                ctx.rig_root / ".beads" / "mctl" / "traces" / f"{today}.jsonl",
+                trace_row,
+            ),
+        ),
+    )
+
+
 def dry_run_payload(plan: EffectPlan) -> dict[str, object]:
     _raise_if_blocked(plan)
     return {

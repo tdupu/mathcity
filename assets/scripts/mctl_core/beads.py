@@ -276,6 +276,11 @@ class BeadUpdate:
     # Optimistic-concurrency guard: the status observed when the plan was
     # built. bd writes nothing and exits 13 if it no longer holds.
     if_status: str | None = None
+    # Set the assignee. The empty string clears it -- releasing a claim -- which
+    # the molecule-cancel path (mc-x06e) uses so a cancelled step's worker is
+    # unclaimed rather than left holding a dead lease. `None` leaves the assignee
+    # untouched, distinct from `""` (unclaim).
+    assignee: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -286,6 +291,8 @@ class BeadUpdate:
             payload["status"] = self.status
         if self.defer_until is not None:
             payload["defer_until"] = self.defer_until
+        if self.assignee is not None:
+            payload["assignee"] = self.assignee
         payload["if_status"] = self.if_status
         return payload
 
@@ -516,6 +523,10 @@ def _apply_bd_update(rig_root: Path, update: BeadUpdate, timeout: int) -> dict[s
         args.extend(("--status", update.status))
     if update.defer_until is not None:
         args.extend(("--defer", update.defer_until))
+    if update.assignee is not None:
+        # `--assignee ""` clears the claim; a non-empty value reassigns. bd
+        # requires the flag value even when empty.
+        args.extend(("--assignee", update.assignee))
     for key, value in sorted((update.metadata or {}).items()):
         args.extend(("--set-metadata", f"{key}={value}"))
     if update.if_status is not None:

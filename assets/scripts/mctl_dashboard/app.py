@@ -153,6 +153,13 @@ OPERATIONS: dict[str, Operation] = {
     "defer": Operation("defer", "briefs_defer", "deferral", option_id="defer"),
     "dispatch": Operation("dispatch", "work_dispatch", "work dispatch", option_id="dispatch-work"),
     "create": Operation("create", "briefs_create", "brief creation", needs_brief=False),
+    # A molecule cancel is a mutation with no brief behind it: its target is a
+    # molecule ROOT bead, not a brief, so `needs_brief=False` and the arguments
+    # carry `root_bead_id` (mc-x06e). It rides the same preview/apply guard rails
+    # as every other mutation -- dry-run first, confirm the plan still holds.
+    "molecule_cancel": Operation(
+        "molecule_cancel", "molecule_cancel", "molecule cancel", needs_brief=False
+    ),
 }
 
 
@@ -380,7 +387,14 @@ class Dashboard:
     #: cannot quietly become a third mutation path.
     MUTATION_ROUTES = ("/preview", "/apply")
 
-    def __init__(self, client: McpClient, *, city_wide: bool = False, rig: str | None = None):
+    def __init__(
+        self,
+        client: McpClient,
+        *,
+        city_wide: bool = False,
+        rig: str | None = None,
+        orders_reader: Any = None,
+    ):
         self.client = client
         # City-wide is opt-in and comes from how the server was started, not
         # from what a request asks for: a query parameter that could widen the
@@ -389,6 +403,12 @@ class Dashboard:
         self.city_wide = bool(city_wide)
         self.rig = rig
         self.previews = PreviewStore()
+        # The catalog reader for /orders. Left None in production and built on
+        # demand from the client's city (`_default_orders_reader`) -- so the
+        # served route is wired without anyone assigning `dash.orders_reader` by
+        # hand (#117 / mc-0mhh). A test may still inject a fixture reader, either
+        # here or by setting the attribute, and that override wins.
+        self.orders_reader = orders_reader
 
     # -- scope --
 
@@ -589,23 +609,35 @@ class Dashboard:
             context_bar="",
         )
 
-    #: Injected in tests; in production this shells out to `gc`, which is slow
-    #: (~33s orders, ~57s history, ~32s formulas -- measured). Nothing here
-    #: calls it per render without a cache in front.
-    orders_reader = None
+    def _default_orders_reader(self):
+        """The production catalog reader, bound to the client's city.
+
+        `orders.city_reader` shells out to `gc order list`/`history` (slow --
+        ~33-89s measured) and reads the local event log. It is built here rather
+        than injected so the served `/orders` route is wired through ordinary
+        construction: `make_server` builds `Dashboard(client, ...)` and this
+        resolves the reader from `client.city`. A failed `gc` call is turned by
+        `orders_status` into a named `unreachable` state, never into zero orders
+        (§5.4). Imported at call time so the module load does not pay for it.
+        """
+        from mctl_core.orders import city_reader
+
+        city = getattr(self.client, "city", None) or Path.cwd()
+        return city_reader(city)
 
     def _orders(self, request):
-        """Orders and formulas (#117). Two of the three nouns asked for."""
+        """Orders and formulas (#117 / mc-0mhh). Two of the three nouns asked for.
+
+        The reader is the fixture one when a test injected it, otherwise the
+        production `city_reader` bound to the client's city. Either way the
+        screen renders real event-log outcomes and the failing count, and an
+        unreadable catalog renders a reason -- never `0 orders`.
+        """
         from mctl_core.orders import formulas_catalog, orders_status
 
         from .screens import orders as orders_screen
 
-        reader = self.orders_reader
-        if reader is None:
-            def reader(_what):  # noqa: ANN001
-                raise RuntimeError(
-                    "no orders reader configured -- gc is not wired to this dashboard yet"
-                )
+        reader = self.orders_reader or self._default_orders_reader()
 
         sections = [
             orders_screen.orders_table(orders_status(reader)),
@@ -1429,7 +1461,7 @@ class Dashboard:
             return self._page(
                 f"Molecule {molecule_id}", "/molecules", context, sections, context_bar=""
             )
-        sections = [molecules_screen.molecule_detail(payload)]
+        sections = [molecules_screen.molecule_detail(payload, rig=rig)]
         return self._page(
             f"Molecule {molecule_id}", "/molecules", context, sections, context_bar=""
         )
@@ -2370,6 +2402,19 @@ def _arguments_for(
         return arguments
     if operation.name == "dispatch":
         arguments["brief_id"] = brief_id
+        return arguments
+    if operation.name == "molecule_cancel":
+        # Targets a molecule ROOT bead, not a brief. Every field is named and
+        # mapped to a declared schema property -- no passthrough -- exactly as
+        # the brief mutations are.
+        root = (form.get("root_bead_id") or "").strip()
+        if root:
+            arguments["root_bead_id"] = root
+        reason = (form.get("reason") or "").strip()
+        if reason:
+            arguments["reason"] = reason
+        if (form.get("force") or "").strip():
+            arguments["force"] = True
         return arguments
     labels = [item.strip() for item in (form.get("labels") or "").split(",") if item.strip()]
     sources = [item.strip() for item in (form.get("sources") or "").split(",") if item.strip()]

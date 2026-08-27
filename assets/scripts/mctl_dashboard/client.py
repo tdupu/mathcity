@@ -67,6 +67,7 @@ ALLOWED_TOOLS = frozenset(
         "blast_radius_registry",
         "molecules_list",
         "molecules_show",
+        "molecule_cancel",
         "briefs_list",
         "briefs_show",
         "briefs_options",

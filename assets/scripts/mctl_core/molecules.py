@@ -105,6 +105,21 @@ def roots_in(beads: Iterable[Bead]) -> tuple[Bead, ...]:
     return tuple(b for b in beads if is_molecule_root(b))
 
 
+def is_closed_status(status: str | None) -> bool:
+    """Whether a bead status is terminal (`closed`/`done`).
+
+    Public because the cancel path (mc-x06e) and the evidence links must agree on
+    what "still open" means; a second private copy would drift the first time the
+    vocabulary gained a status.
+    """
+    return (status or "").strip().lower() in _CLOSED_STATUSES
+
+
+def open_steps_of(root_id: str, beads: Iterable[Bead]) -> tuple[Bead, ...]:
+    """The steps of `root_id` that are NOT closed -- what a cancel must close."""
+    return tuple(s for s in steps_of(root_id, beads) if not is_closed_status(s.status))
+
+
 def _rig_of(metadata: Mapping[str, object]) -> str | None:
     ref = _text(metadata, "gc.root_store_ref")
     if ref is None:
@@ -390,6 +405,12 @@ def describe(bead: Bead) -> dict[str, object]:
         "input_convoy": _text(m, "gc.input_convoy_id"),
         "artifacts": _artifacts_of(m),
         "status": bead.status,
+        # Whether a deliberate cancel (mc-x06e) has anything to act on: a
+        # molecule whose ROOT is already closed/done has finished or been
+        # cancelled and there is nothing to stop. The dashboard renders its
+        # cancel control only when this is true; the finer "a step is
+        # mid-execution, force required" answer comes from the tool's dry run.
+        "is_cancellable": not is_closed_status(bead.status),
         "created_at": bead.created_at,
         "updated_at": bead.updated_at,
     }

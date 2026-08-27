@@ -374,7 +374,7 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # here: it is mutating and mints briefs that are approved and dispatchable
     # at creation, and the MCP has no caller identity. Recorded in
     # DELIBERATELY_UNREACHABLE with the reason.
-    assert len(ALLOWED_TOOLS) == 29  # +commission_brief (#190), +briefs_present (#177), +queue_status (#113), +costs_summary (#118), +worktrees_status (#120)
+    assert len(ALLOWED_TOOLS) == 30  # +commission_brief (#190), +briefs_present (#177), +queue_status (#113), +costs_summary (#118), +worktrees_status (#120), +molecule_cancel (mc-x06e)
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

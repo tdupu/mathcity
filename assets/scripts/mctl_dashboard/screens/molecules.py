@@ -134,7 +134,49 @@ def _evidence_block(step: Mapping[str, Any]) -> str:
     return f'<ul class="reason-list">{items}</ul>{broken_line}'
 
 
-def molecule_detail(payload: Mapping[str, Any]) -> str:
+def cancel_control(molecule: Mapping[str, Any], rig: str | None) -> str:
+    """The typed-cancel action, shown only when the tool reports it permitted.
+
+    "Permitted" here is the coarse answer `molecules_show` carries -- the root is
+    not already closed, so there is a run to stop (the `BriefOption.enabled`
+    pattern applied to a molecule). The finer answer -- a step a worker is
+    actively running, which needs force -- is the cancel tool's own dry-run
+    refusal, surfaced when the operator previews. An already-finished molecule
+    shows no control at all rather than a button that could only ever refuse.
+    """
+    molecule_id = _e(molecule.get("id"))
+    if not molecule.get("is_cancellable"):
+        return _panel(
+            "Cancel",
+            '<p class="lede">This molecule\'s root is '
+            f'<span class="mono">{_e(molecule.get("status"))}</span> — it has finished or '  # single-shape-ok: molecule root row, not a brief
+            "already been cancelled, so there is nothing running to stop.</p>",
+            region="molecule-cancel-unavailable",
+        )
+    rig_field = (
+        f'<input type="hidden" name="rig" value="{_e(rig)}">' if rig else ""
+    )
+    body = (
+        '<p class="lede">Deliberately stop this run. Preview first — nothing is written '
+        "until you confirm. The cancel closes the open steps and the root with a cancel "
+        "reason and releases any claim; the record survives. A step a worker is actively "
+        "running is refused unless you force it.</p>"
+        '<form class="operation" method="post" action="/preview">'
+        '<input type="hidden" name="operation" value="molecule_cancel">'
+        f'<input type="hidden" name="root_bead_id" value="{molecule_id}">'
+        + rig_field
+        + '<label>Reason<input type="text" name="reason" '
+        'placeholder="why this molecule is being cancelled"></label>'
+        '<label><input type="checkbox" name="force" value="1"> '
+        "Force — cancel even if a step is mid-execution (releases the worker’s claim)"
+        "</label>"
+        '<div><button type="submit" class="secondary">Preview cancel</button></div>'
+        "</form>"
+    )
+    return _panel("Cancel this molecule", body, region="molecule-cancel")
+
+
+def molecule_detail(payload: Mapping[str, Any], *, rig: str | None = None) -> str:
     """One molecule: identity, then per-step `expected_artifacts` vs
     `artifacts`, the three-valued `is_complete`, and the evidence links."""
     rows: Sequence[Mapping[str, Any]] = payload.get("molecules") or []
@@ -171,8 +213,11 @@ def molecule_detail(payload: Mapping[str, Any]) -> str:
             + "</section>"
             for step in steps
         )
-    return _panel(
-        f"Molecule {molecule.get('id')}",
-        identity + f'<h3>Steps ({len(steps)})</h3>' + steps_body,
-        region="molecule-detail",
+    return (
+        _panel(
+            f"Molecule {molecule.get('id')}",
+            identity + f'<h3>Steps ({len(steps)})</h3>' + steps_body,
+            region="molecule-detail",
+        )
+        + cancel_control(molecule, rig)
     )

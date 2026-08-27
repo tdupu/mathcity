@@ -116,6 +116,24 @@ CLASS_COLLISION = "P5-existing-decision-names-the-same-artifact"
 TIER_ADJUDICATED = "A-adjudicated"
 TIER_CLAIMED = "B-claimed-disposition"
 TIER_OPEN = "C-no-disposition"
+#: A brief that was dispatched, prepped, or queued for presentation, but has
+#: claimed no verdict. Deliberately distinct from both `C-no-disposition` (which
+#: reads as "nobody has touched this") and `B-claimed-disposition` (which asserts
+#: a disposition WAS claimed): the honest third state is "in flight" -- not
+#: finished, and not awaiting a verdict either (mc-55de2, Taylor 2026-08-27).
+TIER_PILE = "D-in-flight"
+
+#: Frontmatter statuses that assert a brief is IN FLIGHT -- dispatched, being
+#: prepped, or queued for presentation. Kept SEPARATE from
+#: `_DISPOSED_STATUS_PREFIXES` on purpose: adding them there would widen
+#: `is_disposed`, silently changing which briefs the B1.3 shape repair skips
+#: (its docstring makes that coupling binding). An in-flight brief is not
+#: disposed of, so it must not enter the disposed set.
+_IN_FLIGHT_STATUS_PREFIXES = (
+    "present-it-pending",
+    "brief-prep-dispatched",
+    "briefed",
+)
 
 #: Frontmatter statuses that assert the brief was disposed of. `ready` and
 #: `ready-for-adjudication` are NOT among them -- "ready for adjudication" is
@@ -298,7 +316,20 @@ def classify_tier(frontmatter: Mapping[str, str]) -> str:
         return TIER_ADJUDICATED
     if verdict or _disposed(frontmatter.get("status") or ""):
         return TIER_CLAIMED
+    if _is_in_flight(frontmatter.get("status") or ""):
+        return TIER_PILE
     return TIER_OPEN
+
+
+def _is_in_flight(status: str) -> bool:
+    """Whether a frontmatter `status` says the brief is parked in flight.
+
+    Deliberately NOT folded into `is_disposed`: an in-flight brief has claimed no
+    disposition, so it must stay out of the disposed set the B1.3 repair keys on.
+    Checked only after the verdict/disposed tests, so a recorded verdict still
+    wins -- a brief that claimed a disposition is claimed, not in the pile.
+    """
+    return status.lower().startswith(_IN_FLIGHT_STATUS_PREFIXES)
 
 
 def _unquote(value: str) -> str:
@@ -342,7 +373,12 @@ def build_row(
 
     tier = classify_tier(frontmatter)
     verdict = _unquote(frontmatter.get("verdict", "")) or None
-    if tier != TIER_OPEN:
+    # Only a claimed OR adjudicated disposition "carries a verdict". The pile
+    # tier (in-flight) is non-OPEN but has claimed nothing, so it must NOT get
+    # `P3-carries-verdict` -- that class exists to flag rows whose disposition
+    # materialisation has to preserve, and an in-flight brief has no disposition
+    # to preserve (mc-55de2).
+    if tier in (TIER_ADJUDICATED, TIER_CLAIMED):
         problems.append(CLASS_VERDICT)
 
     if titles is None:
