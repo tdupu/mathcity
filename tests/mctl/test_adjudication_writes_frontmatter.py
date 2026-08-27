@@ -232,8 +232,15 @@ def test_only_the_lines_we_set_change(brief_fixture: BriefFixture):
 
     after = brief_fixture.path.read_text(encoding="utf-8").splitlines()
     changed = [line for line in after if line not in before]
-    # `status` is rewritten in place and `verdict` is appended; nothing else moves.
-    assert sorted(changed) == ["status: adjudicated", "verdict: approve"]
+    # `status` is rewritten in place; `verdict` and `adjudicated_at` are appended
+    # (mc-9kwwv put the date in the frontmatter so classify_tier can reach
+    # TIER_ADJUDICATED). No `--adjudicated-by` was passed, so no authority line is
+    # written -- and nothing else moves.
+    assert "status: adjudicated" in changed
+    assert "verdict: approve" in changed
+    assert any(line.startswith("adjudicated_at: ") for line in changed)
+    assert "adjudicated_by" not in "\n".join(changed)
+    assert len(changed) == 3
 
 
 def test_the_write_is_idempotent(tmp_path: Path):

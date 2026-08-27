@@ -472,6 +472,14 @@ def _add_brief_adjudicate_parser(commands: argparse._SubParsersAction[argparse.A
     parser.add_argument("--verdict", "--decision", dest="verdict")
     parser.add_argument("--reason")
     parser.add_argument("--option")
+    # The CLI surface for #152's recording half, mirroring the
+    # `briefs_relay_adjudication` MCP tool's `adjudicated_by` parameter (mc-ewapk
+    # / mc-ba376). The `adjudicate-brief` skill prescribes THIS call as the
+    # canonical write path, so without the flag every verdict recorded through
+    # the skill was unattributable and `MBRF_ADJUDICATOR_UNRECORDED` fired on
+    # every one. Naming the value is caller-supplied by construction here -- the
+    # surface exists precisely so a human can say who decided.
+    parser.add_argument("--adjudicated-by", dest="adjudicated_by")
     parser.add_argument("--dry-run", action="store_true")
     _add_runtime_arguments(parser)
 
@@ -659,6 +667,7 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                     verdict=args.verdict,
                     reason=args.reason,
                     option=args.option,
+                    adjudicated_by=args.adjudicated_by,
                 )
                 payload = dry_run_payload(plan) if args.dry_run else apply_effect_plan(context, plan).to_dict()
             else:
