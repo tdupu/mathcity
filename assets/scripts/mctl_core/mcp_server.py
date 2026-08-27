@@ -797,6 +797,159 @@ def _handle_dashboard_restart(scope: CityScope, arguments: Mapping[str, Any]) ->
     }
 
 
+def _handle_dashboard_serve(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """`mc-lj0sh`: start a dashboard from the typed surface -- the missing verb.
+
+    `#207` made `status` (observe) and `restart` (rebind) typed and left `start`
+    on the CLI, so an MCP-only Mayor asked to launch a dashboard from a cold
+    start could only report the gap -- `dashboard_restart` cannot substitute,
+    since it stops a NAMED, stamped instance and from a cold start there is
+    nothing to name. This is the create half, mirroring `mctl dashboard serve`
+    (`host`, `port`, `rig`), dry-run by default like every mutating tool.
+
+    A start where a dashboard is ALREADY stamped on the port is refused,
+    `MDSH_PORT_IN_USE`, symmetric with restart's `MDSH_NO_INSTANCE` -- never a
+    silent double-bind. The safety that gates `restart` (`#164`/`#210`: no
+    silent contract swap mid-session) does not apply here: starting where none
+    runs swaps no contract and surprises no session.
+
+    `P6.1`/`P6.3` on the live start: `start_instance` returns a bare pid before
+    the child has bound anything, so the result is CONFIRMED against the stamp
+    the child writes only after binding (`dashboards.confirm_started`). A child
+    that exits before stamping is `MDSH_SERVE_FAILED` with `applied=False`; a
+    start still coming up at the deadline is `still_starting` with elapsed -- a
+    distinct non-failure state, never rendered as a failed start.
+    """
+    port = int(arguments["port"])
+    host = str(arguments.get("host") or "127.0.0.1")
+    rig_arg = arguments.get("rig")
+    rig = str(rig_arg) if rig_arg else None
+    current = serving.read_commit(serving.PACK_ROOT)
+    instances = dashboards.discover(scope.city_root, current_commit=current)
+    existing = next((inst for inst in instances if inst.port == port), None)
+    if existing is not None:
+        return {
+            "diagnostics": [
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    code="MDSH_PORT_IN_USE",
+                    message=f"A dashboard (pid {existing.pid}) is already stamped on port {port} for this city.",
+                    hint="Rebind it onto current code with dashboard_restart, or start on another port.",
+                    facts={"pid": str(existing.pid), "port": str(port)},
+                ).to_dict()
+            ],
+            "applied": False,
+        }
+    if _dry_run(arguments):
+        return {
+            "diagnostics": [],
+            "applied": False,
+            "plan": {"port": port, "host": host, "rig": rig, "new_commit": current},
+        }
+    started = dashboards.start_instance(city_root=scope.city_root, host=host, port=port, rig=rig)
+    pid = int(started["pid"])
+    outcome = dashboards.confirm_started(scope.city_root, pid=pid)
+    elapsed = float(outcome["elapsed"])
+    if outcome["state"] == "died":
+        return {
+            "diagnostics": [
+                Diagnostic(
+                    severity=Severity.ERROR,
+                    code="MDSH_SERVE_FAILED",
+                    message=(
+                        f"The dashboard started on port {port} (pid {pid}) exited before it "
+                        f"bound the port and stamped itself."
+                    ),
+                    hint="Check nothing else holds the port (a non-mctl process leaves no stamp) and retry; nothing is serving.",
+                    facts={"pid": str(pid), "port": str(port), "elapsed_seconds": f"{elapsed:.2f}"},
+                ).to_dict()
+            ],
+            "applied": False,
+        }
+    diags: list[dict] = []
+    if outcome["state"] == "still_starting":
+        diags.append(
+            Diagnostic(
+                severity=Severity.WARN,
+                code="MDSH_SERVE_STILL_STARTING",
+                message=(
+                    f"The dashboard on port {port} (pid {pid}) is still coming up after "
+                    f"{elapsed:.2f}s; it is alive but has not yet stamped itself."
+                ),
+                hint="It is starting, not failed; call dashboard_status in a moment to confirm it bound.",
+                facts={"pid": str(pid), "port": str(port), "elapsed_seconds": f"{elapsed:.2f}", "state": "still_starting"},
+            ).to_dict()
+        )
+    elif outcome.get("slow"):
+        diags.append(
+            Diagnostic(
+                severity=Severity.WARN,
+                code="MDSH_SERVE_SLOW",
+                message=f"The dashboard on port {port} took {elapsed:.2f}s to bind and stamp itself.",
+                hint="It is serving; this is a latency note, not a failure.",
+                facts={"pid": str(pid), "port": str(port), "elapsed_seconds": f"{elapsed:.2f}"},
+            ).to_dict()
+        )
+    return {
+        "diagnostics": diags,
+        "applied": True,
+        "confirmed": outcome["state"] == "confirmed",
+        "state": str(outcome["state"]),
+        "pid": pid,
+        "port": port,
+        "host": host,
+        "url": started.get("url"),
+        "serving_commit": started.get("serving_commit"),
+        "elapsed_seconds": elapsed,
+    }
+
+
+def _handle_dashboard_teardown(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """`#154`/`mc-lj0sh`: stop dashboards from the typed surface -- the stop verb.
+
+    The teardown discipline `#154` added lived only on the CLI (`mctl dashboard
+    teardown`); an MCP-only operator could bring nothing down. This exposes it,
+    dry-run by default: a preview names exactly which live instances WOULD be
+    stopped (all, or the one on `port`) and touches nothing.
+
+    `P6.2` on the live call: `dashboards.teardown` stops each target and leaves
+    the stamp of any instance it could NOT stop IN PLACE, reporting it as a
+    failure -- a torn-down count never includes a process that may still be up.
+    A failed stop surfaces as `MDSH_TEARDOWN_FAILED`.
+    """
+    port_arg = arguments.get("port")
+    port = int(port_arg) if port_arg is not None else None
+    if _dry_run(arguments):
+        instances = dashboards.discover(scope.city_root)
+        targets = [inst for inst in instances if port is None or inst.port == port]
+        return {
+            "diagnostics": [],
+            "applied": False,
+            "plan": {
+                "requested_port": port,
+                "would_stop": [inst.to_dict() for inst in targets],
+            },
+        }
+    report = dashboards.teardown(scope.city_root, port=port)
+    diags = [
+        Diagnostic(
+            severity=Severity.ERROR,
+            code="MDSH_TEARDOWN_FAILED",
+            message=f"Could not stop dashboard pid {entry['pid']} on port {entry['port']}; it may still be running.",
+            hint="Check the process by hand (ps/kill); its stamp was left in place, so it is not counted as torn down.",
+            facts={"pid": str(entry["pid"]), "port": str(entry["port"])},
+        ).to_dict()
+        for entry in report["failed"]
+    ]
+    return {
+        "diagnostics": diags,
+        "applied": True,
+        "requested_port": port,
+        "stopped": report["stopped"],
+        "failed": report["failed"],
+    }
+
+
 def _handle_briefs_list(
     ctx: MctlContext, arguments: Mapping[str, Any], progress: RigProgress | None = None
 ) -> dict[str, object]:
@@ -2110,6 +2263,86 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["applied"],
         ),
         handler=_handle_dashboard_restart,
+        scope=CITY_SCOPE,
+        mutating=True,
+        external_ready=False,
+    ),
+    ToolSpec(
+        name="dashboard_serve",
+        title="Start a dashboard from the typed surface",
+        description=(
+            "Start an `mctl dashboard serve` instance for this city (mc-lj0sh) -- the create "
+            "verb #207 left on the CLI, so an MCP-only Mayor asked to launch a dashboard from a "
+            "cold start could only report the gap (dashboard_restart cannot substitute: it "
+            "rebinds a NAMED, stamped instance, and from a cold start there is nothing to name). "
+            "Mirrors the CLI (host, port, rig); dry run by default previews the port and commit "
+            "it would serve and touches nothing. A start onto a port that already has a stamped "
+            "dashboard is refused MDSH_PORT_IN_USE, symmetric with restart's MDSH_NO_INSTANCE -- "
+            "never a silent double-bind (the #164/#210 no-swap safety that gates restart does "
+            "NOT apply: starting where none runs swaps no contract). A live call confirms the "
+            "child bound its port and stamped itself: a child that exits first is "
+            "MDSH_SERVE_FAILED with applied=false; one still coming up at the deadline is "
+            "reported state=still_starting with elapsed (P6.3), never a failed start."
+        ),
+        input_schema=request_schema(
+            {
+                "port": {"type": "integer", "description": "The port to serve the dashboard on."},
+                "host": {"type": "string", "description": "Bind address (default 127.0.0.1)."},
+                "rig": nullable_string("The rig to pin the dashboard to, or null for city-wide."),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["port"],
+        ),
+        output_schema=response_schema(
+            {
+                "applied": {"type": "boolean", "description": "False for a dry run or a refusal."},
+                "plan": {"type": "object", "description": "The dry-run preview: port, host, rig, and the commit it would serve."},
+                "confirmed": {"type": "boolean", "description": "True when the started instance bound its port and stamped itself within the deadline."},
+                "state": {"type": "string", "description": "confirmed | still_starting on a live start (P6.3)."},
+                "pid": {"type": "integer"},
+                "port": {"type": "integer"},
+                "host": {"type": "string"},
+                "url": nullable_string("The URL the fresh instance is bound to."),
+                "serving_commit": nullable_string("The commit the fresh instance imported."),
+                "elapsed_seconds": {"type": "number", "description": "How long confirmation took (P6.3 carries elapsed)."},
+            },
+            ["applied"],
+        ),
+        handler=_handle_dashboard_serve,
+        scope=CITY_SCOPE,
+        mutating=True,
+        external_ready=False,
+    ),
+    ToolSpec(
+        name="dashboard_teardown",
+        title="Stop running dashboards for this city",
+        description=(
+            "Stop live `mctl dashboard serve` instances for this city and clear their stamps "
+            "(#154/mc-lj0sh) -- the stop verb, previously CLI-only, so an MCP-only operator could "
+            "bring nothing down. Dry run by default: a preview names exactly which live instances "
+            "would be stopped (all, or the one on `port`) and touches nothing. A live call stops "
+            "each target; a stop that does not take leaves its stamp IN PLACE and is reported "
+            "MDSH_TEARDOWN_FAILED (P6.2), so a torn-down count never includes a process that may "
+            "still be up. Dead stamps are reaped in passing, so this also clears the strays #154 "
+            "was filed against."
+        ),
+        input_schema=request_schema(
+            {
+                "port": {"type": ["integer", "null"], "description": "Stop only the instance on this port; omit to stop all for this city."},
+                "dry_run": DRY_RUN_PROPERTY,
+            }
+        ),
+        output_schema=response_schema(
+            {
+                "applied": {"type": "boolean", "description": "False for a dry run."},
+                "plan": {"type": "object", "description": "The dry-run preview: which instances would be stopped."},
+                "requested_port": {"type": ["integer", "null"], "description": "The port filter, or null for all instances."},
+                "stopped": {"type": "array", "description": "Instances stopped and unstamped.", "items": {"type": "object"}},
+                "failed": {"type": "array", "description": "Instances that would not stop; their stamps were left in place.", "items": {"type": "object"}},
+            },
+            ["applied"],
+        ),
+        handler=_handle_dashboard_teardown,
         scope=CITY_SCOPE,
         mutating=True,
         external_ready=False,

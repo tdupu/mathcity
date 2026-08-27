@@ -928,3 +928,32 @@ module = "mcp_server.py"
 severity = "ERROR"
 meaning = "dashboard_restart could not stop the target instance, so nothing was started on top of a process that may still be up (P6.2 on the mutation); applied is false and the operator must check the process by hand."
 module = "mcp_server.py"
+
+# MDSH start/stop (mc-lj0sh). dashboard_serve/dashboard_teardown close the
+# lifecycle to all four verbs #207 left split: an MCP-only Mayor can now bring a
+# dashboard up from a cold start and take one down, not only observe and rebind.
+
+[MDSH_PORT_IN_USE]
+severity = "ERROR"
+meaning = "dashboard_serve was asked to start on a port that already has a stamped dashboard for this city; refused rather than double-binding, symmetric with dashboard_restart's MDSH_NO_INSTANCE. Rebind the existing one with dashboard_restart, or start on another port."
+module = "mcp_server.py"
+
+[MDSH_SERVE_FAILED]
+severity = "ERROR"
+meaning = "dashboard_serve started a child that exited before it bound its port and stamped itself (P6.1): the start did not take. applied is false and nothing is serving -- another process may hold the port."
+module = "mcp_server.py"
+
+[MDSH_SERVE_STILL_STARTING]
+severity = "WARN"
+meaning = "dashboard_serve started a child that is still alive but had not stamped itself when the confirmation deadline elapsed (P6.3): a distinct non-failure state carrying elapsed, never rendered as a failed start. Call dashboard_status in a moment to confirm it bound."
+module = "mcp_server.py"
+
+[MDSH_SERVE_SLOW]
+severity = "WARN"
+meaning = "dashboard_serve confirmed the instance bound and stamped itself, but only after crossing the warn threshold beneath the deadline (P6.3): a latency note naming elapsed, not a failure. It is serving."
+module = "mcp_server.py"
+
+[MDSH_TEARDOWN_FAILED]
+severity = "ERROR"
+meaning = "dashboard_teardown could not stop a target instance, so its stamp was left in place and it is not counted as torn down (P6.2); the operator must check the process by hand."
+module = "mcp_server.py"
