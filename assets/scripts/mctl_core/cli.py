@@ -26,7 +26,14 @@ from .city import DEGRADED_SOURCES, RigProgress, for_each_rig, merge_outcomes
 from .context import ContextError, MctlContext, resolve_context
 from .diagnostics import Diagnostic, render_diagnostic
 from .liveness import city_not_active_diagnostic
-from .trace import fold, new_trace_id, read_rows, trace_not_found_diagnostic
+from .trace import (
+    fold,
+    new_trace_id,
+    read_rows,
+    record_refusal,
+    refusal_ledger_unwritable_diagnostic,
+    trace_not_found_diagnostic,
+)
 from .effects import (
     BriefCreateInput,
     MutationError,
@@ -566,6 +573,33 @@ def _add_work_dispatch_event_parser(
     _add_runtime_arguments(parser)
 
 
+def _record_refusal(
+    context: MctlContext,
+    diagnostic: Diagnostic,
+    *,
+    surface: str,
+    operation: str | None = None,
+) -> None:
+    """Record a refusal to the durable ledger before it is shown and discarded.
+
+    The precondition for mc-3q4v's auto-routing (bead mc-rmqt): a MutationError
+    is caught here, formatted for display, and -- until this ledger -- dropped,
+    so the trace id shown to the operator dereferenced to nothing. A failed
+    ledger write is a distinct failure from the refusal and must never mask it
+    (P6.1): the loss announces itself here, then the caller still surfaces the
+    original refusal.
+    """
+    try:
+        record_refusal(context, diagnostic, surface=surface, operation=operation)
+    except OSError as ledger_error:
+        print(
+            render_diagnostic(
+                refusal_ledger_unwritable_diagnostic(context, ledger_error)
+            ),
+            file=sys.stderr,
+        )
+
+
 def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     try:
         if args.brief_command == "list":
@@ -637,6 +671,12 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                 )
                 payload = dry_run_payload(plan) if args.dry_run else apply_effect_plan(context, plan).to_dict()
     except (BriefError, MutationError) as error:
+        _record_refusal(
+            context,
+            error.diagnostic,
+            surface=f"cli:briefs.{args.brief_command}",
+            operation=f"briefs.{args.brief_command}",
+        )
         print(render_diagnostic(error.diagnostic), file=sys.stderr)
         return 1
     if args.json:
@@ -748,9 +788,21 @@ def _work_command(args: argparse.Namespace, context: MctlContext) -> int:
                 else apply_dispatch_plan(context, plan)
             )
     except MutationError as error:
+        _record_refusal(
+            context,
+            error.diagnostic,
+            surface=f"cli:work.{args.work_command}",
+            operation=f"work.{args.work_command}",
+        )
         print(render_diagnostic(error.diagnostic), file=sys.stderr)
         return 1
     except WorkError as error:
+        _record_refusal(
+            context,
+            error.diagnostic,
+            surface=f"cli:work.{args.work_command}",
+            operation=f"work.{args.work_command}",
+        )
         print(render_diagnostic(error.diagnostic), file=sys.stderr)
         return 1
     if args.json:

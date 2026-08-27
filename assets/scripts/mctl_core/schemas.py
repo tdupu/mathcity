@@ -782,7 +782,7 @@ TRACE_RECORD_SCHEMA: Schema = {
     "properties": {
         "actual_effects": {"type": "array"},
         "blocking_diagnostics": {"type": "array"},
-        "outcome": {"type": "string", "enum": ["planned", "applied", "aborted"]},
+        "outcome": {"type": "string", "enum": ["planned", "applied", "aborted", "refused"]},
         "phases": STRING_ARRAY,
         "trace_id": {"type": "string"},
     },

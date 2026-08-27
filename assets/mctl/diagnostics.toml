@@ -425,6 +425,11 @@ severity = "FATAL"
 meaning = "No trace rows were recorded for the requested trace id."
 module = "trace.py"
 
+[MCTL_REFUSAL_LEDGER_UNWRITABLE]
+severity = "FATAL"
+meaning = "A refusal was caught at a presentation boundary but could not be written to the trace ledger; the refusal still holds but its durable record was lost."
+module = "trace.py"
+
 [MCTL_TRACE_REPLAY_BLOCKED]
 severity = "WARN"
 meaning = "A replay preview of this trace is advisory only: the trace already applied, or aborted with unresolved blockers."
