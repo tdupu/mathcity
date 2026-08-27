@@ -646,3 +646,42 @@ def unwired(tool: str, *, module: str, issue: int) -> str:
         "city has none of these.</p>",
         region=f"city-unwired-{tool}",
     )
+
+
+#: The surfaces in the `/city` fan-out that are RIG-SCOPED. Every other tool on
+#: that page carries `CITY_SCOPE` in `mctl_core/mcp_server.py` and answers with
+#: no rig named; these two do not, so on a city-wide dashboard with no rig
+#: chosen they can only return `MCTL_CONTEXT_RIG_REQUIRED`.
+RIG_SCOPED: frozenset[str] = frozenset({"queue_status", "costs_summary"})
+
+
+def needs_rig(tool: str, rig_ids: Sequence[str], selected: str | None = None) -> str:
+    """A rig-scoped surface on a page that has not been given a rig.
+
+    Not a failure panel and not an empty one. The call did not fail -- it was
+    never worth making: this tool has no `CITY_SCOPE`, so with no rig named the
+    only reachable answer is `MCTL_CONTEXT_RIG_REQUIRED`, which is a statement
+    about the request and not about the city. Rendering that in the slot where
+    a measurement belongs is P6.2's mirror: a probe that could not have passed,
+    dressed as one that ran and found something wrong.
+
+    `_molecules` already answers this with a picker rather than a guaranteed
+    failure; this is the same answer for the two rig-scoped surfaces that share
+    the city fan-out with five city-scoped ones. The five still render -- the
+    picker replaces two panels, never the page.
+    """
+    from mctl_dashboard.render import rig_filter_field
+
+    return _panel(
+        tool.replace("_", " ").title(),
+        '<p class="lede"><strong>This surface is read per rig.</strong> '
+        f'<span class="mono">{_e(tool)}</span> is rig-scoped, and no rig is '
+        "selected — so there is no city-wide answer to show here. This is not a "
+        "failure, not an empty result, and not a statement that the city has "
+        "none of these.</p>"
+        '<form class="operation" method="get" action="/city">'
+        + rig_filter_field(rig_ids, selected)
+        + '<div><button type="submit" class="secondary">'
+        f"Show {_e(tool.replace('_', ' '))}</button></div></form>",
+        region=f"city-needs-rig-{tool}",
+    )

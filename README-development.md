@@ -502,12 +502,26 @@ of the smoke test enforces that no skill branches on them:
   "malformed" beads were never briefs. See
   `subdomains/dev/docs/MALFORMED-BRIEF-TRIAGE-2026-08-19.md`.
 
-**`MBRF004` nevertheless does gate `adjudicate` / `defer` / `dispatch`** — it is
-an `ERROR`, and `effects.py::_blocking_preconditions` refuses any mutation whose
-doctor report carries one. It fires on 146 of 185 live briefs, 88 of them
-`pending` and otherwise healthy. A wired skill will therefore be refused on most
-of the live queue: that is real current behavior, and the skills report the
-diagnostic verbatim rather than routing around it.
+**`MBRF004` does NOT gate `adjudicate` / `defer` / `dispatch`.** Corrected
+2026-08-27; the previous text here asserted the opposite and was stale. Read the
+source, not the prose: `mctl_core/briefs.py:1652` emits it at **`Severity.WARN`**,
+and `_blocking_diagnostic` (`briefs.py:2124`) selects only `ERROR`/`FATAL`, so
+`effects.py::_blocking_preconditions` never blocks on it. #137 made the downgrade;
+this paragraph did not follow.
+
+Measured 2026-08-27 across all 18 registered rigs: `MBRF004` fires on **149
+distinct brief beads** and blocks **none** of them. The stale "146 of 185 live
+briefs, 88 of them `pending`" figure came from before the downgrade and should not
+be repeated. Live check on `mc-ba376` — which raises `MBRF004` — returns
+`adjudicate: enabled=true, disabled_reason=null`; only `dispatch-work` is disabled,
+on `MBRF011` ("no approving verdict for dispatch"), which is the correct gate for a
+brief nobody has approved yet.
+
+**Treating `MBRF004` as a filter is a live failure mode, not a hypothetical.** A
+session that drops `MBRF004`-raising briefs from the queue empties it and concludes
+there is nothing to adjudicate; on 2026-08-27 there were **17** adjudicable briefs
+across 4 rigs at the moment that conclusion was drawn. Skills report the diagnostic
+verbatim and do not branch on it — including not branching on it to *exclude*.
 
 ### Mctl Operator Dashboard
 

@@ -21,16 +21,30 @@ panel, verdicts struck through and inert, reject the only way out. The operator
 is being stopped from endorsing something known-bad.
 
 **Refused-under-review** means *the core will not accept a verdict yet, but
-nothing is known-bad.* `MBRF004` -- which gates roughly two thirds of the live
-pending queue -- means the brief bead has no dependency edge to the thing it is
-deciding about. The brief may be entirely sound; it is simply not attached to
-its subject, so an approval would land on a bead pointing at nothing. That is
-structural incompleteness, not a violation.
+nothing is known-bad.* `MBRF004` means the brief bead has no dependency edge to
+the thing it is deciding about. The brief may be entirely sound; it is simply
+not attached to its subject, so an approval would land on a bead pointing at
+nothing. That is structural incompleteness, not a violation.
+
+This paragraph used to open *"`MBRF004` -- which gates roughly two thirds of
+the live pending queue"*. **It gates none of it.** `MBRF004` is
+`severity = "WARN"` (`assets/mctl/diagnostics.toml`, emitted at
+`briefs.py:1652`), and `briefs.py::_blocking_diagnostic` selects only
+ERROR/FATAL, so a WARN can never block a verdict. The claim was accurate until
+issue #137 downgraded the code from ERROR on 2026-08-22; this file's copy never
+followed. The severity source is cited rather than a fresh population count on
+purpose -- a count is what went stale here, twice.
+
+What survives the correction is the *rendering* rule below, which never
+depended on MBRF004 blocking anything: a brief raising it is refused-under-
+review, not HELD.
 
 The rendering difference carries the whole distinction: **disabled, not struck
 through.** Struck-through text says "this would be wrong". A disabled control
-says "you may not, yet". On a queue where two thirds of briefs are in this
-state, using the first would tell the operator most of their work is bad.
+says "you may not, yet". `MBRF004` is raised across a large share of the
+pending queue, so using the first would tell the operator most of their work is
+bad. (Deliberately not a number: the "two thirds" this sentence used to carry
+is the same stale figure corrected above.)
 
 A further reason for restraint: a large share of that population turns out not
 to be briefs at all. `POLICY` B2.1 already excludes decision beads created for

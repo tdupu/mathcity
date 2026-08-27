@@ -233,13 +233,21 @@ def rig_for_apply(requested: str | None, preview: Any) -> str | None:
     return (pinned or "").strip() or None
 
 
-#: Codes that gate SOME verdicts while leaving others available. A brief
-#: carrying one of these is still actionable and belongs in the stack.
-#: `MBRF004` (no source dependency) blocks `approve` under B2.1 and leaves
-#: `revise` and `reject` live -- measured against `mctl`, all three verdicts,
-#: on a real brief. Treating it as unusable would remove the only action
-#: currently available on most of the open queue.
-PARTIAL_GATES: frozenset[str] = frozenset({"MBRF004"})
+#: REMOVED, 2026-08-27. `PARTIAL_GATES = frozenset({"MBRF004"})` asserted that
+#: `MBRF004` "blocks approve under B2.1 and leaves revise and reject live". No
+#: part of that is true, and nothing read the constant -- it had zero consumers
+#: in `assets/` and `tests/`, so the false claim had no behaviour to contradict
+#: it. `MBRF004` blocks NOTHING: `assets/mctl/diagnostics.toml` declares it
+#: `severity = "WARN"`, `briefs.py:1652` emits it at `Severity.WARN`, and
+#: `briefs.py::_blocking_diagnostic` selects only ERROR/FATAL -- so a WARN can
+#: never reach the blocking set. The text is stale by one issue: #137
+#: downgraded `MBRF004` from ERROR to WARN and closed 2026-08-22; this copy
+#: never followed. Deliberately not replaced with a corrected constant -- the
+#: live treatment already comes from `review.UNDER_REVIEW_CODES`, which routes
+#: `MBRF004` to "refused, under review" (disabled, not struck through) and is
+#: covered by `test_dashboard_panel_v2.py` and `test_dashboard_redesign.py`.
+#: No count is restated here on purpose; the severity source above is the
+#: durable fact, a population size is not.
 
 
 def brief_codes(brief: Mapping[str, Any]) -> tuple[str, ...]:
@@ -287,10 +295,15 @@ def rulable(brief: Mapping[str, Any]) -> bool:
     writes to the bead; a document brief without one is refused outright with
     `MBRF010`, so offering it spends a decision that cannot land.
 
-    `MBRF004` deliberately does NOT disqualify. It gates *approve* while
-    leaving *revise* and *reject* live -- verified against `mctl`, all three
-    verdicts, on a real brief. Filtering those out would hide briefs that can
-    legitimately be sent back, which is the same error pointed the other way.
+    `MBRF004` deliberately does NOT disqualify -- and, since #137, it does not
+    gate anything either. It is `severity = "WARN"`
+    (`assets/mctl/diagnostics.toml`, emitted at `briefs.py:1652`), and
+    `briefs.py::_blocking_diagnostic` selects only ERROR/FATAL, so it cannot
+    reach the blocking set at all. This docstring previously said it "gates
+    *approve* while leaving *revise* and *reject* live"; that was true before
+    #137 downgraded it on 2026-08-22 and has been false since. Filtering on it
+    would hide briefs that can be ruled on in every direction, which is the
+    same error pointed the other way.
     """
     return bool(attr(brief, "bead_id")) and str(attr(brief, "decision_state") or "") == "pending"
 
@@ -1256,10 +1269,35 @@ class Dashboard:
             ("costs_summary", city_screen.costs),
             ("worktrees_status", city_screen.worktrees),
         )
-        outcomes = fan_out(self.client, [(tool, self._args(rig)) for tool, _ in surfaces])
+        # Five of those seven carry CITY_SCOPE and answer with no rig named.
+        # `queue_status` and `costs_summary` do not, so on a city-wide dashboard
+        # with no rig chosen they could only ever return a FATAL
+        # `MCTL_CONTEXT_RIG_REQUIRED` -- a statement about the request, rendered
+        # in the slot where a measurement about the city belongs. `_molecules`
+        # already answers this shape with a picker instead of a guaranteed
+        # failure; this route fanned all seven out regardless, so the default
+        # `/city` view failed two panels on every load. Deferred, not dropped:
+        # each deferred panel names the rig it needs and offers the picker.
+        deferred = (
+            tuple(name for name, _ in surfaces if name in city_screen.RIG_SCOPED)
+            if self.city_wide and not rig
+            else ()
+        )
+        reachable = tuple((name, renderer) for name, renderer in surfaces if name not in deferred)
+
+        # The rig registry rides IN the fan-out, not after it. Read serially it
+        # cost 0.40s on top of a page that had just paid for everything else
+        # concurrently -- measured 0.85s -> 1.25s, which is the whole saving
+        # this route made in `test_city_reads_concurrently` handed back to buy
+        # a picker. It is only read when something was actually deferred.
+        batch = [(tool, self._args(rig)) for tool, _ in reachable]
+        if deferred:
+            batch.append(("context_rigs", {}))
+        outcomes = fan_out(self.client, batch)
+        registry_outcome = outcomes[len(reachable):]
 
         sections: list[str] = []
-        for (tool, renderer), outcome in zip(surfaces, outcomes):
+        for (tool, renderer), outcome in zip(reachable, outcomes):
             try:
                 if isinstance(outcome, Exception):
                     raise outcome
@@ -1291,6 +1329,21 @@ class Dashboard:
                 )
             else:
                 sections.append(renderer(payload))
+
+        # Rig-scoped and no rig chosen: the picker, in the panel's own slot.
+        # An unreadable registry costs the picker its options, never the panel:
+        # the sentence naming which rig is needed is the load-bearing half, and
+        # an empty <select> that still says so beats a panel that vanished.
+        if deferred:
+            rig_ids: tuple[str, ...] = ()
+            outcome = registry_outcome[0] if registry_outcome else None
+            if outcome is not None and not isinstance(outcome, Exception):
+                rig_ids = tuple(
+                    str(entry.get("rig_id"))  # single-shape-ok: context_rigs registry row, not a brief
+                    for entry in outcome.payload.get("rigs") or ()
+                    if entry
+                )
+            sections.extend(city_screen.needs_rig(tool, rig_ids, rig) for tool in deferred)
 
         # Built, tested, and unreachable: no MCP tool exists, so no page can
         # call them. Named rather than omitted -- an absent panel reads as
@@ -1848,8 +1901,11 @@ class Dashboard:
 
         A refused preview reports whatever refused first, and a missing form
         field refuses before the bead's state is ever consulted. That buries
-        the real answer: a brief blocked by `MBRF004`/`MBRF011` cannot be
-        adjudicated however the form is filled in, and telling an operator to
+        the real answer: a brief blocked by `MBRF011` (ERROR) or `MBRF010`
+        (FATAL) cannot be adjudicated however the form is filled in -- these
+        are the severities `_blocking_diagnostic` actually selects, and
+        `MBRF004` is NOT among them since #137 made it WARN. Telling an
+        operator to
         supply a reason implies that supplying one would work. So the option's
         own `disabled_reason` is surfaced alongside -- and ahead of -- the
         field-validation diagnostic, which also makes the form's promise that

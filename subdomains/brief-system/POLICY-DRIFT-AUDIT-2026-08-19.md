@@ -1,5 +1,30 @@
 # Brief-System POLICY.md — drift audit, 2026-08-19
 
+> ### ⚠ SUPERSEDED IN PART — `MBRF004` severity, corrected 2026-08-27
+>
+> This audit is a **dated snapshot and is preserved unedited below.** One of
+> its findings has since been overtaken by the code and must not be quoted as
+> current:
+>
+> **§B2.1 row (line 79) and §"Blast radius" (line 196) state that `MBRF004` is
+> `Severity.ERROR` and therefore gates `adjudicate` / `defer` /
+> `dispatch-work` on 88 healthy pending briefs. That is no longer true.**
+> `#137` downgraded it. `mctl_core/briefs.py:1652` emits `MBRF004` at
+> **`Severity.WARN`**, and `_blocking_diagnostic` (`briefs.py:2124`) selects
+> only `ERROR`/`FATAL`, so no mutation blocks on it. Measured 2026-08-27 across
+> all 18 registered rigs: `MBRF004` fires on **149 distinct brief beads** and
+> blocks **0**. On the same day, **17** bead-backed briefs across 4 rigs
+> returned `adjudicate: enabled=true, disabled_reason=null`.
+>
+> The audit's open question 3 (line 533) — *"whether `MBRF004` blocks
+> adjudication on exactly 88 pending briefs"* — is therefore **answered: it
+> blocks none.** Its other findings were not re-verified in this pass and
+> retain whatever status they had.
+>
+> A session that treats `MBRF004` as a queue filter on the strength of this
+> document will empty the queue and wrongly report nothing to adjudicate. See
+> `tdupu/mathcity#234` and the correction comment on bead `mc-nywhr`.
+
 **Status:** analysis only, uncommitted. **Nothing was mutated** — no bead, no
 POLICY.md edit, no file in `<city-root>/.beads/`, no service touched. Every
 `bd` invocation was a read (`bd list`, `bd show`, `bd export`); every

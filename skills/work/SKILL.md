@@ -132,12 +132,17 @@ deciding anything — the answer is usually one of:
 | `MWRK_ALREADY_DISPATCHED` | provenance exists; this is the duplicate-dispatch gate |
 | `MWRK_BRIEF_NOT_FOUND` | not a brief bead — this is fresh work, take path B |
 
-**`MBRF004` will refuse a great many live briefs.** It is an `ERROR`
-("Brief bead has no source dependency", B2.1) and `_blocking_preconditions`
-refuses any mutation carrying one; it currently fires on 146 of 185 live briefs.
-Report the refusal with the diagnostic verbatim. **Do not branch on `MBRF004`,
-`MBRF005`, or `MBRF021`, and do not route around the gate** — see
-`template-fragments/mctl-entry-point.md`.
+**`MBRF004` refuses nothing.** Corrected 2026-08-27 — this passage previously
+said it was an `ERROR` that blocked mutation on "146 of 185 live briefs", and
+that was stale by #137. `mctl_core/briefs.py:1652` emits it at `Severity.WARN`,
+and `_blocking_diagnostic` (`briefs.py:2124`) selects only `ERROR`/`FATAL`, so
+`_blocking_preconditions` never carries it. Measured 2026-08-27: 149 distinct
+brief beads city-wide raise `MBRF004`; 0 are blocked by it.
+
+Report it with the diagnostic verbatim. **Do not branch on `MBRF004`,
+`MBRF005`, or `MBRF021`** — see `template-fragments/mctl-entry-point.md`. That
+includes not branching on it to *exclude*: a session that filters `MBRF004`
+briefs out of the queue empties the queue and wrongly reports nothing to do.
 
 ## Path A — brief-backed dispatch (`mctl work dispatch`)
 

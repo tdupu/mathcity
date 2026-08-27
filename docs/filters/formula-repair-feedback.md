@@ -25,7 +25,9 @@ review work only when the pattern is tight enough to justify a fix.
   `brief-producer-failure.v1`.
 - Durable `brief.producer_failure` event beads when the bead store is
   reachable.
-- Rollup records in `.producer-failure-rollups/open.jsonl`.
+- Rollup records in `.producer-failure-rollups/open.jsonl` — **open groups only**.
+  A group leaves the file when its repair bead closes; there is no separate
+  closed ledger, because the repair bead is the canonical state (B2.8).
 - Batch files for thresholded groups.
 - Repair-review work in the `gascity-packs` rig, routed to
   `gascity-packs/gc.run-operator` on `brief-producer-repair`.
@@ -58,6 +60,11 @@ create an HQ `gt-*` repair bead and sling it across stores.
 - Repair review launches only after the distinct-source threshold is met.
 - Before slinging repair work, the formula checks required commands and checks
   that the repair bead is not already assigned.
+- A group whose repair bead is already assigned is **skipped**, not fatal: it is
+  the expected steady state while repair work runs. Aborting on it would latch
+  the whole rollup molecule the moment any one repair is dispatched.
+- If `rig:gascity-packs` cannot be resolved, closure state is reported as
+  `unknown` and every group is kept open — never silently reported as zero (P6.2).
 - Failure to write cache or create the event bead must emit a loud failure
   event or exit nonzero.
 

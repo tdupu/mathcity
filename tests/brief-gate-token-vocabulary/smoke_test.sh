@@ -28,6 +28,12 @@ DRAIN="$ROOT/assets/scripts/brief-shuffle-fast-drain.py"
 GATES="$ROOT/assets/brief-pipeline/gates.toml"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/brief-gate-token-vocabulary.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
+# Canonical pile membership is the bead query (POLICY B2.4), so the drain
+# needs a bead source. This fixture has no bd store, so it injects an empty
+# one through the same seam mctl_core.beads.read_beads uses: no brief bead
+# means UNRESOLVED, not closed, so these slugs still drain.
+BEAD_FIXTURE="$TMP/beads.jsonl"
+: >"$BEAD_FIXTURE"
 
 test -f "$CHECK"
 test -f "$DRAIN"
@@ -161,7 +167,7 @@ with open(out_path, "w", encoding="utf-8") as handle:
         f"## Gate Evidence\n{body}\n"
     )
 PY
-  report="$(python3 "$DRAIN" --brief-root "$briefs" --gate-config "$GATES" --max-items 1 --apply --json --no-external)"
+  report="$(python3 "$DRAIN" --brief-root "$briefs" --gate-config "$GATES" --bead-fixture "$BEAD_FIXTURE" --max-items 1 --apply --json --no-external)"
   got="$(printf '%s' "$report" | python3 -c '
 import json
 import sys

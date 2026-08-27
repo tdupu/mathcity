@@ -9,6 +9,7 @@ import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -60,6 +61,19 @@ PILE_MANIFEST_NAME = "manifest.jsonl"
 # beside the jsonl is the convention append_index already follows for the stack
 # index, and <pile>/.manifest.lock already exists on the live city.
 MANIFEST_LOCK_NAME = ".manifest.lock"
+# POLICY B2.4: "Canonical membership is the bead query: open `type=decision`
+# brief beads." B2.3: "any pile-reading process MUST filter to open brief
+# beads." This is that query, byte-identical to `mctl_core.beads.BD_LIST_ARGS`
+# so the two readers cannot drift into disagreeing about what a pile is. It is
+# duplicated rather than imported because this script ships as a standalone
+# pack asset with no `mctl_core` on its path (the same constraint
+# brief-stack-index.py records at its `parse_frontmatter`).
+BD_LIST_ARGS = ("bd", "list", "--all", "--limit", "0", "--json", "--readonly", "--type", "decision")
+BD_TIMEOUT_SECONDS = int(os.environ.get("MCTL_BD_TIMEOUT_SECONDS", "120"))
+# A bead is a pile member while it is in one of these states. Copied from
+# `mctl_core.beads.Bead.is_open`. Anything else -- closed, done -- is
+# adjudicated or abandoned, and its pile file is stale cache.
+OPEN_BEAD_STATUSES = {"open", "hooked", "in_progress", "blocked", "review", "testing"}
 
 
 @dataclass(frozen=True)
@@ -281,13 +295,147 @@ def evaluate(path: Path, gate_config: dict[str, Any]) -> tuple[str, str, dict[st
     return profile, "", metadata, []
 
 
-def selected_pile_items(pile: Path, max_items: int) -> list[Path]:
+class MembershipError(RuntimeError):
+    """The canonical bead store could not be read."""
+
+
+def rig_root_for(brief_root: Path) -> Path | None:
+    """The directory CONTAINING `.beads`, i.e. the rig or city root.
+
+    Same rule brief-stack-index.py serializes against, for the same reason: it
+    is derivable from `--brief-root` alone, so no second convention is needed.
+    A `--brief-root` with no `.beads` component is a fixture and has no rig
+    root; the caller must inject beads instead of guessing a store.
+    """
+    resolved = brief_root.expanduser().resolve()
+    parts = resolved.parts
+    if ".beads" not in parts:
+        return None
+    return Path(*parts[: parts.index(".beads")])
+
+
+def read_brief_beads(rig_root: Path | None, fixture: Path | None) -> dict[str, str]:
+    """Return {brief_bead_id: status} for every `type=decision` bead.
+
+    The fixture seam mirrors `mctl_core.beads.read_beads(fixture_path=...)`,
+    and the `type=decision` narrowing applies to BOTH transports: if the
+    fixture ignored the filter, every fixture-based test would be blind to a
+    mistake in it.
+
+    Raises rather than returning empty on any read failure. An empty result and
+    an unreadable store are the same value in Python and opposite facts here --
+    "no brief beads" would let every pile file through as unresolved, which is
+    exactly the fall-back-to-the-directory behaviour this function exists to
+    remove.
+    """
+    if fixture is not None:
+        beads: dict[str, str] = {}
+        try:
+            for number, line in enumerate(fixture.read_text(encoding="utf-8").splitlines(), start=1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if not isinstance(row, dict):
+                    raise MembershipError(f"{fixture}:{number} is not a JSON object")
+                if row.get("issue_type", row.get("type")) != "decision":
+                    continue
+                bead_id = row.get("id")
+                if not isinstance(bead_id, str) or not bead_id:
+                    raise MembershipError(f"{fixture}:{number} has no string id")
+                beads[bead_id] = str(row.get("status") or "open")
+        except (OSError, json.JSONDecodeError) as error:
+            raise MembershipError(f"could not read bead fixture {fixture}: {error}") from error
+        return beads
+    if rig_root is None:
+        raise MembershipError(
+            "--brief-root has no .beads component, so no rig root can be derived; "
+            "pass --bead-fixture to supply canonical brief beads"
+        )
+    try:
+        result = subprocess.run(
+            list(BD_LIST_ARGS), cwd=rig_root, text=True, capture_output=True,
+            check=False, timeout=BD_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise MembershipError(f"could not query beads through bd: {error}") from error
+    if result.returncode != 0:
+        raise MembershipError(result.stderr.strip() or f"{' '.join(BD_LIST_ARGS)} failed")
+    try:
+        parsed = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise MembershipError(f"{' '.join(BD_LIST_ARGS)} returned invalid JSON: {error}") from error
+    if not isinstance(parsed, list) or not all(isinstance(row, dict) for row in parsed):
+        raise MembershipError(f"{' '.join(BD_LIST_ARGS)} did not return a JSON list of objects")
+    return {
+        row["id"]: str(row.get("status") or "open")
+        for row in parsed
+        if isinstance(row.get("id"), str) and row["id"]
+    }
+
+
+def resolve_brief_bead(stem: str, beads: Mapping[str, str]) -> str | None:
+    """The brief bead a pile filename names, or None if it names none.
+
+    Two deposit conventions are live, so both are honoured -- the same pair
+    `mctl_core.redundant_state._pile_artifact` resolves, and for its reasons:
+
+    - exact `<brief_id>.md` wins outright, so an unambiguous deposit is never
+      reinterpreted;
+    - otherwise `<brief_id>-<slug>.md`, with the `-` separator REQUIRED --
+      without it `mc-ab` would claim `mc-abc-x.md`.
+
+    Two or more prefix candidates return None rather than resolving by sort
+    order. Silently taking the first would replace an honest "unknown" with a
+    specific wrong bead, and this answer decides whether a brief is drained.
+    """
+    if stem in beads:
+        return stem
+    candidates = sorted(bead_id for bead_id in beads if stem.startswith(f"{bead_id}-"))
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+@dataclass(frozen=True)
+class Membership:
+    """One pile file's canonical membership verdict."""
+    path: Path
+    bead: str | None
+    status: str | None
+
+    @property
+    def is_member(self) -> bool:
+        # Unresolved is UNKNOWN, not closed. A file naming no brief bead is
+        # still drained -- excluding it would silently strand genuinely new
+        # deposits -- but it is reported, never silent.
+        if self.bead is None:
+            return True
+        return (self.status or "").lower() in OPEN_BEAD_STATUSES
+
+
+def classify_pile_items(pile: Path, beads: Mapping[str, str]) -> list[Membership]:
     if not pile.exists():
         return []
-    return sorted(
-        (path for path in pile.iterdir() if path.is_file() and path.suffix == ".md" and not path.name.startswith(".")),
+    paths = sorted(
+        (path for path in pile.iterdir()
+         if path.is_file() and path.suffix == ".md" and not path.name.startswith(".")),
         key=lambda path: path.name,
-    )[:max_items]
+    )
+    rows = []
+    for path in paths:
+        bead = resolve_brief_bead(path.stem, beads)
+        rows.append(Membership(path, bead, beads.get(bead) if bead else None))
+    return rows
+
+
+def selected_pile_items(memberships: list[Membership], max_items: int) -> list[Path]:
+    """The bounded batch, drawn from PILE MEMBERS only.
+
+    Non-members are skipped rather than counted against `max_items`: a batch
+    filled with stale cache is a cycle in which no real brief moved, which is
+    the shape the live symptom took (three closed-bead files per 8h cycle).
+    """
+    return [row.path for row in memberships if row.is_member][:max_items]
 
 
 def append_index(stack: Path, row: dict[str, Any]) -> None:
@@ -624,6 +772,12 @@ def main() -> int:
     parser.add_argument("--brief-root", type=Path, default=Path(".beads/briefs"))
     parser.add_argument("--gate-config", type=Path, default=Path("assets/brief-pipeline/gates.toml"))
     parser.add_argument("--max-items", type=int, default=3)
+    parser.add_argument(
+        "--bead-fixture", type=Path, default=None,
+        help="JSONL of canonical beads, replacing the `bd` query. The fixture seam "
+             "`mctl_core.beads.read_beads` already uses; required for a --brief-root "
+             "with no .beads component.",
+    )
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--no-external", action="store_true", help="Reserved: this script has no external side effects.")
@@ -643,10 +797,35 @@ def main() -> int:
         # manifest is a cache, so a miss here is a fact to surface, not a
         # different outcome for the brief.
         "manifest_updated": [], "manifest_aborted": {},
+        # Canonical membership, reported so a skip is never silent.
+        # `not_pile_members` = the file names a brief bead that is NOT open, so
+        # per B2.3/B2.4 it is not in the pile at all. `membership_unresolved` =
+        # the filename names no brief bead; unknown, drained, and visible.
+        "not_pile_members": [], "membership_unresolved": [],
     }
+    try:
+        beads = read_brief_beads(rig_root_for(brief_root), args.bead_fixture)
+    except MembershipError as error:
+        # P6.1 fail loud. Degrading to the directory listing is the defect --
+        # the gate would answer from redundant cache while the canonical store
+        # it is supposed to obey was never read.
+        report["membership_error"] = str(error)
+        report["remaining_pile"] = None
+        if args.json:
+            print(json.dumps(report, sort_keys=True))
+        else:
+            print(f"brief-shuffle-fast-drain: canonical bead membership unreadable: {error}", file=sys.stderr)
+        return 2
     if args.apply:
         report["recovered"] = recover_owned_staging(brief_root)
-    items = selected_pile_items(pile, args.max_items)
+    memberships = classify_pile_items(pile, beads)
+    for row in memberships:
+        if row.bead is None:
+            report["membership_unresolved"].append(row.path.stem)
+        elif not row.is_member:
+            report["not_pile_members"].append(
+                {"slug": row.path.stem, "bead": row.bead, "status": row.status})
+    items = selected_pile_items(memberships, args.max_items)
     for source in items:
         outcome = process_item(source, brief_root, gate_config, args.apply)
         if outcome.action == "skipped":
@@ -662,7 +841,10 @@ def main() -> int:
             report["manifest_updated"].append(outcome.slug)
         elif outcome.manifest == "aborted":
             report["manifest_aborted"][outcome.slug] = outcome.manifest_detail
-    report["remaining_pile"] = len(selected_pile_items(pile, sys.maxsize))
+    # `remaining_pile` counts PILE MEMBERS, not files: it is the operator's
+    # "how much is left to drain", and counting stale cache in it is what made
+    # a pile of 86 files read as 86 pending briefs.
+    report["remaining_pile"] = len(selected_pile_items(classify_pile_items(pile, beads), sys.maxsize))
     if args.json:
         print(json.dumps(report, sort_keys=True))
     else:
@@ -670,6 +852,8 @@ def main() -> int:
             "brief-shuffle-fast-drain: "
             f"promoted={len(report['promoted'])} rejected={len(report['rejected'])} "
             f"skipped={len(report['skipped'])} remaining_pile={report['remaining_pile']} "
+            f"not_pile_members={len(report['not_pile_members'])} "
+            f"membership_unresolved={len(report['membership_unresolved'])} "
             f"manifest_updated={len(report['manifest_updated'])} "
             f"manifest_aborted={len(report['manifest_aborted'])}"
         )

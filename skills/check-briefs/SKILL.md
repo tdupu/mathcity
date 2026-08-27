@@ -66,6 +66,40 @@ For each candidate file, read the frontmatter fields the rest of this skill
 needs (`artifact`, `unlock_count`, `deposited_at`, `brief_bead`, `epic`); the
 target bead is `${brief_bead:-$artifact}`.
 
+> **Read those from the `.md` frontmatter, never from `stack/.index.jsonl`.**
+> The index carries **no** `brief_bead` key and **no** `artifact` key — the
+> full union of keys across the 65 live rows is `brief_kind`, `created_at`,
+> `defer_until`, `gate_profile`, `legacy_n`, `legacy_source`,
+> `manifest_status`, `migration_action`, `path`, `slug`, `source`,
+> `unlock_count` `[measured 2026-08-27]`, and only the six non-legacy ones are
+> on every row. `assets/scripts/brief-stack-index.py:29` feeds `source` from
+> `("source_bead", "artifact")` — the brief's **subject**, not its own bead —
+> and `brief-decisions-track-inventory.py:238` writes the literal string
+> `"decisions-track"` into that same field on 40 of the 65 rows, so `source`
+> is not a bead id and cannot be treated as one.
+>
+> **This matters because absent is not null.** A prior session looked for
+> `brief_bead` in the index, found the key missing, read that as "this brief
+> has no bead", and concluded that all 62-odd stack briefs were beadless and
+> that `MBRF010` had blocked adjudication city-wide. Bead `mc-nywhr` still
+> carries that framing. The stack *is* mostly beadless — `mctl briefs list
+> --all-rigs` classifies **64 hq records as `source: stack_file`** (i.e. no bead
+> represents them) against **66 `.md` files on disk** `[measured 2026-08-27]`,
+> and `mctl briefs options` on one of them returns `MBRF010 FATAL` — but that
+> is not what the index said, because the index cannot say it either way.
+> **Enumerate the key set before concluding a field is empty.**
+>
+> A related trap when reconciling those two numbers: **three identity
+> conventions are in play.** The index `slug` is the filename stem *with* its
+> `-brief` suffix and leading number (`69-amendment-a-revision-path-brief`);
+> mctl's `brief_id` for the same document strips both
+> (`amendment-a-revision-path`); the bead id is a third thing entirely
+> (`mc-ba376`). A naive slug join across them silently under-matches.
+>
+> The missing bead reference is tracked as `tdupu/mathcity#234`. The same
+> failure class — an absent key indistinguishable from a null value — is #145
+> (`bd list --json` omits nulls) and #229 (`briefs_list` drops fields silently).
+
 Canonical brief state (adjudicated / deferred / pending) is `mctl`'s job, not
 this skill's. Read the whole city in **one** call. `--all-rigs` resolves every
 registered rig concurrently in `mctl_core/city.py` and tags each row with the

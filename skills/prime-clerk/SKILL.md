@@ -153,15 +153,23 @@ actually land" without guessing.
 **Refusals are the machinery working.** `mctl` fails closed. The one you will
 meet constantly:
 
-> **`MBRF004`** — *"Brief bead has no source dependency"* (B2.1). It is an
-> `ERROR`, and no mutation proceeds carrying one. It currently fires on **146 of
-> 185** live briefs, including **88 that are `pending` and otherwise healthy**,
-> so most of the live queue will simply refuse adjudication today. **This is
-> real current behavior, not a bug in the skill and not something to route
-> around.** Relay the diagnostic to the human adjudicator; the fix is a real
-> source link, which is a human decision. Do not branch on it, nor on
-> `MBRF005` or `MBRF021` — all three are untrustworthy signal
-> (`template-fragments/mctl-entry-point.md`).
+> **`MBRF004`** — *"Brief bead has no source dependency"* (B2.1). It is a
+> **`WARN`** and **blocks nothing** (`mctl_core/briefs.py:1652`;
+> `_blocking_diagnostic` at `briefs.py:2124` selects only `ERROR`/`FATAL`).
+> Measured 2026-08-27: it fires on **149** distinct brief beads city-wide and
+> blocks **0** of them. Relay it to the human adjudicator as a finding; the fix
+> is a real source link, which is a human decision. Do not branch on it, nor on
+> `MBRF005` or `MBRF021` (`template-fragments/mctl-entry-point.md`).
+>
+> **Corrected 2026-08-27.** This passage previously said `MBRF004` was an
+> `ERROR` firing on "146 of 185 live briefs, 88 of them pending", so "most of
+> the live queue will simply refuse adjudication today." That was stale by #137
+> and it is the single most dangerous stale line a clerk can read: a clerk who
+> filters `MBRF004` out of the queue reports an empty stack. On the day this
+> was corrected, **17** briefs across 4 rigs had `adjudicate: enabled=true,
+> disabled_reason=null`. What actually refuses an adjudication is `MBRF011`
+> (not pending / no approving verdict) and, on an option-less `approve` against
+> a multi-option brief, `MOPT001` — both correct.
 
 **No-brainers:** briefs classified `compact_eligible: true` appear collapsed to
 a one-line block during `present-briefs` (CONFIRM: y / n / grill-me-further).

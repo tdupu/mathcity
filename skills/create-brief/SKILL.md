@@ -233,9 +233,18 @@ echo "MCTL-TRACE: $TRACE_ID"
 ```
 
 **`--source` is not optional in practice.** Omitting it produces `MBRF034`
-(B2.1-incomplete) at creation, and the resulting brief is one that
-`mctl briefs adjudicate` will later refuse with `MBRF004`. Pass the source bead
-now; the alternative is a brief nobody can ever adjudicate.
+(B2.1-incomplete) at creation, and the resulting brief raises `MBRF004` for the
+rest of its life — its subject is unrecoverable from the store, so no downstream
+reader can say what it is about. Pass the source bead now.
+
+**It does not, however, make the brief unadjudicable.** Corrected 2026-08-27:
+this passage previously said `mctl briefs adjudicate` "will later refuse with
+`MBRF004`" and that "the alternative is a brief nobody can ever adjudicate".
+`MBRF004` is a `WARN` (`mctl_core/briefs.py:1652`) and `_blocking_diagnostic`
+(`briefs.py:2124`) selects only `ERROR`/`FATAL`. The reason to pass `--source`
+is legibility, not a gate. If you genuinely have no subject bead, declare it
+(B2.1a) so the brief raises `MBRF056` INFO instead of `MBRF004` WARN — silence
+is not a declaration.
 
 **`MBRF035` — refusing to create a brief tree.** If the resolved brief root does
 not exist, creation aborts and names the path it resolved rather than

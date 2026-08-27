@@ -300,9 +300,17 @@ briefs whose bead is closed or defer-windowed but whose cache row still says
 behavior bypassed canonical bead-first state.
 
 **Do not branch on `MBRF021`, `MBRF004`, or `MBRF005`.** `MBRF004` in
-particular fires on 146 of 185 live briefs including healthy pending ones;
-treating it as a presentation filter would empty the queue. Filter on
-`decision_state` only. See `template-fragments/mctl-entry-point.md`.
+particular fires on **149 distinct brief beads city-wide** (measured
+2026-08-27, all 18 registered rigs) including healthy pending ones, and it
+blocks **none** of them — it is a `WARN` (`mctl_core/briefs.py:1652`), and
+`_blocking_diagnostic` (`briefs.py:2124`) selects only `ERROR`/`FATAL`.
+Treating it as a presentation filter would empty the queue and hide the
+briefs that *are* adjudicable (17 of them on the day this was corrected).
+Filter on `decision_state` only. See `template-fragments/mctl-entry-point.md`.
+
+*(Figure corrected 2026-08-27; the previous "146 of 185 live briefs" predates
+the #137 downgrade. The conclusion above was already right — only the
+evidence for it was stale.)*
 
 **`gt-*` fallback.** `gt-*` beads live in the city-root HQ store, which is not a
 registered rig, so `mctl --rig` cannot address them

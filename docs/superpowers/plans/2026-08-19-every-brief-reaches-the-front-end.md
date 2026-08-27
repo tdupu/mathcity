@@ -1,5 +1,30 @@
 # Every Brief Reaches The Front End — Implementation Plan
 
+> ### ⚠ CORRECTION 2026-08-27 — the `MBRF004` premise is stale
+>
+> This plan's table (line 33) and its §"Why" (line 130) say **`MBRF004` refuses
+> `adjudicate`/`defer`/`dispatch-work` on 120 of 141 open decision beads**, and
+> call that *"the largest block on acting, as distinct from reading."*
+> **`MBRF004` blocks nothing.** `mctl_core/briefs.py:1652` emits it at
+> `Severity.WARN` (downgraded by #137), and `_blocking_diagnostic`
+> (`briefs.py:2124`) selects only `ERROR`/`FATAL`.
+>
+> Re-measured 2026-08-27 across all 18 registered rigs: `MBRF004` fires on
+> **149** distinct brief beads and blocks **0**; **17** bead-backed briefs are
+> adjudicable right now (`adjudicate: enabled=true, disabled_reason=null`); city-wide
+> pending is **108** briefs (59 `stack_file` + 32 `manifest` + 17 `bead`).
+>
+> The plan's *goal* survives — briefs still fail to reach the front end — but
+> the mechanism is different, and slices sized against "120 blocked by
+> `MBRF004`" are sized against a number that no longer means what it says. The
+> live blocker for the city-root stack is that **64 of 66 stack `.md` files have
+> no canonical brief bead**, so `mctl briefs adjudicate` refuses them with
+> `MBRF010` — because a document brief is not an adjudicable object, not
+> because a gate is over-firing. The structural reason that population is hard
+> to even count is filed as `tdupu/mathcity#234`: `stack/.index.jsonl` rows
+> carry no bead reference of any kind. Re-derive the slice sizes before
+> executing.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every brief in every rig, including the city-root HQ store, becomes readable and actionable from the front end.

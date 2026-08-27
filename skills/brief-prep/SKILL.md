@@ -243,8 +243,13 @@ echo "MCTL-TRACE: $TRACE_ID"
 ```
 
 **`--source` is mandatory in practice, whatever the flag says.** Omitting it
-yields `MBRF034` now and a brief that `mctl briefs adjudicate` will later refuse
-with `MBRF004` — an unadjudicable brief, which is worse than no brief. This is
+yields `MBRF034` now and a brief that raises `MBRF004` forever after — a brief
+whose subject cannot be recovered from the store, so nobody downstream can tell
+what it is about. **It does not make the brief unadjudicable** (corrected
+2026-08-27: `MBRF004` is a `WARN`, `mctl_core/briefs.py:1652`, and blocks no
+mutation; this line previously said adjudication would "refuse with `MBRF004`").
+Pass `--source` because an unattributable brief is a bad brief, not because a
+gate will stop it. This is
 also why self-rejection condition #6 (unlock_count uncomputable because `bd` is
 unreachable) is a stop: without the store you cannot establish the source link
 either.

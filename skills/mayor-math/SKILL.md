@@ -85,8 +85,13 @@ prompt lore is exactly the duplicate control surface this replaced.
   city's, and do not loop over rigs to fake a city-wide view.
 
 **Never branch on `MBRF021` / `MBRF004` / `MBRF005`** — all three are
-untrustworthy signal today, and `MBRF004` legitimately refuses dispatch on most
-of the live brief queue. Report the refusal; do not route around it.
+untrustworthy signal today. `MBRF004` is a **`WARN` and refuses nothing**
+(`briefs.py:1652`; `_blocking_diagnostic` at `briefs.py:2124` selects only
+`ERROR`/`FATAL`) — corrected 2026-08-27, this line previously said it
+"legitimately refuses dispatch on most of the live brief queue", which was
+stale by #137. Dispatch is gated by `MBRF011`, not `MBRF004`. Report the
+diagnostics; do not route around them, and do not use `MBRF004` as a queue
+filter — doing so empties the queue and hides real adjudicable work.
 
 ### Fresh work with no brief yet
 

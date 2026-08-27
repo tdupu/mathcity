@@ -118,15 +118,37 @@ a multi-option brief fails closed with `MOPT001`, which is the gate working.
 
 **A non-zero exit is a refusal, not a crash.** `mctl` fails closed when the
 brief's invariants do not hold, and it prints the blocking diagnostic. Relay
-the diagnostic verbatim and stop. In particular:
+the diagnostic verbatim and stop.
 
-> **`MBRF004` ("Brief bead has no source dependency", B2.1) is an `ERROR`, and
-> `effects.py::_blocking_preconditions` refuses any mutation carrying one.** It
+**What blocks is exactly `ERROR` and `FATAL`.** `effects.py::_blocking_preconditions`
+filters on `{Severity.ERROR, Severity.FATAL}` and nothing else, so a `WARN` or an
+`INFO` never blocks a mutation — it is reported alongside the applied plan. Read the
+severity in the diagnostic, never the code. In particular:
+
+> **`MBRF004` ("Brief bead has no source dependency", B2.1) fires at `WARN`, and
+> therefore does NOT block adjudication.** [measured 2026-08-27: `assets/mctl/diagnostics.toml`
+> `[MBRF004] severity = "WARN"`; `mctl_core/briefs.py` emits it as `Severity.WARN`;
+> a live `mctl briefs doctor --brief <id> --json` returns `"severity": "WARN"`; and a
+> live `mctl briefs adjudicate --dry-run` on an `MBRF004`-carrying brief returns
+> `effect_plan.preconditions == []`.] It is still worth fixing — the remedy is a real
+> source link (`bd dep add <brief> <source-bead> --type related`), decided by a human —
+> but it is an advisory, not a gate.
+>
+> **CORRECTION, 2026-08-27.** This paragraph previously read *"`MBRF004` … is an `ERROR`,
+> and `effects.py::_blocking_preconditions` refuses any mutation carrying one … it
 > currently fires on 146 of 185 live briefs, including 88 that are `pending` and
-> otherwise healthy — so **most of the live queue will refuse adjudication**.
-> That is real current behavior, not a defect in this skill and not something to
-> route around. The remedy is a real source link
-> (`bd dep add <brief> <source-bead> --type related`), decided by a human.
+> otherwise healthy — so most of the live queue will refuse adjudication."* **That was
+> true before tdupu/mathcity#137, which downgraded `MBRF004` to `WARN` and closed
+> 2026-08-22; the text was never updated.** The counts (146 / 185 / 88) come from the
+> 2026-08-19 audits (`subdomains/dev/docs/MBRF004-TRIAGE-2026-08-19.md`,
+> `MALFORMED-BRIEF-TRIAGE-2026-08-19.md`) and describe the pre-#137 world. **Do not use
+> `MBRF004` as a filter.** A session that reads it as one empties its own queue and
+> concludes — wrongly — that there is nothing to adjudicate.
+>
+> Codes that genuinely do block today include `MOPT001` (multi-option brief adjudicated
+> without `--option`, `ERROR`) and `MBRF034` (`FATAL`). If a refusal cites a code, check
+> its severity in `assets/mctl/diagnostics.toml` before believing this file about it.
+>
 > Do **not** branch on `MBRF004`, `MBRF005`, or `MBRF021` — see
 > `template-fragments/mctl-entry-point.md`.
 

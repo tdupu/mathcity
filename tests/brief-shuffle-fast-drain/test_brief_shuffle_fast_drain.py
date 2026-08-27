@@ -27,6 +27,19 @@ class BriefShuffleFastDrainTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.brief_root = Path(self.temp_dir.name) / ".beads/briefs"
         (self.brief_root / ".pile").mkdir(parents=True)
+        # Canonical pile membership is the bead query (POLICY B2.4), so every
+        # run needs a bead source. These fixtures have no bd store, so they
+        # inject one through the same seam `mctl_core.beads.read_beads` uses.
+        # Empty by default: a slug with no brief bead is UNRESOLVED, not
+        # closed, and unresolved briefs are still drained.
+        self.bead_fixture = Path(self.temp_dir.name) / "beads.jsonl"
+        self.bead_fixture.write_text("", encoding="utf-8")
+
+    def write_beads(self, *rows):
+        self.bead_fixture.write_text(
+            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+        )
+        return self.bead_fixture
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -40,6 +53,8 @@ class BriefShuffleFastDrainTests(unittest.TestCase):
                 str(self.brief_root),
                 "--gate-config",
                 str(GATES),
+                "--bead-fixture",
+                str(self.bead_fixture),
                 "--json",
                 "--no-external",
                 *args,
@@ -600,6 +615,95 @@ feedback_sink: brief_quality_failure
         rejection = json.loads((self.brief_root / ".pile/.rejected/discard-route/rejection.json").read_text())
         self.assertEqual(rejection["failures"][0]["repair_kind"], "discard")
         self.assertFalse(rejection["failures"][0]["repairable"])
+
+    # --- Canonical pile membership (POLICY B2.3/B2.4/B2.8) --------------
+    #
+    # The pile DIRECTORY is redundant cache; the pile is the bead query.
+    # A file left behind for a brief bead that is already closed is not a
+    # pile member and must never be handed to the intake gate.
+
+    def test_closed_brief_bead_is_not_a_pile_member_and_is_left_alone(self):
+        self.write_brief("adjudicated-approve")
+        self.write_beads({
+            "id": "adjudicated-approve",
+            "status": "closed",
+            "issue_type": "decision",
+            "title": "already adjudicated",
+        })
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["promoted"], [])
+        self.assertEqual(report["rejected"], [])
+        self.assertTrue((self.brief_root / ".pile/adjudicated-approve.md").is_file())
+        self.assertFalse((self.brief_root / ".pile/.rejected/adjudicated-approve").exists())
+        self.assertEqual(
+            report["not_pile_members"],
+            [{"slug": "adjudicated-approve", "bead": "adjudicated-approve", "status": "closed"}],
+        )
+        self.assertEqual(report["remaining_pile"], 0)
+
+    def test_open_brief_bead_is_a_pile_member_and_still_drains(self):
+        self.write_brief("live-brief")
+        self.write_beads({"id": "live-brief", "status": "open", "issue_type": "decision"})
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["promoted"], ["live-brief"])
+        self.assertEqual(report["not_pile_members"], [])
+
+    def test_closed_beads_do_not_consume_the_max_items_budget(self):
+        # The live symptom: three closed-bead cache files per 8h cycle filled
+        # the whole batch, so a real pile member was never reached.
+        for slug in ("aaa-closed", "bbb-closed", "ccc-closed"):
+            self.write_brief(slug)
+        self.write_brief("ddd-live")
+        self.write_beads(
+            {"id": "aaa-closed", "status": "closed", "issue_type": "decision"},
+            {"id": "bbb-closed", "status": "closed", "issue_type": "decision"},
+            {"id": "ccc-closed", "status": "closed", "issue_type": "decision"},
+            {"id": "ddd-live", "status": "open", "issue_type": "decision"},
+        )
+        report = self.json_output(self.run_drain("--max-items", "3", "--apply"))
+        self.assertEqual(report["promoted"], ["ddd-live"])
+        self.assertEqual([row["slug"] for row in report["not_pile_members"]],
+                         ["aaa-closed", "bbb-closed", "ccc-closed"])
+
+    def test_slug_suffixed_filename_resolves_to_its_brief_bead(self):
+        self.write_brief("mc-abc-some-slug-brief")
+        self.write_beads({"id": "mc-abc", "status": "closed", "issue_type": "decision"})
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["rejected"], [])
+        self.assertEqual([row["bead"] for row in report["not_pile_members"]], ["mc-abc"])
+
+    def test_ambiguous_prefix_match_is_unresolved_not_closed(self):
+        # `mc-ab` must not claim `mc-abc-x.md`; two candidates resolve to
+        # neither. Unknown is reported as unknown and the brief still drains.
+        self.write_brief("mc-ab-c-x")
+        self.write_beads(
+            {"id": "mc-ab", "status": "closed", "issue_type": "decision"},
+            {"id": "mc-ab-c", "status": "closed", "issue_type": "decision"},
+        )
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["not_pile_members"], [])
+        self.assertEqual(report["membership_unresolved"], ["mc-ab-c-x"])
+        self.assertEqual(report["promoted"], ["mc-ab-c-x"])
+
+    def test_non_decision_bead_never_supplies_membership(self):
+        self.write_brief("task-shaped")
+        self.write_beads({"id": "task-shaped", "status": "closed", "issue_type": "task"})
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["not_pile_members"], [])
+        self.assertEqual(report["membership_unresolved"], ["task-shaped"])
+
+    def test_unreadable_bead_source_fails_loud_and_drains_nothing(self):
+        # P6.1: an unreadable canonical store must not silently degrade to the
+        # directory listing -- that IS the defect this filter exists to kill.
+        self.write_brief("never-touched")
+        self.bead_fixture.write_text("{not json}\n", encoding="utf-8")
+        result = self.run_drain("--apply")
+        self.assertNotEqual(result.returncode, 0)
+        report = json.loads(result.stdout)
+        self.assertIn("membership_error", report)
+        self.assertEqual(report["promoted"], [])
+        self.assertEqual(report["rejected"], [])
+        self.assertTrue((self.brief_root / ".pile/never-touched.md").is_file())
 
 
 if __name__ == "__main__":

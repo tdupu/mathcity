@@ -70,9 +70,13 @@ except Exception: print("")')
   way to get ahead of that.** `MWRK_ALREADY_DISPATCHED` means the work is
   already out. `MWRK001` means the bead already has an assignee.
 
-**`MBRF004`** ("no source dependency") is an `ERROR` that refuses dispatch on
-most of the live brief queue today. Report the refusal verbatim; do not branch
-on it, nor on `MBRF005` or `MBRF021` — see
+**`MBRF004`** ("no source dependency") is a **`WARN`** and refuses nothing —
+corrected 2026-08-27, this line previously called it an `ERROR` that blocked
+dispatch on most of the queue. `briefs.py:1652` emits it at `Severity.WARN`;
+`_blocking_diagnostic` (`briefs.py:2124`) selects only `ERROR`/`FATAL`. What
+actually gates dispatch is `MBRF011` ("no approving verdict for dispatch"),
+which is correct. Report `MBRF004` verbatim; do not branch on it — in either
+direction — nor on `MBRF005` or `MBRF021`. See
 `template-fragments/mctl-entry-point.md`.
 
 `gt-*` beads live in the city-root HQ store, which is not a registered rig, so

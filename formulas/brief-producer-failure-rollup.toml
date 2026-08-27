@@ -45,7 +45,39 @@ Group deduped signals by:
 source_formula + failed_gate + failure_fingerprint
 ```
 
-Write one JSON object per open group to
+Resolve, for each group, whether it is still **open**. A group is open until the
+repair bead for its fingerprint is closed. Closure is read from the bead store,
+never from the `status` field of the previous `open.jsonl` — this step is a full
+rewrite, so any status written into that file is clobbered on the next run and
+cannot carry state (B2.8: bead state is not derived from a file):
+
+```bash
+repair_rig_dir="$(gc rig list --json | jq -r '.rigs[] | select(.name=="gascity-packs") | .path')"
+
+group_repair_status() {
+  # $1 = failure_fingerprint. Prints: open | closed | unknown
+  if [ -z "$repair_rig_dir" ]; then
+    printf 'unknown\n'
+    return
+  fi
+  bd -C "$repair_rig_dir" search "$1" --json --readonly 2>/dev/null | jq -r \
+    '[if type == "array" then .[] else . end
+      | select(((.title // "") | contains("[brief-producer-repair]"))
+               or ((.title // "") | test("producer.?repair"; "i")))]
+     | (.[0].status // "open")'
+}
+
+if [ -z "$repair_rig_dir" ]; then
+  echo "producer-failure-rollup: rig:gascity-packs unresolved — closure state UNKNOWN for every group; reporting all as open (P6.2: unknown, not zero)" >&2
+fi
+```
+
+**Omit any group whose repair bead is `closed`** from `open.jsonl`. A group whose
+status is `unknown` is written as open and counted in the UNKNOWN tally, never
+silently dropped. Report `open=<n> closed=<n> unknown=<n>` on completion so a run
+that closed nothing is distinguishable from a run that could not tell.
+
+Write one JSON object per **remaining open** group to
 `{{artifact_root}}/.producer-failure-rollups/open.jsonl` with:
 
 - `source_formula`
@@ -55,7 +87,7 @@ Write one JSON object per open group to
 - `signal_paths`
 - `oldest_observed_at`
 - `newest_observed_at`
-- `status`
+- `status` — `open`, or `unknown` when the repair rig could not be resolved
 """
 
 [[steps]]
@@ -138,10 +170,17 @@ fi
 
 assignee="$(bd -C "$repair_rig_dir" show "$repair_bead" --json --readonly | jq -r '.[0].assignee // .assignee // ""')"
 if [ -n "$assignee" ]; then
-  echo "ALREADY DISPATCHED — bead $repair_bead has active assignee: $assignee; aborting producer repair sling" >&2
-  exit 1
+  echo "ALREADY DISPATCHED — bead $repair_bead has active assignee: $assignee; skipping this group" >&2
+  skipped=$((skipped + 1))
+  continue
 fi
 ```
+
+An already-dispatched group is the **expected steady state** once repair work is
+actually running, not an error: the group stays in `open.jsonl` until its repair
+bead closes, so every later run sees it again. Aborting the step here would latch
+the entire rollup molecule the moment any one repair is dispatched — the guard
+skips the group and the loop continues to the others.
 
 Sling:
 

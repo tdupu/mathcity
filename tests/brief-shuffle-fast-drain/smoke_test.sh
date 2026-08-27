@@ -9,6 +9,12 @@ SCRIPT="$ROOT/assets/scripts/brief-shuffle-fast-drain.py"
 GATES="$ROOT/assets/brief-pipeline/gates.toml"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/brief-shuffle-fast-drain.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
+# Canonical pile membership is the bead query (POLICY B2.4), so the drain
+# needs a bead source. This fixture has no bd store, so it injects an empty
+# one through the same seam mctl_core.beads.read_beads uses: no brief bead
+# means UNRESOLVED, not closed, so these slugs still drain.
+BEAD_FIXTURE="$TMP/beads.jsonl"
+: >"$BEAD_FIXTURE"
 
 test -f "$ORDER"
 test -f "$FORMULA"
@@ -47,7 +53,7 @@ for gate_id in config["profiles"]["standard"]["gates"]:
 open(sys.argv[2], "w").write("---\nbrief_slug: controlled-fail\ngate_profile: standard\nsource_bead: smoke-source\n---\n\n## Gate Evidence\n" + "\n".join(lines) + "\n")
 PY
 
-report="$(python3 "$SCRIPT" --brief-root "$BRIEFS" --gate-config "$GATES" --max-items 1 --apply --json --no-external)"
+report="$(python3 "$SCRIPT" --brief-root "$BRIEFS" --gate-config "$GATES" --bead-fixture "$BEAD_FIXTURE" --max-items 1 --apply --json --no-external)"
 python3 - "$report" <<'PY'
 import json
 import sys
