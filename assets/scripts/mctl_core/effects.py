@@ -939,7 +939,14 @@ def plan_adjudication(
     block the write, which is the gate half.
     """
     normalized = _normalize_verdict(ctx, verdict, brief_id)
-    reason = _require_reason(ctx, reason, brief_id)
+    # mc-qlmh: the reason is OPTIONAL on the adjudicate path. The tool schema
+    # types it `["string", "null"]`, the dashboard panel labels it optional and
+    # always posts `reason=""` when the operator leaves it blank, and Taylor's
+    # live instruction was "I shouldn't have to give a reason." Forcing it here
+    # made the form invite a call the core then refused (409 on a bare verdict).
+    # Deferral keeps `_require_reason` (a parked brief without a reason is a
+    # different contract); only the verdict path is relaxed.
+    reason = (reason or "").strip()
     observed = show_brief(ctx, brief_id)
     observed_diagnostics = tuple(doctor_briefs(ctx, brief_id).diagnostics)
     diagnostics = list(_blocking_preconditions(observed_diagnostics))
@@ -1043,6 +1050,26 @@ def plan_adjudication(
         "verdict": normalized,
         "verdict_reason": reason,
     }
+    # #77 gave the brief file's own frontmatter a writer, but only for `status`
+    # and `verdict`. mc-9kwwv: the attribution and its date were written to bead
+    # metadata ONLY, while every reader of them -- `materialize_plan.classify_tier`
+    # (which needs verdict AND authorizer AND date together to reach
+    # TIER_ADJUDICATED), `materialize_plan.build_row`, and
+    # `mctl_dashboard/fields.py` -- reads the FRONTMATTER. So an mctl-adjudicated
+    # brief could never reach TIER_ADJUDICATED and no surface ever showed who
+    # decided. Both keys are single-line-safe (a name; an ISO instant whose
+    # colons sit after the first `key:` and so parse cleanly), unlike
+    # `verdict_reason`, which stays out of the line-format frontmatter and lives
+    # in `decisions/<id>.toml`. `adjudicated_by` is written only when supplied --
+    # absent authority stays absent, so classify_tier keeps an unattributed
+    # verdict below TIER_ADJUDICATED rather than forging a value (#152).
+    frontmatter_fields = {
+        "status": "adjudicated",
+        "verdict": normalized,
+        "adjudicated_at": now,
+    }
+    if adjudicated_by and adjudicated_by.strip():
+        frontmatter_fields["adjudicated_by"] = adjudicated_by.strip()
     return _plan(
         ctx,
         operation="briefs.adjudicate",
@@ -1058,11 +1085,12 @@ def plan_adjudication(
         cache_fields=cache_fields,
         # #77: the brief file's own `status:` was owned by nobody, so 35 of 88
         # index rows pointed at a document still reading `present-it-pending`
-        # after its brief had been decided. Two keys, not four: the frontmatter
-        # is a line format, and a `verdict_reason` carrying a newline or a
-        # colon cannot be represented in it. Both the reason and the timestamp
-        # are already in `decisions/<id>.toml`, which can hold them.
-        frontmatter_fields={"status": "adjudicated", "verdict": normalized},
+        # after its brief had been decided. The frontmatter is a line format, so
+        # `verdict_reason` (which may carry a newline or a colon) still stays out
+        # and lives in `decisions/<id>.toml`; `status`, `verdict`, `adjudicated_at`
+        # and (when supplied) `adjudicated_by` are all single-line-safe and go in
+        # here, because that is the surface classify_tier reads (mc-9kwwv, above).
+        frontmatter_fields=frontmatter_fields,
         # The legacy lane's decision record. `decisions/<id>.toml` holds the
         # decision for a stack-track brief; a decisions-track brief's decision
         # has always lived in its manifest row, and until now the only writer

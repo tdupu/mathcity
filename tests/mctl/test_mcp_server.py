@@ -540,10 +540,13 @@ def test_work_dispatch_returns_the_same_effect_plan_shape_as_the_cli(tmp_path: P
 def test_mutation_fails_closed_on_a_blocking_precondition(tmp_path: Path):
     city_root, rig_root = runtime_fixture(tmp_path)
 
+    # `mc-closed` is already closed, so re-adjudicating it raises a blocking
+    # precondition (MBRF005) -- a genuine state block, not the missing-reason
+    # refusal this test used to lean on (the reason is optional now, mc-qlmh).
     result = call(
         server(city_root, rig_root),
         "briefs_relay_adjudication",
-        {"brief_id": "mc-open", "verdict": "approve", "dry_run": True},
+        {"brief_id": "mc-closed", "verdict": "approve", "reason": "ok", "dry_run": True},
     )["result"]
 
     assert result["isError"] is True

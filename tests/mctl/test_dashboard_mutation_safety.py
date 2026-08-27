@@ -377,13 +377,21 @@ def test_an_under_review_block_is_not_dressed_as_a_hard_state_lock(tmp_path: Pat
     assert 'action="/apply"' not in response.body
 
 
-def test_an_empty_reason_is_refused_at_preview_time(tmp_path: Path):
+def test_an_empty_reason_is_accepted_at_preview_time(tmp_path: Path):
+    """mc-qlmh: the reason is optional, so a bare verdict previews cleanly.
+
+    The panel labels the reason optional and posts `reason=""` when it is left
+    blank; before mc-qlmh the core FATAL'd (MCTL_MUTATION_REASON_REQUIRED) and a
+    bare verdict came back 409. Now the preview is produced and offers an apply
+    control. The preview is a dry run, so the bead is untouched until apply.
+    """
     dashboard, _, rig_root = dashboard_for(tmp_path)
 
     response = preview(dashboard, reason="")
 
-    assert response.status >= 400
-    assert 'action="/apply"' not in response.body
+    assert response.status == 200, strip_tags(response.body)[:300]
+    assert "MCTL_MUTATION_REASON_REQUIRED" not in strip_tags(response.body)
+    assert 'action="/apply"' in response.body
     assert bead(rig_root, "mc-open")["status"] == "open"
 
 
