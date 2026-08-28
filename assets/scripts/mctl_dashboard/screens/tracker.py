@@ -132,6 +132,53 @@ def readiness_cell(row: Any) -> str:
     return '<td class="mono" data-readiness="none">&mdash;</td>'
 
 
+def actions_cell(row: Any, *, repo: str) -> str:
+    """The row's available moves, and only the ones that make sense for it.
+
+    Taylor asked for `make_hygienic`, `to_brief` and `split_to_smaller_issues`.
+    The first two are wired to tools that already exist -- `make_hygienic` is
+    `standardize_github_issue` (its own description opens "Make an existing
+    GitHub issue hygienic in place"), and the first half of `to_brief` is
+    `create_issue_bead`, which is also exactly what closes the unpaired gap
+    this screen exists to show.
+
+    **Actions are offered only where they apply.** A row whose pairing is
+    `unknown` gets NONE: the store did not answer, so minting a bead could
+    duplicate one it could not see. An already-paired row is not offered
+    "mint a bead" either -- `create_issue_bead` is idempotent and would no-op,
+    but offering a button whose only outcome is "nothing happened" trains an
+    operator to distrust the page.
+
+    Every action posts to `/preview`, so it lands in the dry-run-then-confirm
+    flow every other mutation uses. Nothing here writes on a click.
+    """
+    if row.pairing == UNKNOWN:
+        return (
+            '<td class="mono" data-actions="none" '
+            'title="the bead store did not answer, so no action here would be '
+            'safe — an action offered on unknown state can duplicate work">'
+            "&mdash;</td>"
+        )
+    buttons = [_action_form("make_hygienic", "make hygienic", row, repo)]
+    if row.needs_bead:
+        buttons.append(_action_form("mint_bead", "mint a bead", row, repo))
+    return f'<td data-actions="available">{"".join(buttons)}</td>'
+
+
+def _action_form(operation: str, label: str, row: Any, repo: str) -> str:
+    """One action as a real form post -- works with scripting off."""
+    return (
+        '<form class="operation-inline" method="post" action="/preview" '
+        f'style="display: inline-block; margin-right: 6px;">'
+        f'<input type="hidden" name="operation" value="{_e(operation)}">'
+        f'<input type="hidden" name="repo" value="{_e(repo)}">'
+        f'<input type="hidden" name="issue_number" value="{_e(row.number)}">'
+        f'<button type="submit" class="btn btn-ghost" '
+        f'style="font-size: 11px; padding: 3px 8px;">{_e(label)}</button>'
+        "</form>"
+    )
+
+
 def summary_line(summary: Mapping[str, Any]) -> str:
     """The header counts.
 
@@ -163,7 +210,7 @@ def summary_line(summary: Mapping[str, Any]) -> str:
     )
 
 
-def table(rows: Sequence[Any]) -> str:
+def table(rows: Sequence[Any], *, repo: str = "") -> str:
     """One row per issue. Empty input renders a stated emptiness, not a blank."""
     if not rows:
         return (
@@ -177,12 +224,14 @@ def table(rows: Sequence[Any]) -> str:
         + bead_cell(r)
         + brief_cell(r)
         + readiness_cell(r)
+        + actions_cell(r, repo=repo)
         + "</tr>"
         for r in rows
     )
     return (
         '<table class="grid" data-region="tracker-table">'
-        "<thead><tr><th>Issue</th><th>Bead</th><th>Brief</th><th>Readiness</th></tr></thead>"
+        "<thead><tr><th>Issue</th><th>Bead</th><th>Brief</th><th>Readiness</th>"
+        "<th>Actions</th></tr></thead>"
         f"<tbody>{body}</tbody></table>"
     )
 
@@ -192,6 +241,7 @@ def render(
     summary: Mapping[str, Any],
     *,
     issues_unreadable: str | None = None,
+    repo: str = "",
 ) -> str:
     """The whole screen.
 
@@ -201,4 +251,4 @@ def render(
     """
     if issues_unreadable is not None:
         return unreadable_note("The issue tracker", issues_unreadable)
-    return summary_line(summary) + table(rows)
+    return summary_line(summary) + table(rows, repo=repo)

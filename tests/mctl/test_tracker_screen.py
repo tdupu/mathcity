@@ -221,3 +221,56 @@ def test_render_draws_a_row_per_issue() -> None:
     body = html.split("<tbody>")[1].split("</tbody>")[0]
     assert body.count("<tr>") == 2  # <thead> carries one too
     assert "tracker-table" in html
+
+
+# -- row actions -----------------------------------------------------------
+#
+# `make_hygienic` and `mint_bead` are wired to tools that ALREADY EXIST
+# (`standardize_github_issue`, `create_issue_bead`). The tests below are about
+# WHEN an action is offered, which is the part that can hurt: an action offered
+# on state nobody could read is how duplicate work gets made.
+
+
+def test_no_actions_are_offered_when_the_store_did_not_answer() -> None:
+    """The one that matters: minting off unknown state duplicates beads."""
+    html = screen.actions_cell(_row(store_unreadable="dolt refused"), repo="tdupu/mathcity")
+    assert 'data-actions="none"' in html
+    assert "mint_bead" not in html
+    assert "make_hygienic" not in html
+
+
+def test_an_unpaired_issue_is_offered_a_bead() -> None:
+    html = screen.actions_cell(_row(beads=[]), repo="tdupu/mathcity")
+    assert "mint_bead" in html
+    assert 'data-actions="available"' in html
+
+
+def test_an_already_paired_issue_is_not_offered_a_bead() -> None:
+    """create_issue_bead is idempotent, so the button would only ever no-op."""
+    html = screen.actions_cell(_row(beads=[_bead("mc-2kf", "gh-186")]), repo="tdupu/mathcity")
+    assert "mint_bead" not in html
+    assert "make_hygienic" in html  # still standardizable
+
+
+def test_actions_post_to_preview_not_apply() -> None:
+    """Nothing writes on a click; everything lands in dry-run-then-confirm."""
+    html = screen.actions_cell(_row(beads=[]), repo="tdupu/mathcity")
+    assert 'action="/preview"' in html
+    assert 'action="/apply"' not in html
+
+
+def test_actions_carry_the_repo_and_issue_number() -> None:
+    html = screen.actions_cell(_row(number=186, beads=[]), repo="tdupu/mathcity")
+    assert 'name="repo" value="tdupu/mathcity"' in html
+    assert 'name="issue_number" value="186"' in html
+
+
+def test_a_hostile_repo_is_escaped_in_the_action_form() -> None:
+    html = screen.actions_cell(_row(beads=[]), repo='"><script>x</script>')
+    assert "<script>" not in html
+
+
+def test_the_table_carries_an_actions_column() -> None:
+    html = screen.table([_row(beads=[])], repo="tdupu/mathcity")
+    assert "<th>Actions</th>" in html
+    assert 'data-actions=' in html

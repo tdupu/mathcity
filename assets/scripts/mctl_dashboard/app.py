@@ -200,6 +200,21 @@ OPERATIONS: dict[str, Operation] = {
     "molecule_cancel": Operation(
         "molecule_cancel", "molecule_cancel", "molecule cancel", needs_brief=False
     ),
+    # #186's row actions. Both target a GITHUB ISSUE, not a brief, so
+    # `needs_brief=False` and the arguments carry `repo`/`issue_number`.
+    #
+    # Neither is a new tool. Taylor asked for "make_hygienic" and
+    # `standardize_github_issue` already is exactly that -- its own description
+    # opens "Make an existing GitHub issue hygienic in place". Minting a second
+    # tool under his wording would have duplicated a shipped, idempotent one.
+    # `create_issue_bead` is likewise the first half of "to_brief", and is the
+    # very operation that closes the 102-row unpaired gap this screen shows.
+    "make_hygienic": Operation(
+        "make_hygienic", "standardize_github_issue", "issue standardization", needs_brief=False
+    ),
+    "mint_bead": Operation(
+        "mint_bead", "create_issue_bead", "bead minting", needs_brief=False
+    ),
 }
 
 
@@ -1515,6 +1530,7 @@ class Dashboard:
                 rows,
                 payload.get("summary") or {},
                 issues_unreadable=payload.get("issues_unreadable"),
+                repo=repo,
             )
         ]
         return self._page("Issue tracker", "/tracker", context, sections, context_bar="")
@@ -2450,6 +2466,17 @@ def _arguments_for(
     preview was taken against rather than whatever the page is showing now.
     """
     arguments: dict[str, Any] = {"rig": rig} if rig else {}
+    if operation.name in ("make_hygienic", "mint_bead"):
+        # Issue-targeted, not brief-targeted. `issue_number` is coerced here so
+        # a non-numeric form value is refused by this function rather than
+        # reaching the tool as a string it would have to guess about.
+        repo = (form.get("repo") or "").strip()
+        raw_number = (form.get("issue_number") or "").strip()
+        if repo:
+            arguments["repo"] = repo
+        if raw_number.isdigit():
+            arguments["issue_number"] = int(raw_number)
+        return arguments
     if operation.name == "adjudicate":
         arguments["brief_id"] = brief_id
         for key in ("verdict", "reason", "option"):
