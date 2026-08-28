@@ -136,6 +136,7 @@ from .trace import (
     trace_not_found_diagnostic,
 )
 from .beads import read_beads
+from .bead_reads import beads_list_payload, beads_show_payload
 from .decisions import brief_body, dispatchability_refusals
 from .work import (
     WorkError,
@@ -1519,6 +1520,34 @@ def _handle_tracker_rows(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict
         ],
         "summary": summarize(rows),
     }
+def _handle_beads_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Enumerate beads with the scope declared (#245).
+
+    Reads through `read_beads`, which passes `--all` -- so the default is a
+    census, not `bd list`'s open-only default. The `scope` block is what makes a
+    narrowed read safe to quote.
+    """
+    status = arguments.get("status")
+    payload = beads_list_payload(
+        read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture),
+        status=tuple(status) if status else None,
+        issue_type=arguments.get("issue_type"),
+        has_verdict=arguments.get("has_verdict"),
+    )
+    return {"diagnostics": _diagnostics(ctx, ()), **payload}
+
+
+def _handle_beads_show(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """One bead in full, including its verdict metadata (#245).
+
+    `bead_comment` could already WRITE to a bead by id that no tool could READ.
+    This closes that asymmetry.
+    """
+    payload = beads_show_payload(
+        read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture),
+        arguments["bead_id"],
+    )
+    return {"diagnostics": _diagnostics(ctx, ()), **payload}
 
 
 def _handle_work_ready(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -3071,6 +3100,56 @@ TOOLS: tuple[ToolSpec, ...] = (
         mutating=True,
         external_ready=False,
         artifact_state=True,
+    ),
+    ToolSpec(
+        name="beads_list",
+        title="List beads",
+        description=(
+            "Enumerate beads from the canonical store, with the SCOPE of the read "
+            "declared in the payload. Defaults to a CENSUS -- every status -- because "
+            "`bd list`'s open-only default is a CLI convenience that reads as an answer: "
+            "it once produced '23 decision beads, zero verdicts' against a store holding "
+            "129 decisions and 104 verdicts. `scope` names `matched`, `total_in_store` "
+            "and `statuses_excluded`, so a filtered read can never be quoted as a census."
+        ),
+        input_schema=request_schema(
+            {
+                "status": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Statuses to include. Omit for every status (a census).",
+                },
+                "issue_type": {
+                    "type": ["string", "null"],
+                    "description": "Narrow to one kind, e.g. 'decision', 'bug', 'task'.",
+                },
+                "has_verdict": {
+                    "type": ["boolean", "null"],
+                    "description": "True = only ruled beads; False = only unruled. Omit for both.",
+                },
+            }
+        ),
+        output_schema=response_schema(
+            {
+                "beads": {"type": "array", "items": {"type": "object"}},
+                "scope": {"type": "object"},
+            },
+            ["beads", "scope"],
+        ),
+        handler=_handle_beads_list,
+    ),
+    ToolSpec(
+        name="beads_show",
+        title="Show one bead",
+        description=(
+            "One bead in full by id: typed fields plus verbatim metadata, including "
+            "`verdict`, `verdict_option`, `verdict_reason`, `adjudicated_by` and "
+            "`adjudicated_at`. Complements `bead_comment`, which could already write to "
+            "a bead the surface had no way to read."
+        ),
+        input_schema=request_schema({"bead_id": {"type": "string"}}, ["bead_id"]),
+        output_schema=response_schema({"bead": {"type": ["object", "null"]}}, ["bead"]),
+        handler=_handle_beads_show,
     ),
     ToolSpec(
         name="work_ready",
