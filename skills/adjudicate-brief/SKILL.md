@@ -63,24 +63,41 @@ PACK_ROOT="${MATHCITY_PACK_ROOT:-$(
 MCTL="$PACK_ROOT/bin/mctl"
 [ -x "$MCTL" ] || { echo "mctl entry point not found at $MCTL"; exit 1; }
 
-# Bead prefix -> rig NAME registered in city.toml.
+# Bead prefix -> rig identifier the resolver accepts (`mctl context --rig <id>`).
+# Most are declared in city.toml; `hq` is the exception — see the note below.
 case "$BRIEF_BEAD" in
   he-*)  RIG=hecke ;;   gsp-*) RIG=gascity-packs ;;  gs-*) RIG=gascity ;;
   as-*)  RIG=agent_skills ;;  mc-*) RIG=mathcity ;;  lm-*) RIG=lmfdb ;;
   tgi-*) RIG=tdupu_github_io ;; ho-*) RIG=homog ;;   ja-*) RIG=jacobi ;;
-  dv-*)  RIG=differential_valuations ;;
+  dv-*)  RIG=differential_valuations ;;   gt-*) RIG=hq ;;
   mca-*) RIG=magma_clifford_algebras ;; mda-*) RIG=magma_diff_alg ;;
   *)     RIG="" ;;
 esac
 ```
 
-**`gt-*` beads have no route through `mctl`.** The city-root HQ store is not a
-registered rig in `city.toml`, so `--rig gt` fails with
-`MCTL_CONTEXT_UNKNOWN_RIG`. For an unmapped prefix, stop and hand the verdict
-to a human rather than improvising a second write path — recording a `gt-*`
-verdict by hand is exactly the redundant write this skill no longer does.
+**`gt-*` beads route through `mctl` via the `hq` rig.** The city-root HQ store
+(`$HOME/gt`) is served by a rig the resolver **synthesizes from the city root
+itself** — it is NOT declared in `city.toml`, so reading that file alone makes it
+look absent. It is not: `mctl context --rig hq --json` resolves clean
+(`rig_id: hq`, `rig_root: <city-root>`, zero warnings/diagnostics — verified
+2026-08-27, trace da25526c). So record a `gt-*` verdict with `--rig hq` like any
+other bead; do NOT hand it to a human as "unroutable" and do NOT improvise a raw
+`bd` write. (Corrected 2026-08-27: prior text claimed `gt-*` had no mctl route
+and `--rig gt` failed — `gt` is indeed not a rig, but `hq` is the identifier for
+this store, and the roster is not derivable from `city.toml` alone.)
 
 ### 1. Preview the verdict before applying it
+
+**Attribution is required.** Set `ADJUDICATED_BY` to who decided — the human
+adjudicator's identity (a relay records it on their behalf). Without it, the
+verdict is recorded unattributed and `MBRF_ADJUDICATOR_UNRECORDED` fires on every
+one; the flag exists precisely so a human can say who decided (`cli.py`'s
+`--adjudicated-by`, mirroring the `briefs_relay_adjudication` MCP tool's
+`adjudicated_by`, mc-ewapk/mc-ba376):
+
+```bash
+ADJUDICATED_BY="<who decided — e.g. the human adjudicator, or 'relay:<name> for <adjudicator>'>"
+```
 
 `--dry-run` renders the full `EffectPlan` — the bead update and every cache
 write — without touching anything. Run it first on any verdict you are not
@@ -88,7 +105,8 @@ certain of:
 
 ```bash
 "$MCTL" briefs adjudicate "$BRIEF_BEAD" --verdict "$VERDICT" \
-  --reason "$RATIONALE" --city "$CITY_ROOT" --rig "$RIG" --dry-run --json
+  --reason "$RATIONALE" --adjudicated-by "$ADJUDICATED_BY" \
+  --city "$CITY_ROOT" --rig "$RIG" --dry-run --json
 ```
 
 ### 2. Record the verdict
@@ -104,8 +122,11 @@ if [ "$VERDICT" = "defer" ]; then
 else
   out=$("$MCTL" briefs adjudicate "$BRIEF_BEAD" \
           --verdict "$VERDICT" --reason "$RATIONALE" \
+          --adjudicated-by "$ADJUDICATED_BY" \
           --city "$CITY_ROOT" --rig "$RIG" --json); rc=$?
 fi
+# NOTE: `briefs defer` takes no --adjudicated-by (verified against cli.py); the
+# flag is for the adjudicate write, which is what MBRF_ADJUDICATOR_UNRECORDED gates.
 TRACE_ID=$(printf '%s' "$out" \
   | python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get("trace_id",""))

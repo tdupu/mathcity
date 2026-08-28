@@ -76,9 +76,14 @@ prompt lore is exactly the duplicate control surface this replaced.
 
 **Two limits to know:**
 
-- `gt-*` beads are unreachable through `--rig` (the city-root HQ store is not a
-  registered rig; `MCTL_CONTEXT_UNKNOWN_RIG`). Rule 3 below already says gt HQ
-  has no worker fleet — this is the same boundary seen from the CLI.
+- `gt-*` beads are reachable through `--rig hq` (the city-root HQ store; the
+  resolver synthesizes `hq` from the city root and does not declare it in
+  `city.toml`, so it looks absent there but resolves clean — verified 2026-08-27).
+  This is a READ/adjudicate route; it is separate from Rule 3's point that gt HQ
+  has no worker fleet, so you can address `gt-*` beads via `--rig hq` but cannot
+  dispatch a fleet worker there. (Corrected 2026-08-27: prior text said `gt-*`
+  beads were "unreachable through --rig / not a registered rig" — false; that
+  conflated rig-addressing with the fleet boundary.)
 - `--all-rigs` **is implemented** for brief reads (`mctl_core/city.py`), so the
   city-wide brief queue is one call. `work ready` still answers one rig at a
   time — say which rig a count came from rather than presenting it as the

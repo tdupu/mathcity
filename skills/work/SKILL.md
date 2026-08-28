@@ -98,9 +98,14 @@ MCTL="$PACK_ROOT/bin/mctl"
 RIG=<rig owning the bead>   # he-* -> hecke, gsp-* -> gascity-packs, mc-* -> mathcity, ...
 ```
 
-**`gt-*` beads are out of reach.** The city-root HQ store is not a registered
-rig in `city.toml`, so `--rig gt` fails with `MCTL_CONTEXT_UNKNOWN_RIG`.
-`gt-*` work uses the commission path below, run from the city root.
+**`gt-*` beads are addressed via `--rig hq`.** The city-root HQ store is served by
+the `hq` rig — the resolver synthesizes it from the city root and does not declare
+it in `city.toml`, so it looks absent there but resolves clean (verified
+2026-08-27). Use `--rig hq` to read/adjudicate a `gt-*` bead; DISPATCH still uses
+the commission path below, run from the city root, because gt HQ has no worker
+fleet (that is a fleet boundary, not a rig-addressing one). (Corrected 2026-08-27:
+prior text said `gt-*` beads were "out of reach / --rig gt fails" — `gt` is not a
+rig, but `hq` is.)
 
 **Cross-rig views do not exist yet.** `--all-rigs` was specified in Slice 2 and
 is not implemented. Call one rig at a time; do not loop over rigs here.

@@ -66,8 +66,11 @@ Two outcomes, and they take different paths:
 and is not implemented; `work ready` answers for one rig. Do not loop over rigs
 here — record the need and rank within the rig.
 
-`gt-*` beads are unreachable through `--rig` (the city-root HQ store is not a
-registered rig; `MCTL_CONTEXT_UNKNOWN_RIG`). Treat them as path B.
+`gt-*` beads are reachable through `--rig hq` (the city-root HQ store; the
+resolver synthesizes `hq` from the city root and does not declare it in
+`city.toml`, so it looks absent there but resolves clean — verified 2026-08-27).
+(Corrected 2026-08-27: prior text said `gt-*` beads were "unreachable through
+--rig / not a registered rig" and to treat them as path B — false; use `--rig hq`.)
 
 **Never branch on `MBRF021` / `MBRF004` / `MBRF005`** — see
 `template-fragments/mctl-entry-point.md`.

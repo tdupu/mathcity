@@ -118,9 +118,13 @@ Specifically:
 > `template-fragments/mctl-entry-point.md` and
 > `subdomains/dev/docs/MALFORMED-BRIEF-TRIAGE-2026-08-19.md`.
 
-`MCTL_CONTEXT_UNKNOWN_RIG` on a `gt-*` brief is the known HQ-store gap, not an
-error in the brief: the city-root store is not a registered rig. Note it and
-review without the pre-check.
+A `gt-*` brief lives in the city-root HQ store, addressed by the `hq` rig
+(`--rig hq`) — the resolver synthesizes `hq` from the city root and does not
+declare it in `city.toml`, so it looks absent there but resolves clean (verified
+2026-08-27). If you ever see `MCTL_CONTEXT_UNKNOWN_RIG` it means the wrong `--rig`
+value, not an error in the brief; review without the pre-check either way.
+(Corrected 2026-08-27: prior text called this a "known HQ-store gap / not a
+registered rig" — false; `gt-*` is reachable via `--rig hq`.)
 
 ## Step 0 (only if no artifact): Initial creation
 

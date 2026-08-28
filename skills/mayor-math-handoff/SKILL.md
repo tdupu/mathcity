@@ -153,8 +153,12 @@ Two limits to state honestly rather than paper over:
 - `--all-rigs` was specified in Slice 2 and is **not implemented**, so these are
   per-rig counts. Name the rigs you checked; do not present one rig's number as
   the city's.
-- `gt-*` briefs live in the city-root HQ store, which is not a registered rig
-  (`MCTL_CONTEXT_UNKNOWN_RIG`), so they are absent from these counts entirely.
+- `gt-*` briefs live in the city-root HQ store, addressed by the `hq` rig — the
+  resolver synthesizes `hq` from the city root and does not declare it in
+  `city.toml`, so it looks absent there but resolves clean (`--rig hq`; verified
+  2026-08-27, returns the HQ briefs). Query `--rig hq` to include them; a per-rig
+  count that omits `hq` leaves them out. (Corrected 2026-08-27: prior text said
+  `gt-*` briefs were unreachable / not a registered rig — false.)
 
 Do not branch on `MBRF021` / `MBRF004` / `MBRF005` when summarising, and do not
 report a `malformed` count as damage: it means *closed with no verdict field*.

@@ -268,9 +268,15 @@ and a stale one.
 `--rig` for the city-wide answer, and never loop over rigs to fake one. It
 exits 1 when any rig was unreadable while still printing the full payload, so
 branch on the payload and name every degraded rig rather than reporting a
-partial queue as the city's. `gt-*` briefs stay unreachable either way (the
-city-root HQ store is not a registered rig, `MCTL_CONTEXT_UNKNOWN_RIG`) — say
-so when you report the count.
+partial queue as the city's. `gt-*` briefs live in the city-root HQ store,
+addressed by the **`hq`** rig (`--rig hq`) — the resolver synthesizes `hq` from
+the city root and does NOT declare it in `city.toml`, so reading that file makes
+it look absent, but it is not (verified 2026-08-27: `--rig hq` resolves clean,
+zero diagnostics; `briefs_list rig=hq` returns the HQ briefs). Query `--rig hq`
+for them and include them in the count. (Corrected 2026-08-27: prior text said
+`gt-*` briefs were "unreachable, not a registered rig, MCTL_CONTEXT_UNKNOWN_RIG"
+and told the reader to report that — false, and it trained every incoming Mayor
+into it.)
 
 Do not adjudicate them yourself — surface them so USER can drain the pile.
 
