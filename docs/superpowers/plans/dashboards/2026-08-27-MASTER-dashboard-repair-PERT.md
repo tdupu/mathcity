@@ -40,10 +40,19 @@ issues, and updates this file as work lands.
 | **WP-TRIAGE** | `repair/triage` | mc-1qrg, mc-5p8v; re-scope/close mc-8ij1 | #87 | analysis; `screens/city.py` | 2 |
 
 **Coordination (not new agents):**
-- **Report-box feature** (the `mc-3q4v` manual button) is being built by the
-  "make is so" fork. It is the auto-route *sink*; WP-LEDGER is its
-  *precondition*. BART links that convoy under `mc-3q4v` and sequences its
-  merge after WP-LEDGER.
+- **Report-box feature** (the `mc-3q4v` manual button). WP-LEDGER (its
+  precondition) is in `main`. STATUS (BART 2026-08-27): the "make is so" fork
+  **lapsed producing no branch**; BART rebuilt the formula layer directly on
+  branch `feat/report-box-fix-brief` (UNPUSHED, awaits Taylor's git gate):
+  `brief-briefed-base` + `report-fix-briefed` + a mutation-proven evidence gate,
+  committed `ff8d9fe`, `tests/mctl` 1691✓/1xfail + both smoke tests green.
+  **Stage C (dashboard surface) BLOCKED** on a proven P7.3 gap — `work_dispatch`
+  cannot pin `report-fix-briefed` (takes only `brief_id`); needs a typed
+  formula/seed param, and mc-1pale confirms no park verb to contain a misroute,
+  so the dispatch path must not ship until pinning is typed. Two sibling
+  migrations (Stage A 2nd half + Stage D) deferred — first multi-level `extends`
+  chain, unvalidatable while the city is down. Full record in
+  `docs/FORMULAS-STATUS.md` (report-box note) + the design doc's Stage C.
 - `mc-8ij1` ("/city never renders in 90s") is **re-scoped, not built**: BART
   measured `/city` = 200 in 24.7s on 2026-08-27 — slow, not dead (matches
   closed `mc-5ir2`). WP-TRIAGE closes/re-aims it to the latency work.
