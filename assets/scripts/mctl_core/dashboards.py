@@ -118,7 +118,28 @@ def pid_alive(pid: int) -> bool:
 
     `os.kill(pid, 0)` sends no signal; it only checks existence/permission.
     `ESRCH` means gone, `EPERM` means alive but not ours (still a live process).
+
+    **A zombie is not alive.** `os.kill(pid, 0)` succeeds for a terminated child
+    that its parent has not reaped -- the pid slot is held until someone waits
+    on it -- so the raw check reports a dead process as running. That is not
+    hypothetical: on 2026-08-28 the first live `dashboard_restart` killed the
+    dashboard, read its own zombie as still running, and therefore refused to
+    start a replacement (mc-6i9gm / GH #231). The refusal was the correct
+    response to a failed stop; the stop had not failed.
+
+    So reap first. `waitpid(WNOHANG)` clears our own exited children and makes
+    the `os.kill` below answer honestly; `ChildProcessError` means the pid is
+    not our child, and the ordinary check decides. Reaping a child we spawned is
+    the caller's job anyway, so this fixes a leak as well as the predicate.
     """
+    try:
+        reaped, _status = os.waitpid(pid, os.WNOHANG)
+        if reaped == pid:
+            return False
+    except ChildProcessError:
+        pass  # not our child -- os.kill below is the authority
+    except (OSError, ValueError):
+        pass
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
