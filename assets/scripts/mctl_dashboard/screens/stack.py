@@ -76,6 +76,33 @@ def age_days(brief: Mapping[str, Any], *, now: datetime | None = None) -> int | 
     return max(0, (reference - created).days)
 
 
+def unlock_count(brief: Mapping[str, Any]) -> float | None:
+    """`unlock_count` as a number, or None when it does not carry one.
+
+    The field is int-OR-SENTINEL by contract, not int. `create-brief`
+    (`skills/create-brief/SKILL.md:67`) *requires* the string
+    `UNKNOWN-NOT-COMPUTED` when the store could not be reached, and forbids
+    `0`, because `0` is a measurement claiming the brief blocks nothing and
+    sorts a live blocker to the bottom of an `unlock_count`-ranked stack.
+
+    So a non-numeric value here is a brief written CORRECTLY, and coercing it
+    with a bare `float()` took the whole `/queue` page down on 2026-08-28.
+    Returning None -- never 0.0 -- is what keeps the sentinel's meaning: the
+    callers already sort None last, so unknown stays distinguishable from a
+    measured zero rather than impersonating one.
+
+    Mirrors `age_days` above: parse defensively, return None on anything
+    unparseable.
+    """
+    raw = attr(brief, "unlock_count")
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def severity(brief: Mapping[str, Any]) -> str:
     """Health for the row, from the brief's own diagnostics.
 
@@ -105,7 +132,7 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
     if weights:
         settings.update(weights)
 
-    unlock = attr(brief, "unlock_count")
+    unlock = unlock_count(brief)
     priority = attr(brief, "priority")
     days = age_days(brief)
     if unlock is None and priority is None:
@@ -113,7 +140,7 @@ def score(brief: Mapping[str, Any], weights: Mapping[str, int] | None = None) ->
 
     total = 0.0
     if unlock is not None:
-        total += float(unlock) * settings["unlock"]
+        total += unlock * settings["unlock"]
     if attr(brief, "convoy"):
         total += settings["convoy"] * 2.4
     if days is not None:
@@ -139,8 +166,8 @@ def sort_value(
         raw = attr(brief, "priority")
         return (raw is None, PRIO_RANK.get(str(raw).lower(), 0))
     if key == "unlock":
-        raw = attr(brief, "unlock_count")
-        return (raw is None, float(raw) if raw is not None else 0.0)
+        value = unlock_count(brief)
+        return (value is None, value if value is not None else 0.0)
     if key == "slug":
         return (False, str(attr(brief, "title") or "").lower())
     if key == "rig":
