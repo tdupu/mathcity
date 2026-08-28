@@ -1,0 +1,235 @@
+description = """
+Turn a rough operator bug report into an evidence-backed decision brief that, on
+APPROVE, dispatches a worker to FIX it. This is the formula behind the mathcity
+dashboard "Report" box (decision mc-3q4v): the operator types what is broken; a
+drafting agent produces a hygienic, evidence-backed fix-brief in the operator's
+stack; on adjudication APPROVE the brief commissions `build-basic-briefed` to fix
+the bug and open a PR. The bug report and the fix-commission are the SAME object —
+one brief in the stack, not two records.
+
+SHAPE — adapter over `brief-briefed-base`: it `extends` the base and overrides
+ONLY `intake` and `compose-body` by id; the `file-brief` terminal (and the whole
+brief-producer.v1 schema) is inherited unchanged, so this formula cannot drift
+from the rest of the briefed-terminal family (Taylor's explicit anti-drift
+requirement, D7). It stamps its own provenance via `[vars.source_formula]` and
+sets `[vars.terminal_action] = dispatch-fix`.
+
+SCOPE BOUNDARY (subdomains/dev/POLICY.md P3.2 / P4.1): this box is for
+`tdupu/mathcity`-OWNED bugs only. A reported bug whose fix would land in
+gascity/beads core (outside the owned set) is OUT of scope here: intake
+classifies it and fails closed with a pointer to the P3.2 briefed path
+(`create-issue-briefed` → the upstream PR pipeline). It never routes an upstream
+fix through `build-basic-briefed`. Fixes land PR-only to `tdupu/mathcity` (P3.1).
+
+EVIDENCE DISCIPLINE (D5): always evidence-backed; FAIL-CLOSED without evidence.
+intake gathers a repro / a locatable code site / ≥1 related bead and refuses —
+with a visible signal and the missing-evidence list — if it cannot. A sourceless
+brief is independently refused downstream by `briefs_create` (MBRF034); intake's
+gate is the earlier, friendlier failure that also supplies the cited source.
+
+STEPS:
+  1. intake        — read the report; classify scope (owned vs upstream, refuse
+                     upstream); gather evidence and FAIL-CLOSED if absent; find
+                     related beads → sources, or mint a defect bead as the source.
+                     OVERRIDDEN.  [gc.run-operator]
+  2. compose-body  — draft the fix-brief body (§1 "Fix <X>?", evidence, related
+                     beads, recommended verdict A=approve→dispatch build-basic-briefed).
+                     Never fabricates evidence. OVERRIDDEN.  [gc.run-operator]
+  3. file-brief    — INHERITED from brief-briefed-base. Deposits the fix-brief as a
+                     brief-producer.v1 decision brief. TERMINAL.  [mathcity.brief-operator]
+
+Does NOT fix the bug and does NOT dispatch the worker. The worker is dispatched
+only after the human adjudicates the brief APPROVE.
+
+KNOWN LIMITATION: the inherited `file-brief` routes to `mathcity.brief-operator`,
+a pool currently wedged at 0 sessions (tdupu/mathcity#10). Until it has a session
+the terminal cannot be exercised end-to-end; static conformance is covered by
+`tests/report-fix-briefed/smoke_test.sh`, and the dashboard dispatch fails LOUD
+(P6.1) rather than hanging if the pool is empty.
+"""
+formula = "report-fix-briefed"
+extends = ["brief-briefed-base"]
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "report-fix-briefed"
+description = "Turn a rough operator bug report into an evidence-backed fix-brief; on approve it dispatches build-basic-briefed to fix the bug and open a PR to tdupu/mathcity. Adapter over brief-briefed-base; never fixes or dispatches before adjudication."
+
+[vars]
+
+# Override the base provenance/action defaults for this leaf formula.
+[vars.source_formula]
+description = "Leaf formula name stamped onto the inherited file-brief for honest brief provenance."
+default = "report-fix-briefed"
+
+[vars.terminal_action]
+description = "This formula commissions a fix dispatch."
+default = "dispatch-fix"
+enum = ["dispatch-fix"]
+
+[vars.routing_path]
+description = "Brief routing metadata for this producer."
+default = "report-fix-briefed"
+
+[vars.target_repo]
+description = "The owned repo a fix lands against, PR-only. DECLARED, never guessed; an upstream target is refused at intake with the P3.2 pointer, not filed here."
+default = "tdupu/mathcity"
+enum = ["tdupu/mathcity"]
+
+[vars.fix_formula]
+description = "The formula the approved brief commissions to fix the bug. Fleet-owned build path; PR-only to the owned repo."
+default = "build-basic-briefed"
+
+[[steps]]
+id = "intake"
+title = "Read the report, classify scope, and gather evidence (fail-closed)"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+OVERRIDES the abstract base `intake`. READ-ONLY; performs no fix and no dispatch.
+
+Read the operator's rough report from the source bead's description/notes. Then:
+
+**1. Classify scope — owned vs upstream (P3.2 / P4.1), fail-closed on upstream:**
+This box fixes `tdupu/mathcity`-owned bugs only. Decide where the fix would land.
+A fix in the owned tree (`<repos-root>/mathcity/**`: formulas, assets/scripts,
+skills, subdomains, tests) is IN scope. A fix in gc/bd binaries or upstream-owned
+gascity-packs content is OUT of scope.
+
+```bash
+TARGET_REPO="{{target_repo}}"
+case "$TARGET_REPO" in
+  tdupu/mathcity) : ;;
+  *)
+    echo "[report-fix-briefed] BLOCKED: target_repo '$TARGET_REPO' is not the owned repo; this box fixes tdupu/mathcity only."
+    bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: target_repo '$TARGET_REPO' unsupported. This box is tdupu/mathcity-owned only."
+    gc runtime drain-ack; exit 0 ;;
+esac
+```
+
+If the report itself describes an UPSTREAM bug (the fix must land in gc/bd core or
+upstream gascity-packs), refuse with the P3.2 pointer — do NOT dispatch a
+build-basic-briefed fix against code we do not own:
+
+```bash
+# When intake determines the fix site is upstream (not under the owned tree):
+echo "[report-fix-briefed] BLOCKED (out of owned set): the fix would land upstream (gc/bd core or upstream gascity-packs)."
+bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: reported bug's fix site is UPSTREAM, out of the tdupu/mathcity owned set. Route via the P3.2 briefed path (create-issue-briefed -> upstream PR pipeline), NOT build-basic-briefed."
+gc runtime drain-ack; exit 0
+```
+
+**2. Read the rough report (fail-closed if empty):**
+```bash
+DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
+if [ -z "$DESC" ]; then
+    echo "[report-fix-briefed] BLOCKED: {{source_bead}} has no report text to draft a fix-brief from"
+    bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: source bead has no report text."
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**3. Evidence gate (D5, P6.1 — fail-closed with the missing list):**
+An evidence-backed fix-brief needs, at minimum, ONE of a concrete repro and a
+locatable code site, PLUS at least one related bead. Judge presence, not polish —
+a repro honestly marked "observed once, not yet minimized" is present; a silently
+absent one is not.
+
+| Evidence | Required |
+|---|---|
+| A concrete repro (steps / observed failing output / a failing command) OR a locatable code site (file:line or symbol where the bug lives) | at least ONE of the two |
+| ≥1 related bead (search the store; if none relates, MINT a defect bead as the canonical source — MBRF034) | yes |
+
+Search for related beads and record them as `sources`. If none relates, mint the
+canonical source defect bead (the report itself is the evidence):
+
+```bash
+# Related-bead search (record the ids found as SOURCES for compose-body):
+RELATED=$(bd search "<key terms from the report>" --json 2>/dev/null | jq -r '.[].id' | head -5)
+# If RELATED is empty, mint the source defect bead via the typed tool
+# (create_defect_bead) so the brief has its MBRF034-required source. The freshly
+# minted bead id becomes the cited source. Set SOURCES to the related ids or the
+# minted defect id.
+SOURCES="${RELATED:-$MINTED_DEFECT_ID}"
+```
+
+Decide the gate with the single code-owner of the evidence rule —
+`assets/scripts/report_fix_evidence_gate.py` (do NOT re-implement the condition in
+bash; that helper is the tested unit, with an observed refusal case in
+tests/mctl/test_report_fix_evidence_gate.py). It exits non-zero and prints the
+missing list when evidence is insufficient:
+
+```bash
+GATE="$(git rev-parse --show-toplevel)/assets/scripts/report_fix_evidence_gate.py"
+if ! VERDICT=$(python3 "$GATE" --repro "$REPRO" --code-site "$CODE_SITE" --sources "$SOURCES"); then
+    echo "[report-fix-briefed] $VERDICT"
+    bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: $VERDICT (need <a repro OR a locatable code site> and <a related bead or a minted defect source>). Fail-closed per D5/P6.1; nothing dispatched."
+    gc runtime drain-ack; exit 0
+fi
+```
+
+**4. Record intake results for compose-body:**
+```bash
+bd update {{source_bead}} --notes "report-fix-briefed intake:
+  target_repo: $TARGET_REPO
+  scope: OWNED (tdupu/mathcity)
+  evidence: <repro | code-site file:line | both>
+  sources: <bead ids — related or the minted defect bead>
+  fix_formula: {{fix_formula}}"
+```
+The `report-fix-briefed intake:` marker and the field order are a COMPATIBILITY
+CONTRACT with `compose-body`, which greps for that literal marker and reads the
+following lines. Do not rename the marker or reorder past its read window.
+
+**Exit criteria:** scope classified OWNED, report non-empty, evidence gate PASSED
+with a cited source, results recorded under the compatibility marker. OR:
+fail-closed BLOCK note + drain-ack.
+"""
+
+[[steps]]
+id = "compose-body"
+needs = ["intake"]
+title = "Draft the evidence-backed fix-brief body"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+OVERRIDES the abstract base `compose-body`. Draft the fix-brief body from the REAL
+report + the evidence intake gathered, and write it to
+`$GC_WORK_DIR/{{brief_slug}}-body.md` for the inherited `file-brief` terminal.
+NEVER fabricate evidence — a field the report does not supply is written
+`<unknown — needs input>`, never invented.
+
+```bash
+INTAKE=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].notes // ""' | grep -A6 'report-fix-briefed intake:')
+SOURCES=$(echo "$INTAKE" | sed -n 's/.*sources: //p' | head -1)
+DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
+```
+
+Write the fix-brief body with this structure (Decision-at-Top invariant — §1
+first):
+
+```bash
+cat > "$GC_WORK_DIR/{{brief_slug}}-body.md" << 'EOF'
+## §1 — What is being decided
+Fix `<one-line statement of the bug>` in tdupu/mathcity? APPROVE dispatches
+{{fix_formula}} to fix it and open a PR.
+
+## §2 — The report (as filed)
+<the operator's rough report, verbatim>
+
+## §3 — Evidence
+- Repro / failing output: <the gathered repro, or `<unknown — needs input>`>
+- Code site: <file:line or symbol, or `<unknown — needs input>`>
+- Related beads: <the cited source bead ids>
+
+## §4 — Recommended verdict
+A = APPROVE → dispatch {{fix_formula}} (worker fixes the bug, opens a PR to
+tdupu/mathcity). C = REVISE (evidence insufficient / scope wrong).
+EOF
+bd update {{source_bead}} --notes "report-fix-briefed compose-body: fix-brief body drafted at $GC_WORK_DIR/{{brief_slug}}-body.md"
+```
+
+**Exit criteria:** an evidence-backed fix-brief body written to $GC_WORK_DIR, §1
+"What is being decided" first, no fabricated evidence. This step does NOT dispatch
+the fix.
+"""

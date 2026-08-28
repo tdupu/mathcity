@@ -1,0 +1,203 @@
+description = """
+Shared BASE for the briefed-terminal formula family — the single code-owner of
+the `file-brief` terminal step and the `brief-producer.v1` brief schema. Every
+"draft something, then file it as a human decision brief" formula EXTENDS this
+base and overrides only its `intake` and `compose-body` steps by id; the
+`file-brief` terminal is inherited unchanged, so the whole family writes exactly
+one brief schema and cannot drift from each other.
+
+WHY THIS EXISTS: before this base, each sibling (`create-issue-briefed`,
+`pr-pipeline-briefed`) re-spelled the entire `brief-producer.v1` frontmatter
+schema, the `.pile` deposit rule, and the gate-evidence block in its own
+`file-brief` prose. Three hand-maintained copies of one contract is exactly the
+prose-schema drift this base removes: the schema now has ONE owner. A new
+briefed-terminal formula is a small `extends` + two step overrides, never a
+fourth copy of the schema.
+
+SHAPE — this is an ABSTRACT base (POLICY-formulas.md F8.1: terminal step =
+file-brief). It declares all THREE canonical step ids so children can override
+`intake` and `compose-body` IN POSITION and inherit `file-brief` as the terminal.
+The `intake`/`compose-body` steps here are fail-closed placeholders: pouring the
+base directly is a usage error, and they say so. The reason all three ids must
+exist in the base is the merge rule (gascity `internal/formula/parser.go`,
+`mergeSteps`): a child step whose id is NOT already in the parent APPENDS after
+the parent's steps — which would land after `file-brief` and break F8.1. Children
+MUST override by id; they must not append.
+
+PROVENANCE IS PARAMETERIZED: the inherited `file-brief` stamps
+`gc.brief.source_formula = {{source_formula}}`, and every child overrides
+`[vars.source_formula]` with its own formula name. This keeps the deposited
+brief's provenance honest (it records the leaf formula that produced it, not the
+base) while the schema itself stays owned here. `[vars.terminal_action]` names
+what the approved brief commissions (`file-issue` / `open-pr` / `dispatch-fix`)
+so the same terminal serves every sibling.
+
+STEPS:
+  1. intake        — ABSTRACT placeholder; children override by id.  [gc.run-operator]
+  2. compose-body  — ABSTRACT placeholder; children override by id.  [gc.run-operator]
+  3. file-brief    — the shared terminal: deposit the drafted body as a
+                     brief-producer.v1 decision brief into `.pile/` (brief-shuffle
+                     is the only writer to stack/, B2.10). Inherited unchanged by
+                     every child. TERMINAL.  [mathcity.brief-operator]
+
+Does NOT execute the commissioned action (no `gh issue create`, no `gh pr create`,
+no `gc sling`). The action runs only after human adjudication of the brief.
+"""
+formula = "brief-briefed-base"
+version = 1
+
+[requires]
+formula_compiler = ">=2.0.0"
+
+[catalog]
+name = "brief-briefed-base"
+description = "Abstract base owning the shared file-brief terminal + brief-producer.v1 schema for the briefed-terminal formula family. Extend it and override intake/compose-body by id; never pour it directly."
+
+[vars]
+
+[vars.source_bead]
+description = "Bead the drafted body is sourced from and the brief is filed for. Its notes/description carry the real source text. Satisfies the MBRF034 source-dependency requirement enforced by briefs_create."
+required = true
+
+[vars.brief_slug]
+description = "Stable filename stem for the brief artifact (e.g. mc-abc-report-body)."
+required = true
+pattern = "^[A-Za-z0-9._-]+$"
+
+[vars.source_formula]
+description = "The LEAF formula name that produced this brief, stamped onto the inherited file-brief for honest provenance. Each child MUST override this default with its own formula name; leaving the base default is a usage error."
+default = "brief-briefed-base"
+
+[vars.terminal_action]
+description = "What the approved brief commissions. Names the post-adjudication act so the deposited brief can state it plainly. file-issue = gh issue create; open-pr = gh pr create; dispatch-fix = sling build-basic-briefed."
+default = "file-issue"
+enum = ["file-issue", "open-pr", "dispatch-fix"]
+
+[vars.artifact_root]
+description = "Root for the brief artifact."
+default = ".beads/briefs"
+
+[vars.routing_path]
+description = "Comma-separated route from wrapper formula to final producer (brief routing metadata)."
+default = "brief-briefed-base"
+
+[vars.operator_target]
+description = "Fleet agent for the intake + compose-body steps. Fleet ADDRESS, never a model name."
+default = "gc.run-operator"
+
+[vars.brief_operator]
+description = "Fleet agent for the terminal file-brief step. Fleet ADDRESS, never a model name."
+default = "mathcity.brief-operator"
+
+[[steps]]
+id = "intake"
+title = "ABSTRACT — children override this step by id"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+ABSTRACT placeholder. This base is not meant to be poured directly — every child
+formula overrides `intake` by id with its own read/validate/gather logic.
+
+If this placeholder ever runs, it means a child forgot to override it (or the base
+was poured directly). Fail closed rather than proceeding with no real intake:
+
+```bash
+echo "[brief-briefed-base] BLOCKED: the abstract base intake ran — this formula must be EXTENDED, not poured directly. Override the 'intake' step in a child formula."
+bd update {{source_bead}} --notes "brief-briefed-base abstract intake ran directly — pour a child formula (report-fix-briefed / create-issue-briefed / pr-pipeline-briefed) instead."
+gc runtime drain-ack; exit 0
+```
+
+**Exit criteria:** never reached in normal use; children override this step.
+"""
+
+[[steps]]
+id = "compose-body"
+needs = ["intake"]
+title = "ABSTRACT — children override this step by id"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+ABSTRACT placeholder. Every child overrides `compose-body` by id with its own
+body-drafting logic (issue body / PR description / fix-brief). It must write the
+drafted body to `$GC_WORK_DIR/{{brief_slug}}-body.md` for the inherited
+`file-brief` terminal to deposit.
+
+If this placeholder runs, a child failed to override it — fail closed:
+
+```bash
+echo "[brief-briefed-base] BLOCKED: the abstract base compose-body ran — override it in a child formula."
+bd update {{source_bead}} --notes "brief-briefed-base abstract compose-body ran directly — pour a child formula instead."
+gc runtime drain-ack; exit 0
+```
+
+**Exit criteria:** never reached in normal use; children override this step.
+"""
+
+[[steps]]
+id = "file-brief"
+needs = ["compose-body"]
+title = "File the drafted body as a decision brief for {{source_bead}}"
+metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "{{source_formula}}", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+description = """
+THE SHARED TERMINAL. Deposit the drafted body (written to
+`$GC_WORK_DIR/{{brief_slug}}-body.md` by `compose-body`) as a `brief-producer.v1`
+decision brief for the human adjudicator. This step is inherited UNCHANGED by
+every child; it is the single owner of the brief schema below.
+
+Write into the `.pile/` — `brief-shuffle` is the ONLY writer to `stack/` (B2.10):
+
+```bash
+BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
+mkdir -p "{{artifact_root}}/.pile"
+BODY=$(cat "$GC_WORK_DIR/{{brief_slug}}-body.md")
+```
+
+The brief MUST contain this `brief-producer.v1` frontmatter (the ONE schema this
+base owns — do not re-spell it in a child):
+- `status: approved`
+- `brief_kind: decision`
+- `gate_profile: decision`
+- `feedback_sink: brief_quality_failure`
+- `brief_bead: {{source_bead}}`
+- `brief_slug: {{brief_slug}}`
+- `producer_contract: brief-producer.v1`
+- `source_formula: {{source_formula}}`
+- `source_step: file-brief`
+- `routing_path: "{{routing_path}}"`
+- `review_gate: approved`
+- `unlock_count: <int>`
+- `priority: P0|P1|P2|P3|P4`
+- `server_touching: false`
+- `user_skill_touching_override: false`
+
+The brief BODY MUST contain:
+- §1 **What is being decided** FIRST (the Decision-at-Top invariant): the exact
+  action `{{terminal_action}}` commissions, phrased as a yes/no the adjudicator
+  answers. (`file-issue` → "File this issue?"; `open-pr` → "Open this PR?";
+  `dispatch-fix` → "Dispatch a worker to fix this?")
+- The full drafted body (content of `$GC_WORK_DIR/{{brief_slug}}-body.md`) as a
+  fenced markdown block.
+- The cited source bead(s) — the brief cites ≥1 (MBRF034; `briefs_create` refuses
+  a sourceless brief in code).
+- Any `<unknown — needs input>` fields flagged for the adjudicator to fill.
+- Recommended verdict (A = approve → `{{terminal_action}}`; C = revise).
+- A complete `## Gate Evidence` section for the `decision` gate profile, including
+  this machine-readable G9 line:
+  `G9 No-brainer-filter: PASS - classifier_state=known_non_no_brainer; classified_at=<ISO-8601-utc>; category=none; confidence=none; stop_gates_clear=false; reason=human adjudicator approval required before {{terminal_action}}; proposed_registry_extension=none`
+
+The write itself goes through `briefs_create` (POLICY B2.11 — the single
+code-enforced brief writer: it enforces this frontmatter schema, the MBRF034
+source-dependency refusal, and the gate-evidence contract). Do NOT hand-write the
+brief around it.
+
+This step does NOT execute `{{terminal_action}}`. On APPROVE, the verdict-executing
+agent performs it.
+
+After filing:
+```bash
+bd update {{source_bead}} --notes "{{source_formula}} file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (commissioned action {{terminal_action}} not yet performed)."
+gc runtime drain-ack
+```
+
+**Exit criteria:** a brief-producer.v1 decision brief deposited in `.pile/` via
+briefs_create, citing ≥1 source bead, with the full drafted body and gate
+evidence. The commissioned action is NOT performed here.
+"""

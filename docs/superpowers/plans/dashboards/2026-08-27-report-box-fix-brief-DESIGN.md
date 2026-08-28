@@ -123,6 +123,23 @@ delta → the migration is wrong.
 - **If `work_dispatch` cannot pin `report-fix-briefed`** (it may route via the
   `work-briefed` router): extend `work_dispatch` to accept the formula, filing
   that as a P7.3 mctl gap — do NOT route around it with `gc sling`.
+  - **⚠ CONFIRMED AT SOURCE (BART 2026-08-27).** This condition is now PROVEN
+    true, not hypothetical: `mcp_server.py::_handle_work_dispatch` (:1463) calls
+    `plan_dispatch(ctx, arguments["brief_id"])` and the `work_dispatch` schema
+    (:2978) accepts ONLY `{brief_id, dry_run}` — no `formula`, no seed vars. It
+    dispatches an existing brief-backed bead via that bead's own routing; it
+    cannot be told to use `report-fix-briefed`. `work_dispatch_event` carries a
+    `formula` param but only RECORDS a `dispatch-provenance.v1` event — it does
+    not sling. So the dashboard dispatch is genuinely blocked on a typed
+    `work_dispatch` extension (add a `formula`/seed param, or a new typed
+    dispatch-with-formula tool). **P7.3: file the gap; do not route around it.**
+    Compounded by mc-1pale (STILL-REAL, clark's sweep): there is no park / hold /
+    pause verb in the live roster, so a dispatch that misroutes to the
+    `work-briefed` default cannot be contained after the fact — the pinning MUST
+    be typed BEFORE any dispatch path ships. Stage C's dispatch half therefore
+    waits on this extension (Taylor-gated) + a city up to `gc formula show`- and
+    live-validate it. `work_claim` (:2986) is the typed P1.21 assignee-read the
+    pre-sling check will use.
 
 ### Stage D — migrate `pr-pipeline-briefed` onto the base (LAST / may be a separate PR)
 - Highest blast radius (P3.1-mandated PR path). Only after A–C are green, behind
