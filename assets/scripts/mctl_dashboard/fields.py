@@ -81,6 +81,13 @@ SUPPRESSED = frozenset(
         "policy_references",
         "redundant_artifacts",
         "readings",
+        # The brief's alternatives and the starred one: rendered in the §4 body
+        # section and the disposition control, never as attribute rows. Left in,
+        # `decision_options` (a list of {id,label,description} dicts) stringifies
+        # as a Python repr and the option labels appear repeatedly across the
+        # page -- the issue-49 "the disposition repeats twice" render bug.
+        "decision_options",
+        "recommendation",
     }
 )
 
