@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from mctl_dashboard.reading import attr
 from mctl_dashboard.render import esc as _e
 
 #: The three pairing states, duplicated from `mctl_core.tracker` rather than
@@ -106,8 +107,11 @@ def brief_cell(row: Any) -> str:
         )
     if not row.briefs:
         return '<td class="mono" data-brief="none">no brief</td>'
+    # `attr` rather than `.get`: a brief row may carry its id at the top level
+    # or nested under `fields`, and reading only one shape is the defect
+    # `tests/mctl/test_no_single_shape_reads.py` exists to catch. It caught this.
     ids = " ".join(
-        f'<span class="mono">{_e(b.get("brief_id") or b.get("id") or "?")}</span>'
+        f'<span class="mono">{_e(attr(b, "brief_id") or attr(b, "id") or "?")}</span>'
         for b in row.briefs
     )
     return f'<td data-brief="present">{ids}</td>'
