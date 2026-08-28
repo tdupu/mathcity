@@ -324,11 +324,14 @@ FIELD_VALUE_SCHEMA: Schema = {
         "field": {"type": "string", "description": "The exact field the value came from."},
         "source": {
             "type": "string",
-            "enum": ["bead", "manifest_row", "frontmatter"],
+            "enum": ["bead", "manifest_row", "frontmatter", "stack_frontmatter"],
             "description": (
                 "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track "
-                "row, `frontmatter` a key in the brief markdown file's own header. A surface "
-                "must be able to render which is which rather than flatten them."
+                "row, `frontmatter` a key in the header of the brief file beside the "
+                "manifest, `stack_frontmatter` the same key in the stack copy of the same "
+                "brief. The last two are kept apart because the two copies disagree -- "
+                "`form` 13 times live, mostly where a shape repair rewrote one lane only. "
+                "A surface must be able to render which is which rather than flatten them."
             ),
         },
         "value": {"type": "string", "description": "The value verbatim, never normalised."},
@@ -350,7 +353,10 @@ FIELD_READING_SCHEMA: Schema = {
         "conflict": {"type": "boolean"},
         "name": {"type": "string"},
         "readings": {"type": "array", "items": FIELD_VALUE_SCHEMA, "minItems": 1},
-        "source": {"type": "string", "enum": ["bead", "manifest_row", "frontmatter"]},
+        "source": {
+            "type": "string",
+            "enum": ["bead", "manifest_row", "frontmatter", "stack_frontmatter"],
+        },
         "value": {"type": "string"},
     },
     "additionalProperties": False,
@@ -433,15 +439,49 @@ BODY_DIAGNOSTICS_SCHEMA: Schema = {
     "description": "Why the body parse produced what it did; empty on a clean parse.",
 }
 
+#: One markdown document behind a brief, with the lane it was read from. A
+#: brief can have two: the file beside the decisions-track manifest and the
+#: stack file the pipeline presents from. Both are carried because they differ
+#: -- 19 of 46 live pairs -- and because the reading that suppressed the row
+#: over the stack copy left 87 of 89 stack documents reachable by no surface.
+BRIEF_DOCUMENT_SCHEMA: Schema = {
+    "type": "object",
+    "title": "BriefDocument",
+    "description": "One markdown document behind a brief, and the lane it came from.",
+    "required": ["body", "lane", "path", "sections"],
+    "properties": {
+        "body": {
+            "type": ["string", "null"],
+            "description": (
+                "The document's text verbatim. Null means the file could not be read; "
+                "empty string means it was read and is empty."
+            ),
+        },
+        "lane": {
+            "type": "string",
+            "enum": ["decisions_track", "stack"],
+            "description": (
+                "Which directory the document was read from. Stated rather than left to "
+                "be pattern-matched out of `path`."
+            ),
+        },
+        "path": {"type": "string"},
+        "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},
+    },
+    "additionalProperties": False,
+}
+
 BRIEF_RECORD_SCHEMA: Schema = {
     "type": "object",
     "title": "BriefRecord",
     "description": (
         "One brief, from whichever store holds it: a decision bead with its redundant "
-        "cache artifacts, or a decisions-track manifest row that no bead represents. "
-        "`source` says which, and must be read before the record is trusted as attested. "
-        "A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file "
-        "sitting beside the manifest, and `body_path` names it."
+        "cache artifacts, a decisions-track manifest row that no bead represents, or a "
+        "stack file that neither a bead nor a manifest row claims. `source` says which, "
+        "and must be read before the record is trusted as attested. A manifest row is not "
+        "bodiless -- 203 of 204 live rows carry the markdown file sitting beside the "
+        "manifest, and `body_path` names it -- and 46 of them carry a stack copy as well, "
+        "in `documents`."
     ),
     "required": [
         "bead_id",
@@ -466,25 +506,31 @@ BRIEF_RECORD_SCHEMA: Schema = {
             "The canonical decision bead. Null on a manifest-sourced record: there is no bead."
         ),
         "body_path": nullable_string(
-            "The markdown file behind this record. On a manifest record null is exactly the "
-            "`unreadable` lane -- no file exists. On a bead record it names the cache a "
+            "The markdown file behind this record -- `documents[0].path` where there are "
+            "documents. On a bead-less record null is exactly the `unreadable` lane: no "
+            "file in either directory. On a bead record it names the cache a "
             "frontmatter-sourced field was read from."
         ),
         "brief_id": {"type": "string"},
         "canonical_source": {
             "type": "string",
-            "enum": ["bead_store", "decisions_track_manifest"],
-            "description": "Which store is authoritative for this record.",
+            "enum": ["bead_store", "decisions_track_manifest", "brief_stack"],
+            "description": (
+                "Which store is authoritative for this record. `brief_stack` is the "
+                "weakest of the three: the deposited file is the only record of that "
+                "brief anywhere -- no bead attests it and no manifest row tracks it."
+            ),
         },
         "created_at": nullable_string("Bead creation timestamp. Null on a manifest record."),
         "decision_state": {
             "type": "string",
             "description": (
                 "adjudicated / deferred / pending / malformed for a bead; adjudicated, "
-                "pending or `unreadable` for a manifest row. `unreadable` means no brief "
-                "body file exists for the row, and nothing else: a row with a body and no "
-                "verdict is an ordinary pending brief. One live row is unreadable; the "
-                "previous reading put 36 there, 35 of which had a body all along."
+                "pending or `unreadable` for a bead-less record. `unreadable` means no "
+                "readable document exists in any lane, and nothing else: a record with a "
+                "document and no verdict is an ordinary pending brief. One live row is "
+                "unreadable; the previous reading put 36 there, 35 of which had a body "
+                "all along."
             ),
         },
         "fields": FIELDS_SCHEMA,
@@ -501,10 +547,11 @@ BRIEF_RECORD_SCHEMA: Schema = {
         "redundant_artifacts": {"type": "array", "items": REDUNDANT_ARTIFACT_SCHEMA},
         "source": {
             "type": "string",
-            "enum": ["bead", "manifest"],
+            "enum": ["bead", "manifest", "stack"],
             "description": (
-                "Which store this record came from. `manifest` means a decisions-track row "
-                "attested by nothing else -- no bead, no file."
+                "Which store this record came from. `manifest` means a decisions-track "
+                "row no bead attests; `stack` means a deposited brief file that neither a "
+                "bead nor a manifest row claims -- 41 live, previously read by nothing."
             ),
         },
         "status": nullable_string("Raw bead status, or the manifest row's status string."),
@@ -533,6 +580,14 @@ BRIEF_RECORD_SCHEMA: Schema = {
         "body": BODY_SCHEMA,
         "body_diagnostics": BODY_DIAGNOSTICS_SCHEMA,
         "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},
+        # Present exactly when this record carries document text, which is the
+        # bead-less populations. `body`, `body_path` and `sections` mirror
+        # `documents[0]`, so a caller that wants "the brief" is unaffected;
+        # `documents` is how the second copy of a brief becomes readable at
+        # all. Absent on a bead record rather than `[]`: the roster withholds
+        # bead bodies deliberately, and an empty array would report that the
+        # bead has no document rather than that none was fetched.
+        "documents": {"type": "array", "items": BRIEF_DOCUMENT_SCHEMA},
     },
 }
 
@@ -554,6 +609,7 @@ BRIEF_DETAIL_SCHEMA: Schema = {
         "body": BODY_SCHEMA,
         "body_diagnostics": BODY_DIAGNOSTICS_SCHEMA,
         "sections": {"type": "array", "items": BRIEF_SECTION_SCHEMA},
+        "documents": {"type": "array", "items": BRIEF_DOCUMENT_SCHEMA},
     },
 }
 

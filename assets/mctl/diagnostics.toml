@@ -225,7 +225,7 @@ module = "manifest.py"
 
 [MBRF063]
 severity = "WARN"
-meaning = "Decisions-track row has no brief body file, so what it said cannot be shown. This, and only this, is what `unreadable` means."
+meaning = "Decisions-track row has no brief document in either lane -- neither beside the manifest nor in the stack -- so what it said cannot be shown. This, and only this, is what `unreadable` means."
 policy_ref = "B2.10"
 module = "manifest.py"
 
@@ -246,6 +246,18 @@ severity = "WARN"
 meaning = "More than one brief body file normalises to the same slug; the sorted-first file was used."
 policy_ref = "B2.10"
 module = "manifest.py"
+
+# MBRF067 belongs to the stack read (stack.py). The stack used to be opened
+# only to decide which manifest rows to throw away, which made 87 of 89 live
+# stack documents reachable by no surface at all. It is now a population of its
+# own, and WARN for the same reason as its siblings: a file it cannot decode
+# costs that brief's visibility and must not take down the listing.
+
+[MBRF067]
+severity = "WARN"
+meaning = "Stack brief file could not be read, so the brief it holds cannot be shown."
+policy_ref = "B2.10"
+module = "stack.py"
 
 [MCTL_BEAD_UPDATE_RACE_LOST]
 severity = "FATAL"

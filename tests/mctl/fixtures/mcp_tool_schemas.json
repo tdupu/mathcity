@@ -2294,7 +2294,7 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, a decisions-track manifest row that no bead represents, or a stack file that neither a bead nor a manifest row claims. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 203 of 204 live rows carry the markdown file sitting beside the manifest, and `body_path` names it -- and 46 of them carry a stack copy as well, in `documents`.",
             "properties": {
               "bead_id": {
                 "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
@@ -2436,7 +2436,7 @@
                 "type": "array"
               },
               "body_path": {
-                "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
+                "description": "The markdown file behind this record -- `documents[0].path` where there are documents. On a bead-less record null is exactly the `unreadable` lane: no file in either directory. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
                   "string",
                   "null"
@@ -2446,10 +2446,11 @@
                 "type": "string"
               },
               "canonical_source": {
-                "description": "Which store is authoritative for this record.",
+                "description": "Which store is authoritative for this record. `brief_stack` is the weakest of the three: the deposited file is the only record of that brief anywhere -- no bead attests it and no manifest row tracks it.",
                 "enum": [
                   "bead_store",
-                  "decisions_track_manifest"
+                  "decisions_track_manifest",
+                  "brief_stack"
                 ],
                 "type": "string"
               },
@@ -2461,8 +2462,107 @@
                 ]
               },
               "decision_state": {
-                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
+                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a bead-less record. `unreadable` means no readable document exists in any lane, and nothing else: a record with a document and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
+              },
+              "documents": {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One markdown document behind a brief, and the lane it came from.",
+                  "properties": {
+                    "body": {
+                      "description": "The document's text verbatim. Null means the file could not be read; empty string means it was read and is empty.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lane": {
+                      "description": "Which directory the document was read from. Stated rather than left to be pattern-matched out of `path`.",
+                      "enum": [
+                        "decisions_track",
+                        "stack"
+                      ],
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "sections": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One markdown section of a brief body, already parsed.",
+                        "properties": {
+                          "body": {
+                            "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
+                            "type": "string"
+                          },
+                          "end_line": {
+                            "description": "1-based last line of the section.",
+                            "type": "integer"
+                          },
+                          "heading": {
+                            "description": "Heading text as the brief wrote it.",
+                            "type": "string"
+                          },
+                          "level": {
+                            "description": "Markdown heading depth, 1-6.",
+                            "type": "integer"
+                          },
+                          "match": {
+                            "description": "How section_index was decided: an explicit \u00a7N marker, a recognised heading name, or nothing matched.",
+                            "enum": [
+                              "explicit",
+                              "heading",
+                              "unmapped"
+                            ],
+                            "type": "string"
+                          },
+                          "section_index": {
+                            "description": "present-it section 1-7, or null when the heading names none.",
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "section_key": {
+                            "description": "Stable key for section_index, e.g. what_is_being_decided.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "start_line": {
+                            "description": "1-based line of the heading.",
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "body",
+                          "end_line",
+                          "heading",
+                          "level",
+                          "match",
+                          "section_index",
+                          "section_key",
+                          "start_line"
+                        ],
+                        "title": "BriefSection",
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "body",
+                    "lane",
+                    "path",
+                    "sections"
+                  ],
+                  "title": "BriefDocument",
+                  "type": "object"
+                },
+                "type": "array"
               },
               "fields": {
                 "additionalProperties": {
@@ -2493,11 +2593,12 @@
                             "type": "string"
                           },
                           "source": {
-                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the header of the brief file beside the manifest, `stack_frontmatter` the same key in the stack copy of the same brief. The last two are kept apart because the two copies disagree -- `form` 13 times live, mostly where a shape repair rewrote one lane only. A surface must be able to render which is which rather than flatten them.",
                             "enum": [
                               "bead",
                               "manifest_row",
-                              "frontmatter"
+                              "frontmatter",
+                              "stack_frontmatter"
                             ],
                             "type": "string"
                           },
@@ -2522,7 +2623,8 @@
                       "enum": [
                         "bead",
                         "manifest_row",
-                        "frontmatter"
+                        "frontmatter",
+                        "stack_frontmatter"
                       ],
                       "type": "string"
                     },
@@ -2682,10 +2784,11 @@
                 "type": "array"
               },
               "source": {
-                "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+                "description": "Which store this record came from. `manifest` means a decisions-track row no bead attests; `stack` means a deposited brief file that neither a bead nor a manifest row claims -- 41 live, previously read by nothing.",
                 "enum": [
                   "bead",
-                  "manifest"
+                  "manifest",
+                  "stack"
                 ],
                 "type": "string"
               },
@@ -3092,7 +3195,7 @@
     "title": "Report brief invariant violations"
   },
   "briefs_list": {
-    "description": "List briefs from both stores: canonical decision brief beads, plus decisions-track manifest rows that no bead and no stack file represents. Every record names its `source` (`bead` or `manifest`); a manifest row is attested by no bead, and carries the markdown body sitting beside the manifest -- 157 of 158 live rows have one. `unreadable` means that file does not exist, and nothing else; a row with a body and no verdict is an ordinary `pending` brief. `fields` carries unlock_count, priority, track, form, gates and verdict, each naming the store it was read from, with `conflict` set where a bead and a document disagree. Optionally filtered by status or label.",
+    "description": "List briefs from all three stores: canonical decision brief beads, every decisions-track manifest row, and the stack files that neither a bead nor a manifest row claims. Every record names its `source` (`bead`, `manifest` or `stack`); a manifest row is attested by no bead and a stack record by neither. A manifest row carries the markdown body sitting beside the manifest -- 203 of 204 live rows have one -- and, where the pipeline also deposited it, the stack copy; `documents` lists each with its lane, because the two copies differ on 19 of 46 live pairs. `unreadable` means no document exists in any lane, and nothing else; a record with a document and no verdict is an ordinary `pending` brief. `fields` carries unlock_count, priority, track, form, gates and verdict, each naming the store it was read from, with `conflict` set where two stores disagree. Optionally filtered by status or label.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,
@@ -3194,7 +3297,7 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, a decisions-track manifest row that no bead represents, or a stack file that neither a bead nor a manifest row claims. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 203 of 204 live rows carry the markdown file sitting beside the manifest, and `body_path` names it -- and 46 of them carry a stack copy as well, in `documents`.",
             "properties": {
               "bead_id": {
                 "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
@@ -3336,7 +3439,7 @@
                 "type": "array"
               },
               "body_path": {
-                "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
+                "description": "The markdown file behind this record -- `documents[0].path` where there are documents. On a bead-less record null is exactly the `unreadable` lane: no file in either directory. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
                   "string",
                   "null"
@@ -3346,10 +3449,11 @@
                 "type": "string"
               },
               "canonical_source": {
-                "description": "Which store is authoritative for this record.",
+                "description": "Which store is authoritative for this record. `brief_stack` is the weakest of the three: the deposited file is the only record of that brief anywhere -- no bead attests it and no manifest row tracks it.",
                 "enum": [
                   "bead_store",
-                  "decisions_track_manifest"
+                  "decisions_track_manifest",
+                  "brief_stack"
                 ],
                 "type": "string"
               },
@@ -3361,8 +3465,107 @@
                 ]
               },
               "decision_state": {
-                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
+                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a bead-less record. `unreadable` means no readable document exists in any lane, and nothing else: a record with a document and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
+              },
+              "documents": {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One markdown document behind a brief, and the lane it came from.",
+                  "properties": {
+                    "body": {
+                      "description": "The document's text verbatim. Null means the file could not be read; empty string means it was read and is empty.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lane": {
+                      "description": "Which directory the document was read from. Stated rather than left to be pattern-matched out of `path`.",
+                      "enum": [
+                        "decisions_track",
+                        "stack"
+                      ],
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "sections": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One markdown section of a brief body, already parsed.",
+                        "properties": {
+                          "body": {
+                            "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
+                            "type": "string"
+                          },
+                          "end_line": {
+                            "description": "1-based last line of the section.",
+                            "type": "integer"
+                          },
+                          "heading": {
+                            "description": "Heading text as the brief wrote it.",
+                            "type": "string"
+                          },
+                          "level": {
+                            "description": "Markdown heading depth, 1-6.",
+                            "type": "integer"
+                          },
+                          "match": {
+                            "description": "How section_index was decided: an explicit \u00a7N marker, a recognised heading name, or nothing matched.",
+                            "enum": [
+                              "explicit",
+                              "heading",
+                              "unmapped"
+                            ],
+                            "type": "string"
+                          },
+                          "section_index": {
+                            "description": "present-it section 1-7, or null when the heading names none.",
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "section_key": {
+                            "description": "Stable key for section_index, e.g. what_is_being_decided.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "start_line": {
+                            "description": "1-based line of the heading.",
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "body",
+                          "end_line",
+                          "heading",
+                          "level",
+                          "match",
+                          "section_index",
+                          "section_key",
+                          "start_line"
+                        ],
+                        "title": "BriefSection",
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "body",
+                    "lane",
+                    "path",
+                    "sections"
+                  ],
+                  "title": "BriefDocument",
+                  "type": "object"
+                },
+                "type": "array"
               },
               "fields": {
                 "additionalProperties": {
@@ -3393,11 +3596,12 @@
                             "type": "string"
                           },
                           "source": {
-                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the header of the brief file beside the manifest, `stack_frontmatter` the same key in the stack copy of the same brief. The last two are kept apart because the two copies disagree -- `form` 13 times live, mostly where a shape repair rewrote one lane only. A surface must be able to render which is which rather than flatten them.",
                             "enum": [
                               "bead",
                               "manifest_row",
-                              "frontmatter"
+                              "frontmatter",
+                              "stack_frontmatter"
                             ],
                             "type": "string"
                           },
@@ -3422,7 +3626,8 @@
                       "enum": [
                         "bead",
                         "manifest_row",
-                        "frontmatter"
+                        "frontmatter",
+                        "stack_frontmatter"
                       ],
                       "type": "string"
                     },
@@ -3582,10 +3787,11 @@
                 "type": "array"
               },
               "source": {
-                "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+                "description": "Which store this record came from. `manifest` means a decisions-track row no bead attests; `stack` means a deposited brief file that neither a bead nor a manifest row claims -- 41 live, previously read by nothing.",
                 "enum": [
                   "bead",
-                  "manifest"
+                  "manifest",
+                  "stack"
                 ],
                 "type": "string"
               },
@@ -4406,7 +4612,7 @@
               "type": "array"
             },
             "body_path": {
-              "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
+              "description": "The markdown file behind this record -- `documents[0].path` where there are documents. On a bead-less record null is exactly the `unreadable` lane: no file in either directory. On a bead record it names the cache a frontmatter-sourced field was read from.",
               "type": [
                 "string",
                 "null"
@@ -4416,10 +4622,11 @@
               "type": "string"
             },
             "canonical_source": {
-              "description": "Which store is authoritative for this record.",
+              "description": "Which store is authoritative for this record. `brief_stack` is the weakest of the three: the deposited file is the only record of that brief anywhere -- no bead attests it and no manifest row tracks it.",
               "enum": [
                 "bead_store",
-                "decisions_track_manifest"
+                "decisions_track_manifest",
+                "brief_stack"
               ],
               "type": "string"
             },
@@ -4431,8 +4638,107 @@
               ]
             },
             "decision_state": {
-              "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
+              "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a bead-less record. `unreadable` means no readable document exists in any lane, and nothing else: a record with a document and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
               "type": "string"
+            },
+            "documents": {
+              "items": {
+                "additionalProperties": false,
+                "description": "One markdown document behind a brief, and the lane it came from.",
+                "properties": {
+                  "body": {
+                    "description": "The document's text verbatim. Null means the file could not be read; empty string means it was read and is empty.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lane": {
+                    "description": "Which directory the document was read from. Stated rather than left to be pattern-matched out of `path`.",
+                    "enum": [
+                      "decisions_track",
+                      "stack"
+                    ],
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "sections": {
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "One markdown section of a brief body, already parsed.",
+                      "properties": {
+                        "body": {
+                          "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
+                          "type": "string"
+                        },
+                        "end_line": {
+                          "description": "1-based last line of the section.",
+                          "type": "integer"
+                        },
+                        "heading": {
+                          "description": "Heading text as the brief wrote it.",
+                          "type": "string"
+                        },
+                        "level": {
+                          "description": "Markdown heading depth, 1-6.",
+                          "type": "integer"
+                        },
+                        "match": {
+                          "description": "How section_index was decided: an explicit \u00a7N marker, a recognised heading name, or nothing matched.",
+                          "enum": [
+                            "explicit",
+                            "heading",
+                            "unmapped"
+                          ],
+                          "type": "string"
+                        },
+                        "section_index": {
+                          "description": "present-it section 1-7, or null when the heading names none.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "section_key": {
+                          "description": "Stable key for section_index, e.g. what_is_being_decided.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "start_line": {
+                          "description": "1-based line of the heading.",
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "body",
+                        "end_line",
+                        "heading",
+                        "level",
+                        "match",
+                        "section_index",
+                        "section_key",
+                        "start_line"
+                      ],
+                      "title": "BriefSection",
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "body",
+                  "lane",
+                  "path",
+                  "sections"
+                ],
+                "title": "BriefDocument",
+                "type": "object"
+              },
+              "type": "array"
             },
             "fields": {
               "additionalProperties": {
@@ -4463,11 +4769,12 @@
                           "type": "string"
                         },
                         "source": {
-                          "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                          "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the header of the brief file beside the manifest, `stack_frontmatter` the same key in the stack copy of the same brief. The last two are kept apart because the two copies disagree -- `form` 13 times live, mostly where a shape repair rewrote one lane only. A surface must be able to render which is which rather than flatten them.",
                           "enum": [
                             "bead",
                             "manifest_row",
-                            "frontmatter"
+                            "frontmatter",
+                            "stack_frontmatter"
                           ],
                           "type": "string"
                         },
@@ -4492,7 +4799,8 @@
                     "enum": [
                       "bead",
                       "manifest_row",
-                      "frontmatter"
+                      "frontmatter",
+                      "stack_frontmatter"
                     ],
                     "type": "string"
                   },
@@ -4652,10 +4960,11 @@
               "type": "array"
             },
             "source": {
-              "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+              "description": "Which store this record came from. `manifest` means a decisions-track row no bead attests; `stack` means a deposited brief file that neither a bead nor a manifest row claims -- 41 live, previously read by nothing.",
               "enum": [
                 "bead",
-                "manifest"
+                "manifest",
+                "stack"
               ],
               "type": "string"
             },
@@ -5276,7 +5585,7 @@
         },
         "briefs": {
           "items": {
-            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, or a decisions-track manifest row that no bead represents. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 157 of 158 live rows carry the markdown file sitting beside the manifest, and `body_path` names it.",
+            "description": "One brief, from whichever store holds it: a decision bead with its redundant cache artifacts, a decisions-track manifest row that no bead represents, or a stack file that neither a bead nor a manifest row claims. `source` says which, and must be read before the record is trusted as attested. A manifest row is not bodiless -- 203 of 204 live rows carry the markdown file sitting beside the manifest, and `body_path` names it -- and 46 of them carry a stack copy as well, in `documents`.",
             "properties": {
               "bead_id": {
                 "description": "The canonical decision bead. Null on a manifest-sourced record: there is no bead.",
@@ -5418,7 +5727,7 @@
                 "type": "array"
               },
               "body_path": {
-                "description": "The markdown file behind this record. On a manifest record null is exactly the `unreadable` lane -- no file exists. On a bead record it names the cache a frontmatter-sourced field was read from.",
+                "description": "The markdown file behind this record -- `documents[0].path` where there are documents. On a bead-less record null is exactly the `unreadable` lane: no file in either directory. On a bead record it names the cache a frontmatter-sourced field was read from.",
                 "type": [
                   "string",
                   "null"
@@ -5428,10 +5737,11 @@
                 "type": "string"
               },
               "canonical_source": {
-                "description": "Which store is authoritative for this record.",
+                "description": "Which store is authoritative for this record. `brief_stack` is the weakest of the three: the deposited file is the only record of that brief anywhere -- no bead attests it and no manifest row tracks it.",
                 "enum": [
                   "bead_store",
-                  "decisions_track_manifest"
+                  "decisions_track_manifest",
+                  "brief_stack"
                 ],
                 "type": "string"
               },
@@ -5443,8 +5753,107 @@
                 ]
               },
               "decision_state": {
-                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a manifest row. `unreadable` means no brief body file exists for the row, and nothing else: a row with a body and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
+                "description": "adjudicated / deferred / pending / malformed for a bead; adjudicated, pending or `unreadable` for a bead-less record. `unreadable` means no readable document exists in any lane, and nothing else: a record with a document and no verdict is an ordinary pending brief. One live row is unreadable; the previous reading put 36 there, 35 of which had a body all along.",
                 "type": "string"
+              },
+              "documents": {
+                "items": {
+                  "additionalProperties": false,
+                  "description": "One markdown document behind a brief, and the lane it came from.",
+                  "properties": {
+                    "body": {
+                      "description": "The document's text verbatim. Null means the file could not be read; empty string means it was read and is empty.",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lane": {
+                      "description": "Which directory the document was read from. Stated rather than left to be pattern-matched out of `path`.",
+                      "enum": [
+                        "decisions_track",
+                        "stack"
+                      ],
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "sections": {
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "One markdown section of a brief body, already parsed.",
+                        "properties": {
+                          "body": {
+                            "description": "Section text, running to the next heading at the same or a shallower level, so a section keeps its own subsections.",
+                            "type": "string"
+                          },
+                          "end_line": {
+                            "description": "1-based last line of the section.",
+                            "type": "integer"
+                          },
+                          "heading": {
+                            "description": "Heading text as the brief wrote it.",
+                            "type": "string"
+                          },
+                          "level": {
+                            "description": "Markdown heading depth, 1-6.",
+                            "type": "integer"
+                          },
+                          "match": {
+                            "description": "How section_index was decided: an explicit \u00a7N marker, a recognised heading name, or nothing matched.",
+                            "enum": [
+                              "explicit",
+                              "heading",
+                              "unmapped"
+                            ],
+                            "type": "string"
+                          },
+                          "section_index": {
+                            "description": "present-it section 1-7, or null when the heading names none.",
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "section_key": {
+                            "description": "Stable key for section_index, e.g. what_is_being_decided.",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "start_line": {
+                            "description": "1-based line of the heading.",
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "body",
+                          "end_line",
+                          "heading",
+                          "level",
+                          "match",
+                          "section_index",
+                          "section_key",
+                          "start_line"
+                        ],
+                        "title": "BriefSection",
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "body",
+                    "lane",
+                    "path",
+                    "sections"
+                  ],
+                  "title": "BriefDocument",
+                  "type": "object"
+                },
+                "type": "array"
               },
               "fields": {
                 "additionalProperties": {
@@ -5475,11 +5884,12 @@
                             "type": "string"
                           },
                           "source": {
-                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the brief markdown file's own header. A surface must be able to render which is which rather than flatten them.",
+                            "description": "`bead` is a canonical bd column, `manifest_row` a key on a decisions-track row, `frontmatter` a key in the header of the brief file beside the manifest, `stack_frontmatter` the same key in the stack copy of the same brief. The last two are kept apart because the two copies disagree -- `form` 13 times live, mostly where a shape repair rewrote one lane only. A surface must be able to render which is which rather than flatten them.",
                             "enum": [
                               "bead",
                               "manifest_row",
-                              "frontmatter"
+                              "frontmatter",
+                              "stack_frontmatter"
                             ],
                             "type": "string"
                           },
@@ -5504,7 +5914,8 @@
                       "enum": [
                         "bead",
                         "manifest_row",
-                        "frontmatter"
+                        "frontmatter",
+                        "stack_frontmatter"
                       ],
                       "type": "string"
                     },
@@ -5664,10 +6075,11 @@
                 "type": "array"
               },
               "source": {
-                "description": "Which store this record came from. `manifest` means a decisions-track row attested by nothing else -- no bead, no file.",
+                "description": "Which store this record came from. `manifest` means a decisions-track row no bead attests; `stack` means a deposited brief file that neither a bead nor a manifest row claims -- 41 live, previously read by nothing.",
                 "enum": [
                   "bead",
-                  "manifest"
+                  "manifest",
+                  "stack"
                 ],
                 "type": "string"
               },

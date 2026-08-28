@@ -8,7 +8,7 @@ the three have readers. The third did not, and it is not small:
 population                                    n   reachable before this
 =========================================  =====  ==========================
 manifest rows                                204  as a migration blocker only
-… whose slug matches a stack file              46  yes, through the file
+… whose slug matches a stack file              46  **no -- see the join below**
 … whose slug matches an archived file           0  --
 … matching neither                            158  **nothing could read them**
 =========================================  =====  ==========================
@@ -79,8 +79,10 @@ So the lanes are:
     anywhere shows what it said. One live row (``he-rg5r-cascade-close``) is
     in this lane, and it is a hole in the corpus rather than in the reader.
 
-Of the 158 rows this module emits, that is 125 adjudicated, 32 pending and 1
-unreadable, against Slice 6's 122 / 0 / 36.
+Of the 158 rows this module emitted before the stack join, that was 125
+adjudicated, 32 pending and 1 unreadable, against Slice 6's 122 / 0 / 36. With
+all 204 emitted it is 133 / 70 / 1, measured 2026-08-20 -- the one unreadable
+row is still ``he-rg5r-cascade-close``, and it has no stack file either.
 
 ## Matching a row to its body, and the bug not to write a third time
 
@@ -115,19 +117,67 @@ than "this brief was never stored here" -- and a row with none of the five
 date keys reports ``None`` rather than a synthesised timestamp. 60 rows would
 otherwise render a fabricated Age.
 
-## Deduplication
+## The stack join, and the dedup it replaces
 
-46 rows are already represented by a stack file, and emitting them again would
-double-count a brief that has always been visible. They are matched by the
-normalisation the measurement used -- stack filename stem, leading `NNN-`
-prefix stripped, trailing `-brief` stripped -- and suppressed. The comparison
-is against the stack directory rather than the stack index, because the index
-is itself a cache that can be stale, and a stale index would resurrect a
-duplicate.
+This module used to **suppress** every row whose slug matched a stack file --
+46 of the 204 -- on the stated grounds that such a brief "has always been
+visible" through the stack file. Measured 2026-08-20, that premise is false in
+the most direct way available: *nothing reads stack files as records.*
 
-The join to *beads* is deliberately not attempted here: `verdicts` measured it
-at 0 of 126 rows by any principled key, and a join that yields nothing is a
-per-call cost that buys nothing.
+============================================================  ====
+check                                                            n
+============================================================  ====
+suppressed slugs appearing in ``mctl briefs list --all-rigs``    0
+stack filename stems appearing as a ``brief_id``                 0
+stack files any surface could reach                              2
+============================================================  ====
+
+`list_briefs` reads beads and it reads this manifest. The only reader that
+opens the stack directory at all is `briefs._cached_brief_document`, and it
+keys on a **bead id**, globbing `<bead-id>-*.md`; no stack filename stem is a
+bead id, and exactly two files match the prefix form. So suppression did not
+remove a duplicate. It removed the only record of 46 briefs, and left the
+documents behind them unreachable -- with the 43 stack files that have no
+manifest row at all, 87 of the 89 live stack documents reached no surface.
+
+So the rule becomes a **join**: a row whose slug matches a stack file keeps
+its record and gains that file, under `stack_path`, `stack_body` and
+`stack_frontmatter`. The emitted population goes from 158 back to all 204.
+
+Matching uses the same anchored `normalize_stem` the body join uses, against
+the stack *directory* rather than the stack index -- the index is a cache that
+can be stale, and a stale index would join a brief to the wrong file or to
+none.
+
+**Both documents are kept, and neither is resolved into the other.** All 46
+joined rows have a decisions-track file as well as a stack file; 19 of the two
+copies differ, and their frontmatter disagrees on `form` 13 times, `status` 5
+and `artifact` once. The stack copy was the newer text in 14 of the 15 pairs
+whose difference was measurable that way, and 18 of the disagreements are the
+shape-repair pass rewriting `form: compact` to `form: full` in the stack copy
+only. Picking a winner would delete the fact that the pipeline's two copies of
+a brief have drifted apart -- which is the finding, not the noise.
+
+`body`/`body_path` therefore keep meaning exactly what they meant: the
+document beside the manifest, matching this record's `canonical_source`. The
+stack file is carried under its own names rather than promoted, because a
+`body_path` that meant one lane for 158 records and another for 46 would be
+the second resolution rule this codebase keeps having to delete.
+
+The stack files with **no** manifest row are not this module's population;
+`stack.py` reads those.
+
+The join to *beads* is deliberately still not attempted here: `verdicts`
+measured it at 0 of 126 rows by any principled key, and a join that yields
+nothing is a per-call cost that buys nothing.
+
+## A live count is not a test
+
+Every number above is a measurement, not an invariant. The stack drained from
+89 files to 54 during the session that wrote this module, taking the joined
+count from 46 to 38 and the stack-only count from 43 to 16. The counts are
+recorded so the reasoning can be checked; the tests pin the *arithmetic*
+instead -- see `test_manifest_source.py`, which says why.
 
 ## Tolerant reads, and how that differs from the legacy gate
 
@@ -146,7 +196,7 @@ from pathlib import Path
 from types import MappingProxyType
 import json
 import re
-from typing import Iterable, Mapping
+from typing import Mapping
 
 from . import fields as field_provenance
 from .fields import FieldReading
@@ -171,14 +221,21 @@ CANONICAL_SOURCE_BEAD = "bead_store"
 CANONICAL_SOURCE_MANIFEST = "decisions_track_manifest"
 CANONICAL_SOURCES = (CANONICAL_SOURCE_BEAD, CANONICAL_SOURCE_MANIFEST)
 
+#: Which directory a brief document was read from. Reported per document so a
+#: reader never has to infer the lane from the path -- and so the two copies of
+#: a joined brief are told apart by name rather than by string-matching a path.
+LANE_DECISIONS_TRACK = "decisions_track"
+LANE_STACK = "stack"
+LANES = (LANE_DECISIONS_TRACK, LANE_STACK)
+
 #: The lane a manifest row lands in. `adjudicated` and `pending` are the same
 #: words the bead population uses and mean the same things -- a verdict can be
 #: read, or the brief is still waiting for one.
 STATE_ADJUDICATED = "adjudicated"
 STATE_PENDING = "pending"
-#: No body file exists anywhere for this row: the brief was tracked and what it
-#: said is not recoverable. Slice 6 used this word for "the row has no verdict",
-#: which was wrong for 35 of the 36 rows it applied to.
+#: No document exists in either lane for this row: the brief was tracked and
+#: what it said is not recoverable. Slice 6 used this word for "the row has no
+#: verdict", which was wrong for 35 of the 36 rows it applied to.
 STATE_UNREADABLE = "unreadable"
 
 #: Registered in assets/mctl/diagnostics.toml.
@@ -195,6 +252,10 @@ CODE_BODY_AMBIGUOUS = "MBRF066"
 VERDICT_FIELD = "decisions-track/manifest.jsonl:verdict"
 #: Where a verdict read out of the body file's own frontmatter came from.
 FRONTMATTER_VERDICT_FIELD = "frontmatter.verdict"
+#: Same, for the stack copy of the same brief. Named separately because the two
+#: documents disagree, and "the presented copy records a verdict" is a
+#: different claim from "the archived copy does".
+STACK_FRONTMATTER_VERDICT_FIELD = "stack.frontmatter.verdict"
 
 #: Row keys carrying a field the body file's frontmatter also declares, and the
 #: name each is exposed under. Read from both, kept as two readings when they
@@ -282,19 +343,50 @@ class ManifestRecord:
     #: The body file's frontmatter block, as written. Empty when the file has
     #: none; `MBRF065` says which of the two happened.
     frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER
-    #: Every field the row and its file declare, each naming where it was read
-    #: and flagging where the two disagree.
+    #: The stack file that also represents this brief, or None. This is the
+    #: document the dedup used to suppress the whole row over; it is a second
+    #: account of the same brief, never a second brief.
+    stack_path: Path | None = None
+    #: That file's text, verbatim, with the same `None` versus `""` distinction
+    #: `body` makes. Carried rather than merely named: 19 of the 46 joined
+    #: copies differ from the decisions-track copy, and a path a reader cannot
+    #: open is the state this slice exists to end.
+    stack_body: str | None = None
+    #: The stack file's own frontmatter. Read separately from `frontmatter`
+    #: because the two documents disagree -- `form` 13 times live -- and the
+    #: disagreement is the finding.
+    stack_frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER
+    #: Every field the row and both its files declare, each naming where it was
+    #: read and flagging where they disagree.
     fields: tuple[FieldReading, ...] = ()
+
+    @property
+    def documents(self) -> tuple[tuple[str, Path, str | None, Mapping[str, str]], ...]:
+        """Every markdown document behind this row, in authority order.
+
+        Decisions-track first: it is the document beside the manifest, and the
+        manifest is this record's `canonical_source`. The stack copy follows.
+        A row can have either, both, or neither; `unreadable` is neither.
+        """
+        found = []
+        if self.body_path is not None:
+            found.append((LANE_DECISIONS_TRACK, self.body_path, self.body, self.frontmatter))
+        if self.stack_path is not None:
+            found.append((LANE_STACK, self.stack_path, self.stack_body, self.stack_frontmatter))
+        return tuple(found)
 
     @property
     def decision_state(self) -> str:
         """Which lane this row is in -- see the module docstring.
 
-        `unreadable` is about the *body*, not the verdict. A row with a body
-        and no verdict is an ordinary undecided brief and goes in `pending`,
-        which is where a human will find it.
+        `unreadable` is about the *documents*, not the verdict. A row with a
+        document and no verdict is an ordinary undecided brief and goes in
+        `pending`, which is where a human will find it. A row whose only
+        document is its stack file is readable, and reporting it as
+        `unreadable` because the decisions-track copy is missing would repeat
+        Slice 6's mistake against a different directory.
         """
-        if self.body_path is None:
+        if not self.documents:
             return STATE_UNREADABLE
         return STATE_ADJUDICATED if self.verdict is not None else STATE_PENDING
 
@@ -306,6 +398,7 @@ class ManifestRecord:
             "line": self.line,
             "slug": self.slug,
             "source": self.source,
+            "stack_path": str(self.stack_path) if self.stack_path is not None else None,
             "status": self.status,
             "timestamp": self.timestamp,
             "timestamp_field": self.timestamp_field,
@@ -320,12 +413,26 @@ class ManifestReading:
 
     path: Path
     records: tuple[ManifestRecord, ...]
-    #: Slugs suppressed because a stack file already represents them. Kept so
-    #: `197 + 158 = 355` can be checked against `46 suppressed of 204 rows`
-    #: rather than asserted.
-    represented: tuple[str, ...]
+    #: Slugs that resolved to a stack file and now carry it. These used to be
+    #: the *suppressed* slugs, and the field is kept -- under a name that says
+    #: what happens to them now -- so a caller can still check the arithmetic
+    #: rather than assert it: every row is emitted, and this says how many of
+    #: them gained a second document.
+    joined: tuple[str, ...]
     rows_read: int
     issues: tuple[ManifestIssue, ...] = ()
+
+    @property
+    def stack_paths(self) -> frozenset[Path]:
+        """Stack files these records already carry.
+
+        `stack.py` reads the stack files *no* row claims, and takes this set to
+        know which those are -- rather than recomputing the join and risking
+        the two readers disagreeing about which file belongs to whom.
+        """
+        return frozenset(
+            record.stack_path for record in self.records if record.stack_path is not None
+        )
 
     @property
     def state_counts(self) -> dict[str, int]:
@@ -346,18 +453,19 @@ def normalize_stem(stem: str) -> str:
     return _BRIEF_SUFFIX.sub("", _ORDER_PREFIX.sub("", stem))
 
 
-def represented_slugs(stack_dir: Path) -> frozenset[str]:
-    """Slugs a stack file already presents, normalised for comparison.
+def stack_index(stack_dir: Path) -> tuple[dict[str, Path], tuple[ManifestIssue, ...]]:
+    """Every stack `*.md`, keyed by the slug a manifest row would carry.
+
+    The same `body_index` the decisions-track join uses, pointed at the other
+    directory. One normalisation rule and one collision report for both lanes:
+    two readers disagreeing about which file is which brief is the defect this
+    module has already had to fix twice.
 
     Only `*.md` counts. The stack also holds `.index.jsonl`, its `.bak-*`
-    snapshots, and `*.md.bak*` copies; treating a backup as a representation
-    would silence a row because somebody once saved a file.
+    snapshots, and `*.md.bak*` copies; joining a row to a backup would attach
+    a brief to a file somebody once saved rather than to what it presents.
     """
-    try:
-        entries = tuple(stack_dir.glob("*.md"))
-    except OSError:
-        return frozenset()
-    return frozenset(normalize_stem(path.stem) for path in entries)
+    return body_index(stack_dir)
 
 
 def body_index(directory: Path) -> tuple[dict[str, Path], tuple[ManifestIssue, ...]]:
@@ -388,7 +496,10 @@ def body_index(directory: Path) -> tuple[dict[str, Path], tuple[ManifestIssue, .
         ManifestIssue(
             CODE_BODY_AMBIGUOUS,
             "More than one brief body file normalises to the same slug; the first was used.",
-            detail=f"slug={slug} files=" + ", ".join(item.name for item in paths),
+            detail=(
+                f"slug={slug} dir={directory} files="
+                + ", ".join(item.name for item in paths)
+            ),
         )
         for slug, paths in sorted(collisions.items())
     )
@@ -433,25 +544,33 @@ def read_body(path: Path) -> tuple[str | None, Mapping[str, str], tuple[Manifest
 
 
 def read_manifest(
-    path: Path, *, represented: Iterable[str] = (), bodies: Path | None = None
+    path: Path, *, stack: Path | None = None, bodies: Path | None = None
 ) -> ManifestReading:
-    """Read the manifest at `path`, minus rows `represented` already covers.
+    """Read the manifest at `path`, joining each row to whatever documents it has.
+
+    Every row is emitted. `stack` names the directory whose files used to
+    *suppress* a row; a match there is now attached to the record instead of
+    replacing it, because nothing reads a stack file as a record and the
+    suppression made 46 briefs unreachable rather than deduplicating them.
 
     Never raises. A missing manifest is the normal case for most rigs -- only
     the HQ store has one -- and an unreadable one must not take down a brief
     listing, so both report an issue and return no records.
     """
     path = Path(path)
-    covered = frozenset(represented)
     if not path.is_file():
         return ManifestReading(path, (), (), 0)
 
     body_dir = path.parent if bodies is None else Path(bodies)
     index, issues_from_index = body_index(body_dir)
+    stack_files: dict[str, Path] = {}
+    stack_issues: tuple[ManifestIssue, ...] = ()
+    if stack is not None:
+        stack_files, stack_issues = stack_index(Path(stack))
 
     records: list[ManifestRecord] = []
-    suppressed: list[str] = []
-    issues: list[ManifestIssue] = list(issues_from_index)
+    joined: list[str] = []
+    issues: list[ManifestIssue] = list(issues_from_index) + list(stack_issues)
     rows_read = 0
     try:
         text = path.read_text(encoding="utf-8")
@@ -510,68 +629,96 @@ def read_manifest(
                 )
             )
             continue
-        if slug in covered:
-            suppressed.append(slug)
-            continue
-        record, row_issues = _record(parsed, slug, line_number, index.get(slug))
+        stack_path = stack_files.get(slug)
+        if stack_path is not None:
+            joined.append(slug)
+        record, row_issues = _record(parsed, slug, line_number, index.get(slug), stack_path)
         issues.extend(row_issues)
         records.append(record)
-    return ManifestReading(path, tuple(records), tuple(suppressed), rows_read, tuple(issues))
+    return ManifestReading(path, tuple(records), tuple(joined), rows_read, tuple(issues))
 
 
 def manifest_records(manifest_path: Path, stack_dir: Path) -> ManifestReading:
-    """The manifest-only records for one rig: read, joined to bodies, deduped.
+    """Every decisions-track row for one rig, joined to every document it has.
 
     Bodies come from the manifest's own directory, because that is where they
     are: 204 `.md` files sit beside `manifest.jsonl`, and Slice 6 read the one
-    without ever listing the other.
+    without ever listing the other. Stack files come from `stack_dir`, which
+    the previous reading opened only to decide which rows to throw away.
     """
-    return read_manifest(manifest_path, represented=represented_slugs(stack_dir))
+    return read_manifest(manifest_path, stack=stack_dir)
 
 
 def _record(
-    row: Mapping[str, object], slug: str, line: int, body_path: Path | None
+    row: Mapping[str, object],
+    slug: str,
+    line: int,
+    body_path: Path | None,
+    stack_path: Path | None = None,
 ) -> tuple[ManifestRecord, tuple[ManifestIssue, ...]]:
     timestamp, timestamp_field = _timestamp(row)
-    if body_path is None:
-        body: str | None = None
-        frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER
-        issues: tuple[ManifestIssue, ...] = (
+    issues: tuple[ManifestIssue, ...] = ()
+    body: str | None = None
+    frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER
+    if body_path is not None:
+        body, frontmatter, issues = read_body(body_path)
+    stack_body: str | None = None
+    stack_frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER
+    if stack_path is not None:
+        stack_body, stack_frontmatter, stack_issues = read_body(stack_path)
+        issues = issues + stack_issues
+    if body_path is None and stack_path is None:
+        # No document in either lane. This -- and only this -- is `unreadable`:
+        # the row proves a brief was tracked and nothing anywhere says what it
+        # said. A row with only a stack file is readable, and reporting it here
+        # would be Slice 6's error aimed at the other directory.
+        issues = issues + (
             ManifestIssue(
                 CODE_ROW_HAS_NO_BODY,
-                "Decisions-track row has no brief body file, so what it said cannot be shown.",
+                "Decisions-track row has no brief document in either lane, "
+                "so what it said cannot be shown.",
                 line=line,
                 detail=f"slug={slug}",
             ),
         )
-    else:
-        body, frontmatter, issues = read_body(body_path)
-        issues = tuple(replace(issue, line=line) for issue in issues)
+    issues = tuple(replace(issue, line=line) for issue in issues)
     record = ManifestRecord(
         slug=slug,
         status=_text(row.get("status")),
-        verdict=_verdict(row, frontmatter),
-        track=_text(row.get("track")) or _text(frontmatter.get("track")),
+        verdict=_verdict(row, frontmatter, stack_frontmatter),
+        track=(
+            _text(row.get("track"))
+            or _text(frontmatter.get("track"))
+            or _text(stack_frontmatter.get("track"))
+        ),
         timestamp=timestamp,
         timestamp_field=timestamp_field,
         line=line,
         body_path=body_path,
         body=body,
         frontmatter=frontmatter,
-        fields=_fields(row, frontmatter),
+        stack_path=stack_path,
+        stack_body=stack_body,
+        stack_frontmatter=stack_frontmatter,
+        fields=_fields(row, frontmatter, stack_frontmatter),
     )
     return record, issues
 
 
 def _fields(
-    row: Mapping[str, object], frontmatter: Mapping[str, str]
+    row: Mapping[str, object],
+    frontmatter: Mapping[str, str],
+    stack_frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER,
 ) -> tuple[FieldReading, ...]:
-    """Every exposed field, read from the row first and the file second.
+    """Every exposed field, read from the row, then each document it has.
 
     Row first because the manifest is this record's `canonical_source`; the
-    file is the same brief's other account of itself. Both are kept, and a
-    disagreement is reported rather than resolved -- 17 live rows disagree
-    with their own body file, and that is a finding about the corpus.
+    decisions-track file next, because it is the document beside the manifest;
+    the stack copy last. All three are kept, and a disagreement is reported
+    rather than resolved -- 17 live rows disagree with their own body file, and
+    a further 19 stack copies disagree with the decisions-track copy, most of
+    them because the shape-repair pass rewrote `form` in one lane only. That is
+    a finding about the corpus, and collapsing it would delete the finding.
     """
     readings = []
     for name in ROW_FIELD_KEYS:
@@ -581,13 +728,18 @@ def _fields(
                 row, name, field=f"decisions-track/manifest.jsonl:{name}"
             ),
             field_provenance.frontmatter_value(frontmatter, name),
+            field_provenance.stack_frontmatter_value(stack_frontmatter, name),
         )
         if reading is not None:
             readings.append(reading)
     return tuple(readings)
 
 
-def _verdict(row: Mapping[str, object], frontmatter: Mapping[str, str]) -> Verdict | None:
+def _verdict(
+    row: Mapping[str, object],
+    frontmatter: Mapping[str, str],
+    stack_frontmatter: Mapping[str, str] = _EMPTY_FRONTMATTER,
+) -> Verdict | None:
     """The row's typed verdict, with its provenance, or None.
 
     Confidence is `high` -- the same grade `verdicts` gives a typed field on a
@@ -609,10 +761,22 @@ def _verdict(row: Mapping[str, object], frontmatter: Mapping[str, str]) -> Verdi
     # absent -- Slice 6 could not see those at all. The source says which
     # document attested it, so the two are never conflated.
     from_file = field_provenance.frontmatter_value(frontmatter, "verdict")
-    if from_file is None:
+    if from_file is not None:
+        return Verdict(
+            from_file.value, SOURCE_BRIEF_FRONTMATTER, CONFIDENCE_HIGH, FRONTMATTER_VERDICT_FIELD
+        )
+    # Failing both, the stack copy. It is a brief file like the other one, so
+    # the source is the same -- what changes is `field`, which names the lane,
+    # because a verdict recorded only in the presented copy and a verdict
+    # recorded only in the archived copy are different facts about a brief.
+    from_stack = field_provenance.stack_frontmatter_value(stack_frontmatter, "verdict")
+    if from_stack is None:
         return None
     return Verdict(
-        from_file.value, SOURCE_BRIEF_FRONTMATTER, CONFIDENCE_HIGH, FRONTMATTER_VERDICT_FIELD
+        from_stack.value,
+        SOURCE_BRIEF_FRONTMATTER,
+        CONFIDENCE_HIGH,
+        STACK_FRONTMATTER_VERDICT_FIELD,
     )
 
 

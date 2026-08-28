@@ -434,9 +434,7 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -
         # has, so the identity cell shows the slug and says outright that no
         # bead is behind it -- an empty cell would read as a lost bead id.
         identity = brief.get("bead_id") or brief.get("brief_id")
-        origin = (
-            "" if str(brief.get("source") or "bead") == "bead" else ' <span class="badge">manifest-only</span>'
-        )
+        origin = _origin_badge(str(brief.get("source") or "bead"))
         rows.append(
             "<tr>"
             + rig_cell
@@ -461,6 +459,21 @@ def brief_rows(briefs: Sequence[Mapping[str, Any]], *, show_rig: bool = False) -
     )
 
 
+#: The badge beside a record whose store is not the bead store. Each names what
+#: is *missing*, because a reader's default assumption is that a decision bead
+#: attests the row: `manifest-only` has no bead, `stack-only` has no bead and
+#: no manifest row either -- it is a file the pipeline deposited and nothing
+#: else ever recorded.
+_ORIGIN_BADGES = {
+    "manifest": ' <span class="badge">manifest-only</span>',
+    "stack": ' <span class="badge">stack-only</span>',
+}
+
+
+def _origin_badge(source: str) -> str:
+    return _ORIGIN_BADGES.get(source, "")
+
+
 def state_counts(briefs: Sequence[Mapping[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for brief in briefs:
@@ -483,7 +496,8 @@ def queue_panel(briefs: Sequence[Mapping[str, Any]]) -> str:
         '<section class="panel" data-region="queue">'
         f"<h2>Decision queue ({len(briefs)} briefs)</h2>"
         '<p class="lede">Canonical source: <span class="mono">bead_store</span>, plus '
-        'decisions-track rows no bead represents (each record names its own '
+        'decisions-track rows no bead represents and stack files neither a bead nor a '
+        'manifest row claims (each record names its own '
         '<span class="mono">source</span>). '
         'Read through <span class="mono">briefs_list</span>.</p>'
         '<div class="scroll-x"><table><thead><tr><th>State</th><th>Count</th><th>Meaning</th></tr></thead>'
@@ -505,11 +519,12 @@ def _state_gloss(state: str) -> str:
         "deferred": "Deferred with a defer window on the bead.",
         "malformed": "Closed with no verdict field. See the caveat below.",
         "unreadable": (
-            "Recorded in the decisions-track manifest with no brief file anywhere on disk. "
-            "The row proves a brief existed; nothing shows what it said, so there is nothing "
-            "here to decide on and it is deliberately not in the pending queue. This is "
-            "about the missing body, not a missing verdict: a row with a body and no verdict "
-            "is pending, and 35 such rows were shown here in error before Slice 7."
+            "Recorded in the decisions-track manifest with no brief file in either lane -- "
+            "neither beside the manifest nor in the stack. The row proves a brief existed; "
+            "nothing shows what it said, so there is nothing here to decide on and it is "
+            "deliberately not in the pending queue. This is about the missing document, not "
+            "a missing verdict: a row with a document and no verdict is pending, and 35 "
+            "such rows were shown here in error before Slice 7."
         ),
     }.get(state, "Reported by the canonical bead store.")
 

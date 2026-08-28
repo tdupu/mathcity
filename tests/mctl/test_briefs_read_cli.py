@@ -474,15 +474,21 @@ def test_briefs_list_includes_unlabeled_type_decision_and_closed_briefs(tmp_path
 
     assert result.returncode == 0, result.stderr
     listed = json.loads(result.stdout)["briefs"]
-    # The bead population, then the decisions-track row the fixture manifest
-    # carries and nothing else represents. `legacy-unmapped` is listed rather
-    # than hidden, and says so: `source: manifest`, no bead behind it.
+    # The three populations, in order: the bead population, the decisions-track
+    # row the fixture manifest carries, and the stack file no bead in *this*
+    # fixture claims. `legacy-unmapped` is listed rather than hidden, and says
+    # so: `source: manifest`, no bead behind it. `mc-open` is a stack file
+    # whose bead this fixture's bead list drops, so nothing attests it at all
+    # -- and before the stack became a population it was reachable by nothing.
     assert [brief["brief_id"] for brief in listed] == [
         "mc-unlabeled",
         "mc-closed-real",
         "legacy-unmapped",
+        "mc-open",
     ]
-    assert [brief["source"] for brief in listed] == ["bead", "bead", "manifest"]
+    assert [brief["source"] for brief in listed] == ["bead", "bead", "manifest", "stack"]
+    assert listed[-1]["canonical_source"] == "brief_stack"
+    assert listed[-1]["bead_id"] is None
 
 
 def test_list_and_show_surface_matching_legacy_migration_blocker(tmp_path: Path):

@@ -717,16 +717,19 @@ TOOLS: tuple[ToolSpec, ...] = (
         name="briefs_list",
         title="List briefs",
         description=(
-            "List briefs from both stores: canonical decision brief beads, plus "
-            "decisions-track manifest rows that no bead and no stack file represents. "
-            "Every record names its `source` (`bead` or `manifest`); a manifest row is "
-            "attested by no bead, and carries the markdown body sitting beside the "
-            "manifest -- 157 of 158 live rows have one. `unreadable` means that file "
-            "does not exist, and nothing else; a row with a body and no verdict is an "
-            "ordinary `pending` brief. `fields` carries unlock_count, priority, track, "
-            "form, gates and verdict, each naming the store it was read from, with "
-            "`conflict` set where a bead and a document disagree. Optionally filtered "
-            "by status or label."
+            "List briefs from all three stores: canonical decision brief beads, every "
+            "decisions-track manifest row, and the stack files that neither a bead nor "
+            "a manifest row claims. Every record names its `source` (`bead`, "
+            "`manifest` or `stack`); a manifest row is attested by no bead and a stack "
+            "record by neither. A manifest row carries the markdown body sitting "
+            "beside the manifest -- 203 of 204 live rows have one -- and, where the "
+            "pipeline also deposited it, the stack copy; `documents` lists each with "
+            "its lane, because the two copies differ on 19 of 46 live pairs. "
+            "`unreadable` means no document exists in any lane, and nothing else; a "
+            "record with a document and no verdict is an ordinary `pending` brief. "
+            "`fields` carries unlock_count, priority, track, form, gates and verdict, "
+            "each naming the store it was read from, with `conflict` set where two "
+            "stores disagree. Optionally filtered by status or label."
         ),
         input_schema=request_schema(
             {

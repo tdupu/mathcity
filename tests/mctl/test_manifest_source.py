@@ -76,10 +76,10 @@ def write_manifest(path: Path, rows: list[dict[str, object]]) -> Path:
     return path
 
 
-def stack_with(directory: Path, names: list[str]) -> Path:
+def stack_with(directory: Path, names: list[str], *, body: str = "# a brief\n") -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     for name in names:
-        (directory / name).write_text("# a brief\n", encoding="utf-8")
+        (directory / name).write_text(body, encoding="utf-8")
     return directory
 
 
@@ -380,8 +380,14 @@ def test_normalisation_strips_the_ordering_prefix_and_the_brief_suffix():
     assert normalize_stem("143-diff-alg-1-examples") == "diff-alg-1-examples"
 
 
-def test_rows_a_stack_file_already_represents_are_not_emitted_again(tmp_path: Path):
-    """46 of the live 204 rows are already visible through their stack file."""
+def test_a_row_with_a_stack_file_is_joined_to_it_rather_than_suppressed(tmp_path: Path):
+    """The defect this replaced: 46 of 204 rows were dropped for having a stack file.
+
+    The stated reason was that such a brief "has always been visible" through
+    the file. Nothing reads stack files as records -- 0 of the 46 slugs
+    appeared anywhere in `mctl briefs list --all-rigs` -- so suppression was
+    not deduplication. It was the only record of 46 briefs, deleted.
+    """
     stack = stack_with(
         tmp_path / "stack",
         [
@@ -404,14 +410,82 @@ def test_rows_a_stack_file_already_represents_are_not_emitted_again(tmp_path: Pa
     reading = manifest_records(path, stack)
 
     assert reading.rows_read == 4
-    assert sorted(reading.represented) == ["brief-queue-hygiene", "he-ckilh-dispatch-gate"]
-    # `gone` is represented only by a `.bak` copy, which is a backup and not a
-    # presentation; suppressing a row because somebody once saved a file would
-    # hide it from every reader again.
-    assert [record.slug for record in reading.records] == ["gone", "never-filed"]
+    # Every row is emitted. Two of them gained a document they did not have
+    # before; none of them lost its record for having one.
+    assert [record.slug for record in reading.records] == [
+        "brief-queue-hygiene",
+        "he-ckilh-dispatch-gate",
+        "gone",
+        "never-filed",
+    ]
+    assert sorted(reading.joined) == ["brief-queue-hygiene", "he-ckilh-dispatch-gate"]
+    joined = next(item for item in reading.records if item.slug == "brief-queue-hygiene")
+    assert joined.stack_path == stack / "12-brief-queue-hygiene-brief.md"
+    assert joined.stack_body == "# a brief\n"
+    # `gone` matches only a `.bak` copy, which is a backup and not a
+    # presentation; joining a row to a file somebody once saved would attach a
+    # brief to the wrong document.
+    assert next(item for item in reading.records if item.slug == "gone").stack_path is None
 
 
-def test_every_row_is_either_emitted_or_named_as_already_represented(tmp_path: Path):
+def test_a_joined_row_keeps_both_copies_of_a_brief_that_disagree(tmp_path: Path):
+    """19 of the 46 live pairs differ, and 13 disagree about `form`.
+
+    The stack copies had been rewritten from `compact` to `full` by the
+    shape-repair pass while the decisions-track copies still said `compact`.
+    Resolving that silently would destroy the only record that the pipeline's
+    two copies of a brief have drifted apart.
+    """
+    bodies = bodies_for(
+        tmp_path / "decisions-track",
+        ["shape-repaired"],
+        body="---\nform: compact\nstatus: present-it-pending\n---\n\n## §1 What is being decided\n\nAs deposited.\n",
+    )
+    stack = stack_with(
+        tmp_path / "stack",
+        ["01-shape-repaired-brief.md"],
+        body="---\nform: full\nstatus: present-it-pending\n---\n\n## §1 What is being decided\n\nAs repaired.\n",
+    )
+    path = write_manifest(bodies / "manifest.jsonl", [unreadable("shape-repaired")])
+
+    record = manifest_records(path, stack).records[0]
+
+    form = next(item for item in record.fields if item.name == "form")
+    assert form.conflict, "the two documents disagree about `form` and both must be kept"
+    assert [(reading.source, reading.value) for reading in form.readings] == [
+        ("frontmatter", "compact"),
+        ("stack_frontmatter", "full"),
+    ]
+    # Authority order is unchanged by the new reading: the decisions-track
+    # copy still answers "what does this brief say" for a caller that does not
+    # ask about provenance, because the manifest lane is canonical here.
+    assert form.value == "compact"
+    # Both documents are carried, in authority order: the file beside the
+    # manifest first, because the manifest is this record's canonical source.
+    assert [lane for lane, *_ in record.documents] == ["decisions_track", "stack"]
+    assert record.body != record.stack_body
+    assert record.body is not None and record.stack_body is not None
+
+
+def test_a_row_whose_only_document_is_its_stack_file_is_readable(tmp_path: Path):
+    """`unreadable` is about the documents, not about which directory holds one.
+
+    Slice 6 called a row unreadable because it never listed the directory
+    beside the manifest. Calling one unreadable because its only copy is in
+    the stack would be the same error aimed one directory over.
+    """
+    stack = stack_with(tmp_path / "stack", ["07-only-in-the-stack-brief.md"])
+    path = write_manifest(tmp_path / "manifest.jsonl", [unreadable("only-in-the-stack")])
+
+    record = manifest_records(path, stack).records[0]
+
+    assert record.body_path is None
+    assert record.stack_path == stack / "07-only-in-the-stack-brief.md"
+    assert record.decision_state == STATE_PENDING
+    assert [lane for lane, *_ in record.documents] == ["stack"]
+
+
+def test_every_row_is_emitted_and_the_joined_ones_are_named(tmp_path: Path):
     """The arithmetic a population count rests on: nothing falls between."""
     stack = stack_with(tmp_path / "stack", ["01-kept-brief.md"])
     path = write_manifest(
@@ -421,7 +495,9 @@ def test_every_row_is_either_emitted_or_named_as_already_represented(tmp_path: P
 
     reading = manifest_records(path, stack)
 
-    assert len(reading.records) + len(reading.represented) == reading.rows_read
+    assert len(reading.records) == reading.rows_read
+    assert len(reading.joined) == 1
+    assert reading.stack_paths == frozenset({stack / "01-kept-brief.md"})
 
 
 def test_a_missing_manifest_is_silent_rather_than_an_error(tmp_path: Path):
@@ -522,7 +598,12 @@ def test_the_live_manifest_reads_consistently():
     reading = manifest_records(LIVE_MANIFEST, LIVE_STACK)
 
     assert reading.rows_read > 0
-    assert len(reading.records) + len(reading.represented) == reading.rows_read
+    assert len(reading.records) == reading.rows_read
+    assert len(reading.joined) == len(reading.stack_paths)
+    assert all(
+        (record.stack_path is not None) == (record.slug in set(reading.joined))
+        for record in reading.records
+    )
     assert sum(reading.state_counts.values()) == len(reading.records)
     assert all(record.slug for record in reading.records)
     assert all(

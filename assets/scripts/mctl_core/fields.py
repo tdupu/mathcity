@@ -51,6 +51,17 @@ Ordering is by authority, not by preference: `readings[0]` is the record's
 `canonical_source` where that store holds the field, so `value` still answers
 "what does this brief say" for a caller that does not care about provenance.
 
+A brief can hold **three** accounts of itself, not two: the manifest row, the
+markdown file beside the manifest, and the stack file the pipeline presents
+from. Every row that has a stack file also has a decisions-track file -- all
+46 of them when this was first measured on 2026-08-19 -- so the third column
+is the common case for that population, not an edge one. `stack_frontmatter`
+is its own source for exactly the reason above: 18 of those stack copies had
+been rewritten from `form: compact` to `form: full` by the shape-repair pass
+while the decisions-track copy still said `compact`, and reporting both under
+one label would say a brief declared two forms without saying which document
+declared which.
+
 Comparison is on a folded key -- trimmed, case-folded, and for `priority` a
 leading `P` dropped -- so `P1` against a bead's `1` is not reported as a
 disagreement. The stored values stay verbatim; only the comparison folds.
@@ -78,7 +89,22 @@ from .verdicts import CONFIDENCE_HIGH
 SOURCE_BEAD = "bead"
 SOURCE_MANIFEST_ROW = "manifest_row"
 SOURCE_FRONTMATTER = "frontmatter"
-FIELD_SOURCES = (SOURCE_BEAD, SOURCE_MANIFEST_ROW, SOURCE_FRONTMATTER)
+#: A key in the frontmatter of the brief's *stack* file. Kept apart from
+#: `frontmatter`, which on a manifest record means the file beside the
+#: manifest: a brief can have both, and they disagree. Measured on the live
+#: city 2026-08-20, of the rows that have both documents `form` disagreed 13
+#: times, `status` 5 and `artifact` once -- and the stack copy was the newer
+#: one in 14 of the 15 pairs whose text differed at all. A surface that
+#: labelled both readings `frontmatter` would show the same word twice beside
+#: two different answers and give a reader no way to tell which document said
+#: which.
+SOURCE_STACK_FRONTMATTER = "stack_frontmatter"
+FIELD_SOURCES = (
+    SOURCE_BEAD,
+    SOURCE_MANIFEST_ROW,
+    SOURCE_FRONTMATTER,
+    SOURCE_STACK_FRONTMATTER,
+)
 
 #: The fields exposed with provenance on every record that can carry them.
 #: `verdict` is here as well as on `BriefRecord.verdict`: the record-level
@@ -164,6 +190,22 @@ def frontmatter_value(
     if not value:
         return None
     return FieldValue(value, SOURCE_FRONTMATTER, CONFIDENCE_HIGH, f"frontmatter.{key or name}")
+
+
+def stack_frontmatter_value(
+    frontmatter: Mapping[str, str], name: str, *, key: str | None = None
+) -> FieldValue | None:
+    """One stack-file frontmatter key as a `FieldValue`, or None when absent.
+
+    Same read as `frontmatter_value`, under its own source and its own `field`
+    spelling, so two documents' answers to one question stay tellable apart.
+    """
+    value = _unquote(frontmatter.get(key or name, ""))
+    if not value:
+        return None
+    return FieldValue(
+        value, SOURCE_STACK_FRONTMATTER, CONFIDENCE_HIGH, f"stack.frontmatter.{key or name}"
+    )
 
 
 def row_value(row: Mapping[str, object], name: str, *, field: str) -> FieldValue | None:
