@@ -53,6 +53,7 @@ from .screens import pipeline as pipeline_screen
 from .screens import priority as priority_screen
 from .screens import city as city_screen
 from .screens import molecules as molecules_screen
+from .screens import tracker as tracker_screen
 from .screens import stack
 from .aggregate import CityView, is_deferred as _agg_is_deferred
 from .client import McpClient, ToolFailure, ToolResponse
@@ -88,6 +89,45 @@ def _disagreeing_fields(
             if len(set(values)) > 1:
                 found[key] = tuple(values)
     return found
+
+
+#: The tracker's default repo. Named here rather than inferred: nothing in the
+#: city maps a rig to its GitHub remote, and guessing one would silently pair a
+#: rig's beads against another project's issues. Overridable per request with
+#: `?repo=owner/name`.
+TRACKER_DEFAULT_REPO = "tdupu/mathcity"
+
+
+class _TrackerRowView:
+    """Adapts one `tracker_rows` dict to the attribute shape the screen reads.
+
+    `screens/tracker.py` renders row OBJECTS and deliberately does not import
+    `mctl_core` (`screens/city.py:513`), so the transport hands back plain
+    dicts and this restores the interface. Keeping the adapter here rather than
+    teaching the screen to read dicts means the screen's tests still run
+    against the real model, not against a shape only the transport produces.
+    """
+
+    __slots__ = ("_row",)
+
+    def __init__(self, row: Mapping[str, Any]) -> None:
+        self._row = row
+
+    number = property(lambda self: self._row.get("number"))
+    title = property(lambda self: self._row.get("title") or "")  # single-shape-ok: tracker_rows envelope row, not a brief
+    url = property(lambda self: self._row.get("url") or "")
+    state = property(lambda self: self._row.get("state") or "")
+    pairing = property(lambda self: self._row.get("pairing") or "unpaired")
+    unknown_reason = property(lambda self: self._row.get("unknown_reason"))
+    bead_ids = property(lambda self: tuple(self._row.get("bead_ids") or ()))
+    #: The screen only tests `beads` for truthiness and renders `bead_ids`, so
+    #: the ids serve as both. Returning the ids rather than a fake bead mapping
+    #: keeps this from pretending to carry data the transport did not send.
+    beads = property(lambda self: tuple(self._row.get("bead_ids") or ()))
+    briefs = property(lambda self: tuple(self._row.get("briefs") or ()))
+    is_duplicated = property(lambda self: bool(self._row.get("is_duplicated")))
+    is_orphaned_by_bead = property(lambda self: bool(self._row.get("is_orphaned_by_bead")))
+    needs_bead = property(lambda self: bool(self._row.get("needs_bead")))
 
 
 @dataclass(frozen=True)
@@ -1426,6 +1466,59 @@ class Dashboard:
         sections = [molecules_screen.molecules_list(payload, rig=rig if self.city_wide else None)]
         return self._page("Molecules", "/molecules", context, sections, context_bar="")
 
+    def _tracker(self, request: Request) -> Response:
+        """Every GitHub issue with its bead and brief (#186).
+
+        Rig-scoped, because the pairing is against ONE rig's bead store: an
+        issue paired in `mathcity` is not paired in `hecke`, and a city-wide
+        answer would silently union stores that do not share an id space. So a
+        city-wide dashboard with no rig chosen shows a picker, exactly as
+        `/molecules` does, rather than a guaranteed refusal.
+
+        The screen is mostly a picture of absence -- 102 of 107 open issues had
+        no bead when this landed -- and that gap is #180's work item, so the
+        page must never render it as a blank.
+        """
+        rig = self._rig_for(request)
+        if self.city_wide and not rig:
+            picker = (
+                '<section class="panel" data-region="tracker-rig-picker"><h2>Issue tracker</h2>'
+                '<p class="lede">Issues are paired against one rig\'s bead store. Choose one.</p>'
+                '<form class="operation" method="get" action="/tracker">'
+                + render.rig_filter_field(self._rig_ids(), rig)
+                + '<div><button type="submit" class="secondary">Show tracker</button></div>'
+                "</form></section>"
+            )
+            return self._page(
+                "Issue tracker", "/tracker", None, [picker], context_bar=self._city_bar()
+            )
+        context = self._scope_context(rig)
+        repo = (request.query.get("repo") or TRACKER_DEFAULT_REPO).strip()
+        try:
+            payload = self.client.call(
+                "tracker_rows", {**self._args(rig), "repo": repo}
+            ).payload
+        except ToolFailure as failure:
+            sections = [
+                render.notice_panel(
+                    "tracker_rows did not answer",
+                    "The issue/bead pairing could not be read. This is not a "
+                    "statement that there are no issues.",
+                    failure.diagnostics,
+                    region="tracker-failed",
+                )
+            ]
+            return self._page("Issue tracker", "/tracker", context, sections, context_bar="")
+        rows = [_TrackerRowView(row) for row in (payload.get("rows") or ())]
+        sections = [
+            tracker_screen.render(
+                rows,
+                payload.get("summary") or {},
+                issues_unreadable=payload.get("issues_unreadable"),
+            )
+        ]
+        return self._page("Issue tracker", "/tracker", context, sections, context_bar="")
+
     def _molecule(self, molecule_id: str, request: Request) -> Response:
         """One molecule's steps, with the #115 evidence core rendered per step."""
         rig = self._rig_for(request)
@@ -1797,6 +1890,8 @@ class Dashboard:
             return self._city_operations(request)
         if request.path == "/molecules":
             return self._molecules(request)
+        if request.path == "/tracker":
+            return self._tracker(request)
         if request.path.startswith("/molecules/"):
             return self._molecule(request.path[len("/molecules/") :], request)
         if request.path == "/diagnostics":

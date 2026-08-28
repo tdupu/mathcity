@@ -91,6 +91,7 @@ EXPECTED_TOOLS = (
     "work_provenance",
     "work_ready",
     "work_status",
+    "tracker_rows",
     "worktrees_status",
 )
 

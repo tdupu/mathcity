@@ -16476,6 +16476,204 @@
     },
     "title": "Show a trace"
   },
+  "tracker_rows": {
+    "description": "Every GitHub issue in `repo`, paired with the beads that claim it via `external_ref == 'gh-<number>'` (#186). The match is EXACT and anchored: `gh-56-followup` is not issue 56, because substring/title matching is what produced the duplicate beads in mc-vwkn7. `pairing` is one of `paired`, `unpaired` (the store was read and nothing claims this issue -- actionable, #180 mints one) or `unknown` (the store did not answer -- NOT actionable). `needs_bead` is false under `unknown`, and `summary.needs_bead` is null whenever any row is unknown, because minting beads off a store that never answered would duplicate the beads it could not see. GitHub failing is reported as `issues_unreadable` with no rows, which is different from a repo that genuinely has none. Beads are a LIST per issue: `is_duplicated` flags the mc-vwkn7 signature, and `is_orphaned_by_bead` flags an issue still open whose every bead is closed. Read-only; touches no GitHub or bead state.",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "Maximum issues to read. Defaults to 200.",
+          "type": "integer"
+        },
+        "repo": {
+          "description": "owner/name, e.g. tdupu/mathcity.",
+          "type": "string"
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "Issue state to list: open (default), closed, or all.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "issues_unreadable": {
+          "description": "Why GitHub could not be read. Null on a clean read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rows": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "type": "object"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "diagnostics",
+        "rows",
+        "summary",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Issue tracker: issues with their beads and briefs"
+  },
   "work_claim": {
     "description": "Report one bead's claim state -- assignee, status, and the four `dispatch-provenance.v1` classification fields derived from it (`verified_assignee`, `assignee_state`, `classification_hint`, `fingerprint`). Takes a BEAD id, not a brief id: the caller this exists for commissioned work that has no brief yet. It replaces `bd show <id> | grep -i assignee`, which answered 'some rendered line mentioned assignee' and could not tell an unclaimed bead from a missing one. `window_seconds` names how long the caller already waited and only labels the observation -- nothing here sleeps or polls.",
     "external_ready": true,
