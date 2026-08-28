@@ -246,6 +246,31 @@ class BriefCreateInput:
 NEW_BRIEF_ID_PLACEHOLDER = "(pending-bead-id)"
 
 
+def _with_frontmatter(body: str) -> str:
+    """Open a created brief with a header adjudication can write into.
+
+    `briefs adjudicate` plans a `brief_frontmatter` effect that writes `status:`
+    and `verdict:` into this document. A body whose first line is content has no
+    block to write into, so that effect cannot land: adjudication emits
+    MCTL_BRIEF_FRONTMATTER_UNWRITABLE (WARN) and proceeds, and `classify_tier`
+    then reads the one representation that was never written -- returning
+    TIER_OPEN for a brief that is closed and carries a verdict on its bead
+    (GitHub #155).
+
+    Only `status` is seeded. The verdict keys are deliberately absent rather than
+    empty: `classify_tier` treats a present-but-blank `verdict` the same as a
+    missing one, but an empty key in the corpus would be indistinguishable from
+    an adjudication that wrote nothing, and B2.8a's whole point is that the
+    representations must not disagree silently. A body that already carries its
+    own block is returned untouched -- a producer that wrote a richer header
+    (`artifact:`, `form:`, `track:`) owns it, and re-serialising would reorder or
+    drop keys no core module knows about.
+    """
+    if body.lstrip().startswith("---"):
+        return body
+    return "---\nstatus: open\n---\n\n" + body
+
+
 def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan:
     """Plan a bead-first brief creation.
 
@@ -290,7 +315,9 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     layout = artifact_layout(ctx)
     _require_brief_root(ctx, layout)
     pile_create = FileCreate(
-        "pile_markdown", layout.pile / f"{NEW_BRIEF_ID_PLACEHOLDER}.md", body
+        "pile_markdown",
+        layout.pile / f"{NEW_BRIEF_ID_PLACEHOLDER}.md",
+        _with_frontmatter(body),
     )
     cache_update = CacheUpdate(
         "decision_toml",

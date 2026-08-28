@@ -209,6 +209,53 @@ def test_create_writes_the_decision_bead_before_the_redundant_artifacts(tmp_path
     assert f'brief_id = "{new_id}"' in decision_cache.read_text(encoding="utf-8")
 
 
+def test_create_writes_a_frontmatter_block_adjudication_can_write_into(tmp_path: Path):
+    """A created brief must carry a `---` header, or adjudication cannot record itself.
+
+    `briefs adjudicate` plans a `brief_frontmatter` effect writing `status:` and
+    `verdict:` into the document. A brief whose line 1 is content has no header to
+    write into, so that effect silently does not land -- `briefs adjudicate` emits
+    MCTL_BRIEF_FRONTMATTER_UNWRITABLE at severity WARN and proceeds. `classify_tier`
+    (materialize_plan.py) then reads the one representation that was never written
+    and returns TIER_OPEN for a brief that is closed and carries a verdict on its
+    bead. Measured live on he-wk44t4 and he-87u8ne, and on gsp-4xwync in GitHub #155.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+
+    result = run_mctl(
+        *brief_command(
+            city_root,
+            "create",
+            "--title",
+            "Decide dispatch policy",
+            "--body-file",
+            str(body_file(tmp_path)),
+            "--source",
+            "mc-source",
+            "--json",
+        ),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    new_id = payload["actual_effects"][0]["target"]
+
+    pile = rig_root / ".beads" / "briefs" / ".pile" / f"{new_id}.md"
+    text = pile.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    assert lines[0] == "---", (
+        "a created brief must open with a frontmatter block; adjudication writes "
+        f"status/verdict into it. Line 1 was: {lines[0]!r}"
+    )
+    assert "---" in lines[1:], "the frontmatter block must be closed"
+    closing = lines.index("---", 1)
+    assert closing > 1, "the frontmatter block must not be empty"
+    assert "What is being decided" in text, "the body must survive the header"
+
+
 def test_create_does_not_write_the_presentable_stack_index(tmp_path: Path):
     """B2.10: producers write to .pile; the shuffler owns .pile -> stack."""
     city_root, rig_root = runtime_fixture(tmp_path)
