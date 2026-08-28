@@ -655,6 +655,24 @@ severity = "ERROR"
 meaning = "The source bead named by the brief dependency is closed."
 module = "work.py"
 
+[MBRF037]
+severity = "FATAL"
+meaning = "Proposed brief files evidence under \u00a71; \u00a71 states the question and nothing else (G17/C1)."
+policy_ref = "B1.9"
+module = "briefs.py"
+
+[MBRF038]
+severity = "FATAL"
+meaning = "Proposed brief repeats a section number; every explicit \u00a7N appears exactly once (G17/C2)."
+policy_ref = "B1.9"
+module = "briefs.py"
+
+[MBRF039]
+severity = "WARN"
+meaning = "Proposed brief's \u00a72 is missing, empty, a null answer, or names no decision verb (G17/C3). WARN, not FATAL: B1.9(c) and #194 disagree about a transported UNDECIDED decision and the conflict is unadjudicated (mc-qbs6j)."
+policy_ref = "B1.9"
+module = "briefs.py"
+
 [MBRF036]
 severity = "FATAL"
 meaning = "Proposed brief body is missing a required structural section."

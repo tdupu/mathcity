@@ -1263,9 +1263,15 @@ def _handle_decisions_to_briefs(
     # evidence is the checks above that did NOT fire -- each maps to a work.py
     # dispatch blocker -- so the section carries something a gate can use rather
     # than a heading over filler.
+    # #208: options/recommendation are appended as their own §4 block, NOT woven
+    # into `brief_body`. Composed FIRST since #mc-qbs6j (G17/C2): the composer
+    # must know whether a §4 is coming, or it emits a second one.
+    options_section = _decision_options_section(ctx, arguments)
     body = brief_body(
         decision,
         source_bead_id=source_bead_id,
+        options_follow=bool(options_section),
+        recommendation=arguments.get("recommendation"),
         checks_passed=(
             f"source `{source_bead_id}` resolves in this rig (MDTB002 did not fire)",
             "source is not closed, so the brief is dispatchable (MDTB003 did not fire)",
@@ -1273,10 +1279,6 @@ def _handle_decisions_to_briefs(
             "source has no open child workflow (MDTB005 did not fire)",
         ),
     )
-    # #208: options/recommendation are appended as their own §4 block, NOT woven
-    # into `brief_body` -- the composer is being redesigned (Part 3) and must
-    # stay untouched. Refuses here on an unknown recommendation, before the write.
-    options_section = _decision_options_section(ctx, arguments)
     if options_section:
         body = body.rstrip("\n") + "\n\n" + options_section
     plan = plan_create_brief(

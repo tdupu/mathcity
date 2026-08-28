@@ -59,7 +59,7 @@ store is the source of truth; the filesystem is a cache.*
   Presenters filter mechanically on these conditions (B2.3, B2.7).
 - **Pile.** The single fixed accumulation point for unadjudicated briefs.
   Canonical membership is a bead query, not a directory listing (B2.4, B2.8).
-- **Gate.** A named checkpoint (G1–G16, G5b; inventory below) that demands
+- **Gate.** A named checkpoint (G1–G17, G5b; inventory below) that demands
   either evidence or an explicit N/A with a one-sentence reason. Gates come in
   four kinds: **mechanical** (checkable without judgment), **review** (a named
   reviewer renders a judgment), **manual** (a human step), and **stop** (a
@@ -110,8 +110,9 @@ audits the diff mechanically.
 | G14 | test-execution-silent | mechanical | Non-silent tri-state test-execution declaration: PASSED / NOT APPLICABLE / REQUIRED | T7 |
 | G15 | improve-readme-silent | mechanical | README improvement is recorded as applied or explicit N/A — never silent | D2, B4.3 |
 | G16 | master-current-for-test-evidence | mechanical | Test evidence depending on main/master records the exact base ref | T2 |
+| G17 | section-discipline | mechanical | §1 carries the question and no evidence; every §N appears once; §2 names a recommended action | B1.1, B1.9 |
 
-**Profiles.** `standard` = all 17 gates (every full-form brief).
+**Profiles.** `standard` = all 18 gates (every full-form brief).
 `no_brainer` = G1, G5, G5b, G7, G8, G9, G12, G13, G14, G16 (the auto-execute
 path). `test_execution` = G1, G2, G4, G8, G13, G14, G16.
 `experiment` = G1, G2, G4, G7, G8, G11, G13, G16.
@@ -175,6 +176,31 @@ without asking follow-up questions.*
   or an adjudicated brief whose bead lacks recorded verdict fields or remains
   open, → G8 FAIL. Filesystem manifest consistency is subordinate to bead
   consistency (B2.8).
+- **B1.9 Section discipline (G17).** Headings that exist are not headings
+  that work. Three conditions, each observed failing on `mc-67snh`:
+  **(a)** §1 states the question and carries no evidence — a `file.ext:NNN`
+  citation, a commit sha, an issue reference, or a measured count inside §1 is
+  a FAIL; evidence belongs in §6. **(b)** Every explicit `§N` appears exactly
+  once; `mc-67snh` carried two `## §4` headings and the second one held
+  `kindsets.go:113-118`. **(c)** §2 is present, non-empty, does not open with a
+  null answer (`None recorded`, `NOT SUPPLIED`, `TBD`, …), and names a decision
+  verb — a §2 that restates the question is what *"we need a recommendation"*
+  meant about a brief whose §2 was not empty. Applies only to bodies carrying an
+  explicit `§1` heading (the present-it full form); compact-form bodies are out
+  of scope. Enforced at CREATION, not at drain: creation is where `mc-67snh`
+  entered, and B1.1's own producers-self-reject clause puts the refusal at the
+  author. **(a) and (b) REFUSE** the write (`MBRF037`, `MBRF038`). **(c) is
+  reported as a WARN advisory** (`MBRF039`) and does not yet refuse, because
+  B1.9(c) and #194 — which has `decisions_to_briefs` deposit a transported
+  decision UNDECIDED and forbids inventing a recommendation — are both adopted
+  and cannot both hold. Measured: making (c) fatal turns 9 tests red, four of
+  which assert #194 directly. Which rule moves is an open adjudication on
+  `mc-qbs6j`; until then the finding is loud, not silent. Vocabulary and the
+  blocking/advisory split live in
+  `assets/brief-pipeline/section-discipline.toml`. Measured cost of not having
+  this: `mc-67snh` REVISE 18:16:09Z → `mc-wg331` approving a refuted direction
+  at 18:25:28Z → an hour of refutation → rejected.
+
 - **B1.8 Specialized evidence follows its own rule set.** Test evidence →
   T-rules. Experiment design → E-rules. LaTeX surface → L-rules.
   README/documentation → D-rules. A brief citing "gates pass" without the
