@@ -33,44 +33,77 @@ with JavaScript off. Data arrives over `mctl` MCP tool calls, never shell.
   The Brief Manager design is now the only briefs-dashboard design — there is no
   second one to confuse it with.
 
-## Implementation status — what is built vs. designed-not-built (as of origin/main 326083d, 2026-08-23)
+## Implementation status — build state vs. issue state
 
-### BRIEFS dashboard
-**Works today:** the base adjudication surface renders (pile/stack/brief detail),
-and the write-side plumbing the design needs largely landed 2026-08-23:
-- `briefs_options` MCP tool is live; `BriefRecord.to_dict()` emits `body` +
-  `sections` + `body_diagnostics` (the present-it body the detail screen reads).
-- **#208** decision_options + recommendation **write path** — landed (Plan G,
-  `326083d`); a recommendation stays advisory (brief deposits UNDECIDED).
-- **#76** no_brainer field (Field 7) **write path** — landed (Plan G).
-- **#209** revise-return **formula** — landed (Plan H); a revise verdict now
-  auto re-deposits. Live end-to-end still pending.
-- **#205** mayor_boot handoff read — fixed (Plan F). **#210 / #172** MCP
-  serving-commit stamp + rebind — landed (Plan I).
+**Verified 2026-08-28 against `main` and the running dashboard.** Supersedes
+the `326083d` (2026-08-23) snapshot, which had drifted in *both* directions.
 
-**Designed, NOT built yet:**
-- **#66** (keystone) — several of the 9 designed screens have no real data source.
-- **#76** — brief attribute fields 1–6 (unlock_count, track, priority, form,
-  gates, shape) and the **read/render side of options** (#76 Field 8): the
-  disposition panel still shows "names no options" even though the brief now
-  carries them and the adjudication reader sees them.
-- **#68** the full 9-screen vertical-slice redesign · **#125** adjudicate-fast
-  (save-in-place, auto-advance) · **#198** overview-vs-queue count mismatch ·
-  **#175** rename briefs_adjudicate → briefs_relay_adjudication.
+**Read these as two different facts.** A closed issue does not mean the thing
+renders, and an open issue does not mean the code is missing — several issues
+below stay open for follow-up while their code landed. Merging the two claims
+into one is the exact error [#153](https://github.com/tdupu/mathcity/issues/153)
+was filed to name, so this table keeps them apart.
+
+### Routes actually registered (`app.py`)
+
+```
+/adjudicated /apply /briefs /city /deferred /diagnostics /junk /malformed
+/molecules /orders /pile /preview /priority /queue /trace /validate /work
+```
+
+**There is no `/overview`, `/rigs`, `/costs`, `/worktrees` or `/evidence`
+route, and their absence is not a missing feature.** Costs, worktrees,
+queue-status and evidence are **panels inside `/city`**. Probing for them as
+routes returns 404 and has already been misread once as "designed-not-built";
+check `/city`'s panels before concluding a slice is unbuilt.
 
 ### CITY dashboard
-**Works today:** the base city/overview and rig/order/molecule read views render.
 
-**Designed, NOT built yet (the observability slices):**
-- **#115** (keystone) evidence log + `step.expected_artifacts` · **#88** A–E
-  evidence/derivation core + `molecule.state` · **#87** object-model gap analysis ·
-  **#113** queue_status · **#118** costs_summary · **#120** worktrees_status.
-- **#153** — five merged city-dashboard slices "render nowhere" (backend-only
-  completion was counted as progress).
+`/city` renders (HTTP 200, ~199 KB) with these panels carrying real data:
+City health (18 rigs) · Gates (5) · Blast radius (7) · Worktrees (188) ·
+Queue Status · Costs Summary · Events List · Agents.
+
+- **#153 — closing condition MET, recommend closing.** It asserts "no page
+  consumes any of them" and "there is no city-operations surface". Both are
+  now false: all five slices (#110 blast_radius, #112 fleet_sessions,
+  #114 city_health, #116 events_list, #119 gates_status) are reachable and
+  rendering on `/city`.
+- **#120 worktrees_status — open, but the panel renders 188 rows.** Verify
+  against its acceptance criteria, then close.
+- **#113 queue_status · #118 costs_summary · #87 gap analysis · #66 keystone
+  — CLOSED and rendering.** The previous revision listed all four as
+  designed-not-built.
+- Still genuinely open: **#115** evidence log + `step.expected_artifacts` ·
+  **#88** A–E evidence/derivation core.
+- The **Agents** panel currently reads *"Fleet size is unknown. The probe did
+  not answer, so this is not a count of zero."* That is P6.2 working, not a
+  defect — an unanswered probe reported as unknown rather than a plausible
+  zero. Likely lock contention; see `mc-znfnm`.
+
+### BRIEFS dashboard
+
+Base adjudication surface renders (pile/stack/brief detail).
+
+- **Code landed, issue still open** (do not read these as missing):
+  **#208** decision_options + recommendation write path is in `mcp_server.py`;
+  **#175** the rename is done — the tool is `briefs_relay_adjudication`.
+  Also open: **#205**, **#209**.
+- Genuinely open: **#68** 9-screen vertical slice · **#76** brief attribute
+  fields 1–6 and the read/render side of options · **#125** adjudicate-fast ·
+  **#198** overview-vs-queue count mismatch.
 
 ### Shared / serving both
-- **#207** dashboard_status/dashboard_restart MCP tools · **#165** dead MCP child
-  renders as an empty city · **#154** no teardown discipline. All OPEN.
+
+- **#207, #165, #154 are CLOSED.** The previous revision called them "All
+  OPEN"; the dashboard lifecycle verbs, MCP child health-check and teardown
+  discipline all shipped. **#164** and **#172** are closed too; **#210**
+  remains open.
+- **Open, P1, not yet fixed:** `mc-znfnm` — every MCP call serializes on one
+  process-wide lock over a single pipe, so one slow page blocks every
+  concurrent request (measured: `/queue` 1.7 s alone, **64.9 s** during
+  `/city`). This makes *every* latency figure in these docs conditional on
+  what else was in flight — treat historical timings for `/city` (3.6 s,
+  24.7 s, 61 s, "never") as measurements of concurrency, not of the route.
 
 ## Where dashboard plans/designs go (the convention)
 
