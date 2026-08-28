@@ -1442,6 +1442,85 @@ def _handle_standardize_github_issue(ctx: MctlContext, arguments: Mapping[str, A
     return _effect_payload(ctx, plan, dry_run)
 
 
+def _handle_tracker_rows(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Every GitHub issue paired with its bead and brief (#186).
+
+    Two independent reads, and their failures are reported SEPARATELY because
+    they mean different things:
+
+    * GitHub not answering -> `issues_unreadable`, and no rows at all. There is
+      nothing to pair against, so returning an empty list would claim the repo
+      has no issues.
+    * The bead store not answering -> every row is `pairing: "unknown"` with a
+      reason. The issues are still worth rendering; what is unknown is only
+      whether each already has a bead.
+
+    Neither is ever reported as a zero. Collapsing "did not answer" into "none"
+    is the failure this codebase keeps naming, and here it would be actively
+    dangerous: #180 mints a bead for every issue that appears to lack one, so a
+    silent read failure would mint duplicates on top of beads it could not see.
+    That is why `needs_bead` is withheld entirely when anything is unknown.
+    """
+    from .beads import BeadReadError, read_beads
+    from .github_issues import GithubIssueError, list_issues
+    from .tracker import build_rows, summarize
+
+    repo = str(arguments.get("repo") or "").strip()
+    state = str(arguments.get("state") or "open").strip() or "open"
+    limit = int(arguments.get("limit") or 200)
+
+    try:
+        snapshots = list_issues(repo, state=state, limit=limit)
+    except GithubIssueError as error:
+        return {
+            "diagnostics": _diagnostics(ctx, ()),
+            "issues_unreadable": str(error),
+            "rows": [],
+            "summary": {},
+        }
+
+    issues = [
+        {
+            "number": snap.number,
+            "title": snap.title,
+            "url": snap.url,
+            "state": snap.state,
+            "labels": list(snap.labels),
+        }
+        for snap in snapshots
+    ]
+
+    store_unreadable: str | None = None
+    beads: list[Mapping[str, Any]] | None
+    try:
+        beads = [dict(bead.raw) for bead in read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture)]
+    except BeadReadError as error:
+        beads, store_unreadable = None, str(error)
+
+    rows = build_rows(issues, beads, None, store_unreadable=store_unreadable)
+    return {
+        "diagnostics": _diagnostics(ctx, ()),
+        "issues_unreadable": None,
+        "rows": [
+            {
+                "number": row.number,
+                "title": row.title,
+                "url": row.url,
+                "state": row.state,
+                "labels": list(row.labels),
+                "bead_ids": list(row.bead_ids),
+                "pairing": row.pairing,
+                "unknown_reason": row.unknown_reason,
+                "is_duplicated": row.is_duplicated,
+                "is_orphaned_by_bead": row.is_orphaned_by_bead,
+                "needs_bead": row.needs_bead,
+            }
+            for row in rows
+        ],
+        "summary": summarize(rows),
+    }
+
+
 def _handle_work_ready(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     return {"diagnostics": _diagnostics(ctx, ()), "work": [item.to_dict() for item in ready_work(ctx)]}
 
@@ -1947,6 +2026,51 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         handler=_handle_worktrees_status,
         scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="tracker_rows",
+        title="Issue tracker: issues with their beads and briefs",
+        description=(
+            "Every GitHub issue in `repo`, paired with the beads that claim it via "
+            "`external_ref == 'gh-<number>'` (#186). The match is EXACT and anchored: "
+            "`gh-56-followup` is not issue 56, because substring/title matching is what "
+            "produced the duplicate beads in mc-vwkn7. `pairing` is one of `paired`, "
+            "`unpaired` (the store was read and nothing claims this issue -- actionable, "
+            "#180 mints one) or `unknown` (the store did not answer -- NOT actionable). "
+            "`needs_bead` is false under `unknown`, and `summary.needs_bead` is null "
+            "whenever any row is unknown, because minting beads off a store that never "
+            "answered would duplicate the beads it could not see. GitHub failing is "
+            "reported as `issues_unreadable` with no rows, which is different from a repo "
+            "that genuinely has none. Beads are a LIST per issue: `is_duplicated` flags "
+            "the mc-vwkn7 signature, and `is_orphaned_by_bead` flags an issue still open "
+            "whose every bead is closed. Read-only; touches no GitHub or bead state."
+        ),
+        input_schema=request_schema(
+            {
+                "repo": {"type": "string", "description": "owner/name, e.g. tdupu/mathcity."},
+                "state": {
+                    "type": "string",
+                    "description": "Issue state to list: open (default), closed, or all.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum issues to read. Defaults to 200.",
+                },
+            },
+            ["repo"],
+        ),
+        output_schema=response_schema(
+            {
+                "issues_unreadable": {
+                    "type": ["string", "null"],
+                    "description": "Why GitHub could not be read. Null on a clean read.",
+                },
+                "rows": {"type": "array", "items": {"type": "object"}},
+                "summary": {"type": "object"},
+            },
+            ["rows", "summary"],
+        ),
+        handler=_handle_tracker_rows,
     ),
     ToolSpec(
         name="context_resolve",

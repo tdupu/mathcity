@@ -57,6 +57,7 @@ ALLOWED_TOOLS = frozenset(
         "formulas_catalog",
         "queue_status",
         "costs_summary",
+        "tracker_rows",
         "worktrees_status",
         "commission_brief",
         "context_resolve",

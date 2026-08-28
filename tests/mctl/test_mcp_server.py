@@ -73,6 +73,7 @@ DECLARED_TOOLS = (
     "standardize_github_issue",
     "trace_replay_preview",
     "trace_show",
+    "tracker_rows",
     "work_claim",
     "work_dispatch",
     "work_dispatch_event",

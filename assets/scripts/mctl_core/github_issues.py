@@ -14,6 +14,7 @@ an issue is exactly the kind of thing a typed tool exists to encapsulate.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping
 import json
 import re
 import subprocess
@@ -130,6 +131,91 @@ def fetch_issue(repo: str, number: int, *, timeout: int = 30) -> IssueSnapshot:
         state=str(payload.get("state") or ""),
         url=str(payload.get("url") or ""),
     )
+
+
+def list_issues(
+    repo: str, *, state: str = "open", limit: int = 200, timeout: int = 60
+) -> tuple[IssueSnapshot, ...]:
+    """Read many issues at once -- the #186 tracker's source.
+
+    `fetch_issue` above is one-at-a-time. A tracker row per open issue would be
+    ~107 sequential `gh` calls on this repo, which is both slow and a different
+    failure surface (one flaky call in a hundred vs one call that either worked
+    or did not). This is the batch read.
+
+    **Bodies are NOT fetched.** The tracker renders numbers, titles, links and
+    pairing; it never renders a body, and `--json body` over 200 issues is a
+    large payload bought for nothing. A caller that needs one issue's body has
+    `fetch_issue`.
+
+    Raises `GithubIssueError` on anything that is not a clean read, exactly as
+    `fetch_issue` does, so a caller can never mistake a failed read for a repo
+    that legitimately has no issues. That distinction is the whole point on the
+    tracker: "no issues" and "GitHub did not answer" render differently, and
+    collapsing them would be the P6.2 failure this codebase keeps naming.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "issue",
+                "list",
+                "--repo",
+                repo,
+                "--state",
+                state,
+                "--limit",
+                str(limit),
+                "--json",
+                "number,title,labels,state,url",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise GithubIssueError("gh is not installed") from error
+    except subprocess.TimeoutExpired as error:
+        raise GithubIssueError(f"gh issue list timed out after {timeout}s") from error
+
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        raise GithubIssueError(f"gh issue list {repo} failed: {stderr or 'no stderr'}")
+
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise GithubIssueError(f"gh issue list {repo} returned unparseable JSON") from error
+
+    if not isinstance(payload, list):
+        raise GithubIssueError(f"gh issue list {repo} returned a non-list payload")
+
+    issues: list[IssueSnapshot] = []
+    for row in payload:
+        if not isinstance(row, Mapping):
+            continue
+        number = row.get("number")
+        if not isinstance(number, int):
+            # A row without a number cannot be paired or linked. Skipping is
+            # right; inventing one would be worse.
+            continue
+        issues.append(
+            IssueSnapshot(
+                repo=repo,
+                number=number,
+                title=str(row.get("title") or ""),
+                body="",  # see the docstring: deliberately not fetched
+                labels=tuple(
+                    str(label.get("name", ""))
+                    for label in (row.get("labels") or [])
+                    if isinstance(label, Mapping) and label.get("name")
+                ),
+                state=str(row.get("state") or ""),
+                url=str(row.get("url") or ""),
+            )
+        )
+    return tuple(issues)
 
 
 # --- write half (#185) -------------------------------------------------------
