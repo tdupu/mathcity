@@ -90,7 +90,7 @@ You are extracting:
 Record the spec in bd notes:
 
 ```bash
-bd update {{source_bead}} --notes "formula-creator-math gather-spec:
+bd update {{source_bead}} --append-notes "formula-creator-math gather-spec:
   name: {{formula_name}}
   shape: <do-work|non-methodology|methodology|source-search>
   steps: <list>
@@ -102,7 +102,7 @@ bd update {{source_bead}} --notes "formula-creator-math gather-spec:
 Record a block note explaining what is missing, then drain:
 
 ```bash
-bd update {{source_bead}} --notes "BLOCKED: insufficient spec — need <what is missing>"
+bd update {{source_bead}} --append-notes "BLOCKED: insufficient spec — need <what is missing>"
 gc runtime drain-ack
 ```
 """
@@ -147,7 +147,7 @@ TOML_EOF
 
 Record the draft path in bd notes:
 ```bash
-bd update {{source_bead}} --notes "formula-creator-math draft-toml: written to /tmp/{{formula_name}}.toml"
+bd update {{source_bead}} --append-notes "formula-creator-math draft-toml: written to /tmp/{{formula_name}}.toml"
 ```
 """
 
@@ -275,7 +275,7 @@ If any check fails, fix the draft in-place and re-run before proceeding.
 Record the validation outcome:
 
 ```bash
-bd update {{source_bead}} --notes "formula-creator-math validate: all checks passed (TOML, terminal-step, catalog, POLICY-formulas F-rules). terminal-step=<id>"
+bd update {{source_bead}} --append-notes "formula-creator-math validate: all checks passed (TOML, terminal-step, catalog, POLICY-formulas F-rules). terminal-step=<id>"
 ```
 """
 
@@ -378,7 +378,7 @@ If you prefer adjustments, defer (C) with notes and I will revise.
 After writing:
 
 ```bash
-bd update {{source_bead}} --notes "formula-creator-math file-brief: brief filed at {{brief_slug}}.md — awaiting human verdict"
+bd update {{source_bead}} --append-notes "formula-creator-math file-brief: brief filed at {{brief_slug}}.md — awaiting human verdict"
 gc runtime drain-ack
 ```
 """

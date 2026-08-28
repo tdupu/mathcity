@@ -412,3 +412,91 @@ def test_boot_warns_when_no_handoff_found_in_a_readable_hq_store(monkeypatch, tm
     blob = (diag.message + " " + " ".join(f"{k}={v}" for k, v in diag.facts.items())).lower()
     assert "hq" in blob, "diagnostic does not name the hq store it searched"
     assert "handoff" in blob, "diagnostic does not name the handoff query it applied"
+
+
+# ---------------------------------------------------------------------------
+# M3 / mc-uvl, second instance: a TRUNCATED list that did not say it was one.
+#
+# `recent_handoffs` is `found[-limit:]` with limit=5. Five rows came back with
+# nothing beside them saying five was a cap rather than a census, so a Mayor
+# priming from `mayor_boot` could not tell "this session had five predecessors"
+# from "this session had fifty and you are seeing the tail". Same defect class
+# as `work_ready`'s bare array, same fix: the read declares its own scope.
+#
+# `-1` for unmeasured follows this module's existing convention -- `open_beads`
+# and `blocked_beads` already report -1 for an unreadable store rather than 0,
+# because zero is an answer and this is not one.
+
+
+def _boot_with_handoffs(monkeypatch, tmp_path, rows, *, hq_error=None):
+    ctx = _boot_ctx(tmp_path / "rig", tmp_path / "city")
+    monkeypatch.setattr(
+        mayor,
+        "load_rows",
+        lambda root, *_a, **_k: (rows, hq_error) if Path(root) == Path(tmp_path / "city") else ([], None),
+    )
+    monkeypatch.setattr(mayor, "city_state", lambda *_a, **_k: mayor.CityState(
+        state="unknown", probes=(), suspended_rigs=(), active_rigs=(), pane_count=None))
+    return mayor.boot_state(ctx)
+
+
+def _handoff_rows(count: int) -> list[dict[str, object]]:
+    return [
+        {
+            "id": f"gt-{index:03d}",
+            "created_at": f"2026-08-{index + 1:02d}",
+            "status": "open",
+            "title": f"S{index} handoff — session {index}",
+        }
+        for index in range(count)
+    ]
+
+
+def test_a_truncated_handoff_chain_says_it_was_truncated(monkeypatch, tmp_path) -> None:
+    """Twelve handoffs, five rows. The five must not read as all of them."""
+    state = _boot_with_handoffs(monkeypatch, tmp_path, _handoff_rows(12))
+    assert len(state.recent_handoffs) == 5
+    assert state.handoff_scope["matched"] == 5
+    assert state.handoff_scope["handoffs_found"] == 12
+    assert state.handoff_scope["older_omitted"] == 7
+    assert state.handoff_scope["limit"] == 5
+
+
+def test_an_untruncated_chain_reports_zero_omitted_not_a_missing_key(monkeypatch, tmp_path) -> None:
+    """The control. A block that only appeared when it had bad news would leave
+    the caller guessing on every other call."""
+    state = _boot_with_handoffs(monkeypatch, tmp_path, _handoff_rows(3))
+    assert state.handoff_scope["matched"] == 3
+    assert state.handoff_scope["handoffs_found"] == 3
+    assert state.handoff_scope["older_omitted"] == 0
+
+
+def test_the_denominator_counts_the_store_not_the_handoffs(monkeypatch, tmp_path) -> None:
+    """`total_in_store` must not shrink with the filter -- #245's rule. Rows
+    that are not handoffs still move it, or the ratio is meaningless."""
+    rows = _handoff_rows(2) + [
+        {"id": "gt-x", "created_at": "2026-08-20", "status": "open", "title": "not a session record"},
+        {"id": "gt-y", "created_at": "2026-08-21", "status": "closed", "title": "also not one"},
+    ]
+    state = _boot_with_handoffs(monkeypatch, tmp_path, rows)
+    assert state.handoff_scope["matched"] == 2
+    assert state.handoff_scope["handoffs_found"] == 2
+    assert state.handoff_scope["total_in_store"] == 4
+
+
+def test_an_unreadable_hq_store_reports_unmeasured_never_zero(monkeypatch, tmp_path) -> None:
+    """P6.2's mirror: a diagnostic that cannot pass. `handoffs_found: 0` for a
+    store nobody could read is a measurement that was never taken, rendered as
+    one that was. -1, the convention `open_beads` already uses here."""
+    state = _boot_with_handoffs(monkeypatch, tmp_path, [], hq_error="dolt: connection refused")
+    assert state.handoff_scope["handoffs_found"] == -1
+    assert state.handoff_scope["total_in_store"] == -1
+    assert state.handoff_scope["older_omitted"] == -1
+    assert state.handoff_scope["matched"] == 0, "matched is the rows returned, and zero were"
+
+
+def test_the_scope_block_reaches_the_payload(monkeypatch, tmp_path) -> None:
+    """`to_dict` is what the MCP tool and the CLI both serialise; a field that
+    stops at the dataclass is not a declaration anyone can read."""
+    state = _boot_with_handoffs(monkeypatch, tmp_path, _handoff_rows(9))
+    assert state.to_dict()["handoff_scope"] == dict(state.handoff_scope)

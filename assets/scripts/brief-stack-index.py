@@ -467,6 +467,114 @@ def command_add_missing_rows(args: argparse.Namespace) -> int:
     return 0
 
 
+#: The three path serializations the live index is known to hold. Named so a
+#: report can say WHICH form a row used instead of just "unresolvable", which
+#: was the reading error that turned a 1-file gap into a claimed 44% divergence.
+SERIALIZATION_CITY_RELATIVE = "city-relative"   # ".beads/briefs/stack/x.md"
+SERIALIZATION_ABSOLUTE = "absolute"             # "/Users/.../stack/x.md"
+SERIALIZATION_BRIEFS_RELATIVE = "briefs-relative"  # "stack/x.md"
+SERIALIZATION_BARE = "bare"                     # "x.md"
+
+
+def path_serialization(path: str) -> str:
+    """Classify a row's ``path`` by which root it is relative to.
+
+    This exists because the divergence between index and disk is NOT
+    measurable by string comparison: the same file is spelled three ways.
+    Comparing raw ``path`` strings against a single base makes every row in the
+    other two forms look phantom, which is exactly how a 1-row gap was once
+    reported as 40 phantom rows and 41 orphan files.
+    """
+    if path.startswith("/"):
+        return SERIALIZATION_ABSOLUTE
+    if ".beads/" in path:
+        return SERIALIZATION_CITY_RELATIVE
+    if path.startswith("stack/"):
+        return SERIALIZATION_BRIEFS_RELATIVE
+    return SERIALIZATION_BARE
+
+
+def command_check(args: argparse.Namespace) -> int:
+    """Report index/disk divergence, and FAIL when there is any.
+
+    Read-only always: there is no ``--apply``, because a check that can write
+    is not a check. The repair is ``add-missing-rows``.
+
+    Exit codes are the point (mathcity POLICY P6.2 -- a check that could not
+    have failed must not render as a check that passed):
+
+    * ``0`` -- every stack file has exactly one row and every row resolves to a
+      file on disk.
+    * ``1`` -- divergence: orphan files, phantom rows, or duplicate rows.
+    * ``2`` -- the index is unreadable or malformed rows are present, which is
+      a different failure from divergence and must not be reported as one.
+
+    Rows are matched to files on BASENAME, never on the raw ``path`` string,
+    for the reason in `path_serialization`. Serialization counts are reported
+    so heterogeneity stays visible without being scored as divergence -- three
+    spellings of a file that exists is a writer-consistency defect, not a
+    missing brief, and conflating them is what produced the false 44% figure.
+    """
+    brief_root = Path(args.brief_root).expanduser()
+    stack = brief_root / "stack"
+    index = stack / ".index.jsonl"
+
+    if not stack.is_dir():
+        print(json.dumps({"command": "check", "error": "stack-dir-missing",
+                          "stack": str(stack)}, indent=2, sort_keys=True))
+        return 2
+
+    lines = load_index(index) if index.exists() else []
+    malformed = [line.line_no for line in lines if line.entry is None]
+
+    serializations: dict[str, int] = {}
+    row_basenames: list[str] = []
+    rows_without_path = 0
+    for line in lines:
+        if line.entry is None:
+            continue
+        raw = line.entry.get("path")
+        if not isinstance(raw, str) or not raw:
+            rows_without_path += 1
+            continue
+        key = path_serialization(raw)
+        serializations[key] = serializations.get(key, 0) + 1
+        row_basenames.append(Path(raw).name)
+
+    disk = sorted(p.name for p in stack.glob("*.md") if p.is_file())
+    indexed = set(row_basenames)
+    duplicates = sorted(
+        {name for name in row_basenames if row_basenames.count(name) > 1}
+    )
+    orphan_files = sorted(name for name in disk if name not in indexed)
+    phantom_rows = sorted(indexed - set(disk))
+
+    divergence = len(orphan_files) + len(phantom_rows) + len(duplicates)
+    report = {
+        "command": "check",
+        "index_row_count": len(lines),
+        "stack_file_count": len(disk),
+        "resolved_row_count": len(row_basenames),
+        "overlap_count": len(indexed & set(disk)),
+        "orphan_files": orphan_files,
+        "orphan_file_count": len(orphan_files),
+        "phantom_rows": phantom_rows,
+        "phantom_row_count": len(phantom_rows),
+        "duplicate_basenames": duplicates,
+        "rows_without_path": rows_without_path,
+        "malformed_row_numbers": malformed,
+        "path_serializations": serializations,
+        "serialization_form_count": len(serializations),
+        "divergence_count": divergence,
+        "ok": divergence == 0 and not malformed,
+    }
+    print(json.dumps(report, indent=2, sort_keys=True))
+
+    if malformed:
+        return 2
+    return 1 if divergence else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -486,6 +594,10 @@ def main() -> int:
     add_missing.add_argument("--brief-root", required=True)
     add_missing.add_argument("--apply", action="store_true")
     add_missing.set_defaults(func=command_add_missing_rows)
+
+    check = sub.add_parser("check")
+    check.add_argument("--brief-root", required=True)
+    check.set_defaults(func=command_check)
 
     args = parser.parse_args()
     return args.func(args)

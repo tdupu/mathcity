@@ -320,7 +320,7 @@ class BriefFrontmatterUnwritable(OSError):
 
 
 
-def _pile_document(body: str) -> str:
+def _pile_document(body: str, sources: Sequence[str] = ()) -> str:
     """The created document, WITH a frontmatter block adjudication can write into.
 
     Created documents used to be the raw body. Nothing reads a brief's status from
@@ -340,10 +340,28 @@ def _pile_document(body: str) -> str:
 
     A body that already opens with its own block is passed through untouched --
     callers that supply frontmatter are honoured rather than given a second one.
+
+    `source_bead` is written from the same `sources` the create just REFUSED to
+    proceed without (MBRF034 is FATAL since #173), because dropping it here is
+    what made the drain call these briefs unprovenanced. `profile_error` in
+    `brief-shuffle-fast-drain.py` asks the standard profile's frontmatter for
+    `source_bead | artifact | brief_bead`; a document whose whole header was
+    `status: open` answered none of them, so EVERY brief from the single
+    code-enforced writer (POLICY B2.11) was rejected for lacking a fact its own
+    creation guaranteed. The bead held it; the cache file did not say so.
+
+    The FIRST source, not a joined list. `source_bead` is a single-valued line
+    in this format and downstream readers (`verdicts._track_keys`) compare it to
+    a bead id by equality, so "a, b" would match no bead at all -- worse than
+    naming one. Sources beyond the first stay on the bead, which is canonical
+    (B2.8); this line is the cache agreeing with it, not replacing it.
     """
     if body.lstrip().startswith("---"):
         return body
-    return f"---\nstatus: open\n---\n\n{body}"
+    header = "status: open"
+    if sources:
+        header += f"\nsource_bead: {sources[0]}"
+    return f"---\n{header}\n---\n\n{body}"
 
 
 @dataclass(frozen=True)
@@ -385,10 +403,20 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
         ctx, request.title, request.body, request.labels
     )
     # Creation is a mutation, so the same legacy-migration gate that blocks
-    # adjudication blocks it. Doctor's per-brief findings are deliberately not
-    # consulted: an unrelated malformed brief must not make the rig unable to
-    # accept new ones.
-    preconditions = _blocking_preconditions(legacy_gate_diagnostics(ctx))
+    # adjudication blocks it -- SCOPED to what creation writes, exactly as the
+    # gate is scoped for adjudication, deferral and dispatch. Those three name
+    # an existing brief and reach this predicate through `doctor_briefs(ctx,
+    # brief_id)`, which scopes it to `{brief_id}`; creation has no brief id yet,
+    # because bd mints it, so the set of decisions-track rows this write can
+    # touch is empty. An unparseable manifest still fails closed inside
+    # `legacy_gate_diagnostics` -- scoping asks WHICH parsed rows are at risk,
+    # and a manifest that does not parse has no answer to give.
+    #
+    # Passing `None` here vetoed creation on any non-terminal row anywhere in
+    # the rig (mc-tbucy). Doctor's per-brief findings are likewise deliberately
+    # not consulted: an unrelated malformed brief must not make the rig unable
+    # to accept new ones, and neither must an unrelated legacy row.
+    preconditions = _blocking_preconditions(legacy_gate_diagnostics(ctx, set()))
     advisories: list[Diagnostic] = []
     # G17/C3 (mc-qbs6j). `validate_brief_input` already REFUSED on C1 and C2.
     # C3 is declared advisory in `section-discipline.toml` because B1.9(c) and
@@ -467,7 +495,7 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
     pile_create = FileCreate(
         "pile_markdown",
         layout.pile / f"{NEW_BRIEF_ID_PLACEHOLDER}.md",
-        _pile_document(body),
+        _pile_document(body, request.sources),
     )
     cache_update = CacheUpdate(
         "decision_toml",

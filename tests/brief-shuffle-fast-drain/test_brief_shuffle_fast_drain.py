@@ -66,7 +66,7 @@ class BriefShuffleFastDrainTests(unittest.TestCase):
 
     def write_brief(self, slug, profile="standard", extra_frontmatter="", evidence=None):
         profile_gates = {
-            "standard": ["G1", "G2", "G3", "G4", "G5", "G5b", "G6", "G7", "G8", "G9", "G10", "G11", "G12", "G13", "G14", "G15", "G16"],
+            "standard": ["G1", "G2", "G3", "G4", "G5", "G5b", "G6", "G7", "G8", "G9", "G10", "G11", "G12", "G13", "G14", "G15", "G16", "G17"],
             "decision": ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"],
             "lost_bead_filter": ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"],
             "producer_repair": ["G5", "G5b", "G8", "G9", "G11", "G12", "G13"],
@@ -79,6 +79,7 @@ class BriefShuffleFastDrainTests(unittest.TestCase):
             "G9": "No-brainer-filter", "G10": "Improve-README", "G11": "Breadcrumb",
             "G12": "Auto-merge-kill-switch", "G13": "Stale-claim",
             "G14": "Test-execution-silent", "G15": "Improve-README-silent", "G16": "Master-current",
+            "G17": "Section-discipline",
         }
         lines = evidence if evidence is not None else [
             f"{gate} {gate_names[gate]}: "
@@ -705,6 +706,79 @@ feedback_sink: brief_quality_failure
         self.assertEqual(report["rejected"], [])
         self.assertTrue((self.brief_root / ".pile/never-touched.md").is_file())
 
+    def test_relative_brief_root_from_foreign_cwd_fails_loud(self):
+        # D4/#73 defect class. The formula's step emits a bare relative
+        # `--brief-root .beads/briefs`, and the ralph runner's cwd is a
+        # per-bead agent work dir -- never a brief root. Resolved against that
+        # cwd the root does not exist, and the drain used to exit 0 with an
+        # all-empty report and `remaining_pile: 0`, i.e. it reported a clean
+        # pile while the real pile sat untouched. P6.1: a drain that cannot
+        # see its pile must fail loud, not answer "nothing to drain".
+        self.write_brief("never-reached")
+        foreign_cwd = Path(self.temp_dir.name) / "agent-work-dir"
+        foreign_cwd.mkdir()
+        result = subprocess.run(
+            ["python3", str(SCRIPT),
+             "--brief-root", ".beads/briefs",
+             "--gate-config", str(GATES),
+             "--bead-fixture", str(self.bead_fixture),
+             "--json", "--no-external", "--apply"],
+            cwd=foreign_cwd, text=True, capture_output=True, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        report = json.loads(result.stdout)
+        self.assertIn("brief_root_error", report)
+        # remaining_pile must never read as 0 from a root that was never seen.
+        self.assertIsNone(report["remaining_pile"])
+        self.assertEqual(report["promoted"], [])
+        self.assertEqual(report["rejected"], [])
+        # the real pile is untouched
+        self.assertTrue((self.brief_root / ".pile/never-reached.md").is_file())
+
+    def test_existing_brief_root_with_no_pile_is_not_an_error(self):
+        # The guard must fire on a MISRESOLVED root, not on a legitimately
+        # empty pipeline: brief root present, pile absent, is a real state.
+        import shutil
+        shutil.rmtree(self.brief_root / ".pile")
+        result = self.run_drain("--apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertNotIn("brief_root_error", report)
+        self.assertEqual(report["remaining_pile"], 0)
+    def test_a_brief_declaring_G17_FAIL_is_still_rejected(self):
+        """Control for the G17 fixture repair.
+
+        All 13 failures this repair fixes read "missing required gate G17
+        Section-discipline": gates.toml's `standard` profile requires G17 and
+        this fixture's gate list stopped at G16, so every fixture brief was
+        refused before reaching the behaviour under test.
+
+        Adding G17 to the fixture is only correct if the gate still REFUSES a
+        brief that genuinely fails it. Without this the repair is
+        indistinguishable from switching the gate off (POLICY P6.2).
+        """
+        names = {
+            "G1": "Test-evidence", "G2": "Good-test", "G3": "Shell-scripts-testable",
+            "G4": "Critical-review", "G5": "Server-touching", "G5b": "User-skill-touching",
+            "G6": "LaTeX-gate", "G7": "Artifacts-staging", "G8": "Brief-record",
+            "G10": "Improve-README", "G11": "Breadcrumb",
+            "G12": "Auto-merge-kill-switch", "G13": "Stale-claim",
+            "G14": "Test-execution-silent", "G15": "Improve-README-silent",
+            "G16": "Master-current",
+        }
+        evidence = [f"{g} {n}: PASS" for g, n in names.items()]
+        evidence.append(
+            "G9 No-brainer-filter: PASS classifier_state=known_non_no_brainer "
+            "reason=fixture classified_at=2026-08-16T00:00:00Z"
+        )
+        evidence.append("G17 Section-discipline: FAIL")
+        self.write_brief("g17-fails", evidence=evidence)
+        report = self.json_output(self.run_drain("--apply"))
+        self.assertEqual(report["promoted"], [])
+        self.assertEqual(report["rejected"], ["g17-fails"])
+        self.assertIn("G17", report["reasons"]["g17-fails"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

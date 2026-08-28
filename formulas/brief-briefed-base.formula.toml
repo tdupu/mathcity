@@ -102,7 +102,7 @@ was poured directly). Fail closed rather than proceeding with no real intake:
 
 ```bash
 echo "[brief-briefed-base] BLOCKED: the abstract base intake ran — this formula must be EXTENDED, not poured directly. Override the 'intake' step in a child formula."
-bd update {{source_bead}} --notes "brief-briefed-base abstract intake ran directly — pour a child formula (report-fix-briefed / create-issue-briefed / pr-pipeline-briefed) instead."
+bd update {{source_bead}} --append-notes "brief-briefed-base abstract intake ran directly — pour a child formula (report-fix-briefed / create-issue-briefed / pr-pipeline-briefed) instead."
 gc runtime drain-ack; exit 0
 ```
 
@@ -124,7 +124,7 @@ If this placeholder runs, a child failed to override it — fail closed:
 
 ```bash
 echo "[brief-briefed-base] BLOCKED: the abstract base compose-body ran — override it in a child formula."
-bd update {{source_bead}} --notes "brief-briefed-base abstract compose-body ran directly — pour a child formula instead."
+bd update {{source_bead}} --append-notes "brief-briefed-base abstract compose-body ran directly — pour a child formula instead."
 gc runtime drain-ack; exit 0
 ```
 
@@ -193,7 +193,7 @@ agent performs it.
 
 After filing:
 ```bash
-bd update {{source_bead}} --notes "{{source_formula}} file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (commissioned action {{terminal_action}} not yet performed)."
+bd update {{source_bead}} --append-notes "{{source_formula}} file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (commissioned action {{terminal_action}} not yet performed)."
 gc runtime drain-ack
 ```
 

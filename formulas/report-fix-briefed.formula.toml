@@ -104,7 +104,7 @@ case "$TARGET_REPO" in
   tdupu/mathcity) : ;;
   *)
     echo "[report-fix-briefed] BLOCKED: target_repo '$TARGET_REPO' is not the owned repo; this box fixes tdupu/mathcity only."
-    bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: target_repo '$TARGET_REPO' unsupported. This box is tdupu/mathcity-owned only."
+    bd update {{source_bead}} --append-notes "report-fix-briefed intake BLOCKED: target_repo '$TARGET_REPO' unsupported. This box is tdupu/mathcity-owned only."
     gc runtime drain-ack; exit 0 ;;
 esac
 ```
@@ -116,7 +116,7 @@ build-basic-briefed fix against code we do not own:
 ```bash
 # When intake determines the fix site is upstream (not under the owned tree):
 echo "[report-fix-briefed] BLOCKED (out of owned set): the fix would land upstream (gc/bd core or upstream gascity-packs)."
-bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: reported bug's fix site is UPSTREAM, out of the tdupu/mathcity owned set. Route via the P3.2 briefed path (create-issue-briefed -> upstream PR pipeline), NOT build-basic-briefed."
+bd update {{source_bead}} --append-notes "report-fix-briefed intake BLOCKED: reported bug's fix site is UPSTREAM, out of the tdupu/mathcity owned set. Route via the P3.2 briefed path (create-issue-briefed -> upstream PR pipeline), NOT build-basic-briefed."
 gc runtime drain-ack; exit 0
 ```
 
@@ -125,7 +125,7 @@ gc runtime drain-ack; exit 0
 DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
 if [ -z "$DESC" ]; then
     echo "[report-fix-briefed] BLOCKED: {{source_bead}} has no report text to draft a fix-brief from"
-    bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: source bead has no report text."
+    bd update {{source_bead}} --append-notes "report-fix-briefed intake BLOCKED: source bead has no report text."
     gc runtime drain-ack; exit 0
 fi
 ```
@@ -164,14 +164,14 @@ missing list when evidence is insufficient:
 GATE="$(git rev-parse --show-toplevel)/assets/scripts/report_fix_evidence_gate.py"
 if ! VERDICT=$(python3 "$GATE" --repro "$REPRO" --code-site "$CODE_SITE" --sources "$SOURCES"); then
     echo "[report-fix-briefed] $VERDICT"
-    bd update {{source_bead}} --notes "report-fix-briefed intake BLOCKED: $VERDICT (need <a repro OR a locatable code site> and <a related bead or a minted defect source>). Fail-closed per D5/P6.1; nothing dispatched."
+    bd update {{source_bead}} --append-notes "report-fix-briefed intake BLOCKED: $VERDICT (need <a repro OR a locatable code site> and <a related bead or a minted defect source>). Fail-closed per D5/P6.1; nothing dispatched."
     gc runtime drain-ack; exit 0
 fi
 ```
 
 **4. Record intake results for compose-body:**
 ```bash
-bd update {{source_bead}} --notes "report-fix-briefed intake:
+bd update {{source_bead}} --append-notes "report-fix-briefed intake:
   target_repo: $TARGET_REPO
   scope: OWNED (tdupu/mathcity)
   evidence: <repro | code-site file:line | both>
@@ -226,7 +226,7 @@ Fix `<one-line statement of the bug>` in tdupu/mathcity? APPROVE dispatches
 A = APPROVE → dispatch {{fix_formula}} (worker fixes the bug, opens a PR to
 tdupu/mathcity). C = REVISE (evidence insufficient / scope wrong).
 EOF
-bd update {{source_bead}} --notes "report-fix-briefed compose-body: fix-brief body drafted at $GC_WORK_DIR/{{brief_slug}}-body.md"
+bd update {{source_bead}} --append-notes "report-fix-briefed compose-body: fix-brief body drafted at $GC_WORK_DIR/{{brief_slug}}-body.md"
 ```
 
 **Exit criteria:** an evidence-backed fix-brief body written to $GC_WORK_DIR, §1

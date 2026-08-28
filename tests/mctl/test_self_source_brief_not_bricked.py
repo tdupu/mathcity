@@ -31,6 +31,16 @@ contradicts the blocker sitting beside it.
 
 My #157 tests could not have caught this: all five construct a source bead
 DISTINCT from the brief. No fixture put them in the same object.
+
+NARROWED 2026-08-28 (M3, mc-uvl). The exemption keyed on `source.id ==
+brief_id`, which is true of two different briefs: the sourceless one the
+fallback made its own source (the case above -- exempt), and one that
+EXPLICITLY names its own id in `source_dependencies`. The second has a real
+`source_id`, so MWRK011 never fires, nothing contradicts MWRK013, and the
+exemption handed back the closed-bead-reports-ready defect #157 closed.
+`synthetic_self_source` now separates them, and it is required rather than
+defaulted so no caller can get the permissive branch by omission. Every call
+below passes it explicitly; the assertions are otherwise unchanged.
 """
 from __future__ import annotations
 
@@ -63,7 +73,7 @@ def test_a_brief_that_is_its_own_source_is_not_blocked_for_being_closed():
     """The brick. An adjudicated sourceless brief is closed BY DEFINITION."""
     brief = bead("brief-1", status="closed")          # adjudication closed it
     assert work._closed_source_blockers(
-        StubCtx(), brief_id="brief-1", source=brief
+        StubCtx(), brief_id="brief-1", source=brief, synthetic_self_source=True
     ) == []
 
 
@@ -71,7 +81,7 @@ def test_a_REAL_closed_source_bead_is_still_blocked():
     """#157 must survive. If this fails the original defect is back."""
     closed_source = bead("src-1", status="closed")
     blockers = work._closed_source_blockers(
-        StubCtx(), brief_id="brief-1", source=closed_source
+        StubCtx(), brief_id="brief-1", source=closed_source, synthetic_self_source=False
     )
     assert [d.code for d in blockers] == ["MWRK013"]
 
@@ -79,13 +89,13 @@ def test_a_REAL_closed_source_bead_is_still_blocked():
 def test_a_real_OPEN_source_is_still_not_blocked():
     open_source = bead("src-1", status="open")
     assert work._closed_source_blockers(
-        StubCtx(), brief_id="brief-1", source=open_source
+        StubCtx(), brief_id="brief-1", source=open_source, synthetic_self_source=False
     ) == []
 
 
 def test_a_missing_source_is_still_left_to_MWRK012():
     assert work._closed_source_blockers(
-        StubCtx(), brief_id="brief-1", source=None
+        StubCtx(), brief_id="brief-1", source=None, synthetic_self_source=False
     ) == []
 
 
@@ -95,6 +105,21 @@ def test_the_two_contradictory_blockers_can_never_co_occur():
     """
     self_source = bead("brief-1", status="closed")
     codes = [d.code for d in work._closed_source_blockers(
-        StubCtx(), brief_id="brief-1", source=self_source
+        StubCtx(), brief_id="brief-1", source=self_source, synthetic_self_source=True
     )]
     assert "MWRK013" not in codes
+
+
+def test_a_brief_that_NAMES_ITSELF_as_a_source_is_still_blocked_when_closed():
+    """The narrowing (M3). Not the fallback -- a real, self-naming dependency.
+
+    Zero live instances across the mathcity, hq and hecke stores on
+    2026-08-28 (46,550 beads), so this is a latent hole rather than a measured
+    one. It is still the same hole: one predicate wide, and on the read that
+    tells a dispatcher what to pick up.
+    """
+    self_named = bead("brief-1", status="closed")
+    blockers = work._closed_source_blockers(
+        StubCtx(), brief_id="brief-1", source=self_named, synthetic_self_source=False
+    )
+    assert [d.code for d in blockers] == ["MWRK013"]

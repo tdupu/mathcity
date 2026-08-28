@@ -86,6 +86,26 @@ def _instance_on(port: int) -> dashboards.DashboardInstance | None:
     return None
 
 
+def _instance_on_within(port: int, *, timeout: float = 20.0):
+    """`_instance_on`, polled -- because the stamp and the port are two signals.
+
+    `_listening` polls the PORT; `discover` reads a STAMP FILE. The child binds
+    its socket and writes its stamp independently, so a bound port does not
+    imply a readable stamp, and asserting on `_instance_on` the instant
+    `_listening` returns is a race. Measured 2026-08-28: it lost 2 runs in 5,
+    always as `assert None is not None`.
+
+    A flaky test is worse than no test -- it trains the reader to discount red.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        inst = _instance_on(port)
+        if inst is not None:
+            return inst
+        time.sleep(0.2)
+    return None
+
+
 @pytest.fixture
 def served_port():
     """A real dashboard on a free port, torn down however the test ends.
@@ -100,7 +120,9 @@ def served_port():
         assert _listening(port, timeout=30), "the dashboard never bound its port"
         yield port
     finally:
-        inst = _instance_on(port)
+        # Poll here too: a stamp not yet written at teardown means the fixture
+        # silently leaks a real dashboard -- the exact #154 failure this file cites.
+        inst = _instance_on_within(port, timeout=10.0)
         if inst is not None:
             dashboards.stop_instance(inst)
             dashboards.remove_stamp(CITY_ROOT, inst.pid)
@@ -119,7 +141,7 @@ def test_stop_then_start_rebinds(served_port: int) -> None:
     reported failure on a process it had killed, so the start never happened
     and the port stayed dead.
     """
-    old = _instance_on(served_port)
+    old = _instance_on_within(served_port)
     assert old is not None, "the instance left no discoverable stamp"
 
     assert dashboards.stop_instance(old) is True, (
@@ -133,7 +155,7 @@ def test_stop_then_start_rebinds(served_port: int) -> None:
     )
     assert _listening(served_port, timeout=30), "nothing bound the port after the restart"
 
-    new = _instance_on(served_port)
+    new = _instance_on_within(served_port)
     assert new is not None
     assert new.pid != old.pid, "the rebind returned the same pid; nothing was replaced"
 
@@ -147,7 +169,7 @@ def test_stopped_dashboard_leaves_no_zombie_claiming_to_be_alive(served_port: in
     After a stop, the old pid must not report alive -- that false positive is
     what made `dashboard_restart` refuse to replace what it had just destroyed.
     """
-    inst = _instance_on(served_port)
+    inst = _instance_on_within(served_port)
     assert inst is not None
     dashboards.stop_instance(inst)
     dashboards.remove_stamp(CITY_ROOT, inst.pid)

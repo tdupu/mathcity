@@ -31,6 +31,7 @@ event.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from typing import Any, Callable, Mapping
 
@@ -47,6 +48,29 @@ EMIT_FAILED = "MEVT_EMIT_FAILED"
 EMIT_TIMEOUT_SECONDS = 10
 
 Runner = Callable[[list[str]], Any]
+
+#: Kill-switch for the real doorbell. Set to `0`/`false`/`no`/`off` to make
+#: `emit` a no-op instead of shelling to `gc event emit`.
+#:
+#: WHY IT EXISTS (measured 2026-08-28). `gc` is on PATH on a developer box, so
+#: any test that drives a LIVE mctl apply rang the REAL city: 329 `brief.decided`
+#: events with the fixture subject `mc-open`, plus 60 for `gs-open`, were on the
+#: bus in 24h, the oldest from 2026-08-27T18:38 -- and `brief.decided` has THREE
+#: consumers, so each one woke brief-decision-dispatch,
+#: post-decision-file-or-sendback and revise-return on a brief that does not
+#: exist. A fixture run is not a city and must not ring its bells.
+#:
+#: The switch is honoured ONLY for the default subprocess runner. An INJECTED
+#: runner is the caller's own seam -- a test that supplies one is asking to
+#: observe the call, and suppressing it there would make the seam lie.
+CITY_EVENTS_ENV = "MCTL_CITY_EVENTS"
+
+_SUPPRESSED_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def suppressed() -> bool:
+    """True when the environment has switched the real doorbell off."""
+    return os.environ.get(CITY_EVENTS_ENV, "").strip().lower() in _SUPPRESSED_VALUES
 
 
 def _default_runner(argv: list[str]) -> "subprocess.CompletedProcess[str]":
@@ -92,6 +116,11 @@ def emit(
     `runner` is an injectable subprocess seam (a recording fake in tests);
     absent, it shells to `gc event emit` with a bounded timeout.
     """
+    if runner is None and suppressed():
+        # Deliberate suppression is not a failed doorbell: the caller asked for
+        # silence, so there is nothing for a backstop to recover and no advisory
+        # to raise.
+        return None
     argv = emit_argv(event, subject, payload)
     run = runner or _default_runner
     try:
@@ -113,4 +142,45 @@ def _failed(event: str, subject: str, detail: str) -> Diagnostic:
         "the condition backstop will recover it.",
         hint="events are lossy by design; the typed mutation already succeeded",
         facts={"event_type": event, "subject": subject, "detail": detail},
+    )
+
+
+#: The city event one recorded verdict rings. THREE orders subscribe to it --
+#: `brief-decision-dispatch` (acts on the verdict), `post-decision-file-or-
+#: sendback` (routes follow-up briefing), and `revise-return` (re-deposits a
+#: revised brief). Named once here so the producers cannot disagree about it.
+BRIEF_DECIDED = "brief.decided"
+
+
+def emit_brief_decided(
+    brief_id: str,
+    *,
+    verdict: object,
+    adjudicated_by: object,
+    runner: Runner | None = None,
+) -> Diagnostic | None:
+    """Ring `brief.decided` for a just-recorded verdict, from ANY write path.
+
+    WHY THIS IS SHARED (mc-d6lp). The MCP path (`briefs_relay_adjudication`)
+    rang this bell; the CLI path (`mctl briefs adjudicate`) recorded the same
+    verdict and rang nothing -- so `gc events | grep revise-return` showed zero
+    firings and 13 hecke briefs adjudicated `revise` were closed by a verdict
+    that could never come back. Two producers of one event with two separate
+    payload literals is how they drifted; there is now one.
+
+    The payload keys are the ones the skill path (brief-record-decision.toml)
+    uses, so a consumer cannot tell the three producers apart: `brief_slug`
+    resolves the brief for all three orders, and `decision` is what
+    brief-decision-dispatch branches on (approve/reject/revise/defer).
+    Best-effort like every doorbell: returns a WARN advisory, never raises.
+    """
+    return emit(
+        BRIEF_DECIDED,
+        brief_id,
+        {
+            "brief_slug": brief_id,
+            "decision": verdict,
+            "adjudicated_by": adjudicated_by,
+        },
+        runner=runner,
     )

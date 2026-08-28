@@ -100,7 +100,7 @@ case "$TARGET_REPO" in
   tdupu/mathcity|tdupu/gascity-packs|gastownhall/gascity|tdupu/gascity) : ;;
   *)
     echo "[mathcity-issue-briefed] BLOCKED: target_repo '$TARGET_REPO' is not a recognized target"
-    bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: unrecognized target_repo '$TARGET_REPO' (recognized: tdupu/mathcity, tdupu/gascity-packs, gastownhall/gascity, tdupu/gascity)"
+    bd update {{source_bead}} --append-notes "mathcity-issue-briefed intake BLOCKED: unrecognized target_repo '$TARGET_REPO' (recognized: tdupu/mathcity, tdupu/gascity-packs, gastownhall/gascity, tdupu/gascity)"
     gc runtime drain-ack; exit 0 ;;
 esac
 ```
@@ -146,7 +146,7 @@ then produces a plain body.
 DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
 if [ -z "$DESC" ]; then
     echo "[mathcity-issue-briefed] BLOCKED: {{source_bead}} has no description to draft an issue from"
-    bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: source bead has no description text to draft the issue from"
+    bd update {{source_bead}} --append-notes "mathcity-issue-briefed intake BLOCKED: source bead has no description text to draft the issue from"
     gc runtime drain-ack; exit 0
 fi
 ```
@@ -174,13 +174,13 @@ the duplicate found.
 On any missing item:
 ```bash
 echo "[mathcity-issue-briefed] BLOCKED: investigation evidence missing: <list the stages>"
-bd update {{source_bead}} --notes "mathcity-issue-briefed intake BLOCKED: investigation evidence missing for stage(s) <list> per {{investigation_standard}}. Run the create-issue skill (or record the evidence on this bead) before re-dispatching."
+bd update {{source_bead}} --append-notes "mathcity-issue-briefed intake BLOCKED: investigation evidence missing for stage(s) <list> per {{investigation_standard}}. Run the create-issue skill (or record the evidence on this bead) before re-dispatching."
 gc runtime drain-ack; exit 0
 ```
 
 **6. Record intake results for compose-body:**
 ```bash
-bd update {{source_bead}} --notes "create-issue-briefed intake:
+bd update {{source_bead}} --append-notes "create-issue-briefed intake:
   target_repo: $TARGET_REPO
   template_path: ${TEMPLATE_PATH:-<none — plain body>}
   issue_kind: $ISSUE_KIND

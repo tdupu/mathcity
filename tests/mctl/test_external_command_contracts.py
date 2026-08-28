@@ -184,6 +184,11 @@ def test_gc_accepts_every_flag_mctl_puts_in_a_dispatch_command(tmp_path: Path):
     class _Ctx:
         rig_id = "mathcity"
         rig_root = tmp_path / "rig"
+        # `_formula_invocation` resolves the brief deposit root through
+        # `artifact_layout()`, which reads paths.toml. Pointing at a file that
+        # does not exist is the honest double: the resolver falls back to its
+        # declared default, which is the layout this test's rig has.
+        paths_toml = tmp_path / "no-paths.toml"
 
     class _Item:
         brief_id = BRIEF_ID

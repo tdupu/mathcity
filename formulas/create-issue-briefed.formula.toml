@@ -104,7 +104,7 @@ if [ -z "$TARGET_REPO" ]; then
 fi
 if [ -z "$TARGET_REPO" ]; then
     echo "[create-issue-briefed] BLOCKED: could not resolve target repo (pass --var target_repo=owner/name)"
-    bd update {{source_bead}} --notes "create-issue-briefed intake BLOCKED: target repo unresolved (pass target_repo=owner/name)"
+    bd update {{source_bead}} --append-notes "create-issue-briefed intake BLOCKED: target repo unresolved (pass target_repo=owner/name)"
     gc runtime drain-ack; exit 0
 fi
 ```
@@ -127,14 +127,14 @@ fi
 DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // ""')
 if [ -z "$DESC" ]; then
     echo "[create-issue-briefed] BLOCKED: {{source_bead}} has no description to draft an issue from"
-    bd update {{source_bead}} --notes "create-issue-briefed intake BLOCKED: source bead has no description text to draft the issue from"
+    bd update {{source_bead}} --append-notes "create-issue-briefed intake BLOCKED: source bead has no description text to draft the issue from"
     gc runtime drain-ack; exit 0
 fi
 ```
 
 **5. Record intake results for compose-body:**
 ```bash
-bd update {{source_bead}} --notes "create-issue-briefed intake:
+bd update {{source_bead}} --append-notes "create-issue-briefed intake:
   target_repo: $TARGET_REPO
   template_path: ${TEMPLATE_PATH:-<none — plain body>}"
 ```
@@ -172,7 +172,7 @@ DESC=$(bd show {{source_bead}} --json 2>/dev/null | jq -r '.[0].description // "
 cat > "$GC_WORK_DIR/{{brief_slug}}-issue-body.md" << 'EOF'
 <the fully-filled issue body, matching $TEMPLATE_PATH structure exactly>
 EOF
-bd update {{source_bead}} --notes "create-issue-briefed compose-body: template-complete issue body drafted at $GC_WORK_DIR/{{brief_slug}}-issue-body.md"
+bd update {{source_bead}} --append-notes "create-issue-briefed compose-body: template-complete issue body drafted at $GC_WORK_DIR/{{brief_slug}}-issue-body.md"
 ```
 
 **Exit criteria:** a template-complete issue body written to $GC_WORK_DIR. This
@@ -226,7 +226,7 @@ runs `gh issue create` with this exact body.
 After filing:
 
 ```bash
-bd update {{source_bead}} --notes "create-issue-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (no issue filed)."
+bd update {{source_bead}} --append-notes "create-issue-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (no issue filed)."
 gc runtime drain-ack
 ```
 """

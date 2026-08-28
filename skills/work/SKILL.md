@@ -217,12 +217,35 @@ this stays a `gc sling` of the router, which files the commission brief. Once
 that brief is approved, dispatch goes back through path A.
 
 Run from the source bead's rig directory so `bd` resolves the bead correctly.
-Use a bead-scoped artifact root; never a shared bare rig root.
+
+**Two roots, and they are not interchangeable.** `artifact_root` is the
+build/stage root and is bead-scoped, because two concurrent dispatches in one
+rig otherwise share a stage root (gsp-1bmxuz). `brief_root` is the brief DEPOSIT
+root and is the rig's one shared brief tree, because that is the only pile any
+adjudication surface reads. Passing one value for both is mc-4ovmy: it stranded
+18 complete, gate-passing briefs under `.gc-builds/<bead>/.pile/`, where nothing
+looks — a brief no adjudicator can reach is, operationally, not filed.
+
+`brief_root` is derived from the **city registry**, never from `$PWD`: the
+runner's cwd is an agent work dir, which is never a rig root and never a brief
+root. It is also rig-scoped, never city-scoped — mctl resolves the pile it reads
+as `<rig-root>/.beads/briefs/.pile`, and the city-root tree is the separate `hq`
+store, not a shared one.
 
 ```bash
 SOURCE_BEAD=<bead-id>
 BRIEF_SLUG="$SOURCE_BEAD-work"
 ARTIFACT_ROOT=".gc-builds/$SOURCE_BEAD"
+
+RIG_PATH="$(gc rig list --json | jq -r --arg id "$SOURCE_BEAD" '
+  [(.rigs // [])[] | select(.prefix as $p | $id | startswith($p + "-"))]
+  | sort_by(.prefix | length) | last // empty
+  | .path // empty')"
+[ -n "$RIG_PATH" ] || {
+  echo "I'm sorry, I can't do that — no registered rig prefix matches $SOURCE_BEAD, so the brief deposit root cannot be resolved."
+  exit 1
+}
+BRIEF_ROOT="$RIG_PATH/.beads/briefs"
 
 gc formula list 2>/dev/null | awk '{print $1}' | grep -qx 'work-briefed' || {
   echo "I'm sorry, I can't do that — work-briefed is not in the live formula catalog."
@@ -233,8 +256,36 @@ gc sling <owning-rig>/gc.run-operator "$SOURCE_BEAD" --on work-briefed \
   --var source_bead="$SOURCE_BEAD" \
   --var brief_slug="$BRIEF_SLUG" \
   --var artifact_root="$ARTIFACT_ROOT" \
+  --var brief_root="$BRIEF_ROOT" \
   --var child_run_target=auto \
   --var routing_path="mathcity.work"
+```
+
+Confirm the deposit root is the one the reader uses — the check that would have
+caught mc-4ovmy, and the only one that could have. Ask the **MCP** surface, via
+the `briefs_list` tool, and read `artifact_trust.resolved_pile`:
+
+    mcp__mctl__briefs_list  rig=<owning-rig>   ->  .artifact_trust.resolved_pile
+
+    must equal "$BRIEF_ROOT/.pile"
+
+Measured 2026-08-28 for `rig=mathcity`: `resolved_brief_root` is
+`<city-root>/mathcity/.beads/briefs` and `resolved_pile` is
+`<city-root>/mathcity/.beads/briefs/.pile` — rig-relative, per
+`assets/brief-pipeline/paths.toml`, never the city root.
+
+**Do not reach for the CLI here.** `mctl briefs list --json` emits only
+`briefs`, `diagnostics` and `trace_id`; `artifact_trust` is attached by the MCP
+server layer and by nothing else, so `jq -r '.artifact_trust.resolved_pile'`
+against the CLI prints `null` on a correct city and on a broken one alike. A
+check that cannot fail must not be written as a check that passed (P6.2). If
+only a shell is available, the honest substitute names its own weakness — it
+re-derives the root instead of reading the resolver:
+
+```bash
+# WEAKER: re-derivation, not the resolver's own answer.
+RIG_ROOT="$(mctl context --city "$CITY_ROOT" --rig "$RIG" --json | jq -r .rig_root)"
+test "$BRIEF_ROOT/.pile" = "$RIG_ROOT/.beads/briefs/.pile"
 ```
 
 If you have extra context that must not be lost in translation, pass it through:

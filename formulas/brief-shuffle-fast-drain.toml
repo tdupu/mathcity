@@ -63,7 +63,7 @@ Then run this deterministic command exactly once, with both roots substituted:
 
 ```bash
 python3 "<mathcity-pack-root>/assets/scripts/brief-shuffle-fast-drain.py" \
-  --brief-root {{artifact_root}} \
+  --brief-root "<brief-root>" \
   --gate-config "<mathcity-pack-root>/assets/brief-pipeline/gates.toml" \
   --max-items {{max_items}} \
   --apply --json --no-external
@@ -78,9 +78,15 @@ the test suite runs from the pack root. `$PACK_DIR` is not a substitute either:
 gascity injects it for order dispatch and `gc` custom commands only, never into
 a formula step's agent session.
 
-`{{artifact_root}}` is a RIG path, not a pack path, and stays as it is — see
+`{{artifact_root}}` is a RIG path, not a pack path — see
 `assets/brief-pipeline/paths.toml` for why brief-pipeline roots are
-rig-relative.
+rig-relative. Its VALUE is unchanged (`.beads/briefs`), but it is relative, so
+it must be joined to the scope root from step 2 and passed as `<brief-root>`.
+Passing it bare is the defect: the script resolves a relative `--brief-root`
+against the cwd, and the cwd is the agent work dir. It no longer fails
+silently — `brief-shuffle-fast-drain.py` now exits 2 with `brief_root_error`
+and `remaining_pile: null` rather than exiting 0 with `remaining_pile: 0` — but
+a loud failure is still a failure, and the drain does not run.
 
 Record its JSON summary, including promoted, rejected, skipped, and remaining
 pile counts. The script owns only staging directories it creates and is the

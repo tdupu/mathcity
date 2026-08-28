@@ -31,7 +31,11 @@ description = "The work bead ID to route. The router reads this bead's descripti
 required = true
 
 [vars.artifact_root]
-description = "Build or brief artifact root. For builds, scope per bead (for example <rig-root>/.gc-builds/<bead>)."
+description = "Build/stage artifact root ONLY. Scope per bead (for example <rig-root>/.gc-builds/<bead>) so two concurrent dispatches in one rig do not share a stage root (gsp-1bmxuz). It is NOT a brief root — see brief_root."
+required = true
+
+[vars.brief_root]
+description = "Brief DEPOSIT root: the rig's one shared brief tree, absolute, never bead-scoped. Pass <rig-root>/.beads/briefs — the pile every adjudication surface reads. Required, and deliberately without a default: a rig-relative default resolves against the runner's cwd, which is an agent work dir and never a brief root, so a wrong root would be inherited silently instead of refused loudly (mc-4ovmy)."
 required = true
 
 [vars.brief_slug]
@@ -245,6 +249,7 @@ gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on commission-work-briefed \
   --var brief_slug={{brief_slug}} \
   --var commission_mode=fresh \
   --var artifact_root={{artifact_root}} \
+  --var brief_root={{brief_root}} \
   --var context="{{context}}" \
   --var routing_path="{{routing_path}},commission-work-briefed"
 ```
@@ -262,6 +267,7 @@ gc sling "$CHILD_RUN_TARGET" {{source_bead}} --on simple-work-briefed \
   --var model={{model}} \
   --var brief_type={{brief_type}} \
   --var artifact_root={{artifact_root}} \
+  --var brief_root={{brief_root}} \
   --var routing_path="{{routing_path}},simple-work-briefed" \
   --var task="$TASK" \
   --var context="{{context}}"
@@ -298,7 +304,7 @@ fi
 Then close this routing step and drain:
 
 ```bash
-bd update <this-step-bead-id> --notes "Dispatched {{source_bead}} via <child formula>. Route molecule started."
+bd update <this-step-bead-id> --append-notes "Dispatched {{source_bead}} via <child formula>. Route molecule started."
 gc runtime drain-ack
 ```
 """

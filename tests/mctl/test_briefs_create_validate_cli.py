@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -424,21 +425,122 @@ def test_create_without_a_source_is_REFUSED_not_warned(tmp_path: Path):
     assert "MCTL_MUTATION_BLOCKED_BY_DIAGNOSTICS" in result.stderr
 
 
-def test_create_is_blocked_by_legacy_decisions_track_uncertainty(tmp_path: Path):
+def create_args(tmp_path, title="Decide dispatch policy"):
+    return (
+        "create",
+        "--title",
+        title,
+        "--body-file",
+        str(body_file(tmp_path)),
+        "--source",
+        "mc-source",
+        "--dry-run",
+        "--json",
+    )
+
+
+def test_create_is_not_blocked_by_an_unrelated_legacy_decisions_track_row(tmp_path: Path):
+    """mc-tbucy(C): the B2.10 gate is scoped to the writes it protects.
+
+    Creation writes a bead, a pile file and a decision TOML, all keyed to an id
+    bd has not minted yet. It writes no decisions-track row, so no
+    decisions-track row is the thing it could corrupt. Adjudication, deferral
+    and dispatch already scope this identical check to the one brief they are
+    about -- they route through ``doctor_briefs(ctx, brief_id)``, which passes
+    ``{brief_id}`` into ``_legacy_gate_diagnostics``. Only ``plan_create_brief``
+    asked for every row in the rig, via the unscoped ``legacy_gate_diagnostics``
+    helper, and got the whole legacy corpus back as a veto. Scoping creation is
+    consistency with three siblings, not a new exception.
+
+    Measured on the live ``hq`` manifest, 2026-08-27: 204 rows, 42 non-terminal,
+    22 of them ``status=ready`` -- the live brief queue, not legacy debris. Those
+    42 sat in a closed loop: a beadless brief cannot be adjudicated (MBRF010),
+    minting its bead was refused here, and adjudicating is the thing that would
+    terminalize its row. This assertion is the loop-breaker.
+    """
     city_root, rig_root = runtime_fixture(
         tmp_path, legacy_manifest='{"slug":"mc-legacy","status":"ready"}\n'
     )
 
     result = run_mctl(
+        *brief_command(city_root, *create_args(tmp_path)),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    codes = {
+        str(diagnostic.get("code"))
+        for diagnostic in payload.get("preconditions", [])
+    }
+    assert "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED" not in codes, (
+        "an unrelated legacy row must not veto creation"
+    )
+    assert "MBRF008" not in codes
+
+
+def test_create_still_refuses_when_the_legacy_manifest_cannot_be_parsed(tmp_path: Path):
+    """Negative control for mc-tbucy(C). Scoped is not the same as disabled.
+
+    Scoping answers "which rows does this write touch?" from the parsed rows.
+    An unparseable manifest means there are no parsed rows to scope against, so
+    the question has no answer and the gate must fail closed -- exactly as the
+    three scoped siblings already do, since ``_legacy_gate_diagnostics`` returns
+    MBRF013 plus the blocker before it ever consults ``brief_ids``.
+
+    Delete the scoping short-circuit in ``plan_create_brief`` and this test still
+    passes; weaken the gate to always-pass and it fails. That is the half of the
+    pair that keeps the check falsifiable (POLICY P6.2).
+    """
+    city_root, rig_root = runtime_fixture(
+        tmp_path, legacy_manifest="{ this line is not JSON\n"
+    )
+
+    result = run_mctl(
+        *brief_command(city_root, *create_args(tmp_path)),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    assert result.returncode != 0
+    assert "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED" in result.stderr
+
+    # And the parse failure itself is named, not just the blocker it triggers.
+    # `_raise_if_blocked` surfaces only the FATAL blocker on stderr, so the
+    # ERROR that caused it is read from the diagnostic payload.
+    doctor = run_mctl(
+        *brief_command(city_root, "doctor", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+    assert "MBRF013" in diagnostic_codes(json.loads(doctor.stdout))
+
+
+def test_adjudication_of_a_brief_that_owns_a_legacy_row_is_still_refused(tmp_path: Path):
+    """Negative control for mc-tbucy(C): the write the gate genuinely protects.
+
+    Adjudication DOES write the legacy manifest -- ``_decisions_track_row_key``
+    finds the row and the plan carries a ``decisions_track_row`` update. So a
+    non-terminal row belonging to the brief being ruled is precisely the
+    unmigrated state #38 is about, and it must keep blocking. Same manifest
+    shape as the test two above; only the slug differs, and the slug is the
+    whole difference between a write that touches legacy state and one that
+    does not.
+    """
+    city_root, rig_root = runtime_fixture(
+        tmp_path, legacy_manifest='{"slug":"mc-consistent","status":"ready"}\n'
+    )
+
+    result = run_mctl(
         *brief_command(
             city_root,
-            "create",
-            "--title",
-            "Decide dispatch policy",
-            "--body-file",
-            str(body_file(tmp_path)),
-            "--source",
-            "mc-source",
+            "adjudicate",
+            "mc-consistent",
+            "--verdict",
+            "approve",
+            "--reason",
+            "ready",
             "--dry-run",
             "--json",
         ),
@@ -448,6 +550,114 @@ def test_create_is_blocked_by_legacy_decisions_track_uncertainty(tmp_path: Path)
 
     assert result.returncode != 0
     assert "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED" in result.stderr
+
+    # The row is blocking under the SCOPED predicate too, not merely present:
+    # `doctor` passes `{brief_id}` into the same `_legacy_gate_diagnostics`
+    # creation now calls, and MBRF008 still names `mc-consistent`.
+    doctor = run_mctl(
+        *brief_command(city_root, "doctor", "--brief", "mc-consistent", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+    assert "MBRF008" in diagnostic_codes(json.loads(doctor.stdout))
+
+
+def test_migration_blocker_names_a_command_that_acts_on_this_rig(tmp_path: Path):
+    """mc-tbucy(D): the blocker's advice must be followable.
+
+    It named ``bash tests/decisions-track-migration/smoke_test.sh``. That script
+    builds its own rig under ``mktemp -d``, asserts against the fixture it just
+    wrote, and deletes it on exit -- it never reads the operator's manifest, so
+    running it cannot change anything the gate measures. An operator who
+    followed the tool's own advice ran a passing test and hit the identical
+    refusal. Whatever the blocker suggests must at minimum be about the rig that
+    is blocked.
+    """
+    city_root, rig_root = runtime_fixture(
+        tmp_path, legacy_manifest='{"slug":"mc-consistent","status":"ready"}\n'
+    )
+
+    result = run_mctl(
+        *brief_command(city_root, "doctor", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+
+    payload = json.loads(result.stdout)
+    blocker = next(
+        diagnostic
+        for diagnostic in payload["diagnostics"]
+        if diagnostic["code"] == "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED"
+    )
+    command = str(blocker["facts"]["suggested_next_command"])
+    assert "smoke_test.sh" not in command, (
+        "a sandboxed smoke test cannot clear a gate measured on the live manifest"
+    )
+    assert str(rig_root) in command, f"advice must name the blocked rig: {command}"
+
+
+def test_the_blockers_advice_runs_against_the_blocked_rig_and_writes_nothing(
+    tmp_path: Path,
+):
+    """mc-tbucy(D): "not smoke_test.sh" is weaker than "followable".
+
+    The test above reads the advice as a string. A string can name the blocked
+    rig and still name a script that is not there, or a mode of a script that
+    edits the rig it was asked to inspect -- and either way the operator is
+    back where the old advice left them. So this one stops reading and runs it.
+
+    Two properties, and they are the whole of what an operator is owed by a
+    suggested_next_command: it succeeds, and reading a blocked rig does not
+    change it. The second matters because the verb is ``migrate`` -- the
+    migrator's write path is behind ``--apply``, which the advice does not
+    pass, and a digest over the whole rig is what holds that to be true rather
+    than assuming it.
+
+    The rig is repointed at ``REPO_ROOT`` because ``runtime_fixture``'s
+    source_checkout is a stub holding only ``assets/brief-pipeline`` -- and a
+    stub is exactly where the old advice's failure would hide, since a command
+    naming a script that does not exist still satisfies the string assertions.
+    """
+    city_root, rig_root = runtime_fixture(
+        tmp_path, legacy_manifest='{"slug":"mc-consistent","status":"ready"}\n'
+    )
+    (city_root / "city.toml").write_text(
+        '[[rigs]]\nname = "mathcity"\ndb = "fixture_mathcity"\n\n'
+        f'[rigs.imports.mathcity]\nsource = "{REPO_ROOT}"\n',
+        encoding="utf-8",
+    )
+
+    doctor = run_mctl(
+        *brief_command(city_root, "doctor", "--json"),
+        cwd=REPO_ROOT,
+        beads_fixture=beads_fixture(rig_root),
+    )
+    blocker = next(
+        diagnostic
+        for diagnostic in json.loads(doctor.stdout)["diagnostics"]
+        if diagnostic["code"] == "MCTL_DECISIONS_TRACK_MIGRATION_BLOCKED"
+    )
+    command = shlex.split(str(blocker["facts"]["suggested_next_command"]))
+
+    before = tree_digest(rig_root)
+    followed = subprocess.run(command, text=True, capture_output=True, check=False)
+
+    assert followed.returncode == 0, (
+        "the tool told the operator to run this and it failed: "
+        f"{followed.stdout}{followed.stderr}"
+    )
+    assert tree_digest(rig_root) == before, "reading a blocked rig must not write to it"
+    # It reported on THIS manifest -- the single row planted above -- and not on
+    # a fixture of its own. That is the difference from the advice it replaced,
+    # which exits 0 having inspected only the rig it built under `mktemp -d`.
+    try:
+        report = json.loads(followed.stdout)
+    except json.JSONDecodeError:
+        raise AssertionError(
+            "the advice succeeded without reporting on this rig's manifest: "
+            f"{followed.stdout[:400]!r}"
+        ) from None
+    assert report["inventory_rows"] == 1, followed.stdout
 
 
 def test_a_failure_after_bead_creation_leaves_no_half_written_cache(tmp_path: Path):

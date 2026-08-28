@@ -117,7 +117,9 @@ from .schemas import (
     SEVERITY_COUNTS_SCHEMA,
     STRING_ARRAY,
     TRACE_RECORD_SCHEMA,
+    HANDOFF_SCOPE_SCHEMA,
     WORK_ITEM_SCHEMA,
+    WORK_SCOPE_SCHEMA,
     Schema,
     nullable_string,
     request_schema,
@@ -139,13 +141,14 @@ from .beads import read_beads
 from .bead_reads import beads_list_payload, beads_show_payload
 from .decisions import brief_body, dispatchability_refusals
 from .work import (
+    EMPTY_WORK_SCOPE,
     WorkError,
     _open_child_workflow,
     apply_dispatch_plan,
     dispatch_dry_run_payload,
     plan_dispatch,
     plan_dispatch_event,
-    ready_work,
+    ready_work_payload,
     work_claim,
     work_provenance,
     work_status,
@@ -462,6 +465,15 @@ CROSS_RIG_ARRAYS: dict[str, tuple[str, ...]] = {
     "briefs_list": ("briefs",),
     "briefs_validate": ("briefs", "brief_diagnostics"),
     "work_ready": ("work",),
+}
+
+#: The scope blocks each cross-rig read carries, with the ZERO block the merge
+#: seeds from (M3, mc-uvl). Arrays alone were not enough: `--all-rigs` is the
+#: call whose row count actually got quoted city-wide, and merging only the
+#: arrays would have left that one total the single read on this surface with
+#: no denominator beside it.
+CROSS_RIG_SCOPES: dict[str, dict[str, Mapping[str, Any]]] = {
+    "work_ready": {"work_scope": EMPTY_WORK_SCOPE},
 }
 
 ALL_RIGS_PROPERTY: Schema = {
@@ -1073,16 +1085,14 @@ def _handle_briefs_relay_adjudication(ctx: MctlContext, arguments: Mapping[str, 
         is recorded so a decision can be attributed. `decision`/`brief_slug` are
         the same keys the skill path (brief-record-decision.toml) uses, so the
         event is shape-indistinguishable. Best-effort -- a failed doorbell is a
-        WARN advisory, never a FATAL.
+        WARN advisory, never a FATAL. The payload itself is built by
+        `gc_events.emit_brief_decided`, shared with the CLI verdict path so the
+        two producers cannot drift (mc-d6lp).
         """
-        return gc_events.emit(
-            "brief.decided",
+        return gc_events.emit_brief_decided(
             brief_id,
-            {
-                "brief_slug": brief_id,
-                "decision": arguments.get("verdict"),
-                "adjudicated_by": arguments.get("adjudicated_by"),
-            },
+            verdict=arguments.get("verdict"),
+            adjudicated_by=arguments.get("adjudicated_by"),
         )
 
     return _effect_payload(ctx, plan, _dry_run(arguments), on_apply=_emit_brief_decided)
@@ -1551,7 +1561,7 @@ def _handle_beads_show(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[s
 
 
 def _handle_work_ready(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
-    return {"diagnostics": _diagnostics(ctx, ()), "work": [item.to_dict() for item in ready_work(ctx)]}
+    return {"diagnostics": _diagnostics(ctx, ()), **ready_work_payload(ctx)}
 
 
 def _handle_work_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -3157,7 +3167,8 @@ TOOLS: tuple[ToolSpec, ...] = (
         description="List brief-backed work whose canonical state permits dispatch.",
         input_schema=request_schema({"all_rigs": ALL_RIGS_PROPERTY}),
         output_schema=response_schema(
-            {"work": {"type": "array", "items": WORK_ITEM_SCHEMA}}, ["work"]
+            {"work": {"type": "array", "items": WORK_ITEM_SCHEMA}, "work_scope": WORK_SCOPE_SCHEMA},
+            ["work", "work_scope"],
         ),
         handler=_handle_work_ready,
     ),
@@ -3336,6 +3347,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "open_beads": {"type": "integer", "description": "-1 when the store was unreadable."},
                 "blocked_beads": {"type": "integer", "description": "-1 when the store was unreadable."},
                 "recent_handoffs": {"type": "array", "items": {"type": "object"}},
+                "handoff_scope": HANDOFF_SCOPE_SCHEMA,
                 "escalations_queryable": {"type": "boolean"},
                 "prose_residue": dict(STRING_ARRAY, description="Facts no query answers. Shrinks as gaps close."),
             },
@@ -3344,6 +3356,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "city",
                 "conservation",
                 "escalations_queryable",
+                "handoff_scope",
                 "open_beads",
                 "prose_residue",
                 "recent_handoffs",
@@ -3666,6 +3679,7 @@ class MctlMcpServer:
             scope,
             outcomes,
             arrays=CROSS_RIG_ARRAYS[tool.name],
+            scopes=CROSS_RIG_SCOPES.get(tool.name),
             trace_id=new_trace_id(),
             artifact_state=tool.artifact_state,
             validity=tool.name == "briefs_validate",

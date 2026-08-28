@@ -56,7 +56,7 @@ You are the codex-worker. Perform the following task:
 {{context}}
 
 When the task is complete:
-1. Record your findings or output in this bead's notes (`bd update <this-bead-id> --notes "<output>"`).
+1. Record your findings or output in this bead's notes (`bd update <this-bead-id> --append-notes "<output>"`).
 2. Close this step bead (`bd close <this-bead-id>`).
 3. Call `gc runtime drain-ack`.
 

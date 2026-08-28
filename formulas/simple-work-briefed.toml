@@ -61,7 +61,11 @@ description = "Pool that runs both formula steps."
 default = "mathcity.brief-operator"
 
 [vars.artifact_root]
-description = "Brief pipeline artifact root (rig-relative)."
+description = "Build/stage artifact root. Scope per bead (for example <rig-root>/.gc-builds/<bead>) so two concurrent dispatches in one rig do not share a stage root (gsp-1bmxuz). This is NOT the brief deposit root — see brief_root."
+default = ".beads/briefs"
+
+[vars.brief_root]
+description = "Brief DEPOSIT root: the rig's one shared brief tree, never bead-scoped. mctl resolves the pile every adjudication surface reads as <rig-root>/.beads/briefs/.pile (assets/brief-pipeline/paths.toml, rig-relative); a brief deposited anywhere else has no route to a human (mc-4ovmy). A relative value is resolved against the rig root from the city registry, never against the runner's cwd."
 default = ".beads/briefs"
 
 [vars.routing_path]
@@ -89,7 +93,7 @@ When the subagent completes, record a summary of the result in this step
 bead's notes:
 
 ```bash
-bd update <this-step-bead-id> --notes "<one-paragraph result summary>"
+bd update <this-step-bead-id> --append-notes "<one-paragraph result summary>"
 ```
 
 Then close this step bead and call `gc runtime drain-ack`.
@@ -114,7 +118,7 @@ never the pack root, so a bare `assets/...` resolves to nothing, and
 id = "file-brief"
 title = "File brief for {{source_bead}}"
 needs = ["execute-task"]
-metadata = { "gc.run_target" = "{{run_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "simple-work-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.type" = "{{brief_type}}", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+metadata = { "gc.run_target" = "{{run_target}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "simple-work-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.type" = "{{brief_type}}", "gc.brief.path" = "{{brief_root}}/.pile/{{brief_slug}}.md" }
 description = """
 Use the `mathcity.brief-prep` skill to prepare and file a brief about the
 result of the `execute-task` step.
@@ -125,11 +129,37 @@ First read the execute-task result from the source bead notes:
 bd show {{source_bead}}
 ```
 
+Deposit to `brief_root`, NOT to `artifact_root`. `artifact_root` is bead-scoped
+so concurrent builds do not collide; a brief deposited under it inherits that
+scoping and lands in a per-bead directory no adjudication surface reads. That is
+mc-4ovmy — six of the eighteen stranded briefs came from THIS step.
+
+Resolve the root from the CITY REGISTRY, never from this runner's cwd — the cwd
+is an agent work dir, which is never a rig root and never a brief root.
+
+```bash
+BRIEF_ROOT="{{brief_root}}"
+case "$BRIEF_ROOT" in
+  /*) ;;
+  *)
+    RIG_PATH="$(gc rig list --json | jq -r --arg id "{{source_bead}}" '
+      [(.rigs // [])[] | select(.prefix as $p | $id | startswith($p + "-"))]
+      | sort_by(.prefix | length) | last // empty
+      | .path // empty')"
+    [ -n "$RIG_PATH" ] || {
+      echo "I'm sorry, I can't do that — no registered rig prefix matches {{source_bead}}, so the brief deposit root cannot be resolved. Pass --var brief_root=<rig-root>/.beads/briefs." >&2
+      exit 1
+    }
+    BRIEF_ROOT="$RIG_PATH/$BRIEF_ROOT"
+    ;;
+esac
+```
+
 Then invoke the brief-prep skill with:
 - source: `{{source_bead}}`
 - slug: `{{brief_slug}}`
 - type: `{{brief_type}}`
-- artifact_root: `{{artifact_root}}`
+- artifact_root: `$BRIEF_ROOT` (the resolved brief deposit root above)
 
 The brief's "What is being decided" section must describe the action taken
 and what the human adjudicator needs to approve, reject, or defer. Include the subagent

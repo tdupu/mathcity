@@ -712,6 +712,121 @@ WORK_ITEM_SCHEMA: Schema = {
     },
 }
 
+WORK_SCOPE_SCHEMA: Schema = {
+    "type": "object",
+    "title": "WorkScope",
+    "description": (
+        "The scope the ready-work enumeration applied, so its row count cannot "
+        "be quoted as a census. Same shape as `beads_list`'s `scope` (#245): "
+        "`matched` beside `total_in_store`, plus the states that were dropped. "
+        "Named `work_scope` rather than `scope` because the cross-rig merge "
+        "already puts the string 'all-rigs' at the top-level `scope` key."
+    ),
+    "required": [
+        "briefs_examined",
+        "distinct_bead_ids",
+        "matched",
+        "readiness_excluded",
+        "total_in_store",
+    ],
+    "properties": {
+        "briefs_examined": {
+            "type": "integer",
+            "description": (
+                "Beads in the B2.1 brief population this read walked. The "
+                "denominator `matched` is actually drawn from."
+            ),
+        },
+        "distinct_bead_ids": {
+            "type": "integer",
+            "description": (
+                "Distinct source beads across the returned rows. Lower than "
+                "`matched` when two briefs name the same bead -- one "
+                "dispatchable bead, and a double-dispatch waiting to happen."
+            ),
+        },
+        "matched": {
+            "type": "integer",
+            "description": "Rows returned. Always equal to the length of `work`.",
+        },
+        "readiness_excluded": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Readiness states present in the population that this read did "
+                "NOT return, e.g. `blocked`, `dispatched`. Empty means nothing "
+                "was dropped, never that nobody asked."
+            ),
+        },
+        "total_in_store": {
+            "type": "integer",
+            "description": (
+                "Beads in the WHOLE store, never the brief population and "
+                "never the matched set. A denominator that shrank with the "
+                "filter would be the same bug with extra steps."
+            ),
+        },
+    },
+    "additionalProperties": False,
+}
+
+HANDOFF_SCOPE_SCHEMA: Schema = {
+    "type": "object",
+    "title": "HandoffScope",
+    "description": (
+        "What the handoff query examined to produce `recent_handoffs`, so a "
+        "capped chain cannot be read as the whole chain. Same convention as "
+        "`work_scope` and `beads_list`'s `scope`: `matched` beside the "
+        "denominator it was drawn from. Every count except `matched` is -1 when "
+        "the HQ store could not be read -- UNMEASURED, never zero, matching "
+        "`open_beads`/`blocked_beads` on this same tool."
+    ),
+    "required": [
+        "handoffs_found",
+        "limit",
+        "matched",
+        "older_omitted",
+        "total_in_store",
+    ],
+    "properties": {
+        "handoffs_found": {
+            "type": "integer",
+            "description": (
+                "Handoff beads matching the title convention, BEFORE the cap. "
+                "The denominator `matched` is actually drawn from."
+            ),
+        },
+        "limit": {
+            "type": "integer",
+            "description": "The cap applied to the matched set. -1 when unmeasured.",
+        },
+        "matched": {
+            "type": "integer",
+            "description": (
+                "Rows returned. Always equal to the length of `recent_handoffs`, "
+                "and a true zero rather than -1 even for an unreadable store: "
+                "zero rows really were returned."
+            ),
+        },
+        "older_omitted": {
+            "type": "integer",
+            "description": (
+                "Handoffs the cap dropped, oldest first. Zero means nothing was "
+                "dropped, never that nobody asked."
+            ),
+        },
+        "total_in_store": {
+            "type": "integer",
+            "description": (
+                "Rows in the WHOLE HQ store, handoff or not. A denominator that "
+                "shrank with the filter would report 5-of-5 for a read that "
+                "walked past forty rows."
+            ),
+        },
+    },
+    "additionalProperties": False,
+}
+
 CLAIM_STATE_SCHEMA: Schema = {
     "type": "object",
     "title": "ClaimState",

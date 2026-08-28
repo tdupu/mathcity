@@ -74,7 +74,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 import re
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from .beads import Bead
 
@@ -739,3 +739,26 @@ def _same_verdict(left: str, right: str) -> bool:
 
 def _normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def is_adjudicated(frontmatter: Mapping[str, Any]) -> bool:
+    """Whether a human has already decided this brief.
+
+    True means the gate MUST NOT re-judge it. A machine re-running its gates
+    over a decided brief and rejecting it discards a human's verdict, which is
+    what mc-8ehd0 records: measured 2026-08-28, 8 of the 24 briefs in
+    `.pile/.rejected/` carried one (7 approve, 1 reject).
+
+    Deliberately NOT built on `read_verdict`. That reader parses free-text
+    `close_reason` and distinguishes a verdict from an execution record, a
+    supersession, and a withdrawal -- it answers "what did they decide". This
+    answers the cruder and safer question "did anyone decide at all", from
+    brief frontmatter, and a shape it cannot classify must still stop the gate.
+
+    An empty `verdict:` is an ABSENT verdict, not a decision -- the same
+    `unknown` vs `zero` distinction this codebase draws everywhere else.
+    """
+    verdict = str(frontmatter.get("verdict") or "").strip()
+    if verdict:
+        return True
+    return str(frontmatter.get("status") or "").strip().lower().startswith("adjudicated")

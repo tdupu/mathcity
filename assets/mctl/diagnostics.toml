@@ -679,6 +679,12 @@ meaning = "Proposed brief body is missing a required structural section."
 policy_ref = "B1.5"
 module = "briefs.py"
 
+[MBRF_ADJUDICATED_REGATE]
+severity = "ERROR"
+meaning = "Brief already carries a human verdict; re-gating it would discard an adjudication."
+policy_ref = "mc-8ehd0"
+module = "briefs.py"
+
 [MCTL_STACK_INDEX_ROW_ABSENT]
 severity = "WARN"
 meaning = "No stack index row targets this brief, so none was updated."

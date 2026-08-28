@@ -110,12 +110,12 @@ pr_work_dir guard):**
 ```bash
 PR_WORK_DIR="{{pr_work_dir}}"
 if [ -n "$PR_WORK_DIR" ]; then
-    cd "$PR_WORK_DIR" || { echo "[pr-pipeline-briefed] BLOCKED: pr_work_dir not accessible: $PR_WORK_DIR"; bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: pr_work_dir not accessible: $PR_WORK_DIR"; gc runtime drain-ack; exit 0; }
+    cd "$PR_WORK_DIR" || { echo "[pr-pipeline-briefed] BLOCKED: pr_work_dir not accessible: $PR_WORK_DIR"; bd update {{source_bead}} --append-notes "pr-pipeline-briefed intake BLOCKED: pr_work_dir not accessible: $PR_WORK_DIR"; gc runtime drain-ack; exit 0; }
 fi
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "[pr-pipeline-briefed] BLOCKED: not a git checkout"; bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: not in a git checkout"; gc runtime drain-ack; exit 0; }
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "[pr-pipeline-briefed] BLOCKED: not a git checkout"; bd update {{source_bead}} --append-notes "pr-pipeline-briefed intake BLOCKED: not in a git checkout"; gc runtime drain-ack; exit 0; }
 if [ -n "$PR_WORK_DIR" ] && [ "$REPO_ROOT" != "$PR_WORK_DIR" ]; then
     echo "[pr-pipeline-briefed] BLOCKED: pr_work_dir=$PR_WORK_DIR but git root=$REPO_ROOT"
-    bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: pr_work_dir root mismatch (git root=$REPO_ROOT)"
+    bd update {{source_bead}} --append-notes "pr-pipeline-briefed intake BLOCKED: pr_work_dir root mismatch (git root=$REPO_ROOT)"
     gc runtime drain-ack; exit 0
 fi
 cd "$REPO_ROOT"
@@ -128,7 +128,7 @@ BRANCH="{{branch}}"
 DEFAULT=$(git remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p' || echo "main")
 if [ -z "$BRANCH" ] || [ "$BRANCH" = "$DEFAULT" ] || [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
     echo "[pr-pipeline-briefed] BLOCKED: on default/empty branch ($BRANCH) — no PR body to compose"
-    bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: on default/empty branch ($BRANCH)"
+    bd update {{source_bead}} --append-notes "pr-pipeline-briefed intake BLOCKED: on default/empty branch ($BRANCH)"
     gc runtime drain-ack; exit 0
 fi
 ```
@@ -155,7 +155,7 @@ RANGE="${BASE_SHA}..HEAD"
 COMMIT_COUNT=$(git rev-list --count "$RANGE" 2>/dev/null || echo 0)
 if [ "${COMMIT_COUNT:-0}" -eq 0 ]; then
     echo "[pr-pipeline-briefed] BLOCKED: empty commit range $RANGE — nothing to describe"
-    bd update {{source_bead}} --notes "pr-pipeline-briefed intake BLOCKED: empty commit range ($RANGE)"
+    bd update {{source_bead}} --append-notes "pr-pipeline-briefed intake BLOCKED: empty commit range ($RANGE)"
     gc runtime drain-ack; exit 0
 fi
 ```
@@ -178,7 +178,7 @@ fi
 **5. Record intake results for compose-body (root-bead notes are the hand-off
 channel):**
 ```bash
-bd update {{source_bead}} --notes "pr-pipeline-briefed intake:
+bd update {{source_bead}} --append-notes "pr-pipeline-briefed intake:
   repo_root: $REPO_ROOT
   branch: $BRANCH
   base_repo: ${BASE_REPO:-<none>}
@@ -226,7 +226,7 @@ section is evidence-only and must never be fabricated:
 ```bash
 if [ "$EVIDENCE_FOUND" = "no" ]; then
     echo "[pr-pipeline-briefed] BLOCKED: no recorded focused-test evidence at $EVIDENCE_PATH — refusing to fabricate a Testing section"
-    bd update {{source_bead}} --notes "pr-pipeline-briefed compose-body BLOCKED: no recorded focused-test evidence (Testing is evidence-only). Run the focused tests + record evidence at {{evidence_source}} or in {{source_bead}} notes, then re-dispatch."
+    bd update {{source_bead}} --append-notes "pr-pipeline-briefed compose-body BLOCKED: no recorded focused-test evidence (Testing is evidence-only). Run the focused tests + record evidence at {{evidence_source}} or in {{source_bead}} notes, then re-dispatch."
     gc runtime drain-ack; exit 0
 fi
 ```
@@ -257,13 +257,13 @@ EOF
 concern out of scope here (belongs to gsp-7njh):
 ```bash
 if git log --format='%b' $RANGE | grep -qi 'Co-Authored-By:.*Claude'; then
-    bd update {{source_bead}} --notes "pr-pipeline-briefed compose-body WARNING: a Co-Authored-By: Claude trailer is present in the commit range. This formula does NOT strip it (P5.5 is commit-level; see gsp-7njh). Surface only."
+    bd update {{source_bead}} --append-notes "pr-pipeline-briefed compose-body WARNING: a Co-Authored-By: Claude trailer is present in the commit range. This formula does NOT strip it (P5.5 is commit-level; see gsp-7njh). Surface only."
 fi
 ```
 
 **4. Record the draft location:**
 ```bash
-bd update {{source_bead}} --notes "pr-pipeline-briefed compose-body: template-complete PR body drafted at $GC_WORK_DIR/{{brief_slug}}-pr-body.md (Summary<-commit body; Testing<-recorded evidence; Checklist<-real state)."
+bd update {{source_bead}} --append-notes "pr-pipeline-briefed compose-body: template-complete PR body drafted at $GC_WORK_DIR/{{brief_slug}}-pr-body.md (Summary<-commit body; Testing<-recorded evidence; Checklist<-real state)."
 ```
 
 **Exit criteria:** a template-complete PR body written to $GC_WORK_DIR, or a
@@ -321,7 +321,7 @@ exact body.
 After filing:
 
 ```bash
-bd update {{source_bead}} --notes "pr-pipeline-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (no PR opened)."
+bd update {{source_bead}} --append-notes "pr-pipeline-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict (no PR opened)."
 gc runtime drain-ack
 ```
 """

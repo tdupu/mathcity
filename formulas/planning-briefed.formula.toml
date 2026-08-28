@@ -78,7 +78,7 @@ sessions at rest is expected and correct.
 ```bash
 POOL="{{plan_target}}"
 if gc agent list 2>/dev/null | grep -q "${POOL}"; then
-  bd update {{source_bead}} --notes "planning-briefed pre-flight: {{plan_target}} is configured (on_demand). gascity will spawn on dispatch."
+  bd update {{source_bead}} --append-notes "planning-briefed pre-flight: {{plan_target}} is configured (on_demand). gascity will spawn on dispatch."
 else
   # Pool does not exist at all — create it or file a bead and drain
   PROV_ID=$(bd create "configure {{plan_target}} for planning-briefed" \
@@ -92,7 +92,7 @@ contains a [[named_session]] entry with template={{plan_target##*.}}.
 
 Once configured, re-sling planning-briefed for {{source_bead}}.")
 
-  bd update {{source_bead}} --notes "planning-briefed pre-flight: {{plan_target}} not found in gc agent list. Provisioning bead: ${PROV_ID}. Draining."
+  bd update {{source_bead}} --append-notes "planning-briefed pre-flight: {{plan_target}} not found in gc agent list. Provisioning bead: ${PROV_ID}. Draining."
   gc runtime drain-ack
 fi
 ```
@@ -123,7 +123,7 @@ Extract:
 Record in bd notes:
 
 ```bash
-bd update {{source_bead}} --notes "planning-briefed gather-context:
+bd update {{source_bead}} --append-notes "planning-briefed gather-context:
   goal: <goal>
   unknowns: <list>
   constraints: <list>
@@ -133,7 +133,7 @@ bd update {{source_bead}} --notes "planning-briefed gather-context:
 Stop if the bead is too vague to plan:
 
 ```bash
-bd update {{source_bead}} --notes "BLOCKED: need more spec — <what is missing>"
+bd update {{source_bead}} --append-notes "BLOCKED: need more spec — <what is missing>"
 gc runtime drain-ack
 ```
 """
@@ -166,7 +166,7 @@ EOF
 Record:
 
 ```bash
-bd update {{source_bead}} --notes "planning-briefed produce-plan: draft at $GC_WORK_DIR/{{source_bead}}-plan.md"
+bd update {{source_bead}} --append-notes "planning-briefed produce-plan: draft at $GC_WORK_DIR/{{source_bead}}-plan.md"
 ```
 """
 
@@ -187,7 +187,7 @@ Review $GC_WORK_DIR/{{source_bead}}-plan.md against three criteria:
 Fix any issues in-place. Record findings:
 
 ```bash
-bd update {{source_bead}} --notes "planning-briefed review-plan: <PASS | issues found and fixed: <list>>"
+bd update {{source_bead}} --append-notes "planning-briefed review-plan: <PASS | issues found and fixed: <list>>"
 ```
 """
 
@@ -230,7 +230,7 @@ The brief MUST contain:
 After filing:
 
 ```bash
-bd update {{source_bead}} --notes "planning-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict"
+bd update {{source_bead}} --append-notes "planning-briefed file-brief: brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting human verdict"
 gc runtime drain-ack
 ```
 """

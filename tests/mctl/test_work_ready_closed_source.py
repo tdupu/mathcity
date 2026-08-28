@@ -83,7 +83,7 @@ def test_a_closed_source_bead_produces_a_blocker(monkeypatch, tmp_path):
     brief = make_bead("brief-1", deps=("src-1",))
     closed_source = make_bead("src-1", status="closed")
     blockers = work._closed_source_blockers(  # type: ignore[attr-defined]
-        StubCtx(), brief_id="brief-1", source=closed_source
+        StubCtx(), brief_id="brief-1", source=closed_source, synthetic_self_source=False
     )
     assert blockers, "a closed source bead must produce a blocker"
     assert any(d.code == "MWRK013" for d in blockers)
@@ -95,7 +95,7 @@ def test_an_open_source_bead_produces_no_blocker():
 
     open_source = make_bead("src-1", status="open")
     assert work._closed_source_blockers(  # type: ignore[attr-defined]
-        StubCtx(), brief_id="brief-1", source=open_source
+        StubCtx(), brief_id="brief-1", source=open_source, synthetic_self_source=False
     ) == []
 
 
@@ -104,5 +104,5 @@ def test_a_missing_source_is_left_to_MWRK012_not_double_reported():
     from mctl_core import work
 
     assert work._closed_source_blockers(  # type: ignore[attr-defined]
-        StubCtx(), brief_id="brief-1", source=None
+        StubCtx(), brief_id="brief-1", source=None, synthetic_self_source=False
     ) == []

@@ -35,6 +35,25 @@
 |---|---|---|---|---|
 | brief-shuffle | mathcity | Promote or reject ONE brief from .pile per the gate registry (the sole .pile→stack writer, B2.10) | EXERCISED (S10 glob fix 3f5c146; lockless redesign S28–S29 gsp-89yli) | stale-lock history; single-writer invariant |
 | brief-shuffle-fast-drain | mathcity | Mechanically promote/reject a bounded batch of pile briefs (condition-triggered) | **fired ≤1×/rig EVER** — post-unlatch rig-scoped firing STILL UNOBSERVED | **#204 drain verdict PENDING**; #40; #73 (fixed) |
+
+> **fast-drain — an adjudicated brief is now TERMINAL (mc-8ehd0, P0).**
+> `evaluate()` in `assets/scripts/brief-shuffle-fast-drain.py` re-gated every
+> `.md` it found in `.pile/` with no notion that a verdict is terminal, so an
+> adjudicated brief lacking provenance metadata was rejected into
+> `.pile/.rejected/` — discarding a decision a human had already made.
+> Measured 2026-08-28: **24** rejected slug directories, **8** carrying a
+> verdict (7 `approve` + 1 `reject`, all `status: adjudicated`), 22 of 24
+> rejected for `"standard brief missing provenance metadata"`. `evaluate()`
+> now refuses to judge any brief carrying a verdict, above the profile lookup,
+> so an unknown gate profile cannot discard one either. Undecided briefs are
+> still rejected exactly as before — three negative controls pin that, and
+> the guard is mutation-proven (weakening it to always-true fails them).
+> **Expect `rejected_count` to DROP** — `assets/scripts/checks/brief-check.sh`
+> reports it, and the drop is the fix working, not briefs going missing.
+> Verdicts already stranded in `.pile/.rejected/` are reported, never moved,
+> by `mctl_core.rejected_recovery.scan()`; re-promotion is a per-brief human
+> decision. Evidence:
+> `docs/superpowers/specs/2026-08-28-adjudicated-rejection-evidence.md`.
 | brief-gate-keep | mathcity | Apply the formal gate registry to a staged/piled brief | EXERCISED (gates fired correctly when poked, S50 MBRF036) | gate-keep architecture he-jyfv |
 | brief-prep | mathcity | Draft brief-bundle + gate evidence, submit to pile | PROVEN S10 (producer fix 2442300) | — |
 | math-brief-prep | mathcity | Fan-out brief-prep per source bead, single-writer shuffle | EXERCISED (brief-pipeline era) | — |

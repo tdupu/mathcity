@@ -22,6 +22,7 @@ from .briefs import (
     validation_scope,
 )
 from .beads import bd_timeout_within
+from . import gc_events
 from .city import DEGRADED_SOURCES, RigProgress, for_each_rig, merge_outcomes
 from .context import ContextError, MctlContext, resolve_context
 from .diagnostics import Diagnostic, render_diagnostic
@@ -44,12 +45,13 @@ from .effects import (
     plan_deferral,
 )
 from .work import (
+    EMPTY_WORK_SCOPE,
     WorkError,
     apply_dispatch_plan,
     dispatch_dry_run_payload,
     plan_dispatch,
     plan_dispatch_event,
-    ready_work,
+    ready_work_payload,
     work_claim,
     work_provenance,
     work_status,
@@ -128,6 +130,14 @@ _ALL_RIGS_ARRAYS: dict[tuple[str, str], tuple[str, ...]] = {
     ("work", "ready"): ("work",),
 }
 
+#: The scope blocks each cross-rig read carries, mirroring the MCP server's
+#: `CROSS_RIG_SCOPES` for the same reason `_ALL_RIGS_ARRAYS` mirrors
+#: `CROSS_RIG_ARRAYS`: the CLI and the tool must not disagree about what a
+#: city-wide answer contains, and the denominator is part of the answer.
+_ALL_RIGS_SCOPES: dict[tuple[str, str], dict[str, object]] = {
+    ("work", "ready"): {"work_scope": EMPTY_WORK_SCOPE},
+}
+
 
 def _all_rigs_command(args: argparse.Namespace) -> int:
     """Run one read against every registered rig.
@@ -138,6 +148,7 @@ def _all_rigs_command(args: argparse.Namespace) -> int:
     """
     key = (args.command, getattr(args, "brief_command", None) or getattr(args, "work_command", None))
     arrays = _ALL_RIGS_ARRAYS[key]
+    scopes = _ALL_RIGS_SCOPES.get(key)
 
     def run(context: MctlContext, progress: RigProgress) -> dict[str, object]:
         if key == ("briefs", "list"):
@@ -161,7 +172,7 @@ def _all_rigs_command(args: argparse.Namespace) -> int:
             return payload
         return {
             "diagnostics": _diagnostics_payload(context, ()),
-            "work": [item.to_dict() for item in ready_work(context)],
+            **ready_work_payload(context),
         }
 
     try:
@@ -175,6 +186,7 @@ def _all_rigs_command(args: argparse.Namespace) -> int:
         scope,
         outcomes,
         arrays=arrays,
+        scopes=scopes,
         trace_id=new_trace_id(),
         validity=key == ("briefs", "validate"),
     )
@@ -669,7 +681,24 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
                     option=args.option,
                     adjudicated_by=args.adjudicated_by,
                 )
-                payload = dry_run_payload(plan) if args.dry_run else apply_effect_plan(context, plan).to_dict()
+                if args.dry_run:
+                    payload = dry_run_payload(plan)
+                else:
+                    payload = apply_effect_plan(context, plan).to_dict()
+                    # Ring the city doorbell AFTER the canonical write lands and
+                    # ONLY on a live apply -- a dry run is a preview and must
+                    # have no side effects, events included (#188).
+                    #
+                    # mc-d6lp: the MCP path rang this bell and the CLI path did
+                    # not, so verdicts recorded through `adjudicate-brief` (which
+                    # prescribes THIS command) woke nothing. Three orders trigger
+                    # on `brief.decided` -- brief-decision-dispatch,
+                    # post-decision-file-or-sendback and revise-return -- and all
+                    # three now fire on a CLI verdict. All three are declared
+                    # idempotent and skip slugs they have already handled, so a
+                    # verdict that also rang the bell by another producer is
+                    # coalesced, not doubled.
+                    _ring_brief_decided(payload, args)
             else:
                 plan = plan_deferral(
                     context,
@@ -715,6 +744,23 @@ def _briefs_command(args: argparse.Namespace, context: MctlContext) -> int:
     return 0
 
 
+def _ring_brief_decided(payload: dict[str, object], args: argparse.Namespace) -> None:
+    """Best-effort `brief.decided` doorbell for a live CLI verdict (mc-d6lp).
+
+    The verdict is already on the bead; the event is only a wake-up. A failed
+    doorbell is therefore a WARN advisory that rides along in `diagnostics` --
+    it must not turn a recorded verdict into a failed command, and WARN keeps
+    the exit status at 0 (`_has_blocking_diagnostic` gates on ERROR/FATAL).
+    """
+    advisory = gc_events.emit_brief_decided(
+        args.brief_id,
+        verdict=args.verdict,
+        adjudicated_by=args.adjudicated_by,
+    )
+    if advisory is not None:
+        payload["diagnostics"] = list(payload.get("diagnostics", [])) + [advisory.to_dict()]
+
+
 def _has_blocking_diagnostic(payload: dict[str, object]) -> bool:
     diagnostics = payload.get("diagnostics")
     if not isinstance(diagnostics, list):
@@ -750,7 +796,7 @@ def _work_command(args: argparse.Namespace, context: MctlContext) -> int:
             payload = {
                 "diagnostics": _diagnostics_payload(context, ()),
                 "trace_id": context.trace_id,
-                "work": [item.to_dict() for item in ready_work(context)],
+                **ready_work_payload(context),
             }
         elif args.work_command == "status":
             payload = {

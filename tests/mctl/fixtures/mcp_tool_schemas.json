@@ -13786,6 +13786,41 @@
         "escalations_queryable": {
           "type": "boolean"
         },
+        "handoff_scope": {
+          "additionalProperties": false,
+          "description": "What the handoff query examined to produce `recent_handoffs`, so a capped chain cannot be read as the whole chain. Same convention as `work_scope` and `beads_list`'s `scope`: `matched` beside the denominator it was drawn from. Every count except `matched` is -1 when the HQ store could not be read -- UNMEASURED, never zero, matching `open_beads`/`blocked_beads` on this same tool.",
+          "properties": {
+            "handoffs_found": {
+              "description": "Handoff beads matching the title convention, BEFORE the cap. The denominator `matched` is actually drawn from.",
+              "type": "integer"
+            },
+            "limit": {
+              "description": "The cap applied to the matched set. -1 when unmeasured.",
+              "type": "integer"
+            },
+            "matched": {
+              "description": "Rows returned. Always equal to the length of `recent_handoffs`, and a true zero rather than -1 even for an unreadable store: zero rows really were returned.",
+              "type": "integer"
+            },
+            "older_omitted": {
+              "description": "Handoffs the cap dropped, oldest first. Zero means nothing was dropped, never that nobody asked.",
+              "type": "integer"
+            },
+            "total_in_store": {
+              "description": "Rows in the WHOLE HQ store, handoff or not. A denominator that shrank with the filter would report 5-of-5 for a read that walked past forty rows.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "handoffs_found",
+            "limit",
+            "matched",
+            "older_omitted",
+            "total_in_store"
+          ],
+          "title": "HandoffScope",
+          "type": "object"
+        },
         "open_beads": {
           "description": "-1 when the store was unreadable.",
           "type": "integer"
@@ -13814,6 +13849,7 @@
         "conservation",
         "diagnostics",
         "escalations_queryable",
+        "handoff_scope",
         "open_beads",
         "prose_residue",
         "recent_handoffs",
@@ -18810,12 +18846,51 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "work_scope": {
+          "additionalProperties": false,
+          "description": "The scope the ready-work enumeration applied, so its row count cannot be quoted as a census. Same shape as `beads_list`'s `scope` (#245): `matched` beside `total_in_store`, plus the states that were dropped. Named `work_scope` rather than `scope` because the cross-rig merge already puts the string 'all-rigs' at the top-level `scope` key.",
+          "properties": {
+            "briefs_examined": {
+              "description": "Beads in the B2.1 brief population this read walked. The denominator `matched` is actually drawn from.",
+              "type": "integer"
+            },
+            "distinct_bead_ids": {
+              "description": "Distinct source beads across the returned rows. Lower than `matched` when two briefs name the same bead -- one dispatchable bead, and a double-dispatch waiting to happen.",
+              "type": "integer"
+            },
+            "matched": {
+              "description": "Rows returned. Always equal to the length of `work`.",
+              "type": "integer"
+            },
+            "readiness_excluded": {
+              "description": "Readiness states present in the population that this read did NOT return, e.g. `blocked`, `dispatched`. Empty means nothing was dropped, never that nobody asked.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "total_in_store": {
+              "description": "Beads in the WHOLE store, never the brief population and never the matched set. A denominator that shrank with the filter would be the same bug with extra steps.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "briefs_examined",
+            "distinct_bead_ids",
+            "matched",
+            "readiness_excluded",
+            "total_in_store"
+          ],
+          "title": "WorkScope",
+          "type": "object"
         }
       },
       "required": [
         "diagnostics",
         "trace_id",
-        "work"
+        "work",
+        "work_scope"
       ],
       "type": "object"
     },

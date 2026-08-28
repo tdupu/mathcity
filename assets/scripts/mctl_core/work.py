@@ -19,6 +19,7 @@ from .liveness import probe_control_plane
 from .molecules import is_molecule_root
 from .verdicts import brief_population, is_brief_bead, read_verdict
 from .trace import append_applied, append_planned
+from .redundant_state import artifact_layout
 from .provenance import (
     DispatchProvenance,
     ProvenanceError,
@@ -249,17 +250,96 @@ def _require_bead(ctx: MctlContext, bead_id: str) -> Bead:
     return bead
 
 
-def ready_work(ctx: MctlContext) -> tuple[WorkItem, ...]:
+def _all_work_items(
+    ctx: MctlContext,
+) -> tuple[tuple[Bead, ...], tuple[Bead, ...], tuple[WorkItem, ...]]:
+    """Every brief's work item, with the store and population it came from.
+
+    Split out of `ready_work` so `ready_work_payload` can report the
+    denominator WITHOUT reading the store a second time. `_beads` shells out to
+    `bd`, and `test_bd_invocation_count` exists because a read that quietly
+    doubled its subprocess count is a regression this repo has already paid
+    for once.
+    """
     beads = _beads(ctx)
+    population = brief_population(beads)
     doctor = _doctor_report(ctx, None, beads)
-    return tuple(
-        item
-        for item in (
-            _work_item(ctx, bead.id, beads=beads, doctor=doctor)
-            for bead in brief_population(beads)
-        )
-        if item.readiness == "ready"
+    items = tuple(
+        _work_item(ctx, bead.id, beads=beads, doctor=doctor) for bead in population
     )
+    return beads, population, items
+
+
+def ready_work(ctx: MctlContext) -> tuple[WorkItem, ...]:
+    _, _, items = _all_work_items(ctx)
+    return tuple(item for item in items if item.readiness == "ready")
+
+
+#: What `work_scope` looks like when nothing was read at all. Declared here,
+#: beside the block itself, so the cross-rig merge can seed a city where every
+#: rig failed with `matched: 0 of 0` instead of dropping the key and returning
+#: an array with no denominator -- which is the exact shape this block exists
+#: to remove. Zeros, never a missing key: absence would read as "the question
+#: was not asked", and here it always was.
+EMPTY_WORK_SCOPE: Mapping[str, object] = {
+    "matched": 0,
+    "distinct_bead_ids": 0,
+    "briefs_examined": 0,
+    "total_in_store": 0,
+    "readiness_excluded": [],
+}
+
+
+def ready_work_payload(ctx: MctlContext) -> dict[str, object]:
+    """Ready work, and the scope the enumeration applied (M3, mc-uvl).
+
+    `ready_work` returns a bare tuple, and every one of its three callers
+    turned it straight into a bare `work` array. A bare array of dispatchable
+    rows is indistinguishable from a census of dispatchable work, and it was
+    read as one: "33 ready in mathcity" on 2026-08-28, with nothing in the
+    payload saying that 33 was drawn from a brief population, that the rest
+    were dropped as `blocked`, or that two of the 33 rows named the same bead.
+
+    This is #245's `beads_list` shape, field for field -- `matched` beside
+    `total_in_store`, and an `_excluded` list naming what was dropped rather
+    than letting it vanish. `total_in_store` counts the WHOLE store, never the
+    brief population and never the matched set: a denominator that shrank with
+    the filter would report 33-of-33 for a read that dropped 200 rows, which is
+    the bug with extra steps. `briefs_examined` sits between the two because
+    `work_ready`'s population is briefs, not beads, and a caller comparing 33
+    against the store size without it would draw the wrong conclusion in the
+    other direction.
+
+    `distinct_bead_ids` is here because rows are not beads. `mc-7h1` occupied
+    two of mathcity's 33 rows (briefs `mc-02zyz` and `mc-u0ix`) and `gt-byxtj`
+    two of hq's four, so the row count overstates dispatchable work AND names
+    a double-dispatch. Reporting only the row count would leave that
+    unmeasurable from the payload.
+
+    THE KEY IS `work_scope`, NOT `scope`, AND THAT IS DELIBERATE. The cross-rig
+    merge already occupies the top-level `scope` key with the STRING
+    `"all-rigs"` (`city.ALL_RIGS_SCOPE`), so a `work_ready` that declared
+    `scope` as an object would fail its own output schema the moment anyone
+    passed `--all-rigs` -- which is precisely the call whose total got quoted.
+    The convention is the field set; only the key had to move.
+    """
+    beads, population, all_items = _all_work_items(ctx)
+    items = tuple(item for item in all_items if item.readiness == "ready")
+    # Derived from what the population actually produced, not from a fixed
+    # vocabulary, so a readiness state nobody anticipated shows up as excluded
+    # instead of disappearing.
+    returned = {item.readiness for item in items}
+    excluded = sorted({item.readiness for item in all_items} - returned)
+    return {
+        "work": [item.to_dict() for item in items],
+        "work_scope": {
+            "matched": len(items),
+            "distinct_bead_ids": len({item.bead_id for item in items}),
+            "briefs_examined": len(population),
+            "total_in_store": len(beads),
+            "readiness_excluded": excluded,
+        },
+    }
 
 
 def work_status(ctx: MctlContext, brief_id: str) -> WorkItem:
@@ -760,7 +840,11 @@ def _dispatch_event_payload(
 
 
 def _closed_source_blockers(
-    ctx: MctlContext | None, *, brief_id: str, source: Bead | None
+    ctx: MctlContext | None,
+    *,
+    brief_id: str,
+    source: Bead | None,
+    synthetic_self_source: bool,
 ) -> list[Diagnostic]:
     """Blocker for a source bead that is no longer open (#157).
 
@@ -783,10 +867,24 @@ def _closed_source_blockers(
     (`open · hooked · in_progress · blocked · review · testing`) and is
     case-insensitive. The check was absent, not wrong -- so this must not
     introduce a second, drifting definition of "closed".
+
+    `synthetic_self_source` is required rather than defaulted, and it narrows
+    #173's exemption to the case #173 was actually about (M3, 2026-08-28).
+    #173 keyed on `source.id == brief_id`, which is true of TWO different
+    briefs: the sourceless one the fallback made its own source (meaningless
+    question, exempt), and one that EXPLICITLY names its own id among its
+    source dependencies. The second has a real `source_id`, so MWRK011 never
+    fires, nothing contradicts MWRK013, and suppressing it hands back exactly
+    the closed-bead-reports-ready defect #157 closed. Measured across the
+    mathcity, hq and hecke stores on 2026-08-28: 46,550 beads, ZERO of them
+    self-naming -- so this is a latent hole rather than a live one, and it is
+    reported as latent. No default, because the safe answer differs per call
+    site and a caller that forgot to say which one it is would silently get the
+    permissive one.
     """
     if source is None or source.is_open:
         return []
-    if source.id == brief_id:
+    if source.id == brief_id and synthetic_self_source:
         # #173, and the regression is mine: I added this check in #157 without
         # considering that a SOURCELESS brief is made its own source bead
         # (the `source_id = brief_id` fallback in `_work_item`). `briefs_relay_adjudication`
@@ -859,6 +957,11 @@ def _work_item(
         )
     blockers.extend(_blocking_doctor_diagnostics(brief_diagnostics))
     skipped_sources: tuple[str, ...] = ()
+    #: Whether the brief became its own source through the MWRK011 fallback
+    #: below, as opposed to naming itself in `source_dependencies`. Recorded
+    #: here, where the two are still distinguishable, because by the time
+    #: `_closed_source_blockers` sees the bead they look identical.
+    synthetic_self_source = False
     if brief.source_dependencies:
         # #228: WALK the sources, skipping any already being worked, instead of
         # blindly taking source[0] forever. Otherwise a multi-source brief
@@ -880,6 +983,7 @@ def _work_item(
             )
         )
         source_id = brief_id
+        synthetic_self_source = True
     source = bead_by_id.get(source_id)
     if source is None:
         blockers.append(
@@ -893,7 +997,14 @@ def _work_item(
                 data_location=_canonical_bead_location(ctx),
             )
         )
-    blockers.extend(_closed_source_blockers(ctx, brief_id=brief_id, source=source))
+    blockers.extend(
+        _closed_source_blockers(
+            ctx,
+            brief_id=brief_id,
+            source=source,
+            synthetic_self_source=synthetic_self_source,
+        )
+    )
     if not _approved_for_dispatch(brief):
         blockers.append(
             _diagnostic(
@@ -1152,8 +1263,25 @@ def _raise_if_blocked(ctx: MctlContext, item: WorkItem) -> None:
 
 
 def _formula_invocation(ctx: MctlContext, item: WorkItem) -> dict[str, object]:
+    """The `gc sling work-briefed` command Path A records as provenance.
+
+    `brief_root` is read out of `artifact_layout()` rather than composed here.
+    That is the whole point: `artifact_layout()` is the single resolver every
+    adjudication surface reads through, so taking the deposit root from it
+    makes the writer and the reader agree BY CONSTRUCTION rather than by two
+    string literals that happen to match today. Composing
+    `rig_root / ".beads" / "briefs"` a second time would be the second
+    resolution rule `redundant_state` exists to prevent -- and it is precisely
+    how mc-4ovmy stranded eighteen briefs.
+
+    `artifact_root` keeps its own value and is deliberately NOT unified with
+    it. It is the build/stage root, it wants per-bead scoping (gsp-1bmxuz),
+    and the shared rig-level value below is a separate known defect with its
+    own bead; folding the two back together is what created this one.
+    """
     brief_slug = item.brief_id
     artifact_root = str(ctx.rig_root / ".beads" / "briefs")
+    brief_root = str(artifact_layout(ctx).root)
     command = [
         "gc",
         "sling",
@@ -1167,6 +1295,8 @@ def _formula_invocation(ctx: MctlContext, item: WorkItem) -> dict[str, object]:
         f"brief_slug={brief_slug}",
         "--var",
         f"artifact_root={artifact_root}",
+        "--var",
+        f"brief_root={brief_root}",
         "--var",
         "routing_path=mctl.work.dispatch,work-briefed",
     ]

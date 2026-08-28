@@ -49,7 +49,11 @@ default = "gc.review-synthesizer"
 enum = ["gc.review-synthesizer", "gc.design-author"]
 
 [vars.artifact_root]
-description = "Brief pipeline artifact root."
+description = "Build/stage artifact root. Scope per bead (for example <rig-root>/.gc-builds/<bead>) so two concurrent dispatches in one rig do not share a stage root (gsp-1bmxuz). This is NOT the brief deposit root — see brief_root."
+default = ".beads/briefs"
+
+[vars.brief_root]
+description = "Brief DEPOSIT root: the rig's one shared brief tree, never bead-scoped. mctl resolves the pile every adjudication surface reads as <rig-root>/.beads/briefs/.pile (assets/brief-pipeline/paths.toml, rig-relative); a brief deposited anywhere else has no route to a human (mc-4ovmy). A relative value is resolved against the rig root from the city registry, never against the runner's cwd."
 default = ".beads/briefs"
 
 [vars.context]
@@ -221,14 +225,39 @@ without filing a commission brief.
 id = "file-brief"
 needs = ["review-dispatch-plan"]
 title = "File commission brief for {{source_bead}}"
-metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "commission-work-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "commission-work-briefed", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{brief_root}}/.pile/{{brief_slug}}.md" }
 description = """
 File a commission decision brief. The brief asks whether the proposed dispatch
 graph is what the user meant and whether the city should execute it.
 
+Deposit to `brief_root`, NOT to `artifact_root`. `artifact_root` is bead-scoped
+so concurrent builds do not collide; a brief deposited under it inherits that
+scoping and lands in a per-bead directory no adjudication surface reads. That is
+mc-4ovmy: 18 complete, gate-passing briefs stranded under
+`<rig-root>/.gc-builds/<bead>/.pile/`, with no route to a human.
+
+Resolve the root from the CITY REGISTRY, never from this runner's cwd — the cwd
+is an agent work dir, which is never a rig root and never a brief root.
+
 ```bash
-BRIEF_PATH="{{artifact_root}}/.pile/{{brief_slug}}.md"
-mkdir -p "{{artifact_root}}/.pile"
+BRIEF_ROOT="{{brief_root}}"
+case "$BRIEF_ROOT" in
+  /*) ;;
+  *)
+    RIG_PATH="$(gc rig list --json | jq -r --arg id "{{source_bead}}" '
+      [(.rigs // [])[] | select(.prefix as $p | $id | startswith($p + "-"))]
+      | sort_by(.prefix | length) | last // empty
+      | .path // empty')"
+    [ -n "$RIG_PATH" ] || {
+      echo "I'm sorry, I can't do that — no registered rig prefix matches {{source_bead}}, so the brief deposit root cannot be resolved. Pass --var brief_root=<rig-root>/.beads/briefs." >&2
+      exit 1
+    }
+    BRIEF_ROOT="$RIG_PATH/$BRIEF_ROOT"
+    ;;
+esac
+
+BRIEF_PATH="$BRIEF_ROOT/.pile/{{brief_slug}}.md"
+mkdir -p "$BRIEF_ROOT/.pile"
 ```
 
 The brief MUST contain:
@@ -271,7 +300,7 @@ The brief MUST contain:
 After filing:
 
 ```bash
-bd update {{source_bead}} --notes "commission-work-briefed file-brief: commission brief at {{artifact_root}}/.pile/{{brief_slug}}.md — awaiting approval before dispatch"
+bd update {{source_bead}} --append-notes "commission-work-briefed file-brief: commission brief at $BRIEF_PATH — awaiting approval before dispatch"
 gc runtime drain-ack
 ```
 """

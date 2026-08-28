@@ -6,7 +6,7 @@ import re
 import tomllib
 from datetime import date
 from pathlib import Path
-from typing import Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .beads import BD_LIST_ARGS, Bead, BeadReadError, read_beads
 from .context import MctlContext
@@ -44,6 +44,7 @@ from .verdicts import (
     Verdict,
     brief_population,
     declares_no_subject,
+    is_adjudicated,
     non_brief_code,
     read_verdict,
 )
@@ -696,14 +697,41 @@ def empty_scope_diagnostic(ctx: MctlContext) -> Diagnostic:
     )
 
 
-def legacy_gate_diagnostics(ctx: MctlContext) -> tuple[Diagnostic, ...]:
-    """The #38 legacy-migration gate, independent of any single brief.
+def legacy_gate_diagnostics(
+    ctx: MctlContext, brief_ids: set[str] | None
+) -> tuple[Diagnostic, ...]:
+    """The #38 legacy-migration gate, for a mutation that has no brief record yet.
 
-    Creation has no existing brief to scope the gate to, but it is still a
-    mutation and must fail closed on unmigrated decisions-track rows.
+    `brief_ids` is the set of decisions-track rows the caller is about to
+    write. `_legacy_gate_diagnostics` reads it exactly as `doctor_briefs` does:
+    an unparseable manifest fails closed regardless, and past that only rows in
+    the set can block. `None` means "every row in the rig", which is a veto on
+    the whole legacy corpus and is almost never what a single write deserves.
+    It is deliberately not defaulted: the unscoped read is what this helper did
+    before mc-tbucy, and a default would hand that back to the next caller
+    silently instead of making them say which rows they are risking.
+
+    Passing the empty set is a claim, not a bypass: it says this mutation
+    writes no decisions-track row, so no decisions-track row is state it could
+    corrupt. `plan_create_brief` is the one caller entitled to make it -- the
+    bead id does not exist until bd mints it, so the brief being created cannot
+    be the subject of any existing row. The other three mutations that consult
+    this gate (adjudication, deferral, dispatch) name a brief that already
+    exists and reach the same predicate through `doctor_briefs(ctx, brief_id)`,
+    which scopes it to `{brief_id}`. Adjudication in particular DOES write the
+    legacy manifest, so for it the scoped row is the state at risk.
+
+    mc-tbucy (Taylor, 2026-08-27). This helper took no scope at all, and the
+    unscoped read made creation the only unscoped consumer of a check its three
+    siblings already scoped. Measured cost on `hq`: 204 rows, 42 non-terminal,
+    22 of them `status=ready` -- the live queue -- deadlocked, because a
+    beadless brief cannot be adjudicated (MBRF010), minting its bead was
+    refused here, and adjudicating is what terminalizes the row.
     """
     layout = artifact_layout(ctx)
-    return _legacy_gate_diagnostics(ctx, layout, legacy_manifest_state(layout), None)
+    return _legacy_gate_diagnostics(
+        ctx, layout, legacy_manifest_state(layout), brief_ids
+    )
 
 
 # A brief label is a bd label: one lowercase token, no spaces.
@@ -2209,6 +2237,27 @@ def _legacy_gate_diagnostics(
 
 
 def _legacy_migration_blocker(ctx: MctlContext, layout: ArtifactLayout) -> Diagnostic:
+    """The #38 blocker, with advice the blocked operator can actually follow.
+
+    It used to suggest `bash tests/decisions-track-migration/smoke_test.sh`.
+    That script builds a whole rig under `mktemp -d`, asserts against the
+    fixture it just wrote, and deletes it on exit; it never opens the manifest
+    this diagnostic is about. So it passes on a rig that is blocked and passes
+    on a rig that is not, and an operator who followed the tool's own advice
+    ran a green test and hit the identical refusal. It remains a good CI test
+    of the migrator -- it is simply not a remedy for this diagnostic, and
+    naming it here was the error (mc-tbucy(D), Taylor 2026-08-27).
+
+    What replaces it is the migrator's own DRY RUN against the blocked rig:
+    same tool the smoke test exercises, pointed at the real manifest, writing
+    nothing without `--apply`. It is the first step of the #38 proof the
+    message asks for, and its output names this rig's rows rather than a
+    fixture's. `ctx.source_checkout` is used rather than a relative path
+    because the operator's cwd is not the checkout -- a relative path was part
+    of why the old advice read as boilerplate.
+    """
+    migrator = ctx.source_checkout / "assets" / "scripts" / "brief-decisions-track-inventory.py"
+    marker = layout.root / "migrations" / "decisions-track-inventory.jsonl"
     return _diagnostic(
         ctx,
         Severity.FATAL,
@@ -2216,7 +2265,9 @@ def _legacy_migration_blocker(ctx: MctlContext, layout: ArtifactLayout) -> Diagn
         "Legacy decisions-track state requires the authorized #38 migration proof/canary.",
         data_location=str(layout.legacy_manifest),
         policy_ref="B2.10",
-        suggested_next_command="bash tests/decisions-track-migration/smoke_test.sh",
+        suggested_next_command=(
+            f"python3 {migrator} migrate --rig-root {ctx.rig_root} --marker {marker}"
+        ),
     )
 
 
@@ -2250,3 +2301,47 @@ def _diagnostic(
     if suggested_next_command:
         facts["suggested_next_command"] = suggested_next_command
     return Diagnostic(severity, code, message, facts=facts, trace_id=ctx.trace_id)
+
+
+CODE_ADJUDICATED_REGATE = "MBRF_ADJUDICATED_REGATE"
+
+
+def regate_diagnostics(
+    frontmatter: Mapping[str, Any],
+    ctx: MctlContext | None = None,
+) -> tuple[Diagnostic, ...]:
+    """Refuse to re-judge a brief a human already decided (mc-8ehd0).
+
+    ERROR rather than WARN on purpose: the downstream consequence is a verdict
+    moved into `.pile/.rejected/`, and a warning a caller may ignore is not a
+    guard. The gate's correct move on seeing this is to leave the item where it
+    is and escalate, never to reject it.
+
+    `ctx` is optional because this predicate is about the brief alone -- it
+    reads no city, rig, or store -- and requiring a context would keep the one
+    rule that must be cheapest to call out of the callers that most need it.
+    With a context the diagnostic carries the usual city/rig facts; without
+    one it still carries its code, severity, and policy reference, which is
+    what a caller branches on.
+    """
+    if not is_adjudicated(frontmatter):
+        return ()
+    message = "This brief already carries a verdict; the gate must not re-judge it."
+    if ctx is not None:
+        return (
+            _diagnostic(
+                ctx,
+                Severity.ERROR,
+                CODE_ADJUDICATED_REGATE,
+                message,
+                policy_ref="B2.2",
+            ),
+        )
+    return (
+        Diagnostic(
+            Severity.ERROR,
+            CODE_ADJUDICATED_REGATE,
+            message,
+            facts={"policy_reference": "B2.2"},
+        ),
+    )

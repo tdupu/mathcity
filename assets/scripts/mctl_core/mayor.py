@@ -584,6 +584,11 @@ class BootState:
     recent_handoffs: Sequence[Mapping[str, object]]
     escalations_queryable: bool
     prose_residue: Sequence[str]
+    #: What the handoff query examined to produce `recent_handoffs` (M3,
+    #: mc-uvl). The chain is `found[-limit:]`, so the array alone cannot say
+    #: whether five rows are five predecessors or the tail of fifty -- and a
+    #: Mayor priming from it has no other place to learn which.
+    handoff_scope: Mapping[str, int] = field(default_factory=lambda: dict(EMPTY_HANDOFF_SCOPE))
     diagnostics: Sequence[Diagnostic] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, object]:
@@ -592,6 +597,7 @@ class BootState:
             "city": self.city.to_dict(),
             "conservation": self.conservation.to_dict(),
             "escalations_queryable": self.escalations_queryable,
+            "handoff_scope": dict(self.handoff_scope),
             "open_beads": self.open_beads,
             "prose_residue": list(self.prose_residue),
             "recent_handoffs": [dict(item) for item in self.recent_handoffs],
@@ -612,9 +618,49 @@ def _hq_store_root(ctx: "MctlContext") -> Path:
     return ctx.city_root
 
 
-def _handoff_chain(rows: Sequence[Mapping[str, object]], limit: int = 5) -> list[dict[str, object]]:
-    """The session chain, newest last. This replaces the prose 'work done by
-    previous sessions' block -- it is a query, and it was always a query."""
+#: The shape `handoff_scope` takes when the HQ store could not be read.
+#: -1, never 0: this module already spells UNMEASURED that way for
+#: `open_beads` and `blocked_beads`, and a zero here would render a
+#: measurement that was never taken as one that was (POLICY P6.2).
+#: `matched` stays a true 0 -- zero rows really were returned.
+EMPTY_HANDOFF_SCOPE: Mapping[str, int] = {
+    "matched": 0,
+    "handoffs_found": -1,
+    "total_in_store": -1,
+    "older_omitted": -1,
+    "limit": -1,
+}
+
+
+def _handoff_scope(
+    rows: Sequence[Mapping[str, object]],
+    chain: Sequence[Mapping[str, object]],
+    limit: int,
+    *,
+    readable: bool,
+) -> dict[str, int]:
+    """What the handoff query walked, beside what it returned (M3, mc-uvl).
+
+    `total_in_store` counts every HQ row, not just the ones matching the
+    handoff markers: a denominator that shrank with the filter would report
+    5-of-5 for a read that dropped forty rows, which is the same defect one
+    step further in. `handoffs_found` sits between the two because the cap is
+    applied to the matched set, and `older_omitted` is what the cap dropped.
+    """
+    if not readable:
+        return dict(EMPTY_HANDOFF_SCOPE)
+    found = _handoff_matches(rows)
+    return {
+        "matched": len(chain),
+        "handoffs_found": len(found),
+        "total_in_store": len(rows),
+        "older_omitted": len(found) - len(chain),
+        "limit": limit,
+    }
+
+
+def _handoff_matches(rows: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
+    """Every handoff bead in these rows, oldest first and NOT capped."""
     found = []
     for row in rows:
         title = str(row.get("title") or "")
@@ -628,7 +674,17 @@ def _handoff_chain(rows: Sequence[Mapping[str, object]], limit: int = 5) -> list
                 }
             )
     found.sort(key=lambda item: item["created_at"])
-    return found[-limit:]
+    return found
+
+
+def _handoff_chain(rows: Sequence[Mapping[str, object]], limit: int = 5) -> list[dict[str, object]]:
+    """The session chain, newest last. This replaces the prose 'work done by
+    previous sessions' block -- it is a query, and it was always a query.
+
+    The cap it applies is reported by `_handoff_scope`, not left implicit in a
+    short array (M3, mc-uvl).
+    """
+    return _handoff_matches(rows)[-limit:]
 
 
 def boot_state(ctx: "MctlContext", handoff_limit: int = 5) -> BootState:
@@ -690,6 +746,9 @@ def boot_state(ctx: "MctlContext", handoff_limit: int = 5) -> BootState:
     hq_root = _hq_store_root(ctx)
     hq_rows, hq_error = load_rows(hq_root)
     recent_handoffs = _handoff_chain(hq_rows, handoff_limit)
+    handoff_scope = _handoff_scope(
+        hq_rows, recent_handoffs, handoff_limit, readable=hq_error is None
+    )
 
     if not recent_handoffs:
         # Emptiness is not absence. An empty chain -- whether the store was
@@ -728,5 +787,6 @@ def boot_state(ctx: "MctlContext", handoff_limit: int = 5) -> BootState:
         recent_handoffs=recent_handoffs,
         escalations_queryable=bool(wisps),
         prose_residue=PROSE_RESIDUE,
+        handoff_scope=handoff_scope,
         diagnostics=tuple(diagnostics),
     )

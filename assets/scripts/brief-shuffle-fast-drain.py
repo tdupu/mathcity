@@ -166,9 +166,49 @@ def classifier_error(text: str) -> str | None:
     return None
 
 
+def _is_adjudicated(metadata: dict[str, str]) -> bool:
+    """Whether a human already decided this brief.
+
+    Mirrors `mctl_core.verdicts.is_adjudicated`. Duplicated rather than
+    imported: this script is a standalone scheduled order and does not import
+    `mctl_core`. The two are pinned to agree by
+    `tests/mctl/test_fast_drain_adjudicated_guard.py`'s drift test, which fails
+    if either copy moves without the other.
+
+    An empty `verdict:` is an ABSENT verdict, not a decision.
+    """
+    if str(metadata.get("verdict") or "").strip():
+        return True
+    return str(metadata.get("status") or "").strip().lower().startswith("adjudicated")
+
+
+# Frontmatter spellings that NAME A BEAD, and therefore answer "what is this
+# brief about". Copied from `mctl_core`'s own identity ladder --
+# `effects._row_matches` and `redundant_state._row_id` both walk
+# ("brief_bead", "brief_id", "bead_id", "slug", "id", "source") -- so the writer
+# and the gate stop disagreeing about how provenance is spelled. Measured on the
+# live city 2026-08-28: `.pile/.rejected/gt-3ibad0-master-methodology-design/
+# brief.md` carries `bead_id: gt-3ibad0` and was rejected as unprovenanced.
+#
+# `slug` and `id` are DELIBERATELY EXCLUDED from mctl's ladder here, and
+# `brief_slug` with them. They are the filename stem, which every producer
+# writes; accepting them would satisfy this gate for every brief that has ever
+# been written and leave a check that cannot fail (POLICY P6.2) -- worse than no
+# check. The ladder is right for JOINING a row to a bead it already has; it is
+# too wide for ASSERTING that a bead was named.
+STANDARD_PROVENANCE_KEYS = (
+    "source_bead",
+    "artifact",
+    "brief_bead",
+    "brief_id",
+    "bead_id",
+    "source",
+)
+
+
 def profile_error(profile: str, metadata: dict[str, str], text: str) -> str | None:
     if profile == "standard":
-        if not any(metadata.get(key) for key in ("source_bead", "artifact", "brief_bead")):
+        if not any(metadata.get(key) for key in STANDARD_PROVENANCE_KEYS):
             return "standard brief missing provenance metadata"
     elif profile == "decision":
         if metadata.get("brief_kind") != "decision":
@@ -256,6 +296,20 @@ def evaluate(path: Path, gate_config: dict[str, Any]) -> tuple[str, str, dict[st
     metadata = parse_frontmatter(path)
     if not metadata:
         return "standard", "invalid or missing frontmatter", metadata, []
+    # mc-8ehd0: an adjudicated brief is TERMINAL. A machine re-running its gates
+    # over a decision a human already made, and rejecting it, discards that
+    # decision. Measured 2026-08-28: 8 of the 24 briefs in .pile/.rejected/
+    # carried a verdict (7 approve, 1 reject), and 22 of the 24 were rejected
+    # for missing provenance metadata -- which an adjudicated brief has no
+    # obligation to carry. Placed above the profile lookup so an unknown or
+    # since-renamed gate profile cannot discard a verdict either.
+    #
+    # The empty-string error is deliberate: evaluate()'s contract is
+    # tuple[str, str, dict, list], and process_item() branches on
+    # `"promote" if not reason else "reject"`, so "" takes the promote branch
+    # without changing the return type. Returning None would change it.
+    if _is_adjudicated(metadata):
+        return metadata.get("gate_profile", "standard"), "", metadata, []
     profile = metadata.get("gate_profile", gate_config["registry"].get("default_profile", "standard"))
     profiles = gate_config.get("profiles", {})
     if profile not in profiles:
@@ -788,6 +842,41 @@ def main() -> int:
         gate_config = tomllib.load(handle)
     brief_root = args.brief_root.expanduser()
     pile = brief_root / ".pile"
+    # P6.1 fail loud, same rule as the membership error below. A relative
+    # `--brief-root` resolves against the CWD, and the ralph runner's CWD is a
+    # per-bead agent work dir -- never a rig root, never a city root, never a
+    # brief root. Resolved there the root simply does not exist, and every
+    # count below then answers from an empty directory: the drain exited 0
+    # reporting `remaining_pile: 0` while the real pile sat untouched. A drain
+    # that never found its pile must not render as a drain that found it empty
+    # (POLICY P6.2: a check that could not have failed must not render as a
+    # check that passed). The script cannot repair this itself -- only the
+    # caller knows whether `{{artifact_root}}` is rig-scoped or city-scoped --
+    # so it refuses instead of guessing a root.
+    if not brief_root.is_dir():
+        report = {
+            "brief_root_error": (
+                f"--brief-root {args.brief_root} does not resolve to a directory "
+                f"(resolved to {brief_root.resolve()} from cwd {Path.cwd()}); "
+                "pass an ABSOLUTE brief root, or one resolved against the "
+                "dispatching order's scope root -- the rig root for "
+                "scope=\"rig\" orders, ${GC_CITY_PATH:-${GC_CITY:-$HOME/gt}} "
+                "for scope=\"city\" orders. The working directory is neither."
+            ),
+            "apply": args.apply,
+            "promoted": [], "rejected": [], "skipped": [], "recovered": [],
+            "planned_promoted": [], "planned_rejected": [],
+            "reasons": {}, "manifest_updated": [], "manifest_aborted": {},
+            "not_pile_members": [], "membership_unresolved": [],
+            # NOT 0. Unknown is unknown; a count from a root that was never
+            # seen is the defect, not the answer.
+            "remaining_pile": None,
+        }
+        if args.json:
+            print(json.dumps(report, sort_keys=True))
+        else:
+            print(f"brief-shuffle-fast-drain: {report['brief_root_error']}", file=sys.stderr)
+        return 2
     report: dict[str, Any] = {
         "apply": args.apply,
         "promoted": [], "rejected": [], "skipped": [], "recovered": [],

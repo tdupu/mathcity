@@ -239,7 +239,7 @@ class RigOutcome:
             if isinstance(entry, Mapping)
         )
 
-    def to_dict(self, arrays: Sequence[str] = ()) -> dict[str, Any]:
+    def to_dict(self, arrays: Sequence[str] = (), scopes: Sequence[str] = ()) -> dict[str, Any]:
         entry: dict[str, Any] = {
             "counts": {name: len(self.payload.get(name) or ()) for name in arrays},
             "diagnostics": [dict(item) for item in self.diagnostics],
@@ -257,6 +257,16 @@ class RigOutcome:
             # did not answer" are read together. A count with no lane report
             # beside it is the number that looked complete.
             entry[DEGRADED_SOURCES] = list(sources)
+        for name in scopes:
+            block = self.payload.get(name)
+            if isinstance(block, Mapping):
+                # Per rig as well as summed, because "1 of 40 briefs" is a
+                # different report per rig and a city-wide sum alone would
+                # hide which rig the rows came out of. Absent, not zeroed, for
+                # a rig that did not answer: a scope block invented for a rig
+                # nobody could read would be a denominator with no store
+                # behind it.
+                entry[name] = dict(block)
         trust = self.payload.get("artifact_trust")
         if isinstance(trust, Mapping):
             # Per rig, never collapsed into one city-wide claim: the resolved
@@ -480,12 +490,40 @@ def _tagged(diagnostics: Sequence[Mapping[str, Any]], rig_id: str) -> list[dict[
     return tagged
 
 
+def _accumulate_scope(total: dict[str, Any], block: Any) -> None:
+    """Fold one rig's scope block into the city-wide total (M3, mc-uvl).
+
+    Integers add and string lists union-and-sort, which is the whole rule.
+    Rig stores are disjoint, so summing denominators does not double-count a
+    bead; a `readiness_excluded` naming `blocked` in two rigs describes one
+    city-wide fact, so it unions rather than repeating.
+
+    Keys are folded rather than replaced, and a key the total does not already
+    carry is ADDED, so a rig running a newer core that reports one more field
+    contributes it instead of having it dropped. A non-numeric, non-list value
+    is left as the seeded default: silently coercing one would be inventing a
+    number, which is the failure this whole block exists to prevent.
+    """
+    if not isinstance(block, Mapping):
+        return
+    for key, value in block.items():
+        current = total.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, list)):
+            continue
+        if isinstance(value, int):
+            total[key] = (current if isinstance(current, int) else 0) + value
+        else:
+            seen = set(current) if isinstance(current, list) else set()
+            total[key] = sorted(seen | {str(item) for item in value})
+
+
 def merge_outcomes(
     scope: CityScope,
     outcomes: Sequence[RigOutcome],
     *,
     arrays: Sequence[str],
     trace_id: str,
+    scopes: Mapping[str, Mapping[str, Any]] | None = None,
     artifact_state: bool = False,
     validity: bool = False,
 ) -> dict[str, Any]:
@@ -501,8 +539,24 @@ def merge_outcomes(
     is what stops the total they are part of from reading as complete: the
     rig entry stays `ok: false`, `valid` goes false, and the lane report
     travels in `rigs[].degraded_sources`.
+
+    `scopes` names the per-rig scope blocks to carry (M3, mc-uvl). They are
+    declared alongside `arrays` and initialised the same way -- to an empty
+    block, not omitted -- so a city where every rig failed still returns the
+    key rather than dropping it and failing the tool's own output schema.
+    Summing is sound because rig stores are disjoint, so no bead is counted
+    twice; integers add, string lists union, and only rigs that contributed
+    rows contribute scope. A rig that could not be read adds nothing to the
+    denominator, which is what makes `valid: false` beside it the whole story.
     """
     merged: dict[str, list[Any]] = {name: [] for name in arrays}
+    # Seeded from the caller's ZERO block, never from `{}`: the tool that
+    # declares a scope also declares what an empty one looks like, so a city
+    # where no rig answered returns `matched: 0` out of `total_in_store: 0`
+    # rather than a half-block that fails the tool's own output schema.
+    scope_totals: dict[str, dict[str, Any]] = {
+        name: dict(zero) for name, zero in (scopes or {}).items()
+    }
     diagnostics: list[dict[str, Any]] = []
     untrusted: list[dict[str, Any]] = []
     severity_counts: dict[str, int] = {}
@@ -527,6 +581,8 @@ def merge_outcomes(
                 merged[name].append(
                     {**dict(row), "rig_id": outcome.rig_id} if isinstance(row, Mapping) else row
                 )
+        for name in scope_totals:
+            _accumulate_scope(scope_totals[name], outcome.payload.get(name))
         diagnostics.extend(_tagged(outcome.payload.get("diagnostics") or (), outcome.rig_id))
         # Concatenated, never promoted. An aggregate that summed a withheld
         # code into an actionable city-wide total would be the single most
@@ -544,11 +600,12 @@ def merge_outcomes(
     payload: dict[str, Any] = {
         "city_root": str(scope.city_root),
         "diagnostics": diagnostics,
-        "rigs": [outcome.to_dict(arrays) for outcome in outcomes],
+        "rigs": [outcome.to_dict(arrays, tuple(scope_totals)) for outcome in outcomes],
         "scope": ALL_RIGS_SCOPE,
         "trace_id": trace_id,
     }
     payload.update(merged)
+    payload.update(scope_totals)
     if validity:
         # Declared unconditionally, not "when a rig reported one": a caller
         # that asked for validation and got a payload with no verdict would
