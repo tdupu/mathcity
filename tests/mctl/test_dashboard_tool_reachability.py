@@ -36,6 +36,13 @@ from mctl_dashboard.client import ALLOWED_TOOLS  # noqa: E402
 #: Server tools the dashboard deliberately may not call, with the reason.
 #: An entry here is a decision; absence from both lists is an oversight.
 DELIBERATELY_UNREACHABLE: dict[str, str] = {
+    "beads_list": (
+        "a raw store read (#245); no screen consumes it. The dashboard reads beads "
+        "through the domain surfaces it already has (briefs_list, queue_status, "
+        "molecules_list), which shape the rows for a page. Allowlisting a tool "
+        "nothing calls would assert a reachability nobody built."
+    ),
+    "beads_show": "a raw single-bead read (#245); no screen consumes it, same footing as beads_list",
     "work_dispatch": "mutating dispatch is not driven from the dashboard",
     "work_dispatch_event": "provenance events are written by the dispatcher, not the page",
     "briefs_create": "briefs are produced by the pipeline, not authored in the dashboard",

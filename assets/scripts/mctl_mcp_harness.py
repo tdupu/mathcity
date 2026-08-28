@@ -48,6 +48,8 @@ MCTL = SCRIPTS_ROOT / "mctl.py"
 
 EXPECTED_TOOLS = (
     "bead_comment",
+    "beads_list",
+    "beads_show",
     "blast_radius_registry",
     "briefs_relay_adjudication",
     "briefs_create",
