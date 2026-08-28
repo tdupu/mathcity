@@ -279,13 +279,49 @@ def teardown(city_root: Path, *, port: int | None = None) -> dict[str, object]:
     return {"requested_port": port, "stopped": stopped, "failed": failed}
 
 
+def port_bound(host: str, port: int, *, timeout: float = 0.4) -> bool:
+    """Whether anything is currently serving `host:port`.
+
+    **This is the authoritative liveness signal for a dashboard, and pid state
+    is not.** A dashboard's contract is "something serves this port", which any
+    process can observe regardless of who spawned what. `pid_alive` cannot say
+    that across a process boundary: a zombie answers `os.kill(pid, 0)`, and
+    only the zombie's own parent can reap it.
+
+    Measured 2026-08-28 (mc-6i9gm): a session tearing down a dashboard it did
+    not start got `waitpid -> ChildProcessError`, fell through to
+    `os.kill(pid, 0)`, and read a defunct process as running. Port 8471 was
+    left unserved while the tool reported the stop had failed.
+    """
+    import socket
+
+    with socket.socket() as probe:
+        probe.settimeout(timeout)
+        return probe.connect_ex((host or "127.0.0.1", int(port))) == 0
+
+
 def stop_instance(instance: DashboardInstance) -> bool:
     """SIGTERM the instance, escalating to SIGKILL if it will not exit.
 
-    Returns whether the process is gone afterwards. A restart must not claim
+    Returns whether the dashboard is gone afterwards. A restart must not claim
     success on a stop that did not take (`P6.2`).
+
+    **Stopped is decided by the PORT, with pid state as a fast path only.**
+    The pid check short-circuits the common same-parent case; the port check is
+    what makes the answer correct when the caller is not the dashboard's parent,
+    which is the ordinary cross-session teardown and the case mc-6i9gm was
+    filed for. A pid we cannot reap tells us nothing; an unbound port tells us
+    everything.
     """
     import signal
+
+    def _gone() -> bool:
+        # Port first: it is the contract, and it is true regardless of
+        # parentage. `pid_alive` remains as a cheap confirmation for the case
+        # where we DO own the child and can reap it.
+        if not port_bound(instance.host, instance.port):
+            return True
+        return not pid_alive(instance.pid)
 
     try:
         os.kill(instance.pid, signal.SIGTERM)
@@ -295,7 +331,7 @@ def stop_instance(instance: DashboardInstance) -> bool:
         return False
     deadline = time.monotonic() + STOP_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        if not pid_alive(instance.pid):
+        if _gone():
             return True
         time.sleep(0.1)
     try:
@@ -303,7 +339,7 @@ def stop_instance(instance: DashboardInstance) -> bool:
     except OSError:
         pass
     time.sleep(0.1)
-    return not pid_alive(instance.pid)
+    return _gone()
 
 
 def start_instance(*, city_root: Path, host: str, port: int, rig: str | None) -> dict[str, object]:

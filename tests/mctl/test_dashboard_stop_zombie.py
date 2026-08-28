@@ -29,6 +29,7 @@ deleted in the same commit that fixes `pid_alive`.
 """
 from __future__ import annotations
 
+import socket
 import subprocess
 import sys
 import time
@@ -125,3 +126,66 @@ def test_stop_instance_reports_a_killed_child_as_stopped() -> None:
             proc.wait(timeout=5)
         except (subprocess.TimeoutExpired, ChildProcessError):
             pass
+
+
+# -- the case the tests above CANNOT reach -------------------------------------
+#
+# Every zombie built with `subprocess.Popen` makes the TEST the parent, so those
+# tests only ever exercise same-parent teardown -- which already worked. BART hit
+# the real one on 2026-08-28: tearing down a dashboard started by ANOTHER session
+# (pid 9630, ppid 5453, STAT Z) with the waitpid fix present, and got the pre-fix
+# outcome. `waitpid` raised ChildProcessError, `os.kill(pid, 0)` succeeded on the
+# zombie, the stop reported failure, and port 8471 was left unserved.
+#
+# The lesson is sharper than the bug: a test aimed at the case that already
+# worked will pass no matter how broken the case that matters is.
+
+
+def test_port_bound_is_false_for_a_port_nobody_serves() -> None:
+    """Control: without this, the assertions below prove nothing."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        free = s.getsockname()[1]
+    assert dashboards.port_bound("127.0.0.1", free) is False
+
+
+def test_port_bound_is_true_for_a_served_port() -> None:
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        assert dashboards.port_bound("127.0.0.1", server.getsockname()[1]) is True
+
+
+def test_a_stop_is_confirmed_by_the_port_even_when_the_pid_is_unreapable() -> None:
+    """The cross-session case: we are NOT the process's parent.
+
+    Simulated with a pid we could never reap, and a port nobody serves. Before
+    the port check, `_gone()` depended on `pid_alive`, which cannot answer for a
+    process we do not own.
+    """
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        free = s.getsockname()[1]
+
+    # pid 1 is init: alive, definitively not our child, unreapable by us.
+    instance = dashboards.DashboardInstance(
+        pid=1,
+        host="127.0.0.1",
+        port=free,
+        url=f"http://127.0.0.1:{free}",
+        rig=None,
+        serving_commit=None,
+        started_at="2026-08-28T00:00:00+00:00",
+    )
+    assert dashboards.pid_alive(1) is True, "pid 1 should read as alive"
+    # The port is unserved, so the dashboard IS gone regardless of that pid.
+    assert dashboards.port_bound(instance.host, instance.port) is False
+
+
+def test_a_still_served_port_is_not_reported_stopped() -> None:
+    """The guard must not flip to always-true: a bound port means still up."""
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        assert dashboards.port_bound("127.0.0.1", port) is True
