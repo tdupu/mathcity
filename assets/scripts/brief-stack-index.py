@@ -26,7 +26,18 @@ TERMINAL_INDEX_STATUSES = {"archived", "decided", "adjudicated"}
 #: brief declares no subject, and the key is omitted rather than guessed --
 #: whether "no bead subject" is even legitimate is an open policy question
 #: (bead mc-csr), and answering it by inventing a value here would foreclose it.
+#:
+#: NOTE these name the brief's SUBJECT bead -- the work the brief is about --
+#: NEVER the brief's own decision bead. That distinction is `brief_bead` below,
+#: and conflating the two is the #234 defect: a reader that took `source` for a
+#: bead link found a track name (`decisions-track`) or a file path instead.
 SOURCE_FRONTMATTER_KEYS = ("source_bead", "artifact")
+
+#: The frontmatter key that names the brief's OWN canonical decision bead
+#: (`skills/check-briefs` step 3 reads `${brief_bead:-$artifact}`). #234: this
+#: is the only key that answers "does this stack brief have a bead, and which
+#: one?", and no index producer read it, so the index could not answer it.
+BRIEF_BEAD_FRONTMATTER_KEY = "brief_bead"
 
 #: Frontmatter keys consulted for ``created_at``. ``deposited_at`` is the
 #: producer's own record of when the brief landed. A file mtime is NOT a
@@ -221,6 +232,27 @@ def slug_for(name: str) -> str:
     return re.sub(r"\.md$", "", name)
 
 
+def declares_no_subject(text: str, frontmatter: dict[str, str]) -> bool:
+    """Whether the brief EXPLICITLY declares it has no bead subject (B2.1a).
+
+    B2.1a is explicit-only: *"Silence is never a declaration."* Two of its
+    three markers are visible in the file itself and are the ones checked here
+    -- a `[no-subject]` title tag and a whole-line ``Source: none`` body field.
+    The third, the `no-subject` label, lives on the bead rather than the file
+    and is out of this standalone script's reach; the bead-side surface reports
+    it as `MBRF056`. A file carrying none of these is silent, and silence must
+    not become a declaration, or the null would swallow the ordinary omission
+    it exists to be distinguished from.
+    """
+    title = frontmatter.get("title", "")
+    if "[no-subject]" in title.lower():
+        return True
+    for line in text.splitlines():
+        if line.strip().lower() == "source: none":
+            return True
+    return False
+
+
 def new_row(brief_root: Path, path: Path) -> dict[str, Any]:
     """A row for a stack file that has none, carrying only grounded fields.
 
@@ -231,8 +263,17 @@ def new_row(brief_root: Path, path: Path) -> dict[str, Any]:
     its absence -- `brief-drain-manifest.sh` reads `(.unlock_count // 0)`.
     A row that omits a field says "the brief did not declare it"; a row that
     invents 0 says "the brief declared zero", and those are different claims.
+
+    #234: `brief_bead` is three-valued, and the three states are the whole
+    point -- a two-valued present/absent field would repeat the misread it
+    fixes. A declared id is emitted verbatim; an EXPLICIT B2.1a no-subject
+    declaration is emitted as `null`; a brief that says neither omits the key.
+    So `"brief_bead": "mc-x"`, `"brief_bead": null` and no `brief_bead` are
+    "has this bead", "declares it has none" and "did not say" -- three claims,
+    told apart at the row rather than collapsed into nothing.
     """
-    frontmatter = read_frontmatter(path.read_text(errors="replace"))
+    text = path.read_text(errors="replace")
+    frontmatter = read_frontmatter(text)
     row: dict[str, Any] = {
         "path": index_path_value(brief_root, path.name),
         "slug": slug_for(path.name),
@@ -247,6 +288,11 @@ def new_row(brief_root: Path, path: Path) -> dict[str, Any]:
             if value:
                 row[key] = value
                 break
+    brief_bead = frontmatter.get(BRIEF_BEAD_FRONTMATTER_KEY, "").strip()
+    if brief_bead:
+        row["brief_bead"] = brief_bead
+    elif declares_no_subject(text, frontmatter):
+        row["brief_bead"] = None
     return row
 
 

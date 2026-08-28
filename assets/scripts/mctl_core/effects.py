@@ -2452,7 +2452,13 @@ def _row_targets_brief(row: Mapping[str, object], target_brief_id: str) -> bool:
     # key cannot pull one brief's verdict onto another's row. The non-bead
     # spellings it also holds (`decisions-track`, `72-...-brief.md`) match no
     # bead id and are therefore inert here.
-    for key in ("brief_id", "bead_id", "slug", "id", "source"):
+    #
+    # `brief_bead` leads because it is the row's TYPED statement of the brief's
+    # own decision bead (#234), where `source` was only ever a workaround for
+    # its absence. A `brief_bead: null` -- a brief that DECLARED it has no bead
+    # (B2.1a) -- is `None` here and equals no `target_brief_id`, so a declared
+    # absence is inert rather than a wildcard.
+    for key in ("brief_bead", "brief_id", "bead_id", "slug", "id", "source"):
         value = row.get(key)
         if value == target_brief_id:
             return True

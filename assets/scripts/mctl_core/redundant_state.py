@@ -337,7 +337,12 @@ def _read_jsonl_strict(path: Path) -> JsonlReadResult:
 
 
 def _row_id(row: dict[str, object]) -> str | None:
-    for key in ("brief_id", "bead_id", "slug", "id"):
+    # `brief_bead` leads: it is the row's typed statement of the brief's own
+    # decision bead (#234), so a bead-backed brief whose `slug` is only the
+    # filename stem still joins to its row by bead id. The `isinstance str`
+    # guard makes a `brief_bead: null` -- a declared no-subject brief (B2.1a) --
+    # fall through rather than resolve to a bogus id.
+    for key in ("brief_bead", "brief_id", "bead_id", "slug", "id"):
         value = row.get(key)
         if isinstance(value, str) and value:
             return value
