@@ -312,11 +312,12 @@ Filter on `decision_state` only. See `template-fragments/mctl-entry-point.md`.
 the #137 downgrade. The conclusion above was already right — only the
 evidence for it was stale.)*
 
-**`gt-*` fallback.** `gt-*` beads live in the city-root HQ store, which is not a
-registered rig, so `mctl --rig` cannot address them
-(`MCTL_CONTEXT_UNKNOWN_RIG`). Leave `gt-*` candidates in the queue and rely on
-the cache filters for them, as `check-briefs` does. Do not invent a second
-resolution path.
+**`gt-*` routing.** `gt-*` beads live in the city-root HQ store, addressed by the
+`hq` rig (`--rig hq`) — the resolver synthesizes `hq` from the city root and does
+not declare it in `city.toml`, so it looks absent there but resolves clean
+(verified 2026-08-27). Address `gt-*` via `--rig hq`; do not invent a second
+resolution path. (Corrected 2026-08-27: prior text said `mctl --rig` cannot
+address `gt-*` / not a registered rig — false; use `--rig hq`.)
 
 If queue is empty: report "No ripe briefs in unified stack. Run /brief-prep, or /decisions-to-briefs to file a decision brief into the pile." and exit.
 

@@ -79,9 +79,12 @@ which is correct. Report `MBRF004` verbatim; do not branch on it — in either
 direction — nor on `MBRF005` or `MBRF021`. See
 `template-fragments/mctl-entry-point.md`.
 
-`gt-*` beads live in the city-root HQ store, which is not a registered rig, so
-`--rig gt` fails with `MCTL_CONTEXT_UNKNOWN_RIG`. Treat those as not
-brief-backed here and spawn in-session.
+`gt-*` beads live in the city-root HQ store, addressed by the `hq` rig
+(`--rig hq`) — the resolver synthesizes `hq` from the city root and does not
+declare it in `city.toml`, so it looks absent there but resolves clean (verified
+2026-08-27). Address `gt-*` with `--rig hq` like any other rig. (Corrected
+2026-08-27: prior text said `--rig gt` fails / not a registered rig and to treat
+`gt-*` as not brief-backed — false; use `--rig hq`.)
 
 ### Step 1 — Identify the work
 

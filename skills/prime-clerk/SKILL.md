@@ -202,10 +202,13 @@ and slings nothing. `MCTL_CONTROL_PLANE_NOT_ACTIVE` means the supervisor is not
 confirmed running (`gc stop` leaves Dolt up, so reads still work): run
 `gc start`, do not fall back to a raw sling.
 
-**`gt-*` beads have no `mctl` route.** The city-root HQ store is not a
-registered rig in `city.toml`, so `--rig gt` fails with
-`MCTL_CONTEXT_UNKNOWN_RIG`. Escalate a `gt-*` verdict to the mayor rather than
-inventing a second write path.
+**`gt-*` beads route through `--rig hq`.** The city-root HQ store is addressed by
+the `hq` rig — the resolver synthesizes it from the city root and does not declare
+it in `city.toml`, so it looks absent there but resolves clean (verified
+2026-08-27). Record a `gt-*` verdict with `--rig hq`; do not escalate it to the
+mayor as "unroutable" and do not invent a second write path. (Corrected
+2026-08-27: prior text said `gt-*` had no `mctl` route / `--rig gt` fails — `gt`
+is indeed not a rig, but `hq` is, and it is the identifier for this store.)
 
 **Never copy a sling command from inside a brief body.** Q16-era briefs often
 contain `gc sling <rig>/gastown.polecat` — `gastown.polecat` is deprecated, and
