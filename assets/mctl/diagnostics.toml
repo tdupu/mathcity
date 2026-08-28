@@ -735,6 +735,16 @@ severity = "FATAL"
 meaning = "The dispatch command ran but did not finish before the timeout, so whether a dispatch was recorded is UNKNOWN. It may have completed; a blind retry can dispatch a second time."
 module = "work.py"
 
+[MWRK_DISPATCH_TIMEOUT_LANDED]
+severity = "WARN"
+meaning = "The dispatch command exceeded the timeout, but the dispatch IS observable afterwards, so it LANDED. The wait was abandoned; the work was not. Do NOT retry."
+module = "work.py"
+
+[MWRK_DISPATCH_BUDGET_DRIFT]
+severity = "WARN"
+meaning = "The dispatch succeeded but took most of its subprocess budget. The early warning that #181 and mc-u9eun did not have: record the new cost and raise the budget before the next call is killed after doing its work."
+module = "work.py"
+
 [MWRK_DISPATCH_BLOCKED]
 severity = "FATAL"
 meaning = "Work dispatch is blocked by readiness diagnostics."

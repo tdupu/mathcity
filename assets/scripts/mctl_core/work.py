@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import subprocess
+import time
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -84,9 +85,17 @@ class WorkDispatchPlan:
 #: landed, and a retry is safe.
 DISPATCH_UNRUNNABLE_CODE = "MWRK_DISPATCH_COMMAND_FAILED"
 
-#: The command RAN and we stopped waiting -- `subprocess.TimeoutExpired`. Whether
-#: its work landed is unknowable from here, so the honest answer is `unknown`.
+#: The command RAN and we stopped waiting -- `subprocess.TimeoutExpired`, and no
+#: dispatch is observable afterwards. Whether its work landed is still unknown.
 DISPATCH_TIMEOUT_CODE = "MWRK_DISPATCH_TIMEOUT_UNKNOWN"
+
+#: The command RAN, we stopped waiting, and the dispatch IS observable afterwards.
+#: mc-u9eun: the 2026-08-28 sling completed at 243.51s and minted molecule
+#: mc-mgejq, and the 200s budget reported that as UNKNOWN. UNKNOWN is strictly
+#: worse than a refusal -- it is what invites the retry that double-dispatches,
+#: and mc-5wdje acquired two work streams that way. When the claim is visible we
+#: do not have to guess: look, and say so.
+DISPATCH_TIMEOUT_LANDED_CODE = "MWRK_DISPATCH_TIMEOUT_LANDED"
 
 
 @dataclass(frozen=True)
@@ -139,6 +148,66 @@ def classify_dispatch_subprocess_error(error: BaseException) -> DispatchFailureV
         may_have_dispatched=False,
         message="The dispatch command could not be run, so no dispatch was recorded.",
     )
+
+
+def resolve_dispatch_timeout(*, claim_observed: bool) -> DispatchFailureVerdict:
+    """Turn a timeout into an ANSWER when the dispatch is observable (mc-u9eun).
+
+    A timeout says only that we stopped waiting. It does not say the work did not
+    happen -- on 2026-08-28 the command had already succeeded (exit 0, 243.51s,
+    molecule mc-mgejq) when the 200s budget killed the wait.
+
+    So: run the same claim observation the success path runs. If a claim IS
+    visible the dispatch demonstrably landed, and reporting `unknown` there is a
+    self-inflicted ambiguity that invites a double dispatch.
+
+    When nothing is observable this stays `applied=None`, NEVER False. Absence of
+    a claim is not proof nothing landed -- the claim may merely not be observable
+    yet (#212/MWRK003) -- and False would tell the caller a retry is safe.
+    """
+    if claim_observed:
+        return DispatchFailureVerdict(
+            code=DISPATCH_TIMEOUT_LANDED_CODE,
+            applied=True,
+            may_have_dispatched=True,
+            message=(
+                "The dispatch command exceeded the timeout, but the dispatch IS "
+                "observable, so it LANDED. The wait was abandoned; the work was not."
+            ),
+            suggested_next_command=(
+                "do not retry -- the dispatch landed; follow it with "
+                "`mctl work status <brief-id> --json`"
+            ),
+        )
+    return DispatchFailureVerdict(
+        code=DISPATCH_TIMEOUT_CODE,
+        applied=None,
+        may_have_dispatched=True,
+        message=(
+            "The dispatch command ran but did not finish before the timeout, and no "
+            "dispatch is observable yet, so whether one was recorded is UNKNOWN."
+        ),
+        suggested_next_command=(
+            "check whether the dispatch landed before you retry -- a retry after a "
+            "timeout can dispatch a second time"
+        ),
+    )
+
+
+
+def dispatch_timeout_is_failure(verdict: DispatchFailureVerdict) -> bool:
+    """Whether a timeout verdict should be rendered as a failure at all (P6.3).
+
+    `subdomains/dev/POLICY.md:554` -- a deadline is a fact about the CALLER, not
+    the probed system, and an expiry "must never render as `failed`". A dispatch
+    we can SEE landed is the least-failed outcome available: the wait was
+    abandoned, the work was not. Rendering it FATAL attributes our impatience to
+    a system that did its job, and tells the caller to clean up work running fine.
+
+    An unresolved timeout stays a failure: nothing is known, and the operator
+    does need to act before retrying.
+    """
+    return verdict.applied is not True
 
 
 class WorkError(Exception):
@@ -494,21 +563,62 @@ def dispatch_dry_run_payload(plan: WorkDispatchPlan) -> dict[str, object]:
 
 LIVE_DISPATCH_ENV = "MCTL_ENABLE_LIVE_DISPATCH"
 
-#: The worst MEASURED cost of a live `gc sling`, S48 on this city 2026-08-22/23:
-#: 162.7s, exit 0 -- slow, not hung (recorded in SURFACE-STATUS.md §4/row 7).
-#: `gc` does ~8-10s of cwd-scoped whole-city enumeration before it even knows
-#: its subcommand, and dry-run resolution alone measured 56s (#181); the routing
-#: half pushes the total past two minutes. Same discipline as
-#: `orders.MEASURED_CATALOG_WORST_SECONDS`: raise this only when a LARGER cost is
-#: measured, never to make a failing call pass.
-MEASURED_SLING_WORST_SECONDS = 162.7
+#: The worst MEASURED cost of a live `gc sling`. Raise this ONLY when a LARGER
+#: cost is measured, never to make a failing call pass (same discipline as
+#: `orders.MEASURED_CATALOG_WORST_SECONDS`).
+#:
+#:   162.7s  S48, 2026-08-22/23, exit 0 -- slow, not hung (SURFACE-STATUS.md §4/row 7)
+#:   243.51s mc-u9eun, 2026-08-28 21:51:18-21:55:21Z, exit 0, molecule mc-mgejq minted
+#:
+#: `gc` does ~8-10s of cwd-scoped whole-city enumeration before it even knows its
+#: subcommand, and dry-run resolution alone measured 56s (#181); the routing half
+#: pushes the total past two minutes. The 2026-08-28 run additionally rode out
+#: four Dolt connection resets (bad idle connection EOF, reset by peer, broken
+#: pipe, unexpected EOF) and still exited 0 -- SLOW, NOT HUNG, the framing S48
+#: recorded in gt-ybi8j2.
+MEASURED_SLING_WORST_SECONDS = 243.51
 
 #: The subprocess budget `apply_dispatch_plan` gives `gc sling`. It MUST clear
 #: the measured worst case above -- a bound below it is a path that cannot
-#: succeed, which is what shipped at 120s and what #181 measured being killed at.
-#: 200s = the 162.7s measurement plus ~23% headroom for a busier city.
-#: `test_dispatch_budget.py` fails if this ever drops back below the measurement.
-DISPATCH_TIMEOUT_SECONDS = 200
+#: succeed, which is what shipped at 120s (#181) and again at 200s (mc-u9eun).
+#: 300s = the 243.51s measurement plus ~23% headroom for a busier city.
+DISPATCH_TIMEOUT_SECONDS = 300
+
+#: The fraction of the budget at which a COMPLETED dispatch is already close
+#: enough to the ceiling to be worth reporting.
+#:
+#: This exists because pinning the budget to a recorded measurement did not stop
+#: the failure recurring three times (120 -> 200 -> 243.51). Those assertions
+#: compare two CONSTANTS, so they only prevent someone lowering the budget; they
+#: are structurally blind to the real cost drifting up underneath them, and they
+#: stayed green through every recurrence. The drift is only observable from an
+#: ACTUAL elapsed time, which nothing was measuring.
+DISPATCH_BUDGET_WARN_FRACTION = 0.75
+
+#: Emitted on a dispatch that SUCCEEDED but took most of its budget.
+DISPATCH_BUDGET_DRIFT_CODE = "MWRK_DISPATCH_BUDGET_DRIFT"
+
+
+def dispatch_budget_drift_warning(elapsed_seconds: float) -> str | None:
+    """Detail for a completed dispatch that is nearing its budget, else None.
+
+    Returns None for a comfortable dispatch: the check must be capable of not
+    firing, or it reports nothing (P6.2 -- a check that could not have failed
+    must not render as a check that passed).
+    """
+    threshold = DISPATCH_TIMEOUT_SECONDS * DISPATCH_BUDGET_WARN_FRACTION
+    if elapsed_seconds <= threshold:
+        return None
+    return (
+        f"this dispatch took {elapsed_seconds:.1f}s of its "
+        f"{DISPATCH_TIMEOUT_SECONDS}s budget "
+        f"(warn threshold {threshold:.1f}s = {DISPATCH_BUDGET_WARN_FRACTION:.0%}). "
+        "It SUCCEEDED, but the cost is approaching the bound; when it crosses, "
+        "the call is killed after doing the work and the outcome is reported "
+        "UNKNOWN. Record the new cost in MEASURED_SLING_WORST_SECONDS and raise "
+        "DISPATCH_TIMEOUT_SECONDS before that happens -- this is the early "
+        "warning that #181 and mc-u9eun did not have."
+    )
 
 
 def live_dispatch_enabled(env: Mapping[str, str] | None = None) -> bool:
@@ -591,6 +701,7 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         )
 
     command = [str(part) for part in plan.formula_invocation["command"]]
+    started_at = time.monotonic()
     try:
         result = subprocess.run(
             command,
@@ -605,6 +716,62 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         # the command RAN; `applied: false` after one is a claim about the world
         # derived from how long we waited, and a caller who believes it retries.
         verdict = classify_dispatch_subprocess_error(error)
+        # mc-u9eun: a timeout is not the end of what we can know. The command may
+        # have already succeeded (2026-08-28: exit 0 at 243.51s under a 200s
+        # budget, molecule mc-mgejq minted, reported UNKNOWN). Look before
+        # shrugging -- an avoidable UNKNOWN is what invites the double dispatch.
+        if verdict.may_have_dispatched and verdict.applied is None:
+            try:
+                observed = _claim_observed(_beads(ctx), plan.bead_id)
+            except WorkError:
+                observed = False
+            verdict = resolve_dispatch_timeout(claim_observed=observed)
+        if not dispatch_timeout_is_failure(verdict):
+            # P6.3: the deadline expired, but the dispatch is OBSERVABLE. Record
+            # it as the success it is, with a WARN naming the overrun -- never a
+            # FATAL, which would report our own impatience as this system's
+            # failure and invite an operator to clean up healthy work. Provenance
+            # is written here too, so the landed dispatch cannot be re-dispatched.
+            provenance = write_dispatch_provenance(
+                ctx,
+                bead_id=plan.bead_id,
+                brief_id=plan.target_brief_id,
+                observed_at=str(plan.provenance["created_at"]),
+                formula_invocation=plan.formula_invocation,
+            )
+            append_jsonl(
+                plan.event_path,
+                {
+                    "bead_id": plan.bead_id,
+                    "brief_id": plan.target_brief_id,
+                    "formula_invocation": plan.formula_invocation,
+                    "operation": plan.operation,
+                    "provenance_path": str(provenance.path),
+                    "trace_id": plan.trace_id,
+                },
+            )
+            return {
+                "applied": True,
+                "claim": "observed",
+                "effect_plan": plan.to_dict(),
+                "provenance": provenance.to_dict(),
+                "trace_id": plan.trace_id,
+                "diagnostics": [
+                    _diagnostic(
+                        ctx,
+                        Severity.WARN,
+                        verdict.code,
+                        verdict.message,
+                        brief_id=plan.target_brief_id,
+                        bead_id=plan.bead_id,
+                        detail=(
+                            f"exceeded the {DISPATCH_TIMEOUT_SECONDS}s subprocess "
+                            "budget; the dispatch is observable, so it landed"
+                        ),
+                        suggested_next_command=verdict.suggested_next_command,
+                    ).to_dict()
+                ],
+            }
         raise WorkError(
             _diagnostic(
                 ctx,
@@ -640,6 +807,7 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
     # and mint a duplicate input convoy (#213). So: write provenance on exit 0
     # (mirrors #184's UNKNOWN-not-failure contract), and report the claim as
     # `observed` or `pending` rather than raising.
+    elapsed_seconds = time.monotonic() - started_at
     try:
         beads_after = _beads(ctx)
     except WorkError:
@@ -678,8 +846,25 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         "provenance": provenance.to_dict(),
         "trace_id": plan.trace_id,
     }
+    diagnostics: list[dict[str, object]] = []
+    drift = dispatch_budget_drift_warning(elapsed_seconds)
+    if drift is not None:
+        # mc-u9eun: the budget has been outgrown three times (120 -> 200 -> 243.51)
+        # and each was discovered in production, because nothing reported the
+        # ACTUAL cost while it still fit. This is that report.
+        diagnostics.append(
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                DISPATCH_BUDGET_DRIFT_CODE,
+                "The dispatch succeeded but is approaching its subprocess budget.",
+                brief_id=plan.target_brief_id,
+                bead_id=plan.bead_id,
+                detail=drift,
+            ).to_dict()
+        )
     if not claim_observed:
-        payload["diagnostics"] = [
+        diagnostics.append(
             _diagnostic(
                 ctx,
                 Severity.WARN,
@@ -694,7 +879,9 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
                 ),
                 suggested_next_command=f"mctl work status {plan.target_brief_id} --json",
             ).to_dict()
-        ]
+        )
+    if diagnostics:
+        payload["diagnostics"] = diagnostics
     return payload
 
 
