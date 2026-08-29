@@ -65,6 +65,80 @@ def read_commit(repo: Path, *, timeout: float = HEAD_READ_TIMEOUT_SECONDS) -> st
     return result.stdout.strip() or None
 
 
+#: The ref a checkout's freshness is measured against. A remote-tracking ref,
+#: never the remote itself: reading it is a local lookup, so nothing here
+#: touches the network or moves a ref under the operator.
+DEFAULT_REMOTE_REF = "origin/main"
+
+
+def read_remote_commit(
+    repo: Path, *, ref: str = DEFAULT_REMOTE_REF, timeout: float = HEAD_READ_TIMEOUT_SECONDS
+) -> str | None:
+    """The short commit of `ref` in `repo`, or `None` if it cannot be read.
+
+    `None` covers three genuinely different situations -- no such ref, git
+    unavailable, timeout -- and deliberately does not distinguish them, because
+    every one of them means the same thing to a caller: we do not know how far
+    this checkout is behind. See `read_behind_remote` for why that matters.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--short", ref],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def read_behind_remote(
+    repo: Path, *, ref: str = DEFAULT_REMOTE_REF, timeout: float = HEAD_READ_TIMEOUT_SECONDS
+) -> int | None:
+    """How many commits `repo`'s HEAD is behind `ref`, or `None` if unknowable.
+
+    THIS DOES NOT FETCH, and that is the whole design constraint (`mc-dhsgo`).
+    A fetch is a network call and it moves refs in a checkout this process does
+    not own. So the number answers "behind the remote-tracking ref as it stands
+    on disk", which is a weaker claim than "behind the remote" -- and the weaker
+    claim is the only one that can be made honestly without side effects.
+
+    THE CONSEQUENCE, STATED SO NO CALLER MISREADS IT. If nobody has fetched, the
+    ref is old and `0` means "level with a stale ref", NOT "up to date with the
+    remote". `0` is therefore not proof of freshness. What this rules out is the
+    opposite and more damaging error: a checkout that is provably behind
+    reporting nothing at all, which is what `mc-dhsgo` was filed for -- a
+    dashboard serving 40-commit-old code while `stale` said `false`, because
+    `stale` compares the process against its checkout's HEAD and never against
+    the ref.
+
+    `None` when the ref does not resolve. Never `0` on failure: a zero returned
+    from a failed lookup is exactly the plausible-looking wrong answer that
+    `P6.2` forbids.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), "rev-list", "--count", f"HEAD..{ref}"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    raw = result.stdout.strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 #: Captured ONCE, here, at import. Because `mctl_core` is imported once per
 #: process, this freezes at process start and does not move under a caller --
 #: it names the code the process is actually running. See the module docstring
