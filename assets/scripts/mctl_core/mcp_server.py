@@ -797,6 +797,46 @@ def _handle_dashboard_status(scope: CityScope, arguments: Mapping[str, Any]) -> 
         for inst in instances
         if inst.stale
     ]
+    # `mc-dhsgo`: `stale` compares the PROCESS against ITS CHECKOUT, so a
+    # dashboard faithfully serving a checkout that is itself behind the remote
+    # reports `stale: false` while rendering old code. That is the second axis
+    # and it needs its own diagnostic -- measured 2026-08-29, a live instance
+    # reported not-stale while serving a checkout behind `origin/main`, and the
+    # operator noticed before the instrument did.
+    #
+    # Emitted ONCE for the city, not per instance: every stamp is served from
+    # the same pack root, so N identical warnings would only pad the response.
+    behind = next(
+        (
+            inst
+            for inst in instances
+            if inst.checkout_freshness_known and (inst.checkout_behind_remote or 0) > 0
+        ),
+        None,
+    )
+    if behind is not None:
+        diags.append(
+            Diagnostic(
+                severity=Severity.WARN,
+                code="MDSH_CHECKOUT_BEHIND_REMOTE",
+                message=(
+                    f"The served checkout is {behind.checkout_behind_remote} commit(s) behind "
+                    f"{serving.DEFAULT_REMOTE_REF}, so a dashboard reporting stale=false may still "
+                    "be rendering old code."
+                ),
+                hint=(
+                    "Pull the checkout, then dashboard_restart. Restarting alone rebinds to the same "
+                    "old code. NOTE: this counts against the remote-tracking ref ON DISK -- nothing "
+                    "here fetches, so if nobody has fetched recently the true gap may be larger."
+                ),
+                facts={
+                    "checkout_behind_remote": str(behind.checkout_behind_remote),
+                    "remote_ref": serving.DEFAULT_REMOTE_REF,
+                    "remote_commit": str(behind.remote_commit),
+                    "current_commit": str(behind.current_commit),
+                },
+            ).to_dict()
+        )
     return {
         "diagnostics": diags,
         "running": bool(instances),

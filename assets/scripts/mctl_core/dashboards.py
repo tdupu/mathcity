@@ -169,6 +169,12 @@ class DashboardInstance:
     #: Filled by `discover` against the checkout's current HEAD, so a caller
     #: reading one instance does not have to re-derive staleness itself.
     current_commit: str | None = None
+    #: The remote-tracking ref's commit, and how far the CHECKOUT is behind it
+    #: (`mc-dhsgo`). Both `None` when the ref does not resolve. These describe
+    #: the checkout, not the process -- see `checkout_behind_remote` below for
+    #: why that is a second, independent axis rather than a better `stale`.
+    remote_commit: str | None = None
+    checkout_behind_remote: int | None = None
 
     @property
     def serving_known(self) -> bool:
@@ -179,7 +185,23 @@ class DashboardInstance:
     @property
     def stale(self) -> bool:
         """True only when BOTH commits are known and differ. Unknown is never
-        reported as stale, and never as current -- see `staleness_known`."""
+        reported as stale, and never as current -- see `staleness_known`.
+
+        SCOPE, and it is narrower than the name suggests. This compares the
+        PROCESS against ITS CHECKOUT. It answers "is this server running the code
+        that is checked out", not "is this server running current code". A
+        checkout that is itself behind `origin/main` yields `stale == False`
+        while the dashboard renders old code -- measured on 2026-08-29, a live
+        instance reported `stale: false` while serving a checkout 1 commit
+        behind, and a second checkout would have covered a 40-commit gap
+        (`mc-dhsgo`).
+
+        Deliberately UNCHANGED rather than re-based on the remote. Callers
+        already branch on this and `dashboard_restart` is its remedy -- rebasing
+        it would make `stale: true` unfixable by a restart, because the remedy
+        would become a pull, which mctl does not own. The missing fact is
+        published beside it instead, as `checkout_behind_remote`.
+        """
         if self.serving_commit is None or self.current_commit is None:
             return False
         return self.serving_commit != self.current_commit
@@ -187,6 +209,17 @@ class DashboardInstance:
     @property
     def staleness_known(self) -> bool:
         return self.serving_commit is not None and self.current_commit is not None
+
+    @property
+    def checkout_freshness_known(self) -> bool:
+        """Whether the checkout-vs-remote comparison could be made at all.
+
+        False means the remote-tracking ref did not resolve, so
+        `checkout_behind_remote` is `None` and NOT zero. A caller must render
+        that as unknown; reading it as "up to date" is the `P6.2` error this
+        pair exists to prevent.
+        """
+        return self.checkout_behind_remote is not None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -202,6 +235,9 @@ class DashboardInstance:
             "current_commit": self.current_commit,
             "stale": self.stale,
             "staleness_known": self.staleness_known,
+            "remote_commit": self.remote_commit,
+            "checkout_behind_remote": self.checkout_behind_remote,
+            "checkout_freshness_known": self.checkout_freshness_known,
         }
 
 
@@ -219,12 +255,20 @@ def discover(city_root: Path, *, current_commit: str | None = None, prune: bool 
     (unless `prune=False`) its stale file removed, so dead stamps cannot accrue
     the way stray servers did in `#154`. `current_commit` defaults to a fresh
     read of the checkout HEAD so each instance carries its own staleness.
+
+    `remote_commit`/`behind_remote` are read ONCE for the whole sweep rather
+    than per instance: every stamp in a city is served from the same pack root,
+    so a per-instance read would re-run identical git for each and could return
+    different answers across one response if a fetch landed mid-sweep
+    (`mc-dhsgo`). Both are `None` when the ref does not resolve -- never 0.
     """
     directory = stamp_dir(city_root)
     if not directory.is_dir():
         return []
     if current_commit is None:
         current_commit = serving.read_commit(serving.PACK_ROOT)
+    remote_commit = serving.read_remote_commit(serving.PACK_ROOT)
+    behind_remote = serving.read_behind_remote(serving.PACK_ROOT)
     instances: list[DashboardInstance] = []
     for path in sorted(directory.glob("*.json")):
         data = _read_stamp(path)
@@ -249,6 +293,8 @@ def discover(city_root: Path, *, current_commit: str | None = None, prune: bool 
                 started_at=str(data.get("started_at") or ""),
                 dashboard=str(data.get("dashboard") or "unknown"),
                 current_commit=current_commit,
+                remote_commit=remote_commit,
+                checkout_behind_remote=behind_remote,
             )
         )
     instances.sort(key=lambda inst: inst.port)
