@@ -5321,6 +5321,13 @@
                     "description": "The exact field the text came from.",
                     "type": "string"
                   },
+                  "option": {
+                    "description": "WHICH option the adjudicator picked, from metadata.verdict_option (#66/#208). Null means none was recorded -- NOT that the brief offered only one path. A verdict on a brief that offered a set and named none is a decision whose subject cannot be reconstructed.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "source": {
                     "enum": [
                       "typed_field",
@@ -6290,6 +6297,13 @@
                   "field": {
                     "description": "The exact field the text came from.",
                     "type": "string"
+                  },
+                  "option": {
+                    "description": "WHICH option the adjudicator picked, from metadata.verdict_option (#66/#208). Null means none was recorded -- NOT that the brief offered only one path. A verdict on a brief that offered a set and named none is a decision whose subject cannot be reconstructed.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "source": {
                     "enum": [
@@ -8710,6 +8724,13 @@
                   "description": "The exact field the text came from.",
                   "type": "string"
                 },
+                "option": {
+                  "description": "WHICH option the adjudicator picked, from metadata.verdict_option (#66/#208). Null means none was recorded -- NOT that the brief offered only one path. A verdict on a brief that offered a set and named none is a decision whose subject cannot be reconstructed.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "source": {
                   "enum": [
                     "typed_field",
@@ -9786,6 +9807,13 @@
                   "field": {
                     "description": "The exact field the text came from.",
                     "type": "string"
+                  },
+                  "option": {
+                    "description": "WHICH option the adjudicator picked, from metadata.verdict_option (#66/#208). Null means none was recorded -- NOT that the brief offered only one path. A verdict on a brief that offered a set and named none is a decision whose subject cannot be reconstructed.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "source": {
                     "enum": [

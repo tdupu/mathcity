@@ -92,8 +92,24 @@ def verdict_cell(brief: Mapping[str, Any]) -> str:
     source = str(verdict.get("source") or "")
     confidence = str(verdict.get("confidence") or "")
     marks = " · ".join(part for part in (source, confidence) if part)
+    # #66: WHICH option was chosen. Written by adjudication since #208 and read
+    # by nothing, so this panel reported the verdict and not its subject. An
+    # absent option renders as an explicit note rather than a blank -- a verdict
+    # on a brief that offered options and named none is a decision whose subject
+    # cannot be reconstructed, which is the case worth surfacing.
+    option = verdict.get("option")
+    chosen = (
+        '<br><span class="mono" style="font-size: 10px;">option '
+        + _e(str(option))
+        + "</span>"
+        if option
+        else '<br><span class="mono" style="font-size: 10px; '
+        'color: var(--color-neutral-600);" title="No verdict_option was recorded. '
+        'If this brief offered a set of options, which one was taken cannot be '
+        'reconstructed from the record.">no option recorded</span>'
+    )
     return (
-        '<td><span class="mono">' + _e(text) + "</span>"
+        '<td><span class="mono">' + _e(text) + "</span>" + chosen
         + (
             '<br><span class="mono" style="font-size: 10px; '
             'color: var(--color-neutral-600);">' + _e(marks) + "</span>"
@@ -287,8 +303,11 @@ def adjudicated(briefs: Sequence[Mapping[str, Any]]) -> str:
             "<span class=\"mono\">notes</span> and "
             "<span class=\"mono\">brief_frontmatter</span>: a verdict recovered from "
             "a close reason is a weaker artifact than a typed field, and is marked "
-            "as such rather than shown as equivalent. The option taken and the "
-            "follow-up bead are still not exposed. "
+            "as such rather than shown as equivalent. The option taken is shown "
+            "beside it where the adjudication recorded one; a verdict on a brief "
+            "that offered options and named none says so, because a decision whose "
+            "subject cannot be reconstructed is worth seeing rather than smoothing. "
+            "The follow-up bead is still not exposed. "
             f'Tracked as <a href="{ISSUE_66}">issue #66</a>.'
         )
         + _rows(briefs, cell=verdict_cell)
