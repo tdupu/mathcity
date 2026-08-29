@@ -47,8 +47,10 @@ ls ~/.claude/skills/new-brief-policy
 
 ### 2. Brief pipeline structure (B2.4, B2.8)
 
-Pipeline paths come from `paths.toml` and are RIG-RELATIVE (resolve against
-the rig root; live pilot: `<city-root>/hecke`). Per B2.4/B2.8, canonical pile/stack
+Pipeline paths come from `paths.toml` as a RELATIVE root (`.beads/briefs`).
+Export `BRIEF_ROOT` explicitly before running any check below rather than
+relying on cwd (the same variable `brief-check.sh:12` honours). WHICH base it
+resolves against is an OPEN question (gt-9c29t5); this skill takes no position. Per B2.4/B2.8, canonical pile/stack
 MEMBERSHIP is a bead query (open `type=decision` brief beads with no active
 defer window — one-bead model); the filesystem layout audited here is an
 implementation-detail cache regenerable from bead state — on disagreement
@@ -57,14 +59,13 @@ the bead store wins and the filesystem is repaired to match.
 ```bash
 PATHS_TOML=<mathcity-pack-root>/assets/brief-pipeline/paths.toml
 cat "$PATHS_TOML"
-RIG_ROOT=<city-root>/hecke
-PILE_DIR="$RIG_ROOT/$(grep '^pile ' "$PATHS_TOML" | awk -F'"' '{print $2}')"
-STACK_DIR="$RIG_ROOT/$(grep '^stack ' "$PATHS_TOML" | awk -F'"' '{print $2}')"
+: "${BRIEF_ROOT:?export BRIEF_ROOT first -- see the note above}"
+PILE_DIR="$BRIEF_ROOT/$(grep '^pile ' "$PATHS_TOML" | awk -F'"' '{print $2}')"
+STACK_DIR="$BRIEF_ROOT/$(grep '^stack ' "$PATHS_TOML" | awk -F'"' '{print $2}')"
 ls "$PILE_DIR" "$STACK_DIR"
 ```
 
-Check: pile = `<rig_root>/.beads/briefs/.pile/`, stack =
-`<rig_root>/.beads/briefs/stack/`. Both must exist; neither may be an
+Check: pile = `$BRIEF_ROOT/.pile/`, stack = `$BRIEF_ROOT/stack/`. Both must exist; neither may be an
 ad-hoc location. Flag any filesystem/bead-store mismatch as cache drift to
 regenerate — never treat the files as the source of truth.
 
@@ -75,7 +76,7 @@ field. Verify that higher-count entries appear earlier in the stack (the
 single-writer `brief-shuffle` should sort on promote).
 
 ```bash
-cat <city-root>/.beads/briefs/stack/manifest.jsonl | \
+cat "$BRIEF_ROOT"/stack/manifest.jsonl | \
   python3 -c "
 import sys,json
 rows = [json.loads(l) for l in sys.stdin if l.strip()]
@@ -94,7 +95,7 @@ is still open. The no-resurface check is therefore a simple state check:
 no closed brief bead may appear in the stack or pile.
 
 ```bash
-STACK_DIR=<city-root>/.beads/briefs/stack
+STACK_DIR="$BRIEF_ROOT"/stack
 for f in "$STACK_DIR"/*.md; do
   slug=$(basename "$f" .md)
   # derive bead ID from slug; check its status
@@ -153,9 +154,9 @@ Check for briefs older than 7 days in the stack without a presented-at
 record in `presentations/`:
 
 ```bash
-ls -lt <city-root>/.beads/briefs/stack/*.md | head
+ls -lt "$BRIEF_ROOT"/stack/*.md | head
 # Compare with presentations/ directory mtime
-ls <city-root>/.beads/briefs/presentations/ | head
+ls "$BRIEF_ROOT"/presentations/ | head
 ```
 
 Flag any brief with a stack entry and no corresponding `*-presented.toml`
@@ -177,8 +178,8 @@ and may be empty:
 
 ```bash
 bd list --type decision --all --json | head   # brief beads; closed = adjudicated
-wc -l <city-root>/.beads/briefs/decisions.jsonl
-ls <city-root>/.beads/briefs/decisions/ | wc -l
+wc -l "$BRIEF_ROOT"/decisions.jsonl
+ls "$BRIEF_ROOT"/decisions/ | wc -l
 ```
 
 ### 8. Gate registry join-layer (PP1.7, PP4.1)

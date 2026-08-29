@@ -30,7 +30,9 @@ After a successful merge of bead X:
   (c) IF X is unlabeled (no `needs-decision`): do nothing extra.
 
 Record and prep artifacts are created in the HQ store (where this run
-executes), consistent with the HQ brief root (<city-root>/.beads/briefs, gsp-hsug).
+executes). This order is city-scoped, so its cwd is the city root and
+{{artifact_root}} resolves there (gsp-hsug). This records where THIS order's run
+lands, not the pipeline-wide convention -- see assets/brief-pipeline/paths.toml.
 
 ## Dedup contract (D3 fix)
 
@@ -84,7 +86,9 @@ default = "mathcity.brief-operator"  # retargeted from gc.run-operator (gastown 
 
 [vars.artifact_root]
 description = "Brief pipeline artifact root relative to the city or rig root."
-# Rig-relative: resolves against the rig root (see assets/brief-pipeline/paths.toml).
+# Relative default: resolves against the RUN'S CWD, which the dispatching
+# order's scope determines. The pipeline-wide convention is declared in
+# assets/brief-pipeline/paths.toml -- do not restate it here.
 default = ".beads/briefs"
 
 [vars.scan_window_days]
