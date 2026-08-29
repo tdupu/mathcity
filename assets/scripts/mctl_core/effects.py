@@ -369,6 +369,21 @@ def _pile_document(body: str, sources: Sequence[str] = ()) -> str:
     a bead id by equality, so "a, b" would match no bead at all -- worse than
     naming one. Sources beyond the first stay on the bead, which is canonical
     (B2.8); this line is the cache agreeing with it, not replacing it.
+
+    `gate_profile`/`brief_kind`/`feedback_sink` are the SAME defect one key over
+    (mc-0q6po), found after `source_bead` had already fixed its half. Provenance
+    said WHICH BEAD; nothing said WHICH CONTRACT. The drain resolves
+    `metadata.get("gate_profile", <registry default>)` and the registry default
+    is `standard`, so a decision brief was graded against 18 gates rather than 7
+    and failed on ones it has no surface to satisfy. Proven by controlled
+    experiment: two byte-identical pile documents differing only in these lines,
+    same drain, same fixture -- the one without them is rejected at G3
+    Shell-scripts-testable, the one with them is promoted.
+
+    The lesson worth keeping is not about either key. A document that is graded
+    somewhere else must carry EVERY fact its grader will ask for; each one the
+    writer knows and omits becomes a wrong answer reconstructed downstream, and
+    reads as the document's fault rather than the writer's.
     """
     if body.lstrip().startswith("---"):
         return body
@@ -394,6 +409,23 @@ def _pile_document(body: str, sources: Sequence[str] = ()) -> str:
     # document is written by whoever knew what the brief unblocked, and this
     # producer does not know.
     header += f"\nunlock_count: {UNLOCK_COUNT_NOT_COMPUTED}"
+    # mc-0q6po: declare the profile this document will be GRADED by, for the
+    # same reason `source_bead` is written above -- the creating call already
+    # knows the answer and dropping it makes the drain reconstruct it wrongly.
+    # `plan_create_brief` mints `issue_type="decision"` unconditionally, so the
+    # decision profile is not a guess here; it is the type restated where the
+    # grader looks. Without it the drain falls back to `default_profile =
+    # "standard"` (gates.toml) and grades a decision brief against 18 gates
+    # instead of 7 -- demanding G3 shell-scripts-testable, G2 good-test, G6
+    # LaTeX, G10/G15 improve-README from an artifact with no shell surface, no
+    # test, no README and nothing runnable. Measured on the live mathcity rig
+    # 2026-08-29: 35 real pile members, ONE promotable.
+    header += "\ngate_profile: decision"
+    header += "\nbrief_kind: decision"
+    # `brief_kind` alone is insufficient: the decision profile checks
+    # feedback_sink too, so declaring the profile without this trades one
+    # rejection for the next one.
+    header += "\nfeedback_sink: brief_quality_failure"
     return f"---\n{header}\n---\n\n{body}"
 
 
