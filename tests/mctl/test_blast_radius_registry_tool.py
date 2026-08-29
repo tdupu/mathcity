@@ -35,7 +35,7 @@ if str(ROOT / "assets" / "scripts") not in sys.path:
 def _server():
     from mctl_core.mcp_server import MctlMcpServer
 
-    return MctlMcpServer(default_city=Path("/Users/tdupuy/gt"), client_class="internal")
+    return MctlMcpServer(default_city=Path("<city-root>"), client_class="internal")
 
 
 def test_the_tool_is_exposed():

@@ -182,7 +182,7 @@ flowchart TD
   },
   "mode": "brief_gated",
   "scope": {
-    "city": "/Users/tdupuy/gt",
+    "city": "<city-root>",
     "rig": "mathcity"
   },
   "reason": "Generated dispatch programs require brief approval before execution.",
@@ -207,7 +207,7 @@ flowchart TD
     "hash": "sha256:<approved-subject-digest>"
   },
   "scope": {
-    "city": "/Users/tdupuy/gt",
+    "city": "<city-root>",
     "rig": "mathcity",
     "source_bead": "mc-1234",
     "program_id": "dp-mc-1234"

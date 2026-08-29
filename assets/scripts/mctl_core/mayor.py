@@ -300,7 +300,7 @@ def probe_rigs(city_root: Path | None = None) -> tuple[ProbeResult, tuple[str, .
     for line in output.splitlines():
         # Rig entries are INDENTED under a "Rigs in <path>:" header that also
         # ends in a colon. Matching on the colon alone counted the header as a
-        # rig named "Rigs in /Users/tdupuy/gt" -- caught in bring-up.
+        # rig named "Rigs in <city-root>" -- caught in bring-up.
         if not line.startswith(" "):
             continue
         stripped = line.strip()

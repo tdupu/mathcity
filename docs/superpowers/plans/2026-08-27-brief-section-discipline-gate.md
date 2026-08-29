@@ -154,6 +154,6 @@ Four paths reach `plan_create_brief`, and the refusal sits on all of them:
 ## Reach beyond this checkout
 
 `~/gt/city.toml` and `~/gt/pack.toml` import mathcity from
-`/Users/tdupuy/repos/mathcity`, not from `~/gt/mathcity`. G17 does not take
+`<repos-root>/mathcity`, not from `~/gt/mathcity`. G17 does not take
 effect in the running city until that checkout advances, which under LP1 routes
 through BART. `unknown`: whether anything else pins an older mathcity.

@@ -89,9 +89,9 @@ does not say who it is. Two local files close the gap — join them on the uuid:
 ```bash
 python3 - <<'PY'
 import json,glob
-roster={v['uuid']:k for k,v in json.load(open('/Users/tdupuy/.claude/agents-roster.json'))['agents'].items()}
+roster={v['uuid']:k for k,v in json.load(open('<home>/.claude/agents-roster.json'))['agents'].items()}
 print(f"{'ROW':<12}{'ROLE':<11}{'ENTRYPOINT':<16}STATUS")
-for f in glob.glob('/Users/tdupuy/.claude/sessions/*.json'):
+for f in glob.glob('<home>/.claude/sessions/*.json'):
     d=json.load(open(f))
     print(f"{str(d.get('name')):<12}{roster.get(d.get('sessionId'),'-'):<11}{str(d.get('entrypoint')):<16}{d.get('status','?')}")
 PY

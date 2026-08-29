@@ -33,7 +33,7 @@ def _server():
     # `client_class="internal"` is what the dashboard uses; the default
     # external surface hides every tool until armed, so asserting against the
     # default would test the arming flag rather than the registration.
-    return MctlMcpServer(default_city=Path("/Users/tdupuy/gt"), client_class="internal")
+    return MctlMcpServer(default_city=Path("<city-root>"), client_class="internal")
 
 
 def test_the_tool_is_exposed():

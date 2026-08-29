@@ -37,7 +37,7 @@ the source anchor worktrees listed below.
 | WI-004 | gsp-4viam | `gsp-wenc9-prepare-item-worktree/worktrees/gsp-4viam` | `5011b200b33b403c4663099bb565105aee07ebf5` |
 | WI-005 | gsp-ev1rr | `gsp-1qtqj-prepare-item-worktree/worktrees/gsp-ev1rr` | `6ecef4d577e4549b98beae7cbd5d56ecd17fbf65` |
 
-All paths above are relative to `/Users/tdupuy/gt/gascity-packs/`.
+All paths above are relative to `<city-root>/gascity-packs/`.
 
 **Final combined commit:** `6ecef4d577e4549b98beae7cbd5d56ecd17fbf65`
 (WI-005 verification worktree — all four changes applied and all 5 ACs verified)

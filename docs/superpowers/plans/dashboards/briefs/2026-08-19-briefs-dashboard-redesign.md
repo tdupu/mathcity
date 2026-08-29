@@ -63,7 +63,7 @@ Every slice's requirements implicitly include this section.
 ### Test command
 
 ```bash
-cd /Users/tdupuy/repos/mathcity/.claude/worktrees/dashboard-redesign
+cd <repos-root>/mathcity/.claude/worktrees/dashboard-redesign
 python3 -m pytest tests/mctl -q
 ```
 
@@ -109,7 +109,7 @@ That is the same shape as the design's 100–900 ramp, which is why the two comp
 - [ ] **Step 1: Run the suite untouched**
 
 ```bash
-cd /Users/tdupuy/repos/mathcity/.claude/worktrees/dashboard-redesign
+cd <repos-root>/mathcity/.claude/worktrees/dashboard-redesign
 python3 -m pytest tests/mctl -q 2>&1 | tail -5
 ```
 
