@@ -27,3 +27,22 @@ def _no_real_city_events() -> None:
     import os
 
     os.environ["MCTL_CITY_EVENTS"] = "0"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_aggregated_brief_root(tmp_path_factory, monkeypatch) -> None:
+    """Pin the aggregated brief root to a fresh per-test tmp dir.
+
+    `effects._aggregated_brief_root()` (gt-5yxup1) defaults to the home-global
+    `~/.gc/mathcity/aggregated-briefs` -- the SAME path the running city reads.
+    Any in-process test that drives `plan_adjudication` without this override
+    writes verdict records straight into that live path and accumulates them
+    across the run: a data-integrity leak into live city data, and a source of
+    order-dependent cross-test failures (the doorbell family that
+    `_no_real_city_events` guards, one root over). A fresh root per test isolates
+    the write completely; a test that wants to observe the real default injects
+    its own value, exactly as `test_adjudication_writes_aggregated_decision.py`
+    already does for its subprocess.
+    """
+    root = tmp_path_factory.mktemp("agg_brief_root")
+    monkeypatch.setenv("MCTL_AGGREGATED_BRIEF_ROOT", str(root))
