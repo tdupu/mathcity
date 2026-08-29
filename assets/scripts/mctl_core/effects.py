@@ -17,6 +17,7 @@ from typing import Mapping, Sequence
 from .beads import (
     BD_LIST_ARGS,
     BeadCreate,
+    BeadLabelChange,
     BeadRaceLostError,
     BeadReadError,
     BeadRelate,
@@ -24,6 +25,7 @@ from .beads import (
     BeadWriteError,
     apply_bead_comment,
     apply_bead_create,
+    apply_bead_label,
     apply_bead_relate,
     apply_bead_update,
     priority_from_labels,
@@ -236,11 +238,15 @@ class EffectPlan:
     # and every brief verdict; the only effect that corrects a record in place
     # without editing it.
     bead_comments: tuple[BeadComment, ...] = ()
+    # Label set/clear on existing beads (mc-p0wps). Empty for every effect but
+    # the hold/release verbs; the only effect that touches a label.
+    bead_label_changes: tuple[BeadLabelChange, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
             "advisories": [diagnostic.to_dict() for diagnostic in self.advisories],
             "bead_comments": [comment.to_dict() for comment in self.bead_comments],
+            "bead_label_changes": [change.to_dict() for change in self.bead_label_changes],
             "bead_creates": [create.to_dict() for create in self.bead_creates],
             "bead_relates": [relate.to_dict() for relate in self.bead_relates],
             "bead_updates": [update.to_dict() for update in self.bead_updates],
@@ -1506,6 +1512,28 @@ def _apply_effects(
                 )
             ) from error
         actual.append({"kind": "bead_comment", "target": comment.bead_id, "result": result})
+    for change in plan.bead_label_changes:
+        try:
+            result = apply_bead_label(
+                ctx.rig_root, change, fixture_path=ctx.beads_fixture
+            )
+        except BeadWriteError as error:
+            append_aborted(
+                trace_file,
+                plan.trace_id,
+                [{"code": "MCTL_BEAD_LABEL_FAILED", "detail": str(error)}],
+            )
+            raise MutationError(
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MCTL_BEAD_LABEL_FAILED",
+                    f"Applying label change to {change.bead_id!r} failed; nothing was written.",
+                    brief_id=change.bead_id,
+                    detail=str(error),
+                )
+            ) from error
+        actual.append({"kind": "bead_label", "target": change.bead_id, "result": result})
     for relate in plan.bead_relates:
         _apply_bead_relation(ctx, plan, relate, minted, actual, trace_file)
     for write in plan.github_writes:

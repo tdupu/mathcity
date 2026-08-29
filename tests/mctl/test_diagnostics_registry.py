@@ -38,11 +38,13 @@ NOT_CODES = {
 # mayor_boot handoff-chain honesty family (#205), MGHW is the GitHub-write intake
 # surfaces (#185), MEVT is mctl event participation (#202), MQUE is queue_status
 # reads (#113), MCOS is costs_summary reads (#118), MWKT is worktrees_status
-# reads (#120), MBCM is bead_comment append-only corrections (mc-ilia). A family
-# missing from this allowlist is invisible to the scanner, so its codes read as
-# "registered but never emitted" however they are written.
+# reads (#120), MBCM is bead_comment append-only corrections (mc-ilia). MBCL is
+# bead_close, MBHD is bead_hold, MBRL is bead_release -- the typed bead-write
+# verbs (mc-p0wps). A family missing from this allowlist is invisible to the
+# scanner, so its codes read as "registered but never emitted" however they are
+# written.
 CODE_PATTERN = re.compile(
-    r'"(MBCM_[A-Z_]+|MBRF\d{3}|MBRF_[A-Z_]+|MCMS_[A-Z_]+|MCOS_[A-Z_]+|MCTL_[A-Z_]+|MDSH_[A-Z_]+|MDTB\d{3}|MEVT_[A-Z_]+|MGHW_[A-Z_]+|MISS\d{3}|MMAY_[A-Z_]+|MOPT\d{3}|MORD_[A-Z_]+|MQUE_[A-Z_]+|MWKT_[A-Z_]+|MWRK\d{3}|MWRK_[A-Z_]+)"'
+    r'"(MBCL_[A-Z_]+|MBCM_[A-Z_]+|MBHD_[A-Z_]+|MBRF\d{3}|MBRF_[A-Z_]+|MBRL_[A-Z_]+|MCMS_[A-Z_]+|MCOS_[A-Z_]+|MCTL_[A-Z_]+|MDSH_[A-Z_]+|MDTB\d{3}|MEVT_[A-Z_]+|MGHW_[A-Z_]+|MISS\d{3}|MMAY_[A-Z_]+|MOPT\d{3}|MORD_[A-Z_]+|MQUE_[A-Z_]+|MWKT_[A-Z_]+|MWRK\d{3}|MWRK_[A-Z_]+)"'
 )
 
 VALID_SEVERITIES = {"INFO", "WARN", "ERROR", "FATAL"}

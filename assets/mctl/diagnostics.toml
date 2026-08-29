@@ -941,9 +941,49 @@ severity = "FATAL"
 meaning = "bead_comment names a bead id that does not exist in the rig store; a correction with nothing to attach to is refused (mc-ilia)."
 module = "bead_comments.py"
 
+[MBCL_ROOT_HAS_OPEN_STEPS]
+severity = "FATAL"
+meaning = "bead_close was asked to close a molecule ROOT that still has open steps; closing it would report a false success, so it is refused. force does NOT bypass this (deps-only downgrade, adjudicated 2026-08-28) -- deliberate cascade-close is molecule_cancel (mc-p0wps)."
+module = "bead_writes.py"
+
+[MBCL_BLOCKED_BY_OPEN_DEPS]
+severity = "ERROR"
+meaning = "bead_close was asked to close a bead still blocked by open dependencies; refused unless force=true, which downgrades it and passes bd update --force (mc-p0wps)."
+module = "bead_writes.py"
+
+[MBCL_NO_SUCH_BEAD]
+severity = "FATAL"
+meaning = "bead_close names a bead id that does not exist in the rig store; there is nothing to close (mc-p0wps)."
+module = "bead_writes.py"
+
+[MBHD_LABEL_HAS_SLASH]
+severity = "FATAL"
+meaning = "bead_hold was given a label containing '/'; only bare or colon-form labels are allowed (MBRF033), so the hold is refused (mc-p0wps)."
+module = "bead_writes.py"
+
+[MBHD_NO_SUCH_BEAD]
+severity = "FATAL"
+meaning = "bead_hold names a bead id that does not exist in the rig store; a hold must attach to an existing bead (mc-p0wps)."
+module = "bead_writes.py"
+
+[MBRL_LABEL_HAS_SLASH]
+severity = "FATAL"
+meaning = "bead_release was given a label containing '/'; only bare or colon-form labels are allowed (MBRF033), so the release is refused (mc-p0wps)."
+module = "bead_writes.py"
+
+[MBRL_NO_SUCH_BEAD]
+severity = "FATAL"
+meaning = "bead_release names a bead id that does not exist in the rig store; there is nothing to release (mc-p0wps)."
+module = "bead_writes.py"
+
 [MCTL_BEAD_COMMENT_FAILED]
 severity = "FATAL"
 meaning = "Appending a comment to an existing bead failed at apply time (bd comment errored); nothing was written (mc-ilia)."
+module = "effects.py"
+
+[MCTL_BEAD_LABEL_FAILED]
+severity = "FATAL"
+meaning = "Setting or clearing a label on an existing bead failed at apply time (bd label add/remove errored); nothing was written (mc-p0wps)."
 module = "effects.py"
 
 [MGHW_ALREADY_STANDARDIZED]

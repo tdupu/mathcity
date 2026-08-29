@@ -281,6 +281,11 @@ class BeadUpdate:
     # unclaimed rather than left holding a dead lease. `None` leaves the assignee
     # untouched, distinct from `""` (unclaim).
     assignee: str | None = None
+    # Deps-only downgrade (mc-p0wps): when true, `bd update --force` overrides
+    # bd's own blocked-by-open-dependencies refusal. It changes NOTHING else --
+    # the plan-time guards (a molecule root with open steps) never consult this
+    # flag; `force` only reaches bd's dependency gate.
+    force: bool = False
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -293,8 +298,28 @@ class BeadUpdate:
             payload["defer_until"] = self.defer_until
         if self.assignee is not None:
             payload["assignee"] = self.assignee
+        if self.force:
+            payload["force"] = self.force
         payload["if_status"] = self.if_status
         return payload
+
+
+@dataclass(frozen=True)
+class BeadLabelChange:
+    """Set or clear one label on an existing bead (mc-p0wps).
+
+    The one genuinely new write mechanism the hold/release verbs need: mctl had
+    update/create/relate/comment apply paths but no way to touch a label.
+    `action` is `"add"` or `"remove"`; both are idempotent on bd's side, so a
+    second add or a remove of an absent label is a no-op rather than an error.
+    """
+
+    bead_id: str
+    label: str
+    action: str  # "add" | "remove"
+
+    def to_dict(self) -> dict[str, object]:
+        return {"bead_id": self.bead_id, "label": self.label, "action": self.action}
 
 
 @dataclass(frozen=True)
@@ -445,6 +470,69 @@ def apply_bead_comment(
     return _apply_bd_comment(rig_root, bead_id, text, timeout or bd_timeout_seconds())
 
 
+def apply_bead_label(
+    rig_root: Path,
+    change: BeadLabelChange,
+    *,
+    fixture_path: Path | None = None,
+    timeout: int | None = None,
+) -> dict[str, object]:
+    """Set or clear one label on an existing bead through the fixture seam or bd.
+
+    Wraps `bd label add|remove <label> <bead_id>` (mc-p0wps). Labels are not
+    status, so there is no `if_status` guard: an add is idempotent and a remove
+    of an absent label is a no-op, which is exactly the set/clear semantics
+    hold/release want.
+    """
+    if fixture_path is not None:
+        return _apply_fixture_label(fixture_path, change)
+    return _apply_bd_label(rig_root, change, timeout or bd_timeout_seconds())
+
+
+def _apply_bd_label(rig_root: Path, change: BeadLabelChange, timeout: int) -> dict[str, object]:
+    _run_bd_command(
+        rig_root,
+        ["bd", "label", change.action, change.label, change.bead_id],
+        timeout,
+        f"Could not {change.action} label {change.label!r} on bead {change.bead_id}",
+    )
+    return {
+        "id": change.bead_id,
+        "mode": "bd",
+        "label": change.label,
+        "action": change.action,
+    }
+
+
+def _apply_fixture_label(path: Path, change: BeadLabelChange) -> dict[str, object]:
+    rows = list(_read_jsonl(path))
+    changed = False
+    rewritten: list[dict[str, object]] = []
+    for row in rows:
+        mutable = dict(row)
+        if mutable.get("id") == change.bead_id:
+            labels = list(mutable.get("labels") or ())
+            if change.action == "add" and change.label not in labels:
+                labels.append(change.label)
+            elif change.action == "remove" and change.label in labels:
+                labels = [label for label in labels if label != change.label]
+            mutable["labels"] = labels
+            changed = True
+        rewritten.append(mutable)
+    if not changed:
+        raise BeadWriteError(f"No bead named {change.bead_id!r} exists in {path}")
+    path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rewritten),
+        encoding="utf-8",
+    )
+    return {
+        "id": change.bead_id,
+        "mode": "fixture",
+        "label": change.label,
+        "action": change.action,
+    }
+
+
 def _apply_fixture_comment(path: Path, bead_id: str, text: str) -> dict[str, object]:
     rows = list(_read_jsonl(path))
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -531,6 +619,8 @@ def _apply_bd_update(rig_root: Path, update: BeadUpdate, timeout: int) -> dict[s
         args.extend(("--set-metadata", f"{key}={value}"))
     if update.if_status is not None:
         args.extend(("--if-status", update.if_status))
+    if update.force:
+        args.append("--force")
     args.append("--json")
     try:
         result = subprocess.run(

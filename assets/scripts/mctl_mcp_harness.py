@@ -47,7 +47,10 @@ from mctl_core.schemas import schema_errors
 MCTL = SCRIPTS_ROOT / "mctl.py"
 
 EXPECTED_TOOLS = (
+    "bead_close",
     "bead_comment",
+    "bead_hold",
+    "bead_release",
     "beads_list",
     "beads_show",
     "blast_radius_registry",

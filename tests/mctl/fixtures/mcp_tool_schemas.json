@@ -1,4 +1,514 @@
 {
+  "bead_close": {
+    "description": "Close ONE bead (mc-p0wps): a typed status-lifecycle write that inherits the optimistic if_status race guard (a concurrent writer loses loudly, MCTL_BEAD_UPDATE_RACE_LOST). Refuses to close a molecule ROOT that still has open steps (MBCL_ROOT_HAS_OPEN_STEPS) -- that would report a false success; use molecule_cancel to cancel the whole molecule, and note force does NOT bypass this. Refuses a bead blocked by open dependencies (MBCL_BLOCKED_BY_OPEN_DEPS) unless force=true, which downgrades ONLY that refusal and passes bd update --force. Dry run by default.",
+    "external_ready": false,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bead_id": {
+          "description": "The bead to close.",
+          "type": "string"
+        },
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "default": true,
+          "description": "Preview the effect plan without applying it. Defaults to true.",
+          "type": "boolean"
+        },
+        "force": {
+          "default": false,
+          "description": "Downgrade ONLY the blocked-by-open-dependencies refusal (bd update --force). It does NOT bypass the molecule-root open-steps guard. Defaults to false.",
+          "type": "boolean"
+        },
+        "reason": {
+          "description": "Why the bead is being closed; recorded in metadata.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bead_id"
+      ],
+      "type": "object"
+    },
+    "mutating": true,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "actual_effects": {
+          "description": "Effects that really landed.",
+          "type": "array"
+        },
+        "applied": {
+          "description": "False for a dry run.",
+          "type": "boolean"
+        },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "effect_plan": {
+          "description": "Everything a mutation intends to do, before it does any of it.",
+          "properties": {
+            "advisories": {
+              "description": "Structured diagnostics for this call.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                "properties": {
+                  "bead_id": {
+                    "description": "Canonical bead this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brief_slug": {
+                    "description": "Brief slug this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city_path": {
+                    "description": "Resolved Gas City root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "code": {
+                    "description": "Stable code from assets/mctl/diagnostics.toml.",
+                    "type": "string"
+                  },
+                  "data_location": {
+                    "description": "File or store the finding was read from.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "facts": {
+                    "description": "Untyped supporting facts.",
+                    "type": "object"
+                  },
+                  "hint": {
+                    "description": "Suggested operator action.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "description": "Human-readable finding.",
+                    "type": "string"
+                  },
+                  "policy_ref": {
+                    "description": "Policy clause the finding is grounded in.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "provenance_ref": {
+                    "description": "Implementation surface that raised it.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_name": {
+                    "description": "Resolved rig identifier.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_path": {
+                    "description": "Resolved rig root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "severity": {
+                    "enum": [
+                      "INFO",
+                      "WARN",
+                      "ERROR",
+                      "FATAL"
+                    ],
+                    "type": "string"
+                  },
+                  "suggested_next_command": {
+                    "description": "Command that would advance the situation.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "trace_id": {
+                    "description": "Trace this diagnostic belongs to.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "brief_slug",
+                  "city_path",
+                  "code",
+                  "data_location",
+                  "facts",
+                  "message",
+                  "policy_ref",
+                  "provenance_ref",
+                  "rig_name",
+                  "rig_path",
+                  "severity",
+                  "suggested_next_command"
+                ],
+                "title": "Diagnostic",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "bead_creates": {
+              "type": "array"
+            },
+            "bead_id": {
+              "type": "string"
+            },
+            "bead_relates": {
+              "type": "array"
+            },
+            "bead_updates": {
+              "type": "array"
+            },
+            "cache_updates": {
+              "type": "array"
+            },
+            "event_writes": {
+              "type": "array"
+            },
+            "file_creates": {
+              "type": "array"
+            },
+            "formula_invocation": {
+              "type": "object"
+            },
+            "github_writes": {
+              "type": "array"
+            },
+            "operation": {
+              "type": "string"
+            },
+            "preconditions": {
+              "description": "Structured diagnostics for this call.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                "properties": {
+                  "bead_id": {
+                    "description": "Canonical bead this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brief_slug": {
+                    "description": "Brief slug this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city_path": {
+                    "description": "Resolved Gas City root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "code": {
+                    "description": "Stable code from assets/mctl/diagnostics.toml.",
+                    "type": "string"
+                  },
+                  "data_location": {
+                    "description": "File or store the finding was read from.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "facts": {
+                    "description": "Untyped supporting facts.",
+                    "type": "object"
+                  },
+                  "hint": {
+                    "description": "Suggested operator action.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "description": "Human-readable finding.",
+                    "type": "string"
+                  },
+                  "policy_ref": {
+                    "description": "Policy clause the finding is grounded in.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "provenance_ref": {
+                    "description": "Implementation surface that raised it.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_name": {
+                    "description": "Resolved rig identifier.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_path": {
+                    "description": "Resolved rig root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "severity": {
+                    "enum": [
+                      "INFO",
+                      "WARN",
+                      "ERROR",
+                      "FATAL"
+                    ],
+                    "type": "string"
+                  },
+                  "suggested_next_command": {
+                    "description": "Command that would advance the situation.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "trace_id": {
+                    "description": "Trace this diagnostic belongs to.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "brief_slug",
+                  "city_path",
+                  "code",
+                  "data_location",
+                  "facts",
+                  "message",
+                  "policy_ref",
+                  "provenance_ref",
+                  "rig_name",
+                  "rig_path",
+                  "severity",
+                  "suggested_next_command"
+                ],
+                "title": "Diagnostic",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "provenance": {
+              "type": "object"
+            },
+            "target_brief_id": {
+              "type": "string"
+            },
+            "trace_id": {
+              "type": "string"
+            },
+            "trace_writes": {
+              "type": "array"
+            }
+          },
+          "required": [
+            "operation",
+            "trace_id"
+          ],
+          "title": "EffectPlan",
+          "type": "object"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "applied",
+        "diagnostics",
+        "effect_plan",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Close one bead"
+  },
   "bead_comment": {
     "description": "Append an append-only comment to ANY existing bead (mc-ilia). This is the typed surface's one way to CORRECT a record without rewriting it: the bead's description is never edited, so a claim later refuted stays readable beside its correction (P1.19 / P5.4). It wraps `bd comment`, which stamps its own author and timestamp -- use it to carry e.g. 'superseded in part by mc-XXXX, see \u00a71-2' on the bead being corrected, rather than filing a whole second bead the reader must know to find. Refuses an empty comment (MBCM_EMPTY_COMMENT) and a comment on a bead that does not exist (MBCM_NO_SUCH_BEAD). Dry run by default.",
     "external_ready": false,
@@ -682,6 +1192,1012 @@
       "type": "object"
     },
     "title": "Append a comment to an existing bead"
+  },
+  "bead_hold": {
+    "description": "Set a `hold:*` LABEL on an existing bead (mc-p0wps / mc-qcnaz option A) -- not a status change, not defer. The label add is idempotent, so a second hold is a no-op. Refuses a slashed label (MBHD_LABEL_HAS_SLASH -- colon-form or bare only, MBRF033) and a bead that does not exist (MBHD_NO_SUCH_BEAD). NOTE: whether a held bead is actually excluded from the claimable set depends on the ready/claim query honoring the label (mc-1pale, still open); this verb sets the label. Dry run by default.",
+    "external_ready": false,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bead_id": {
+          "description": "The bead to hold.",
+          "type": "string"
+        },
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "default": true,
+          "description": "Preview the effect plan without applying it. Defaults to true.",
+          "type": "boolean"
+        },
+        "label": {
+          "default": "hold",
+          "description": "The hold label to set: bare `hold` (default) or a colon form like `hold:soak`. A slash is refused (MBRF033).",
+          "type": "string"
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bead_id"
+      ],
+      "type": "object"
+    },
+    "mutating": true,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "actual_effects": {
+          "description": "Effects that really landed.",
+          "type": "array"
+        },
+        "applied": {
+          "description": "False for a dry run.",
+          "type": "boolean"
+        },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "effect_plan": {
+          "description": "Everything a mutation intends to do, before it does any of it.",
+          "properties": {
+            "advisories": {
+              "description": "Structured diagnostics for this call.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                "properties": {
+                  "bead_id": {
+                    "description": "Canonical bead this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brief_slug": {
+                    "description": "Brief slug this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city_path": {
+                    "description": "Resolved Gas City root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "code": {
+                    "description": "Stable code from assets/mctl/diagnostics.toml.",
+                    "type": "string"
+                  },
+                  "data_location": {
+                    "description": "File or store the finding was read from.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "facts": {
+                    "description": "Untyped supporting facts.",
+                    "type": "object"
+                  },
+                  "hint": {
+                    "description": "Suggested operator action.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "description": "Human-readable finding.",
+                    "type": "string"
+                  },
+                  "policy_ref": {
+                    "description": "Policy clause the finding is grounded in.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "provenance_ref": {
+                    "description": "Implementation surface that raised it.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_name": {
+                    "description": "Resolved rig identifier.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_path": {
+                    "description": "Resolved rig root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "severity": {
+                    "enum": [
+                      "INFO",
+                      "WARN",
+                      "ERROR",
+                      "FATAL"
+                    ],
+                    "type": "string"
+                  },
+                  "suggested_next_command": {
+                    "description": "Command that would advance the situation.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "trace_id": {
+                    "description": "Trace this diagnostic belongs to.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "brief_slug",
+                  "city_path",
+                  "code",
+                  "data_location",
+                  "facts",
+                  "message",
+                  "policy_ref",
+                  "provenance_ref",
+                  "rig_name",
+                  "rig_path",
+                  "severity",
+                  "suggested_next_command"
+                ],
+                "title": "Diagnostic",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "bead_creates": {
+              "type": "array"
+            },
+            "bead_id": {
+              "type": "string"
+            },
+            "bead_relates": {
+              "type": "array"
+            },
+            "bead_updates": {
+              "type": "array"
+            },
+            "cache_updates": {
+              "type": "array"
+            },
+            "event_writes": {
+              "type": "array"
+            },
+            "file_creates": {
+              "type": "array"
+            },
+            "formula_invocation": {
+              "type": "object"
+            },
+            "github_writes": {
+              "type": "array"
+            },
+            "operation": {
+              "type": "string"
+            },
+            "preconditions": {
+              "description": "Structured diagnostics for this call.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                "properties": {
+                  "bead_id": {
+                    "description": "Canonical bead this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brief_slug": {
+                    "description": "Brief slug this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city_path": {
+                    "description": "Resolved Gas City root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "code": {
+                    "description": "Stable code from assets/mctl/diagnostics.toml.",
+                    "type": "string"
+                  },
+                  "data_location": {
+                    "description": "File or store the finding was read from.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "facts": {
+                    "description": "Untyped supporting facts.",
+                    "type": "object"
+                  },
+                  "hint": {
+                    "description": "Suggested operator action.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "description": "Human-readable finding.",
+                    "type": "string"
+                  },
+                  "policy_ref": {
+                    "description": "Policy clause the finding is grounded in.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "provenance_ref": {
+                    "description": "Implementation surface that raised it.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_name": {
+                    "description": "Resolved rig identifier.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_path": {
+                    "description": "Resolved rig root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "severity": {
+                    "enum": [
+                      "INFO",
+                      "WARN",
+                      "ERROR",
+                      "FATAL"
+                    ],
+                    "type": "string"
+                  },
+                  "suggested_next_command": {
+                    "description": "Command that would advance the situation.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "trace_id": {
+                    "description": "Trace this diagnostic belongs to.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "brief_slug",
+                  "city_path",
+                  "code",
+                  "data_location",
+                  "facts",
+                  "message",
+                  "policy_ref",
+                  "provenance_ref",
+                  "rig_name",
+                  "rig_path",
+                  "severity",
+                  "suggested_next_command"
+                ],
+                "title": "Diagnostic",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "provenance": {
+              "type": "object"
+            },
+            "target_brief_id": {
+              "type": "string"
+            },
+            "trace_id": {
+              "type": "string"
+            },
+            "trace_writes": {
+              "type": "array"
+            }
+          },
+          "required": [
+            "operation",
+            "trace_id"
+          ],
+          "title": "EffectPlan",
+          "type": "object"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "applied",
+        "diagnostics",
+        "effect_plan",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Place a hold label on a bead"
+  },
+  "bead_release": {
+    "description": "Clear a `hold:*` LABEL from an existing bead (mc-p0wps / mc-qcnaz option A) -- the inverse of bead_hold. The label remove is idempotent, so releasing a bead that never held is a no-op. Refuses a slashed label (MBRL_LABEL_HAS_SLASH) and a bead that does not exist (MBRL_NO_SUCH_BEAD). Dry run by default.",
+    "external_ready": false,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bead_id": {
+          "description": "The bead to release.",
+          "type": "string"
+        },
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "default": true,
+          "description": "Preview the effect plan without applying it. Defaults to true.",
+          "type": "boolean"
+        },
+        "label": {
+          "default": "hold",
+          "description": "Which hold label to clear: bare `hold` (default) or a colon form like `hold:soak`. A slash is refused (MBRF033).",
+          "type": "string"
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bead_id"
+      ],
+      "type": "object"
+    },
+    "mutating": true,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "actual_effects": {
+          "description": "Effects that really landed.",
+          "type": "array"
+        },
+        "applied": {
+          "description": "False for a dry run.",
+          "type": "boolean"
+        },
+        "claim": {
+          "description": "For an applied work dispatch: whether the claim has been observed yet. `pending` is a successful dispatch whose claim has not landed (recheck with work_status), NOT a failure (#212).",
+          "enum": [
+            "observed",
+            "pending"
+          ],
+          "type": "string"
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "effect_plan": {
+          "description": "Everything a mutation intends to do, before it does any of it.",
+          "properties": {
+            "advisories": {
+              "description": "Structured diagnostics for this call.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                "properties": {
+                  "bead_id": {
+                    "description": "Canonical bead this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brief_slug": {
+                    "description": "Brief slug this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city_path": {
+                    "description": "Resolved Gas City root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "code": {
+                    "description": "Stable code from assets/mctl/diagnostics.toml.",
+                    "type": "string"
+                  },
+                  "data_location": {
+                    "description": "File or store the finding was read from.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "facts": {
+                    "description": "Untyped supporting facts.",
+                    "type": "object"
+                  },
+                  "hint": {
+                    "description": "Suggested operator action.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "description": "Human-readable finding.",
+                    "type": "string"
+                  },
+                  "policy_ref": {
+                    "description": "Policy clause the finding is grounded in.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "provenance_ref": {
+                    "description": "Implementation surface that raised it.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_name": {
+                    "description": "Resolved rig identifier.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_path": {
+                    "description": "Resolved rig root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "severity": {
+                    "enum": [
+                      "INFO",
+                      "WARN",
+                      "ERROR",
+                      "FATAL"
+                    ],
+                    "type": "string"
+                  },
+                  "suggested_next_command": {
+                    "description": "Command that would advance the situation.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "trace_id": {
+                    "description": "Trace this diagnostic belongs to.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "brief_slug",
+                  "city_path",
+                  "code",
+                  "data_location",
+                  "facts",
+                  "message",
+                  "policy_ref",
+                  "provenance_ref",
+                  "rig_name",
+                  "rig_path",
+                  "severity",
+                  "suggested_next_command"
+                ],
+                "title": "Diagnostic",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "bead_creates": {
+              "type": "array"
+            },
+            "bead_id": {
+              "type": "string"
+            },
+            "bead_relates": {
+              "type": "array"
+            },
+            "bead_updates": {
+              "type": "array"
+            },
+            "cache_updates": {
+              "type": "array"
+            },
+            "event_writes": {
+              "type": "array"
+            },
+            "file_creates": {
+              "type": "array"
+            },
+            "formula_invocation": {
+              "type": "object"
+            },
+            "github_writes": {
+              "type": "array"
+            },
+            "operation": {
+              "type": "string"
+            },
+            "preconditions": {
+              "description": "Structured diagnostics for this call.",
+              "items": {
+                "additionalProperties": false,
+                "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+                "properties": {
+                  "bead_id": {
+                    "description": "Canonical bead this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "brief_slug": {
+                    "description": "Brief slug this diagnostic is about.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city_path": {
+                    "description": "Resolved Gas City root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "code": {
+                    "description": "Stable code from assets/mctl/diagnostics.toml.",
+                    "type": "string"
+                  },
+                  "data_location": {
+                    "description": "File or store the finding was read from.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "facts": {
+                    "description": "Untyped supporting facts.",
+                    "type": "object"
+                  },
+                  "hint": {
+                    "description": "Suggested operator action.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "message": {
+                    "description": "Human-readable finding.",
+                    "type": "string"
+                  },
+                  "policy_ref": {
+                    "description": "Policy clause the finding is grounded in.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "provenance_ref": {
+                    "description": "Implementation surface that raised it.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_name": {
+                    "description": "Resolved rig identifier.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rig_path": {
+                    "description": "Resolved rig root.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "severity": {
+                    "enum": [
+                      "INFO",
+                      "WARN",
+                      "ERROR",
+                      "FATAL"
+                    ],
+                    "type": "string"
+                  },
+                  "suggested_next_command": {
+                    "description": "Command that would advance the situation.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "trace_id": {
+                    "description": "Trace this diagnostic belongs to.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "bead_id",
+                  "brief_slug",
+                  "city_path",
+                  "code",
+                  "data_location",
+                  "facts",
+                  "message",
+                  "policy_ref",
+                  "provenance_ref",
+                  "rig_name",
+                  "rig_path",
+                  "severity",
+                  "suggested_next_command"
+                ],
+                "title": "Diagnostic",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "provenance": {
+              "type": "object"
+            },
+            "target_brief_id": {
+              "type": "string"
+            },
+            "trace_id": {
+              "type": "string"
+            },
+            "trace_writes": {
+              "type": "array"
+            }
+          },
+          "required": [
+            "operation",
+            "trace_id"
+          ],
+          "title": "EffectPlan",
+          "type": "object"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "applied",
+        "diagnostics",
+        "effect_plan",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Clear a hold label from a bead"
   },
   "beads_list": {
     "description": "Enumerate beads from the canonical store, with the SCOPE of the read declared in the payload. Defaults to a CENSUS -- every status -- because `bd list`'s open-only default is a CLI convenience that reads as an answer: it once produced '23 decision beads, zero verdicts' against a store holding 129 decisions and 104 verdicts. `scope` names `matched`, `total_in_store` and `statuses_excluded`, so a filtered read can never be quoted as a census.",

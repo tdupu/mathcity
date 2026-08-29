@@ -79,6 +79,14 @@ from .payloads import (
 )
 from .commission import CommissionRefused
 from .bead_comments import BeadCommentInput, plan_bead_comment
+from .bead_writes import (
+    BeadCloseInput,
+    BeadHoldInput,
+    BeadReleaseInput,
+    plan_bead_close,
+    plan_bead_hold,
+    plan_bead_release,
+)
 from .defect_beads import DefectBeadCreateInput, plan_create_defect_bead
 from .issue_standardize import StandardizeIssueInput, plan_standardize_github_issue
 from .effects import (
@@ -1432,6 +1440,40 @@ def _handle_bead_comment(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict
         BeadCommentInput(
             bead_id=arguments.get("bead_id") or "",
             text=arguments.get("comment") or "",
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_bead_close(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_bead_close(
+        ctx,
+        BeadCloseInput(
+            bead_id=arguments.get("bead_id") or "",
+            reason=arguments.get("reason"),
+            force=bool(arguments.get("force", False)),
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_bead_hold(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_bead_hold(
+        ctx,
+        BeadHoldInput(
+            bead_id=arguments.get("bead_id") or "",
+            label=arguments.get("label") or "hold",
+        ),
+    )
+    return _effect_payload(ctx, plan, _dry_run(arguments))
+
+
+def _handle_bead_release(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    plan = plan_bead_release(
+        ctx,
+        BeadReleaseInput(
+            bead_id=arguments.get("bead_id") or "",
+            label=arguments.get("label") or "hold",
         ),
     )
     return _effect_payload(ctx, plan, _dry_run(arguments))
@@ -3084,6 +3126,103 @@ TOOLS: tuple[ToolSpec, ...] = (
         mutating=True,
         external_ready=False,
         artifact_state=True,
+    ),
+    ToolSpec(
+        name="bead_close",
+        title="Close one bead",
+        description=(
+            "Close ONE bead (mc-p0wps): a typed status-lifecycle write that inherits "
+            "the optimistic if_status race guard (a concurrent writer loses loudly, "
+            "MCTL_BEAD_UPDATE_RACE_LOST). Refuses to close a molecule ROOT that still "
+            "has open steps (MBCL_ROOT_HAS_OPEN_STEPS) -- that would report a false "
+            "success; use molecule_cancel to cancel the whole molecule, and note "
+            "force does NOT bypass this. Refuses a bead blocked by open dependencies "
+            "(MBCL_BLOCKED_BY_OPEN_DEPS) unless force=true, which downgrades ONLY that "
+            "refusal and passes bd update --force. Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {"type": "string", "description": "The bead to close."},
+                "reason": nullable_string("Why the bead is being closed; recorded in metadata."),
+                "force": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Downgrade ONLY the blocked-by-open-dependencies refusal "
+                        "(bd update --force). It does NOT bypass the molecule-root "
+                        "open-steps guard. Defaults to false."
+                    ),
+                },
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["bead_id"],
+        ),
+        output_schema=response_schema(_EFFECT_RESPONSE, ["applied", "effect_plan"]),
+        handler=_handle_bead_close,
+        mutating=True,
+        external_ready=False,
+    ),
+    ToolSpec(
+        name="bead_hold",
+        title="Place a hold label on a bead",
+        description=(
+            "Set a `hold:*` LABEL on an existing bead (mc-p0wps / mc-qcnaz option A) "
+            "-- not a status change, not defer. The label add is idempotent, so a "
+            "second hold is a no-op. Refuses a slashed label (MBHD_LABEL_HAS_SLASH -- "
+            "colon-form or bare only, MBRF033) and a bead that does not exist "
+            "(MBHD_NO_SUCH_BEAD). NOTE: whether a held bead is actually excluded from "
+            "the claimable set depends on the ready/claim query honoring the label "
+            "(mc-1pale, still open); this verb sets the label. Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {"type": "string", "description": "The bead to hold."},
+                "label": {
+                    "type": "string",
+                    "default": "hold",
+                    "description": (
+                        "The hold label to set: bare `hold` (default) or a colon form "
+                        "like `hold:soak`. A slash is refused (MBRF033)."
+                    ),
+                },
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["bead_id"],
+        ),
+        output_schema=response_schema(_EFFECT_RESPONSE, ["applied", "effect_plan"]),
+        handler=_handle_bead_hold,
+        mutating=True,
+        external_ready=False,
+    ),
+    ToolSpec(
+        name="bead_release",
+        title="Clear a hold label from a bead",
+        description=(
+            "Clear a `hold:*` LABEL from an existing bead (mc-p0wps / mc-qcnaz option "
+            "A) -- the inverse of bead_hold. The label remove is idempotent, so "
+            "releasing a bead that never held is a no-op. Refuses a slashed label "
+            "(MBRL_LABEL_HAS_SLASH) and a bead that does not exist (MBRL_NO_SUCH_BEAD). "
+            "Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {"type": "string", "description": "The bead to release."},
+                "label": {
+                    "type": "string",
+                    "default": "hold",
+                    "description": (
+                        "Which hold label to clear: bare `hold` (default) or a colon "
+                        "form like `hold:soak`. A slash is refused (MBRF033)."
+                    ),
+                },
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["bead_id"],
+        ),
+        output_schema=response_schema(_EFFECT_RESPONSE, ["applied", "effect_plan"]),
+        handler=_handle_bead_release,
+        mutating=True,
+        external_ready=False,
     ),
     ToolSpec(
         name="standardize_github_issue",

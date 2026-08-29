@@ -32,8 +32,12 @@ BRIEF_STATE = FIXTURES / "brief_state"
 WORK_STATE = FIXTURES / "work_state"
 
 DECLARED_TOOLS = (
+    # mc-p0wps: the three typed bead-write verbs -- close/hold/release.
+    "bead_close",
     # mc-ilia: the surface's only append-only correction path for an existing bead.
     "bead_comment",
+    "bead_hold",
+    "bead_release",
     # #245: the surface had 45 tools and none READ a bead, so every bead question
     # fell through to `bd list --json` -- whose open-only default produced a false
     # report about the owner's own adjudication record. Both declare their scope.
