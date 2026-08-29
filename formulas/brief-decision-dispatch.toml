@@ -65,7 +65,7 @@ diagnostic line with `pending_retry: true` and NO `dispatched_at`, which the
 scan and check treat as still-pending — so the next brief.decided wake retries
 them. Dispatching an already-succeeded decision is a no-op. The check script
 (brief-decision-dispatched-check.sh) verifies each pending slug has a SUCCESS
-line in the ledger (~/.gc/mathcity/briefs/decisions-dispatched.jsonl); a lone
+line in the ledger (~/.gc/mathcity/aggregated-briefs/decisions-dispatched.jsonl); a lone
 pending_retry line does NOT satisfy it. The scan-undispatched step pre-filters
 succeeded slugs, so a run where ALL pending decisions already succeeded
 completes as a safe no-op.
@@ -108,7 +108,7 @@ description = "Dispatch approve/reject/revise/defer actions from decision record
 [vars]
 [vars.artifact_root]
 description = "Brief pipeline artifact root."
-default = "~/.gc/mathcity/briefs"
+default = "~/.gc/mathcity/aggregated-briefs"
 
 [vars.default_branch]
 description = "Default merge target branch (approve path). Falls back to GC_DEFAULT_BRANCH env var, then 'main'."

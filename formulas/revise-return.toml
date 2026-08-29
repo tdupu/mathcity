@@ -76,7 +76,7 @@ description = "Re-deposit a fresh brief from a revise verdict's revision instruc
 [vars]
 [vars.artifact_root]
 description = "Brief pipeline artifact root (global scan point; same as brief-decision-dispatch)."
-default = "~/.gc/mathcity/briefs"
+default = "~/.gc/mathcity/aggregated-briefs"
 
 [[steps]]
 id = "scan-and-redeposit"
@@ -130,18 +130,24 @@ pending_retry_count() {
     | grep -c '"pending_retry"' || true
 }
 
-# Resolve a bead id -> owning rig name via gc's authoritative registry
-# (longest configured prefix wins; HQ row included). Mirrors
-# brief-decision-dispatch's resolver.
-RIG_REGISTRY_JSON=""
-resolve_rig_name() {
-  [ -n "$RIG_REGISTRY_JSON" ] || RIG_REGISTRY_JSON="$(gc rig list --json 2>/dev/null || true)"
-  [ -n "$RIG_REGISTRY_JSON" ] || return 0
-  printf '%s' "$RIG_REGISTRY_JSON" | jq -r --arg id "$1" '
-    [(.rigs // [])[] | select(.prefix as $p | $id | startswith($p + "-"))]
-    | sort_by(.prefix | length) | last // empty
-    | select(. != null) | .name'
-}
+# Source the shared scan + target-rig library. Resolve the pack root the same
+# way brief-decision-dispatch resolves escalate.sh: the parent of the orders/
+# directory on the `Source:` line of `gc order show revise-return`. ($PACK_DIR is
+# NOT injected into a formula step's agent session -- see brief-decision-dispatch.)
+PACK_ROOT="$(gc order show revise-return 2>/dev/null | sed -n 's/^Source:[[:space:]]*//p' | head -n1 | xargs -I{} dirname {} 2>/dev/null || true)"
+LIB="$PACK_ROOT/assets/scripts/revise-return-lib.sh"
+if [ ! -f "$LIB" ]; then
+  echo "I'm sorry, I can't do that -- revise-return-lib.sh not found at $LIB." >&2
+  echo "The scan + target-rig library ships in the mathcity pack (assets/scripts/)." >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+. "$LIB"
+
+# gc's authoritative rig registry (longest configured prefix wins; HQ included).
+# revise_resolve_target_rig reads it to resolve BOTH the source rig (default) and
+# a "move to rig X" directive in the revision reason.
+RIG_REGISTRY_JSON="$(gc rig list --json 2>/dev/null || true)"
 
 # Next revise slug: <base>-r<N+1> if slug already ends -r<N>, else <slug>-r1.
 next_slug() {
@@ -199,45 +205,66 @@ redeposit_slug() {
   fi
 
   new_slug="$(next_slug "$slug")"
-  RIG_NAME="$(resolve_rig_name "$source_bead")"
+  # Rig behaviour (Taylor decision 2). SOURCE_RIG is the bead's owning rig
+  # (prefix resolution, empty reason). TARGET_RIG is where the revised brief
+  # re-files: the SOURCE rig by DEFAULT, or a rig the revision reason names via a
+  # "move to rig X" directive. Both come from the one lib resolver.
+  SOURCE_RIG="$(revise_resolve_target_rig "" "$source_bead" "$RIG_REGISTRY_JSON")"
+  TARGET_RIG="$(revise_resolve_target_rig "$reason" "$source_bead" "$RIG_REGISTRY_JSON")"
 
   # Carry the revision instructions to the brief-prep drafter (best-effort):
-  # append them to the source bead so mathcity.brief-prep reads them when it
-  # redrafts. A failed comment does not block the re-deposit.
+  # append them to the source bead (in the rig it LIVES in) so mathcity.brief-prep
+  # reads them when it redrafts. A failed comment does not block the re-deposit.
   comment_body="Revision requested on brief $slug (verdict=revise). Address this feedback in the re-deposited brief: $reason"
-  if [ -n "$RIG_NAME" ]; then
-    gc bd --rig "$RIG_NAME" comment "$source_bead" "$comment_body" 2>/dev/null || \\
+  if [ -n "$SOURCE_RIG" ]; then
+    gc bd --rig "$SOURCE_RIG" comment "$source_bead" "$comment_body" 2>/dev/null || \\
       bd comment "$source_bead" "$comment_body" 2>/dev/null || true
   else
     bd comment "$source_bead" "$comment_body" 2>/dev/null || true
   fi
+  # A rig MOVE: note the redirect on the source bead too, so the trail records it.
+  if [ -n "$TARGET_RIG" ] && [ "$TARGET_RIG" != "$SOURCE_RIG" ]; then
+    gc bd --rig "$SOURCE_RIG" comment "$source_bead" \\
+      "Revised brief $new_slug re-filed into rig $TARGET_RIG per the revision directive." 2>/dev/null || true
+  fi
 
   # Re-deposit via the sanctioned deposit path: pour brief-prep for the source
   # bead under the fresh slug. brief-prep stages, gate-attaches, and submits to
-  # the pile through mctl (POLICY B2.8: never a hand-written governed path).
-  if bd mol pour brief-prep \\
+  # the pile through mctl (POLICY B2.8: never a hand-written governed path). On a
+  # MOVE the pour runs against the TARGET rig (gc bd --rig); the DEFAULT keeps the
+  # existing bare pour so unchanged same-rig behaviour is preserved.
+  if [ -n "$TARGET_RIG" ] && [ "$TARGET_RIG" != "$SOURCE_RIG" ]; then
+    pour_ok=1; gc bd --rig "$TARGET_RIG" mol pour brief-prep \\
       --var source="$source_bead" \\
       --var brief_slug="$new_slug" \\
-      --var brief_type="$brief_type"; then
-    printf '%s\\n' "$(ledger_line "$slug" "$source_bead" "re-deposited via brief-prep pour" "$new_slug" success)" >> "$LEDGER"
-    echo "re-deposited $slug -> $new_slug (source=$source_bead)"
+      --var brief_type="$brief_type" || pour_ok=0
   else
-    printf '%s\\n' "$(ledger_line "$slug" "$source_bead" "brief-prep pour failed" "$new_slug" failure)" >> "$LEDGER"
-    echo "FAILED re-deposit for $slug (source=$source_bead); will retry"
+    pour_ok=1; bd mol pour brief-prep \\
+      --var source="$source_bead" \\
+      --var brief_slug="$new_slug" \\
+      --var brief_type="$brief_type" || pour_ok=0
+  fi
+  if [ "$pour_ok" -eq 1 ]; then
+    printf '%s\\n' "$(ledger_line "$slug" "$source_bead" "re-deposited via brief-prep pour (rig=$TARGET_RIG)" "$new_slug" success)" >> "$LEDGER"
+    echo "re-deposited $slug -> $new_slug (source=$source_bead, rig=$TARGET_RIG)"
+  else
+    printf '%s\\n' "$(ledger_line "$slug" "$source_bead" "brief-prep pour failed (rig=$TARGET_RIG)" "$new_slug" failure)" >> "$LEDGER"
+    echo "FAILED re-deposit for $slug (source=$source_bead, rig=$TARGET_RIG); will retry"
   fi
 }
 
-# Main scan — global brief root, single scan point (city dog).
+# Main scan — the single global scan point (city dog). revise_scan_pending
+# yields exactly the pending revise slugs (decision=revise, not yet re-deposited);
+# an empty/dead root yields none, which is why populating the aggregated root is
+# the fix (gt-5yxup1) rather than any change to the scan itself.
 redeposited=0
-if [ -d "$ROOT/decisions" ]; then
-  for f in "$ROOT/decisions/"*.toml; do
-    [ -f "$f" ] || continue
-    slug="$(basename "$f" .toml)"
-    if is_redeposited "$slug"; then echo "already re-deposited: $slug"; continue; fi
-    redeposit_slug "$slug"
-    redeposited=$((redeposited + 1))
-  done
-fi
+while IFS= read -r slug; do
+  [ -n "$slug" ] || continue
+  redeposit_slug "$slug"
+  redeposited=$((redeposited + 1))
+done <<REVISE_PENDING_EOF
+$(revise_scan_pending "$ROOT")
+REVISE_PENDING_EOF
 
 echo "scan-and-redeposit complete: processed=$redeposited"
 

@@ -16,7 +16,7 @@ description = "Keep rejected and decided brief artifacts tidy without deleting r
 [vars]
 [vars.artifact_root]
 description = "Brief pipeline artifact root."
-default = "~/.gc/mathcity/briefs"
+default = "~/.gc/mathcity/aggregated-briefs"
 
 [[steps]]
 id = "sweep"
