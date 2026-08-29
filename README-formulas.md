@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical index of every formula in the mathcity pack.**
 
-34 formulas in `mathcity/formulas/`. This file is the ONE complete list. When in doubt, **this file wins**.
+37 formulas in `mathcity/formulas/`. This file is the ONE complete list. When in doubt, **this file wins**.
 
 **Maintenance (single source of truth):**
 - `formula-creator-math` appends the new formula's row here as a required step before filing the brief.
@@ -15,11 +15,12 @@ _Regenerate/verify with `/update-README`._
 
 ---
 
-## Formulas — `mathcity/formulas/`  (34)
+## Formulas — `mathcity/formulas/`  (37)
 
 | Formula | Shape | What it does |
 |---|---|---|
 | `brief-archive-sweep` | do-work | Sweep old rejected or decided brief artifacts into archive state. |
+| `brief-briefed-base` | do-work | Abstract base owning the shared file-brief terminal + `brief-producer.v1` schema for the briefed-terminal formula family. Extend it; never pour it directly. |
 | `brief-decision-dispatch` | do-work | For each undispatched decision record, execute the downstream event chain. |
 | `brief-gate-keep` | do-work | Run the brief gate registry against one brief. |
 | `brief-prep` | methodology | Prepare a policy-gated brief from source work. |
@@ -48,6 +49,8 @@ _Regenerate/verify with `/update-README`._
 | `on-merge-brief-record` | do-work | Post-merge brief-record duty: inspect recently closed beads and file brief records for those that lacked one. |
 | `planning-briefed` | methodology | Produce a planning artifact (PERT/decomposition/design) for a bead or epic, gated by a human decision brief. Planning steps run on Opus-level agents (gc.design-author). |
 | `pr-pipeline-briefed` | do-work | Compose a template-complete upstream PR body and file it as a human decision brief. |
+| `report-fix-briefed` | do-work | Turn a rough operator bug report into an evidence-backed fix-brief; on approve, dispatch build-basic-briefed to fix the bug and open a PR. Adapter over brief-briefed-base; never fixes before adjudication. |
+| `revise-return` | do-work | On `brief.decided`, re-deposit a fresh brief for each `revise` verdict (via the sanctioned brief-prep pour), scanning the aggregated global decision root; re-files to the source rig by default, or a rig the revision reason names. |
 | `simple-work-briefed` | do-work | Simple-work with a brief filing terminal slot; lightweight alternative to build-basic-briefed for bounded one-off tasks. |
 | `smoke-test-briefed` | do-work | Smoke-test a mathcity artifact (formula, skill, Magma, Python, script) and file a brief with test evidence and reproducibility guide (F6.1). |
 | `test-execution-request` | do-work | Formal request workflow for test execution that should not happen silently. |
@@ -69,7 +72,7 @@ version = "sha:<pinned gascity-packs commit>"
 
 The live pin is recorded in `pack.toml` and `packs.lock`; `gc pack fetch`
 refreshes it. Imported formulas are capabilities for MathCity dispatch
-planning, not MathCity-owned formulas, so they are not counted in the 34-row
+planning, not MathCity-owned formulas, so they are not counted in the 37-row
 table above. Verify the import surface with
 `bash tests/superpowers-availability/smoke_test.sh`; when a live city catalog
 should be available, run
