@@ -77,6 +77,7 @@ EXPECTED_TOOLS = (
     "dashboard_status",
     "dashboard_teardown",
     "decisions_to_briefs",
+    "events_list",
     "fleet_sessions",
     "formulas_catalog",
     "gates_status",

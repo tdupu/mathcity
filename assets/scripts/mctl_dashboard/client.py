@@ -55,6 +55,7 @@ ALLOWED_TOOLS = frozenset(
     {
         "orders_status",
         "formulas_catalog",
+        "events_list",
         "queue_status",
         "costs_summary",
         "tracker_rows",

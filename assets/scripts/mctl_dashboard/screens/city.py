@@ -671,6 +671,97 @@ def worktrees(payload: Mapping[str, Any]) -> str:
     return _panel("Worktrees", body, region="city-worktrees")
 
 
+def events(payload: Mapping[str, Any]) -> str:
+    """The city ticker (#116): recent events, tiered, unanswered causes named.
+
+    This panel used to be `unwired()` -- the vocabulary in `mctl_core/ticker.py`
+    was built and tested with no reader and no tool, so no page could call it.
+    It is wired now.
+
+    THREE DISTINCTIONS THIS MUST NOT COLLAPSE, in the order they bite:
+
+    * `unreachable` is not "no events". A log that could not be read says so;
+      rendering an empty ticker for it would assert a quiet city.
+    * A truncated scan is not the whole log. `available_in_scan` counts within
+      the bytes read, so the denominator is stated and never presented as the
+      population (#124: every figure is a FLOOR).
+    * An unanswered CAUSE is a measured break in the chain, not an absence of
+      data -- it is the most informative row here and is surfaced above the
+      stream rather than buried in it.
+    """
+    if str(payload.get("state") or "") == "unreachable":
+        return _panel(
+            "Events",
+            '<p class="lede"><strong>The city event log could not be read.</strong> '
+            "This is not a city with no events — it is a log we could not look at. "
+            "The other panels on this page are unaffected.</p>",
+            region="city-events",
+        )
+
+    rows: Sequence[Mapping[str, Any]] = payload.get("events") or []  # single-shape-ok: events_list envelope, not a brief row
+    unanswered: Sequence[Mapping[str, Any]] = payload.get("unanswered_causes") or []  # single-shape-ok: events_list envelope
+    scan = payload.get("scan") or {}
+
+    if not rows:
+        return _panel(
+            "Events",
+            '<p class="lede">The log was read and holds <strong>no events</strong> '
+            "in the window scanned — a measurement, not a failure to look.</p>",
+            region="city-events",
+        )
+
+    head = (
+        f'<p class="lede"><strong>{len(rows)}</strong> event'
+        f'{"" if len(rows) == 1 else "s"}, newest first, of '
+        f'<strong>{_e(str(payload.get("available_in_scan")))}</strong> in the window '
+        "scanned. Chatter is "
+        + ("shown" if payload.get("chatter_included") else "hidden by default")
+        + "; an unclassified type is <span class=\"mono\">unknown</span> and always "
+        "survives the filter, so a new event type cannot vanish unnoticed.</p>"
+    )
+
+    if scan.get("truncated"):
+        head += (
+            '<p class="lede"><strong>Counts describe the window, not the log.</strong> '
+            f'Read the last {_e(str(scan.get("scanned_bytes")))} of '
+            f'{_e(str(scan.get("log_bytes")))} bytes, so every number here is a floor.</p>'
+        )
+
+    if unanswered:
+        items = "".join(
+            "<li><span class=\"mono\">"
+            + _e(str((pair.get("cause") or {}).get("subject") or "?"))
+            + "</span> fired at <span class=\"mono\">"
+            + _e(str((pair.get("cause") or {}).get("ts") or "?"))
+            + "</span> and produced nothing</li>"
+            for pair in unanswered[:12]
+        )
+        head += (
+            f'<p class="lede"><strong>{len(unanswered)}</strong> cause'
+            f'{"" if len(unanswered) == 1 else "s"} produced no response. '
+            "A cause with no response is a visible break in the chain, and more "
+            f"informative than either event alone.</p><ul>{items}</ul>"
+        )
+
+    body = "".join(
+        "<tr><td class=\"mono\">"
+        + _e(str(row.get("ts") or ""))
+        + "</td><td class=\"mono\">"
+        + _e(str(row.get("tier") or ""))
+        + "</td><td class=\"mono\">"
+        + _e(str(row.get("type") or ""))
+        + "</td><td>"
+        + _e(str(row.get("subject") or ""))
+        + "</td></tr>"
+        for row in rows
+    )
+    table = (
+        "<table><thead><tr><th>When</th><th>Tier</th><th>Type</th><th>Subject</th>"
+        f"</tr></thead><tbody>{body}</tbody></table>"
+    )
+    return _panel("Events", head + table, region="city-events")
+
+
 def unwired(tool: str, *, module: str, issue: int) -> str:
     """A surface whose backend exists and which no page can call.
 
