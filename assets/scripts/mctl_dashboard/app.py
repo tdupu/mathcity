@@ -324,6 +324,13 @@ def brief_codes(brief: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(codes)
 
 
+#: How many skipped briefs to name individually before summarising the rest.
+#: Named rather than dropped (#125): "skipped 14" with no ids is a count the
+#: operator cannot act on, and naming all fourteen turns a confirmation into a
+#: wall of text. The remainder is always reported as a count, never omitted.
+_SKIP_DETAIL_LIMIT = 3
+
+
 def junk_reason(brief: Mapping[str, Any]) -> str | None:
     """Why no verdict can land on this brief, or None if one can.
 
@@ -2536,14 +2543,33 @@ class Dashboard:
         except ToolFailure:
             listing = None
         next_id = None
+        skipped: list[tuple[str, str]] = []
+        adjudicable: list[str] = []
         if listing is not None:
             view = view_state.parse({})
             rows = stack.sorted_briefs(
                 _scoped(list(listing.payload.get("briefs") or ()), view.scope), view
             )
-            ids = [str(attr(r, "bead_id") or attr(r, "brief_id") or "") for r in rows]
-            ids = [i for i in ids if i and i != brief_id]
-            next_id = ids[0] if ids else None
+            # #125: "Skips must be honest. If the next brief cannot be
+            # adjudicated, auto-advance must SAY it skipped and why -- not
+            # silently jump over it."
+            #
+            # This took `rows[0]` unconditionally, so Enter could land the
+            # operator on a brief no verdict can reach, with no explanation and
+            # no way to tell that from an ordinary brief. `junk_reason` is the
+            # right classifier because it is derived from what the write path
+            # actually REFUSES rather than from a hand-kept taxonomy, so this
+            # cannot drift from the behaviour it describes.
+            for row in rows:
+                candidate = str(attr(row, "bead_id") or attr(row, "brief_id") or "")
+                if not candidate or candidate == brief_id:
+                    continue
+                reason = junk_reason(row)
+                if reason is None:
+                    adjudicable.append(candidate)
+                else:
+                    skipped.append((candidate, reason))
+            next_id = adjudicable[0] if adjudicable else None
 
         buttons = [
             f'<a class="btn btn-secondary" href="/queue{suffix}" '
@@ -2560,12 +2586,30 @@ class Dashboard:
                 f'<a class="btn btn-primary" autofocus href="/briefs/{render.esc(next_id)}{suffix}" '
                 'style="font-size: 12px; padding: 5px 14px;">Next brief &rarr;</a>',
             )
+        # Counts what a verdict can still land on, NOT how many rows follow.
+        # `len(ids)` included briefs no verdict can reach, so the number
+        # promised more work than the operator could actually do.
         remaining = (
             f'<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'
-            f"{len(ids)} left on this queue</span>"
+            f"{len(adjudicable)} adjudicable left on this queue</span>"
             if listing is not None and next_id
             else ""
         )
+        if skipped:
+            shown = skipped[: _SKIP_DETAIL_LIMIT]
+            detail = "; ".join(
+                f"{render.esc(bid)} ({render.esc(why)})" for bid, why in shown
+            )
+            more = (
+                f" and {len(skipped) - len(shown)} more"
+                if len(skipped) > len(shown)
+                else ""
+            )
+            remaining += (
+                f'<br><span class="mono" style="font-size: 10.5px; '
+                f'color: var(--color-neutral-600);">skipped {len(skipped)}: '
+                f"{detail}{more}</span>"
+            )
         return (
             '<section class="panel" data-region="advance" '
             'style="display: flex; gap: 9px; align-items: center; margin-top: 4px;">'
