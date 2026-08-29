@@ -306,7 +306,19 @@ VERDICT_SCHEMA: Schema = {
             ],
         },
         "text": {"type": "string", "description": "The verdict verbatim."},
+        "option": {
+            "type": ["string", "null"],
+            "description": (
+                "WHICH option the adjudicator picked, from metadata.verdict_option "
+                "(#66/#208). Null means none was recorded -- NOT that the brief "
+                "offered only one path. A verdict on a brief that offered a set and "
+                "named none is a decision whose subject cannot be reconstructed."
+            ),
+        },
     },
+    # `option` is deliberately NOT in `required`: it is absent on every verdict
+    # recorded before #208, and requiring it would make historical verdicts
+    # unreadable rather than merely unattributed to an option.
     "additionalProperties": False,
 }
 
