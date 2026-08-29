@@ -23,7 +23,7 @@ _Last update: 2026-08-23 20:47 EDT — A/B/C/D launched (running); E/F launching
 | E | mathcity | `…/scratchpad/plan-worktrees/plan-e` | `plan-e-drain` | 8c8a0ee |
 | F | mathcity | `…/scratchpad/plan-worktrees/plan-f` | `plan-f-instruments` | 8c8a0ee |
 
-(full path root: `/private/tmp/claude-501/-Users-tdupuy-repos/4270675a-b833-4bd7-96c1-ad269ac329c6/scratchpad/plan-worktrees`)
+(full path root: `/private/tmp/claude-501/-Users-<home-user>-repos/4270675a-b833-4bd7-96c1-ad269ac329c6/scratchpad/plan-worktrees`)
 
 ---
 
