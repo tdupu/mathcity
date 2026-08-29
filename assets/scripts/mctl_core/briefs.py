@@ -285,6 +285,20 @@ class BriefRecord:
     #: what makes deduplication auditable: a suppressed document is always
     #: named by the record that represents it, never merely absent.
     also_recorded_in: tuple[str, ...] = ()
+    #: The deferral, when there is one: `{until, reason, deferred_at, expired}`.
+    #: `None` means this brief is not deferred.
+    #:
+    #: `briefs_defer` WRITES all three of these -- `defer_until` on the bead,
+    #: `defer_reason` and `deferred_at` in its metadata -- and the read path
+    #: collapsed them to a boolean, so the Deferred screen could say a brief was
+    #: deferred and not until when, by whom, or why. Its own panel said exactly
+    #: that: "The defer window is not shown, because it is not readable."
+    #:
+    #: `expired` is carried rather than filtered on: a deferral whose window has
+    #: passed is a brief that WAS deferred and is now due, which is different
+    #: from one that was never deferred, and only the operator can act on the
+    #: difference.
+    deferral: Mapping[str, Any] | None = None
 
     @property
     def canonical_source(self) -> str:
@@ -306,6 +320,7 @@ class BriefRecord:
             "also_recorded_in": list(self.also_recorded_in),
             "bead_id": self.bead_id,
             "body_elided": self.body_elided,
+            "deferral": dict(self.deferral) if self.deferral is not None else None,
             "body_path": self.body_path,
             "brief_id": self.brief_id,
             "canonical_source": self.canonical_source,
@@ -1866,6 +1881,11 @@ def _bead_record(
         track=None,
         timestamp=bead.updated_at,
         timestamp_field="updated_at" if bead.updated_at else None,
+        # Carried whole rather than collapsed to the boolean `decision_state`
+        # already encodes. `decision_state == "deferred"` says THAT; this says
+        # until when, why, and when it was set — the three facts `briefs_defer`
+        # writes and the Deferred screen could not read.
+        deferral=deferral_detail(bead),
     )
 
 
@@ -2216,12 +2236,53 @@ def _approved_for_dispatch(bead: Bead) -> bool:
     }
 
 
-def _defer_until(bead: Bead) -> bool:
+def deferral_detail(bead: Bead) -> dict[str, Any] | None:
+    """The deferral on this bead, or None when it is not deferred.
+
+    `briefs_defer` writes `defer_until` onto the bead and `defer_reason` /
+    `deferred_at` into its metadata. `_defer_until` read the date, compared it,
+    and returned a BOOLEAN -- so every caller downstream could know a brief was
+    deferred and nothing else. The Deferred screen said so in its own panel:
+    "The defer window is not shown, because it is not readable."
+
+    `expired` is REPORTED, not filtered. A deferral whose window has passed is a
+    brief that was deferred and is now due; a brief that was never deferred is a
+    different thing, and collapsing them is what the boolean did. The old
+    predicate returned False for both, so an expired deferral was
+    indistinguishable from no deferral at all -- which is why a brief could come
+    back from a window nobody was told had closed.
+    """
+    until = None
     for key in ("deferred_until", "defer_until"):
         value = bead.raw.get(key)
-        if isinstance(value, str) and value >= date.today().isoformat():
-            return True
-    return False
+        if isinstance(value, str) and value:
+            until = value
+            break
+    metadata = bead.raw.get("metadata")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    reason = metadata.get("defer_reason")
+    deferred_at = metadata.get("deferred_at")
+    if until is None and reason is None and deferred_at is None:
+        return None
+    return {
+        "until": until,
+        "reason": reason if isinstance(reason, str) else None,
+        "deferred_at": deferred_at if isinstance(deferred_at, str) else None,
+        # None, not False, when there is no date to compare: "we cannot tell
+        # whether the window has passed" is not "it has not passed".
+        "expired": (until < date.today().isoformat()) if until else None,
+    }
+
+
+def _defer_until(bead: Bead) -> bool:
+    """Whether an UNEXPIRED deferral is in force.
+
+    Semantics deliberately unchanged -- `decision_state` callers branch on this
+    and an expired deferral is correctly no longer 'deferred'. It now derives
+    from `deferral_detail` so the two cannot drift apart.
+    """
+    detail = deferral_detail(bead)
+    return bool(detail and detail["until"] and detail["expired"] is False)
 
 
 def _row_slug(row: dict[str, object]) -> str | None:

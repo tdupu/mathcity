@@ -204,18 +204,56 @@ def deferred(briefs: Sequence[Mapping[str, Any]]) -> str:
     return (
         '<section data-region="deferred">'
         + _heading("Deferred", _count(briefs))
-        + _gap(
-            "<strong>The defer window is not shown, because it is not readable.</strong> "
-            "<span class=\"mono\">effects.py</span> writes "
-            "<span class=\"mono\">defer_until</span>, "
-            "<span class=\"mono\">defer_reason</span> and "
-            "<span class=\"mono\">deferred_at</span> when a deferral is applied, but the "
-            "read path returns only a boolean and discards the date, so this screen "
-            "can say a brief is deferred and not until when, by whom, or why. "
-            f'Tracked as <a href="{ISSUE_66}">issue #66</a>.'
-        )
-        + _rows(briefs)
+        + _deferral_note(briefs)
+        + _rows(briefs, cell=deferral_cell)
         + "</section>"
+    )
+
+
+def deferral_cell(brief: Mapping[str, Any]) -> str:
+    """The defer window, or why it cannot be shown for this row.
+
+    Was unreadable until the read path stopped collapsing the deferral to a
+    boolean (#66): `briefs_defer` writes `defer_until`, `defer_reason` and
+    `deferred_at`, and the screen could say only THAT a brief was deferred.
+
+    An EXPIRED window renders as expired rather than being hidden. A brief whose
+    window has passed is due, which is a different thing from one still waiting,
+    and the operator is the one who can act on the difference.
+    """
+    deferral = attr(brief, "deferral")
+    if not deferral:
+        return (
+            '<span class="mono" title="This brief carries no deferral record. '
+            'That is not the same as a deferral we could not read.">&mdash;</span>'
+        )
+    until = deferral.get("until")
+    reason = deferral.get("reason")
+    expired = deferral.get("expired")
+    if not until:
+        window = (
+            '<span class="mono" title="No defer_until was recorded, so whether the '
+            'window has passed is unknown — not \'not passed\'.">until unknown</span>'
+        )
+    elif expired:
+        window = f'<strong>expired</strong> {_e(str(until))}'
+    else:
+        window = f'until {_e(str(until))}'
+    detail = f' &middot; {_e(str(reason))}' if reason else ""
+    return f'{window}{detail}'
+
+
+def _deferral_note(briefs: Sequence[Mapping[str, Any]]) -> str:
+    """Say when a window is unreadable; say nothing when every one is readable."""
+    missing = sum(1 for b in briefs if not (attr(b, "deferral") or {}).get("until"))
+    if not missing:
+        return ""
+    return _gap(
+        f"<strong>{missing} of {len(briefs)}</strong> deferred brief"
+        f'{"" if missing == 1 else "s"} record no <span class="mono">defer_until</span>, '
+        "so for those the window is unknown rather than open. A deferral written before "
+        "the date was carried on the record has nothing to show here. "
+        f'Tracked as <a href="{ISSUE_66}">issue #66</a>.'
     )
 
 
