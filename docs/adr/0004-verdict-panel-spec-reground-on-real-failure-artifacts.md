@@ -65,6 +65,55 @@ own follow-up admits "today gates reject into the pile; nothing files a brief."
 7. New want, filed separately: **"cancel order" for a molecule** on the
    mathcity/city dashboard (lifecycle-action family, #207-adjacent).
 
+## Addendum — mc-31b8c adjudication-UX refinements (2026-08-28)
+
+Five reproduced defects in the rendered panel/flow were fixed so a verdict is
+one legible, honest click matching Taylor's textbox/duration spec. These refine,
+not overturn, the decisions above.
+
+- **One click, guard intact (mc-pf5pm).** A move-button submission folds the
+  dry-run preview and the apply into a single request. It still runs the `_apply`
+  re-plan guard atomically — re-plan (`dry_run:True`), abort if the context,
+  target, or plan moved, then write (`dry_run:False`). The "Apply this
+  adjudication" second button is gone from the move flow; the guard is not.
+  (A direct `verdict`/`option` post without a `move` field still renders the
+  two-step preview→confirm, so the guard's own test path is unchanged.)
+
+- **Disable-and-explain, never hide (mc-x8uox).** A blocked dispatch button
+  renders DISABLED with its refusal code visible at render time (e.g. `MWRK013`,
+  source bead closed), read from the same readiness the `/preview` path performs.
+  `briefs_options`' own `disabled_reason` answers cheaply; only an approved
+  brief rings the `work_dispatch` dry run. A blocked button is never omitted.
+
+- **Legible preview (mc-5fo2a).** The effect-plan panel no longer dumps the raw
+  plan JSON (`{"trace_id":…}`) inline; the readable effect table is the plan.
+  The full plan still rides on the `data-plan-json` attribute for the staleness
+  digest.
+
+- **One textbox, per Taylor's table (mc-q3m5q).**
+
+  | move            | control                        |
+  |-----------------|--------------------------------|
+  | approve         | none                           |
+  | revise          | one textbox, REQUIRED          |
+  | no-brainer      | one textbox, REQUIRED          |
+  | reject          | none unless opted in → required|
+  | defer           | duration picker (days/weeks/months) |
+  | any + opt-in    | one textbox, REQUIRED          |
+
+  There is exactly one reason textbox. It is `required`; approve/reject/defer
+  carry `formnovalidate` so a legal bare verdict stays expressible (mc-qlmh),
+  while revise and any opt-in enforce it — authoritatively server-side
+  (`MCTL_DASH_REASON_REQUIRED`), so it holds JS-off. The no-brainer is a plain
+  opt-in checkbox (no textarea of its own); approve-other is a revise whose
+  proposal is that one reason box. Defer takes a duration, not prose (the unit
+  is converted to the tool's `days`; the picked duration is the reason when none
+  is typed). The placeholder no longer says "Optional".
+
+- **Empty "Error briefs" chip removed (mc-lre5h).** `errors` is an uncountable
+  lane, so the masthead chip only ever showed a permanent em-dash; it is gone.
+  The Error-briefs VIEW (Decision 4) is unaffected.
+
 ## Alternatives considered
 
 - Invent the error-brief class as designed: rejected — no backend, and the

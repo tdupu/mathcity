@@ -148,6 +148,7 @@ def make_server(
     port: int = 8471,
     city_wide: bool = False,
     rig: str | None = None,
+    dashboard: str = "both",
 ) -> tuple[ThreadingHTTPServer, str]:
     """Build a server and report the URL it is actually bound to.
 
@@ -155,7 +156,8 @@ def make_server(
     operator can paste into a browser.
     """
     httpd = ThreadingHTTPServer(
-        (host, port), make_handler(Dashboard(client, city_wide=city_wide, rig=rig))
+        (host, port),
+        make_handler(Dashboard(client, city_wide=city_wide, rig=rig, dashboard=dashboard)),
     )
     bound_host, bound_port = httpd.server_address[0], httpd.server_address[1]
     return httpd, f"http://{bound_host}:{bound_port}"
@@ -211,14 +213,28 @@ def serve_from_args(args: argparse.Namespace) -> int:
         city=Path(args.city) if args.city else None,
         rig=args.rig,
     )
+    dashboard = getattr(args, "dashboard", "both") or "both"
     httpd, url = make_server(
-        client, host=args.host, port=args.port, city_wide=city_wide, rig=args.rig
+        client,
+        host=args.host,
+        port=args.port,
+        city_wide=city_wide,
+        rig=args.rig,
+        dashboard=dashboard,
     )
     print(f"mctl dashboard on {url}", file=sys.stderr)
     print(
         f"  scope: {'city-wide (every registered rig)' if city_wide else 'rig ' + args.rig}",
         file=sys.stderr,
     )
+    print(f"  dashboard: {dashboard}", file=sys.stderr)
+    if dashboard == "city":
+        # Binding is not rendering (mc-wbwel). Say so where the operator looks.
+        print(
+            "  WARNING: /city and /orders are measured at ~112s with no response. "
+            "This process is serving; those two screens are not. See mc-wbwel.",
+            file=sys.stderr,
+        )
     print(
         f"  MCP client class: internal (all {internal_tool_count()} tools); "
         f"server: {' '.join(client.command)}",
@@ -245,6 +261,7 @@ def serve_from_args(args: argparse.Namespace) -> int:
             rig=args.rig,
             serving_commit=_serving.SERVING_COMMIT,
             started_at=_serving.SERVER_STARTED_AT,
+            dashboard=dashboard,
         )
     except OSError:
         pass  # a dashboard that cannot stamp itself still serves

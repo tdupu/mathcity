@@ -448,6 +448,7 @@ class Dashboard:
         *,
         city_wide: bool = False,
         rig: str | None = None,
+        dashboard: str = "both",
         orders_reader: Any = None,
     ):
         self.client = client
@@ -457,6 +458,14 @@ class Dashboard:
         # URL rather than of the deployment.
         self.city_wide = bool(city_wide)
         self.rig = rig
+        # Which dashboard this instance PRESENTS. Like city_wide it is a
+        # property of the deployment, not of a request: a query parameter that
+        # could switch dashboards would make "which surface am I looking at"
+        # unanswerable from how the server was started. It scopes the landing
+        # route and the sidebar ONLY -- every route stays reachable, because
+        # the two dashboards cross-link and a hard filter would break working
+        # screens to enforce a label.
+        self.dashboard = dashboard if dashboard in ("city", "briefs", "both") else "both"
         self.previews = PreviewStore()
         # The catalog reader for /orders. Left None in production and built on
         # demand from the client's city (`_default_orders_reader`) -- so the
@@ -468,14 +477,50 @@ class Dashboard:
     # -- scope --
 
     def _rig_for(self, request: Request) -> str | None:
-        """Which rig this request addresses.
+        """Which rig this request MUTATES -- the write router.
 
         In rig scope it is always the pinned rig, whatever the URL says: a
-        `?rig=` on a single-rig dashboard must not silently retarget it.
+        `?rig=` on a single-rig dashboard must not silently retarget it. This is
+        the mutation-safety guard, and it is deliberately blind to the view
+        switch below -- a verdict/dispatch is routed here and must never follow
+        a URL param. What the operator is LOOKING at is `_view_rig`'s job, not
+        this one's.
         """
         if not self.city_wide:
             return self.rig
         return (request.query.get("rig") or request.form.get("rig") or "").strip() or None
+
+    @property
+    def _is_briefs_manager(self) -> bool:
+        """Whether this deployment is the brief-adjudication dashboard.
+
+        The briefs manager is where an operator triages briefs across the city,
+        so it lets them switch which rig's briefs they VIEW even when the
+        instance was launched pinned. The city dashboard keeps "pinned => no
+        picker": a rig picker there would imply a choice the deployment made.
+        """
+        return self.dashboard == "briefs"
+
+    def _view_rig(self, request: Request) -> str | None:
+        """Which rig a READ view shows -- distinct from `_rig_for`.
+
+        `_rig_for` routes mutations and never lets a `?rig=` retarget a pinned
+        instance. This governs only what is DISPLAYED. On the briefs manager the
+        operator may switch which rig's briefs they view even when pinned, so a
+        `?rig=` naming a real rig wins here; a bogus one falls back to the
+        pinned rig rather than blanking the page under a fake label. Everywhere
+        else this is exactly `_rig_for` -- the view switch is a briefs-manager
+        affordance, not a city-wide one, and the write path is untouched either
+        way: mutations still route through `_rig_for` and the preview's pinned
+        arguments, so a switched view can never silently retarget a write.
+        """
+        if self._is_briefs_manager and not self.city_wide:
+            requested = (
+                request.query.get("rig") or request.form.get("rig") or ""
+            ).strip() or None
+            if requested and requested in self._rig_ids():
+                return requested
+        return self._rig_for(request) or self.rig
 
     def _args(self, rig: str | None = None, **extra: Any) -> dict[str, Any]:
         """Tool arguments, with the rig named whenever there is one to name."""
@@ -569,6 +614,38 @@ class Dashboard:
                 context=context or {},
                 queued=queued,
                 weights=weights,
+                served_code=self._served_code(),
+            ),
+        )
+
+    def _city_page(
+        self,
+        title: str,
+        current: str,
+        context: Mapping[str, Any] | None,
+        sections: Sequence[str],
+        *,
+        status: int = 200,
+        context_bar: str = "",
+        state: Mapping[str, Any] | None = None,
+    ) -> Response:
+        """The city shell, for the city's own routes.
+
+        Split from `_page` because the brief shell hard-codes brief furniture:
+        a "Brief Manager" wordmark, the pipeline rail, the priority list, and
+        a row-cursor key map. On `/city` all four are wrong, and because the
+        city routes pass no `counts` the pipeline chips rendered blank -- which
+        reads as "no briefs exist", a claim the page never made.
+        """
+        return Response(
+            status,
+            render.city_page(
+                title,
+                current,
+                sections,
+                context_bar=context_bar,
+                context=context or {},
+                state=state,
                 served_code=self._served_code(),
             ),
         )
@@ -698,7 +775,7 @@ class Dashboard:
             orders_screen.orders_table(orders_status(reader)),
             orders_screen.formulas_list(formulas_catalog(reader)),
         ]
-        return self._page("Orders & Formulas", "/orders", None, sections)
+        return self._city_page("Orders & Formulas", "/orders", None, sections)
 
     def _priority(self, request: Request) -> Response:
         """The operator's own ordering over the stack.
@@ -833,7 +910,7 @@ class Dashboard:
         whole screen works with scripting disabled.
         """
         view = view_state.parse(request.query)
-        rig = self._rig_for(request) or self.rig
+        rig = self._view_rig(request)
         context = self._scope_context(rig)
         all_briefs, _city, city_extra = self._read_briefs(rig)
         briefs = _scoped(all_briefs, view.scope)
@@ -878,9 +955,21 @@ class Dashboard:
             # The picker is a query flag, so opening it is a link and its
             # state survives a reload -- no toggle handler, no hidden div.
             f'<a class="btn btn-ghost" href="{render.esc(columns_href)}">Columns</a>'
-            # Only in city scope: a rig picker on a dashboard pinned to one rig
-            # would imply a choice the deployment already made.
-            + (render.rig_picker(self._rig_ids(), selected=(rig,) if rig else ()) if self.city_wide else "")
+            # The rig switcher. City-wide it filters the aggregate; on the
+            # briefs manager it lets an operator switch which rig's briefs they
+            # VIEW even on a pinned instance (mutations still route through
+            # `_rig_for`, so the switch never retargets a write). On a pinned
+            # CITY dashboard it stays hidden: a picker there would imply a choice
+            # the deployment already made.
+            + (
+                render.rig_picker(
+                    self._rig_ids(),
+                    selected=(rig,) if rig else (),
+                    include_all=self.city_wide,
+                )
+                if (self.city_wide or self._is_briefs_manager)
+                else ""
+            )
             + (
                 f'<a class="btn btn-secondary" href="{render.esc(view.url(view="brief", brief_id=str(attr(briefs[0], "brief_id") or ""), rig=str(attr(briefs[0], "rig_id") or "") or view.rig))}">'
                 "Open top brief &rarr;</a>"
@@ -1056,7 +1145,13 @@ class Dashboard:
         )
 
     def _brief(self, brief_id: str, request: Request) -> Response:
-        rig = self._rig_for(request)
+        # A READ view, so it honors the briefs-manager view switch: a brief
+        # opened from a switched stack must resolve in the rig being viewed, not
+        # 404 against the pinned one. This is read-only -- the adjudication panel
+        # rendered below emits the viewed rig as its explicit `name="rig"` field,
+        # and the mutation still routes through `_rig_for`, so the switch never
+        # retargets a write.
+        rig = self._view_rig(request)
         if self.city_wide and not rig:
             return self._rig_required(brief_id)
         # All three reads are independent -- `options` and `doctor` are keyed by
@@ -1159,7 +1254,13 @@ class Dashboard:
             # did not mean. Defer joined it as a panel verdict (ADR 0002 D3),
             # so it is omitted here too; dispatch has no other home yet and
             # stays.
-            render.operation_forms(brief_id, option_rows, rig=rig, omit=("adjudicate", "defer")),
+            render.operation_forms(
+                brief_id,
+                option_rows,
+                rig=rig,
+                omit=("adjudicate", "defer"),
+                dispatch_blocked=self._dispatch_readiness(brief_id, rig, option_rows),
+            ),
             render.diagnostics_sections(
                 doctor.diagnostics if doctor else [],
                 doctor.untrusted_diagnostics if doctor else [],
@@ -1308,6 +1409,45 @@ class Dashboard:
         except ToolFailure:
             return None
 
+    def _dispatch_readiness(
+        self,
+        brief_id: str,
+        rig: str | None,
+        option_rows: Sequence[Mapping[str, Any]],
+    ) -> Mapping[str, Any] | None:
+        """Why dispatch is blocked for this brief right now, or None if it is ready.
+
+        mc-x8uox: the dispatch button used to render enabled whenever
+        `briefs_options` did not refuse it -- but that report never consults the
+        SOURCE bead's status, so a brief that is approved-for-dispatch with a
+        CLOSED source (MWRK013) showed a live-looking button and the refusal only
+        surfaced on the `/preview` click. Disable-and-explain requires the reason
+        at render time, so this mirrors the readiness read `/preview` performs.
+
+        Two tiers, cheapest first: if `briefs_options` already refuses
+        dispatch-work (e.g. MBRF011, no approving verdict), its typed
+        `disabled_reason` is the answer and no extra call is made. Only when the
+        option is ENABLED -- the approved briefs, the ones MWRK013 can still bite
+        -- is the `work_dispatch` dry run rung, exactly as `/preview` would.
+        """
+        option = next(
+            (row for row in option_rows if str(row.get("id")) == "dispatch-work"), None
+        )
+        if option is None:
+            return None
+        if not option.get("enabled"):
+            reason = option.get("disabled_reason")
+            return dict(reason) if isinstance(reason, Mapping) else {}
+        try:
+            self.client.call(
+                OPERATIONS["dispatch"].tool,
+                {**self._args(rig, brief_id=brief_id), "dry_run": True},
+            )
+        except ToolFailure as failure:
+            fired = _primary_diagnostic(failure.diagnostics)
+            return dict(fired) if fired else {}
+        return None
+
     def _severity_summary(self, counts: Mapping[str, Any], *, scope: str) -> str:
         return (
             '<section class="panel" data-region="severity-summary"><h2>By severity</h2>'
@@ -1384,6 +1524,7 @@ class Dashboard:
         registry_outcome = outcomes[len(reachable):]
 
         sections: list[str] = []
+        city_state: dict[str, Any] = {}
         for (tool, renderer), outcome in zip(reachable, outcomes):
             try:
                 if isinstance(outcome, Exception):
@@ -1415,6 +1556,45 @@ class Dashboard:
                     )
                 )
             else:
+                # The masthead chips are derived from payloads this route has
+                # ALREADY fanned out, never from extra calls: decorating a
+                # header with three numbers is not worth re-reading the city.
+                # A tool that failed above contributes nothing here, so its
+                # chip stays `—` -- the honest value for "not read" and the
+                # one thing a blank brief-chip could not say.
+                if tool == "city_health":
+                    # `per_rig`/`state` are this payload's keys -- NOT
+                    # `rigs`/`status`. Reading the wrong key here rendered
+                    # "rigs 0 healthy" in the masthead above a panel listing
+                    # eighteen rigs: a fabricated zero, which is the exact
+                    # failure the `—` convention exists to prevent. An empty
+                    # or absent list now reports nothing rather than zero.
+                    per_rig = payload.get("per_rig") or ()
+                    healthy = 0
+                    for entry in per_rig:
+                        if not entry:
+                            continue
+                        state = entry.get("state")  # single-shape-ok: city_health per_rig row, not a brief
+                        if str(state or "").lower() == "healthy":
+                            healthy += 1
+                    if per_rig:
+                        unhealthy = len(per_rig) - healthy
+                        city_state["rigs"] = (
+                            f"{healthy}/{len(per_rig)} healthy" if unhealthy else f"{healthy} healthy"
+                        )
+                        city_state["rigs_tone"] = "warn" if unhealthy else "ok"
+                    plane = str(payload.get("data_plane") or "") or None
+                    city_state["data_plane"] = plane
+                    city_state["data_plane_tone"] = (
+                        "ok" if plane == "reachable"
+                        else "bad" if plane == "unreachable"
+                        else "warn" if plane else ""
+                    )
+                elif tool == "fleet_sessions":
+                    slots = payload.get("slots") or ()
+                    occupied = sum(1 for slot in slots if slot and slot.get("occupied"))
+                    city_state["panes"] = f"{occupied}/{len(slots)}" if slots else None
+                    city_state["panes_tone"] = "bad" if slots and not occupied else "ok"
                 sections.append(renderer(payload))
 
         # Rig-scoped and no rig chosen: the picker, in the panel's own slot.
@@ -1440,7 +1620,7 @@ class Dashboard:
         ):
             sections.append(city_screen.unwired(tool, module=module, issue=issue))
 
-        return self._page("City", "/city", context, sections, context_bar="")
+        return self._city_page("City", "/city", context, sections, state=city_state)
 
     def _molecules(self, request: Request) -> Response:
         """Molecules (#109, #115, #153): one row per workflow RUN, with the
@@ -1477,9 +1657,9 @@ class Dashboard:
                     region="molecules-failed",
                 )
             ]
-            return self._page("Molecules", "/molecules", context, sections, context_bar="")
+            return self._city_page("Molecules", "/molecules", context, sections)
         sections = [molecules_screen.molecules_list(payload, rig=rig if self.city_wide else None)]
-        return self._page("Molecules", "/molecules", context, sections, context_bar="")
+        return self._city_page("Molecules", "/molecules", context, sections)
 
     def _tracker(self, request: Request) -> Response:
         """Every GitHub issue with its bead and brief (#186).
@@ -1889,6 +2069,14 @@ class Dashboard:
                 return self._apply(request)
             return self._not_found(request)
         if request.path == "/":
+            # The landing route is the selection's whole visible effect for an
+            # operator who just opens the base URL. "city" lands on the city
+            # overview; "briefs" lands on the Stack, which is the adjudication
+            # entry point; "both" keeps the historical shared overview.
+            if self.dashboard == "briefs":
+                return self._queue(request)
+            if self.dashboard == "city":
+                return self._city_operations(request)
             return self._overview(request)
         if request.path == "/queue":
             return self._queue(request)
@@ -2033,8 +2221,45 @@ class Dashboard:
                 rig=rig,
             )
         arguments = _arguments_for(operation, brief_id, form, rig)
+        # mc-q3m5q: the reason box is REQUIRED for revise, for a no-brainer
+        # opt-in, and therefore for any move once opted in (Taylor's table). This
+        # is the authoritative, JS-off-safe gate: the panel's `required`/
+        # `formnovalidate` wiring stops it in the browser, but a hand-posted or
+        # scripting-off submit is refused here before anything is written. Defer
+        # is its own operation by now (duration, not prose), so it is exempt.
+        if operation.name == "adjudicate":
+            needs_reason = (
+                str(arguments.get("verdict") or "") == "revise"  # single-shape-ok: tool arguments, not a brief row
+                or bool(arguments.get("no_brainer"))
+            )
+            if needs_reason and not str(arguments.get("reason") or "").strip():
+                return self._mutation_notice(
+                    "A reason is required",
+                    400,
+                    [
+                        _dashboard_diagnostic(
+                            "ERROR",
+                            "MCTL_DASH_REASON_REQUIRED",
+                            "This move records a reason on the brief bead, and none was given.",
+                            "Revise, a no-brainer flag, and any opted-in verdict require the "
+                            "reason. Fill it in and submit again. Nothing was written.",
+                            requested_operation=operation.name,
+                        )
+                    ],
+                    rig=rig,
+                )
+        # mc-pf5pm: a move submission (the one-click panel control) folds the
+        # preview and the apply into a single request -- dry-run, then the SAME
+        # guarded apply. A direct verdict/option post (tests, non-panel callers)
+        # still renders the preview and waits for a `/apply` confirm, so the
+        # two-step guard path stays exactly as it was.
         return self._render_preview(
-            operation, brief_id, rig, arguments, heading="Dry-run preview"
+            operation,
+            brief_id,
+            rig,
+            arguments,
+            heading="Dry-run preview",
+            auto_apply=bool(move),
         )
 
     def _blocking_option(
@@ -2077,6 +2302,7 @@ class Dashboard:
         heading: str,
         prefix: Sequence[str] = (),
         status: int = 200,
+        auto_apply: bool = False,
     ) -> Response:
         context = self._context(rig)
         try:
@@ -2167,6 +2393,16 @@ class Dashboard:
             target=target,
             payload=planned.payload,
         )
+        if auto_apply:
+            # mc-pf5pm: the preview just minted is handed straight to the SAME
+            # guarded apply -- re-plan, abort-if-moved, write -- so the operator
+            # records the verdict in one click without a second confirm. If the
+            # guard trips (the state moved under this request) `_apply` refuses
+            # and replaces this with a fresh preview to read and confirm.
+            apply_form = {"token": preview.token}
+            if rig:
+                apply_form["rig"] = rig
+            return self._apply(Request.post("/apply", **apply_form))
         sections = [
             *prefix,
             # The brief as it reads *now*. On a fresh preview replacing a stale
@@ -2491,36 +2727,49 @@ def _arguments_for(
         # somewhere to put a proposed option.
         if str(arguments.get("option") or "").strip().lower() == "other":
             arguments.pop("option", None)
-            proposed = (form.get("option_other") or "").strip()
-            if proposed:
-                existing = arguments["reason"]
-                marker = f"{PROPOSED_OPTION_MARKER} {proposed}"
-                arguments["reason"] = f"{existing}\n\n{marker}" if existing else marker
             # D8: "Other" is a disposition in the UI and a REVISE in the
-            # backend. The radios cannot express this on their own -- an
-            # operator could otherwise submit Other alongside Approve --
-            # so the disposition, not the verdict control, decides here.
+            # backend. mc-q3m5q collapsed the second textbox, so the proposal is
+            # the operator's own reason (revise requires it), tagged with the
+            # marker so the core still reads it as a proposed option, not one of
+            # the filed letters.
+            existing = arguments["reason"]
+            if existing and not existing.startswith(PROPOSED_OPTION_MARKER):
+                arguments["reason"] = f"{PROPOSED_OPTION_MARKER} {existing}"
             arguments["verdict"] = "revise"
         # The no-brainer flag is a classifier signal, not a disposition. #208
-        # Part 2 gave the tool typed params for it (#76 Field 7), so the checkbox
-        # maps straight to `no_brainer`/`no_brainer_reason` -- the reason is left
-        # as the operator's reason, no marker folded in. Sent only when ticked,
-        # so an ordinary verdict carries no `no_brainer` argument at all.
+        # Part 2 gave the tool typed params for it (#76 Field 7). mc-q3m5q folded
+        # its own textbox into the single reason box, so when the flag is ticked
+        # the operator's reason is recorded as the classifier signal too. Sent
+        # only when ticked, so an ordinary verdict carries no `no_brainer` arg.
         if (form.get("no_brainer") or "").strip():
             arguments["no_brainer"] = True
-            note = (form.get("no_brainer_reason") or "").strip()
+            note = (form.get("no_brainer_reason") or "").strip() or arguments.get("reason", "").strip()
             if note:
                 arguments["no_brainer_reason"] = note
         return arguments
     if operation.name == "defer":
         arguments["brief_id"] = brief_id
-        arguments["reason"] = (form.get("reason") or "").strip()
+        reason = (form.get("reason") or "").strip()
         until = (form.get("until") or "").strip()
         days = (form.get("days") or "").strip()
+        unit = (form.get("days_unit") or "days").strip().lower()
+        window_phrase = ""
         if until:
             arguments["until"] = until
+            window_phrase = f"until {until}"
         elif days.isdigit():
-            arguments["days"] = int(days)
+            # mc-q3m5q: defer takes a duration -- a number and a unit. Convert
+            # the picked unit (days / weeks / months) to the tool's `days`.
+            factor = {"days": 1, "weeks": 7, "months": 30}.get(unit, 1)
+            arguments["days"] = int(days) * factor
+            plural = unit if int(days) != 1 else unit.rstrip("s")
+            window_phrase = f"for {days} {plural}"
+        # Defer takes a duration, not prose (Taylor's table), but the typed tool
+        # requires a non-empty reason. When the operator gives none, the picked
+        # duration IS the reason -- so the picker alone is a complete defer.
+        arguments["reason"] = reason or (
+            f"Deferred {window_phrase}".strip() if window_phrase else "Deferred for the default window"
+        )
         return arguments
     if operation.name == "dispatch":
         arguments["brief_id"] = brief_id

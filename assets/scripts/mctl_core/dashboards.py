@@ -72,6 +72,7 @@ def write_stamp(
     rig: str | None,
     serving_commit: str | None,
     started_at: str,
+    dashboard: str = "unknown",
 ) -> Path:
     """Record a serving dashboard's identity so it becomes queryable.
 
@@ -92,6 +93,7 @@ def write_stamp(
                 "rig": rig,
                 "serving_commit": serving_commit,
                 "started_at": started_at,
+                "dashboard": dashboard,
             },
             indent=2,
             sort_keys=True,
@@ -160,6 +162,10 @@ class DashboardInstance:
     rig: str | None
     serving_commit: str | None
     started_at: str
+    #: Which dashboard this instance presents: "city", "briefs", or "both".
+    #: Older stamps predate the field and read "unknown" -- never silently
+    #: "both", because that would assert a selection nobody made (`P6.2`).
+    dashboard: str = "unknown"
     #: Filled by `discover` against the checkout's current HEAD, so a caller
     #: reading one instance does not have to re-derive staleness itself.
     current_commit: str | None = None
@@ -189,6 +195,7 @@ class DashboardInstance:
             "port": self.port,
             "url": self.url,
             "rig": self.rig,
+            "dashboard": self.dashboard,
             "serving_commit": self.serving_commit,
             "serving_known": self.serving_known,
             "started_at": self.started_at,
@@ -240,6 +247,7 @@ def discover(city_root: Path, *, current_commit: str | None = None, prune: bool 
                 rig=data.get("rig"),
                 serving_commit=data.get("serving_commit"),
                 started_at=str(data.get("started_at") or ""),
+                dashboard=str(data.get("dashboard") or "unknown"),
                 current_commit=current_commit,
             )
         )
@@ -342,7 +350,9 @@ def stop_instance(instance: DashboardInstance) -> bool:
     return _gone()
 
 
-def start_instance(*, city_root: Path, host: str, port: int, rig: str | None) -> dict[str, object]:
+def start_instance(
+    *, city_root: Path, host: str, port: int, rig: str | None, dashboard: str = "both"
+) -> dict[str, object]:
     """Launch a fresh detached `mctl dashboard serve` from current code.
 
     Detached (`start_new_session=True`, streams to devnull) so the new
@@ -354,6 +364,8 @@ def start_instance(*, city_root: Path, host: str, port: int, rig: str | None) ->
     command = [sys.executable, str(mctl), "dashboard", "serve", "--city", str(city_root), "--port", str(port), "--host", host]
     if rig:
         command += ["--rig", rig]
+    if dashboard and dashboard != "both":
+        command += ["--dashboard", dashboard]
     with open(os.devnull, "wb") as devnull:
         proc = subprocess.Popen(
             command,

@@ -108,8 +108,8 @@ SCRIPT = """
     var briefId = box.getAttribute('data-brief-id') || '';
     var key = 'mctl-draft:' + briefId;
     var status = box.querySelector('[data-role="draft-status"]');
-    var FIELDS = ['verdict', 'option', 'reason', 'option_other', 'days',
-                  'no_brainer', 'no_brainer_reason'];
+    var FIELDS = ['verdict', 'option', 'reason', 'days', 'days_unit',
+                  'no_brainer'];
 
     function say(text) { if (status) { status.textContent = text; } }
 

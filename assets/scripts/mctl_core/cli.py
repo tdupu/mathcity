@@ -412,6 +412,20 @@ def _add_dashboard_parser(commands: argparse._SubParsersAction[argparse.Argument
     serve.add_argument("--rig", help="registered rig identifier the dashboard operates on")
     serve.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
     serve.add_argument("--port", type=int, default=8471, help="bind port (default 8471)")
+    # The city dashboard and the briefs dashboard are rendered by ONE codebase
+    # and served by ONE process, which is why they get conflated. This names
+    # which one an instance PRESENTS: it sets the landing route and scopes the
+    # sidebar. It deliberately does NOT 404 the other dashboard's routes --
+    # screens cross-link, and a hard filter would break working views to
+    # enforce a labelling distinction. Default `both` is today's behaviour
+    # exactly, so adding the flag regresses nothing.
+    serve.add_argument(
+        "--dashboard",
+        choices=("city", "briefs", "both"),
+        default="both",
+        help="which dashboard to present: city (rigs/orders/molecules), "
+        "briefs (adjudication), or both (default)",
+    )
 
     # #154: the session-end step. Stop stray/leaked dashboards for this city and
     # clear their stamps, so a debug server cannot linger and answer for the

@@ -1042,6 +1042,11 @@ severity = "ERROR"
 meaning = "dashboard_serve was asked to start on a port that already has a stamped dashboard for this city; refused rather than double-binding, symmetric with dashboard_restart's MDSH_NO_INSTANCE. Rebind the existing one with dashboard_restart, or start on another port."
 module = "mcp_server.py"
 
+[MDSH_CITY_SCREENS_DEGRADED]
+severity = "WARN"
+meaning = "dashboard_serve was asked for the city dashboard, whose own screens are degraded: /city and /orders have been measured taking ~112s with no response (mc-wbwel). The start is NOT refused -- an operator may want it anyway -- but a confirmed start means the process BOUND its port, which is not a claim that these screens render. Emitted so a hang cannot render as success."
+module = "mcp_server.py"
+
 [MDSH_SERVE_FAILED]
 severity = "ERROR"
 meaning = "dashboard_serve started a child that exited before it bound its port and stamped itself (P6.1): the start did not take. applied is false and nothing is serving -- another process may hold the port."

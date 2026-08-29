@@ -13495,6 +13495,15 @@
             "null"
           ]
         },
+        "dashboard": {
+          "description": "Which dashboard the instance PRESENTS: `city` (rigs, orders, formulas, molecules, pools, health), `briefs` (adjudication -- stack, pile, adjudicated), or `both` (default, today's behaviour). The two are rendered by ONE codebase and served by ONE process, which is why they are conflated; this names which one an instance is, sets its landing route, and is recorded in the stamp so dashboard_status can report it. It does NOT make the other dashboard's routes 404 -- the screens cross-link, and a hard filter would break working views to enforce a label.",
+          "enum": [
+            "city",
+            "briefs",
+            "both"
+          ],
+          "type": "string"
+        },
         "dry_run": {
           "default": true,
           "description": "Preview the effect plan without applying it. Defaults to true.",
@@ -13532,6 +13541,10 @@
         "confirmed": {
           "description": "True when the started instance bound its port and stamped itself within the deadline.",
           "type": "boolean"
+        },
+        "dashboard": {
+          "description": "Which dashboard the instance presents: city | briefs | both.",
+          "type": "string"
         },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
@@ -13708,7 +13721,7 @@
     "title": "Start a dashboard from the typed surface"
   },
   "dashboard_status": {
-    "description": "Which `mctl dashboard serve` instances are running for this city, and whether each is serving current code (#207). Reads the stamp every dashboard leaves at startup -- pid, port, and the commit its code imported (the #210/#164 stamp made queryable) -- prunes stamps whose process is gone, and compares each live instance against the checkout's current HEAD. Emits a WARN per stale instance. Reports only; it never restarts anything. `current_commit` is null when the checkout HEAD cannot be read (P6.2): staleness is then unknown, never falsely 'current'.",
+    "description": "Which `mctl dashboard serve` instances are running for this city, and whether each is serving current code (#207). Reads the stamp every dashboard leaves at startup -- pid, port, and the commit its code imported (the #210/#164 stamp made queryable) -- prunes stamps whose process is gone, and compares each live instance against the checkout's current HEAD. Emits a WARN per stale instance. Reports only; it never restarts anything. `current_commit` is null when the checkout HEAD cannot be read (P6.2): staleness is then unknown, never falsely 'current'. Each instance also names WHICH dashboard it presents -- city | briefs | both -- or `unknown` for a stamp written before the selector existed, never silently `both`, which would assert a selection nobody made.",
     "external_ready": true,
     "inputSchema": {
       "additionalProperties": false,

@@ -680,7 +680,9 @@ def test_the_no_brainer_flag_is_present_and_is_not_a_verdict():
 
     html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
     assert 'name="no_brainer"' in html
-    assert 'name="no_brainer_reason"' in html
+    # mc-q3m5q: the opt-in is a plain checkbox; it carries no textarea of its
+    # own (the single reason box serves as its required signal).
+    assert 'name="no_brainer_reason"' not in html
     # It must not be one of the verdict radios.
     assert 'name="verdict" value="no_brainer"' not in html
 
@@ -694,22 +696,22 @@ def test_the_no_brainer_flag_survives_refusal():
     assert 'name="no_brainer"' in html
 
 
-def test_a_reason_is_optional():
-    """mc-qlmh: `reason` is ['string','null'] in briefs_relay_adjudication's schema and the
-    handler defaults it to '' -- a bare verdict is a call the tool accepts. The form
-    used to mark the reason textarea `required`, so a LEGAL state was unexpressible
-    through the only mutation path. The form must not add a mandatory constraint the
-    schema does not."""
+def test_a_bare_approve_needs_no_reason():
+    """mc-qlmh + mc-q3m5q: a bare verdict the schema accepts (approve) must stay
+    expressible. Taylor's newer spec makes the reason REQUIRED for revise, a
+    no-brainer, and any opt-in -- but not for approve/reject/defer, which carry
+    `formnovalidate` so the required box never blocks a legal bare verdict."""
     import re
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _option(True), state.ViewState())
     assert 'name="reason"' in html
-    tag = re.search(r'<textarea name="reason"[^>]*>', html)
-    assert tag, "reason textarea present"
-    assert "required" not in tag.group(0), "reason must not be a required field (mc-qlmh)"
-    assert "minlength" not in tag.group(0), "no minimum length gate on an optional reason (mc-qlmh)"
+    approve = re.search(r'<button[^>]*value="approve"[^>]*>', html)
+    assert approve and "formnovalidate" in approve.group(0), (
+        "a bare approve must skip the required reason so a legal bare verdict stays expressible"
+    )
+    assert "minlength" not in html, "no minimum length gate on the reason"
 
 
 def test_the_verdict_set_stays_an_open_tuple_not_a_closed_enum():
@@ -1643,10 +1645,13 @@ def test_other_is_not_sent_as_an_option_letter():
     class _Op:
         name = "adjudicate"
 
+    # mc-q3m5q: at most one textbox, so the proposal is the operator's own
+    # reason (revise requires it), tagged so the core reads it as a proposed
+    # option rather than one of the filed letters.
     args = _arguments_for(
         _Op(), "he-1",
-        {"verdict": "revise", "reason": "see below", "option": "other",
-         "option_other": "Split it into two briefs and re-file."},
+        {"verdict": "revise", "reason": "Split it into two briefs and re-file.",
+         "option": "other"},
         None,
     )
     assert "option" not in args
@@ -1735,7 +1740,8 @@ def test_the_disposition_control_offers_the_briefs_own_options():
     assert 'value="approve:B"' in html and "Split first" in html
     # ...plus the "none of these, propose your own" escape.
     assert 'value="approve:other"' in html
-    assert 'name="option_other"' in html
+    # mc-q3m5q: the proposal is the one reason box, not a second textarea.
+    assert 'name="option_other"' not in html
 
 
 def test_a_brief_with_no_options_says_so_rather_than_demanding_a_letter():
@@ -1823,7 +1829,8 @@ def test_the_prefill_fills_the_form_and_records_nothing():
     # text and the no-brainer flag is ticked. The operator presses the live
     # Revise move to record it.
     assert "required fields" in html
-    assert 'name="no_brainer" value="1" checked' in html
+    nb = re.search(r'<input[^>]*name="no_brainer"[^>]*>', html)
+    assert nb and "checked" in nb.group(0)
     revise = re.search(r'<button[^>]*value="revise"[^>]*>', html)
     assert revise and "disabled" not in revise.group(0)
     # The offer is gone once taken, and the form is still a form.

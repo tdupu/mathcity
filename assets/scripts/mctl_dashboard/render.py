@@ -198,7 +198,9 @@ def key_map() -> str:
     )
 
 
-def rig_picker(rig_ids: Sequence[str], selected: Sequence[str] = ()) -> str:
+def rig_picker(
+    rig_ids: Sequence[str], selected: Sequence[str] = (), *, include_all: bool = True
+) -> str:
     """Which rig to read, as the header dropdown the design draws.
 
     The design puts this inline in the context line -- `rig all rigs` with a
@@ -209,11 +211,16 @@ def rig_picker(rig_ids: Sequence[str], selected: Sequence[str] = ()) -> str:
     Reads may span rigs; mutations never do. Choosing a rig here filters what
     was read and cannot widen what a verdict touches -- the write path pins
     its rig at preview time regardless.
+
+    `include_all` offers the "all rigs" entry that reads every rig at once. It
+    is dropped for a PINNED briefs manager, whose read is scoped to one rig at a
+    time: offering "all rigs" there would be a control that silently snaps back
+    to the pinned rig, since a pinned instance never widens to the whole city.
     """
     if not rig_ids:
         return ""
     chosen = (list(selected) or [""])[0]
-    options = '<option value="">all rigs</option>' + "".join(
+    options = ('<option value="">all rigs</option>' if include_all else "") + "".join(
         f'<option value="{_e(rig)}"{" selected" if rig == chosen else ""}>{_e(rig)}</option>'
         for rig in rig_ids
     )
@@ -320,15 +327,14 @@ def masthead(
         if rig_ids
         else _e(rig)
     )
+    # mc-lre5h: no "error briefs" chip. `errors` is an uncountable lane (invariant
+    # errors are not filed as briefs), so the chip only ever rendered a permanent
+    # em-dash pointing at a lane the counts never populate.
     chips = "".join(
         (
             _chip("/pile", "pile", counts.get("pile"), key="pile"),
             _chip("/queue", "stack", counts.get("stack"), key="stack"),
             _chip("/deferred", "deferred", counts.get("deferred"), key="deferred"),
-            _chip(
-                "/queue?scope=errors", "error briefs", counts.get("errors"),
-                key="errors", accent=True,
-            ),
         )
     ) + (
         '<a href="#mc-keys" style="font-size: 12px; color: var(--color-neutral-700); '
@@ -545,6 +551,234 @@ def page(
             # but the shell already holds the `context_resolve` payload, which
             # carries a `trace_id`. Fall back to it so those pages carry a trace
             # too. An explicit trace_id (preview/apply) still wins.
+            footer(trace_id or str(context.get("trace_id") or "")),
+            f"<script>{SCRIPT}</script>",
+            "</body>",
+            "</html>",
+        ]
+    )
+
+
+# --- city shell -------------------------------------------------------------
+#
+# The city dashboard is a DIFFERENT INSTRUMENT from the brief manager and it
+# has to look like one. Before this shell existed, `/city` rendered through
+# `page()`, which unconditionally emits the brief masthead, the brief keyboard
+# map and the brief pipeline sidebar. The result branded itself "Brief
+# Manager", showed a Pipeline rail (stack / pile / deferred / adjudicated) and
+# a "My priority list" that have no meaning on a city page, and -- because
+# `/city` passes no `counts` -- rendered every one of those chips blank. An
+# operator reading it could not tell which of the two dashboards they were on,
+# and the blank chips read as "the city has no briefs" rather than "this page
+# never asked".
+#
+# The split is at the shell, not the screen: a screen still cannot build its
+# own document, so the provenance and staleness banners remain impossible to
+# omit. Only the furniture around the panels changes.
+
+
+#: (href, label). The city's own surfaces, ordered as an operator walks them:
+#: is the fleet alive, is the data plane healthy, what is it running, what is
+#: it waiting on, what did it cost, what is left on disk. Deliberately NOT
+#: alphabetical, and deliberately NOT the brief pipeline -- a city page that
+#: navigates by brief state is the bug this shell exists to fix.
+CITY_NAV = (
+    ("/city", "Overview"),
+    ("/molecules", "Molecules — runs"),
+    # Labelled for what the route actually renders. `/orders` serves BOTH the
+    # order table and `formulas_list`, and calling the link "Orders" hid the
+    # formula half entirely -- an operator looking for formulas found a 404 at
+    # `/formulas` and no link anywhere to the page that has them.
+    ("/orders", "Orders & formulas"),
+)
+
+#: Cross-links to the other instrument. Named rather than omitted: the two
+#: dashboards share a port, and an operator who lands on one needs a way to
+#: the other that is not the back button.
+CITY_CROSSLINK = (
+    ("/queue", "Brief Manager — stack"),
+    ("/", "Brief Manager — home"),
+)
+
+#: The city page needs no row-cursor keys: it is panels, not a list. Saying so
+#: is better than showing the brief bindings, which do nothing here.
+CITY_KEY_BINDINGS = (
+    ("g", "jump to a panel via its anchor"),
+)
+
+
+def city_masthead(context: Mapping[str, Any], state: Mapping[str, Any] | None = None) -> str:
+    """Brand, resolved runtime context, and the city's own state chips.
+
+    Dark ground on purpose. The brief manager's masthead is light
+    (`--color-neutral-100`); inverting it here is the cheapest possible
+    "you are somewhere else" signal, readable before any text is.
+
+    The chips report CITY state -- rigs, panes, data plane -- not brief
+    counts. A value the page did not read renders as `—` and never as `0`,
+    because a zero here is a claim about the city that nobody measured.
+    """
+    state = state or {}
+    city = context.get("city_root") or context.get("city_active") or "—"
+    rig_id = context.get("rig_id")  # single-shape-ok: context_resolve payload
+    rig = rig_id or "all rigs"
+
+    def _cityclip(label: str, value: Any, *, tone: str = "") -> str:
+        shown = "—" if value is None or value == "" else str(value)
+        color = {
+            "ok": "var(--color-ok-600, #4a7c4e)",
+            "warn": "var(--color-accent-500, #b68235)",
+            "bad": "var(--color-stop-600, #a8433a)",
+        }.get(tone, "var(--color-neutral-300)")
+        return (
+            '<span class="mono" style="display: inline-flex; gap: 6px; '
+            'align-items: baseline; font-size: 11px;">'
+            f'<span style="color: var(--color-neutral-400);">{_e(label)}</span>'
+            f'<b style="color: {color};">{_e(shown)}</b></span>'
+        )
+
+    chips = "".join(
+        (
+            _cityclip("rigs", state.get("rigs"), tone=state.get("rigs_tone", "")),
+            _cityclip("panes", state.get("panes"), tone=state.get("panes_tone", "")),
+            _cityclip("data plane", state.get("data_plane"), tone=state.get("data_plane_tone", "")),
+        )
+    )
+    return (
+        '<header data-region="city-masthead" style="display: flex; align-items: baseline; '
+        "gap: 18px; padding: 12px 20px 10px; "
+        "border-bottom: 3px solid var(--color-accent-600); "
+        'background: var(--color-neutral-900); flex-wrap: wrap;">'
+        '<div style="font-family: var(--font-heading); font-size: 25px; font-weight: 600; '
+        'letter-spacing: 0.01em; color: var(--color-neutral-100);">City Operations</div>'
+        '<div class="mono" style="font-size: 11.5px; color: var(--color-neutral-300);">'
+        f'<span style="color: var(--color-neutral-500);">city</span> {_e(city)} '
+        '<span style="color: var(--color-neutral-600);">&middot;</span> '
+        f'<span style="color: var(--color-neutral-500);">rig</span> {_e(rig)}'
+        "</div>"
+        '<div style="margin-left: auto; display: flex; align-items: center; gap: 16px;">'
+        f"{chips}</div>"
+        "</header>"
+    )
+
+
+def city_sidebar(current: str) -> str:
+    """The city's own rail: operational surfaces, then a link back.
+
+    Carries no counts. The brief sidebar's numbers come from a listing the
+    caller already holds; the city surfaces have no equivalent single read,
+    and inventing per-link counts would mean seven extra fan-out calls to
+    decorate a nav.
+    """
+    rows = "".join(
+        f'<a class="mc-navlink" href="{_e(href)}"'
+        f"{CURRENT_TAB if href == current else ''}>"
+        f"<span>{_e(label)}</span></a>"
+        for href, label in CITY_NAV
+    )
+    cross = "".join(
+        f'<a class="mc-navlink" href="{_e(href)}"><span>{_e(label)}</span></a>'
+        for href, label in CITY_CROSSLINK
+    )
+    return (
+        '<nav class="mc-sidebar" data-region="city-sidebar">'
+        '<span class="mc-section-head">City</span>'
+        '<p style="padding: 7px 12px 4px; font-size: 11px; color: var(--color-neutral-600); '
+        'font-style: italic; line-height: 1.35; margin: 0;">'
+        "What the city is running and what state it is in. Every panel names the "
+        "typed tool it was read from, and a panel that could not be read says so "
+        "rather than rendering empty.</p>"
+        f"{rows}"
+        '<span class="mc-section-head" style="margin-top: 14px;">Briefs</span>'
+        '<p style="padding: 7px 12px 4px; font-size: 11px; color: var(--color-neutral-600); '
+        'font-style: italic; line-height: 1.35; margin: 0;">'
+        "A different instrument, same port.</p>"
+        f"{cross}"
+        "</nav>"
+    )
+
+
+def city_key_map() -> str:
+    """The city page's own key list -- which is nearly empty, and says so.
+
+    The brief manager's `j`/`k`/`enter`/`n`/`p`/`q` all act on a row cursor
+    over a brief listing. None of them do anything on a page of panels, so
+    showing them here would advertise six controls that silently no-op.
+    """
+    rows = "".join(
+        f'<span style="display: inline-flex; gap: 6px; align-items: baseline;">'
+        f'<b class="mono" style="font-size: 11px; color: var(--color-accent-800);">'
+        f"{_e(key)}</b> {_e(label)}</span>"
+        for key, label in CITY_KEY_BINDINGS
+    )
+    return (
+        '<details id="mc-keys" data-region="city-key-map" '
+        'style="border-bottom: 1px solid var(--color-divider); '
+        'background: var(--color-accent-100); padding: 6px 20px;">'
+        '<summary class="mono" style="font-size: 11px; cursor: pointer; '
+        'color: var(--color-accent-900);">keyboard</summary>'
+        '<div style="display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; '
+        'font-size: 11.5px; color: var(--color-accent-900);">'
+        + rows
+        + '</div><div style="font-size: 11px; font-style: italic; margin-top: 5px; '
+        'color: var(--color-neutral-700);">'
+        "This page is panels, not a list, so it carries no row cursor. The brief "
+        "manager's j/k/enter/n/p/q act on a brief listing and do nothing here."
+        "</div></details>"
+    )
+
+
+def city_page(
+    title: str,
+    current: str,
+    sections: Sequence[str],
+    *,
+    context_bar: str = "",
+    context: Mapping[str, Any] | None = None,
+    state: Mapping[str, Any] | None = None,
+    trace_id: str = "",
+    provenance: "DataProvenance | None" = None,
+    served_code: Any = None,
+) -> str:
+    """The city document shell.
+
+    Same guarantees as `page()` -- provenance and staleness banners emitted by
+    the shell so no screen can omit them -- with the brief furniture replaced
+    by the city's own.
+    """
+    from .assets import SCRIPT
+
+    context = context or {}
+    return "\n".join(
+        [
+            "<!DOCTYPE html>",
+            '<html lang="en">',
+            "<head>",
+            '<meta charset="utf-8">',
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            f"<title>{_e(title)} - city operations</title>",
+            # Distinct favicon glyph from the brief manager's "B", for the same
+            # reason the masthead is inverted: two tabs open on one port must
+            # be tellable apart before either is read.
+            '<link rel="icon" href="data:image/svg+xml,'
+            "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E"
+            "%3Crect width='16' height='16' fill='%23b68235'/%3E"
+            "%3Ctext x='8' y='12' font-size='11' font-family='Georgia,serif' "
+            "text-anchor='middle' fill='%232d2b2b'%3EC%3C/text%3E%3C/svg%3E\">",
+            f"<style>{STYLESHEET}</style>",
+            "</head>",
+            "<body>",
+            provenance_banner(provenance),
+            staleness_banner(served_code),
+            city_masthead(context, state),
+            city_key_map(),
+            '<div class="mc-shell">',
+            city_sidebar(current),
+            '<main class="mc-main">',
+            context_bar,
+            *sections,
+            "</main>",
+            "</div>",
             footer(trace_id or str(context.get("trace_id") or "")),
             f"<script>{SCRIPT}</script>",
             "</body>",
@@ -959,12 +1193,39 @@ def options_panel(options: Sequence[Mapping[str, Any]]) -> str:
 # --- mutations ---------------------------------------------------------------
 
 
+def _dispatch_blocked_notice(reason: Mapping[str, Any]) -> str:
+    """The refusal a disabled dispatch button carries beside itself (mc-x8uox).
+
+    Rendered from the readiness read `/preview` performs, so the operator reads
+    why dispatch is unavailable -- the code, the specific detail (e.g. MWRK013),
+    and the message -- without clicking through to discover it. Disabled, not
+    hidden: a missing button is indistinguishable from a missing feature.
+    """
+    code = str(reason.get("code") or "").strip()
+    detail = str((reason.get("facts") or {}).get("detail") or "").strip()
+    message = str(reason.get("message") or "").strip()
+    tag = code
+    if detail and detail != code:
+        tag = f"{code} &middot; {detail}" if code else detail
+    head = (
+        f'<code class="diagnostic-code">{_e(tag)}</code>' if tag else ""
+    )
+    body = f" {_e(message)}" if message else ""
+    if not head and not body:
+        body = " This bead's current state does not permit dispatch."
+    return (
+        '<p class="disabled-reason" data-region="dispatch-blocked">'
+        "Dispatch is blocked: " + head + body + "</p>"
+    )
+
+
 def operation_forms(
     brief_id: str,
     options: Sequence[Mapping[str, Any]],
     *,
     rig: str | None = None,
     omit: Sequence[str] = (),
+    dispatch_blocked: Mapping[str, Any] | None = None,
 ) -> str:
     """The mutation forms, each pinned to the rig whose store owns this brief.
 
@@ -1045,9 +1306,14 @@ def operation_forms(
         + '<form class="operation" method="post" action="/preview">'
         f'<input type="hidden" name="brief_id" value="{_e(brief_id)}">{rig_field}'
         '<input type="hidden" name="operation" value="dispatch">'
-        '<div><button type="submit" class="secondary">Preview work dispatch</button></div>'
-        f"{_blocked('dispatch-work')}"
-        "</form>"
+        + (
+            '<div><button type="submit" class="secondary" disabled aria-disabled="true">'
+            "Dispatch work</button></div>" + _dispatch_blocked_notice(dispatch_blocked)
+            if dispatch_blocked is not None
+            else '<div><button type="submit" class="secondary">Preview work dispatch</button></div>'
+            + _blocked("dispatch-work")
+        )
+        + "</form>"
         "</section>"
     )
 
@@ -1083,7 +1349,9 @@ def effect_plan_panel(plan: Mapping[str, Any], *, title: str) -> str:
         "written before any redundant artifact.</p>"
         '<div class="scroll-x"><table><thead><tr><th>Effect</th><th>Target</th></tr></thead>'
         f"<tbody>{body}</tbody></table></div>"
-        f"<pre class=\"plan\">{_e(json.dumps(plan, indent=2, sort_keys=True))}</pre>"
+        # mc-5fo2a: no raw JSON dump. The table above is the legible plan; the
+        # full plan rides on `data-plan-json` for the staleness digest and
+        # tooling, where it is machine-read, not shown to the operator.
         "</section>"
     )
 

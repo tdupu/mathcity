@@ -214,9 +214,9 @@ def test_the_quick_action_never_writes_directly():
 def test_the_masthead_counts_come_from_the_counts_mapping():
     from mctl_dashboard import render
 
-    html = render.masthead({"stack": 7, "errors": 2}, {"city_root": "~/gt"})
+    html = render.masthead({"stack": 7, "deferred": 2}, {"city_root": "~/gt"})
     assert ">7<" in html.replace(" ", "")  # the stack count is the one passed
-    assert ">2<" in html.replace(" ", "")
+    assert ">2<" in html.replace(" ", "")  # the deferred count is the one passed
 
 
 def test_a_count_not_measured_is_a_dash_not_a_zero():

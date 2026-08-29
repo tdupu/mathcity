@@ -594,13 +594,12 @@ def worktrees(payload: Mapping[str, Any]) -> str:
         "<th>Created by</th><th>Step</th><th>Merged</th><th>Age</th><th>Size</th>"
         "<th>Orphan</th><th>Registered</th><th>Harvestable</th><th>Commits</th></tr></thead>"
     )
-    body_rows = []
-    for row in rows:
+    def _row_html(row: Mapping[str, Any]) -> str:
         path = str(row.get("path") or "")
         url = row.get("url")
         path_cell = f'<a href="{_e(str(url))}">{_e(path)}</a>' if url else _e(path)
         branch = row.get("branch")
-        body_rows.append(
+        return (
             '<tr class="mc-row">'
             f'<td class="mono">{path_cell}</td>'  # single-shape-ok: worktrees_status row, not a brief
             f'<td>{_e(str(row.get("rig") or "unknown"))}</td>'
@@ -617,7 +616,53 @@ def worktrees(payload: Mapping[str, Any]) -> str:
             f'<td>{row.get("commits") if row.get("commits") is not None else "unknown"}</td>'
             "</tr>"
         )
-    body += f'<div class="scroll-x"><table class="ntdata">{header}<tbody>{"".join(body_rows)}</tbody></table></div>'
+
+    # 188 worktrees rendered as one flat table made `/city` roughly 16,000px
+    # tall, of which this panel was the overwhelming majority -- the operator
+    # scrolled past every path in the city to reach the panels below it. The
+    # rows are GROUPED, never dropped: a truncated inventory that does not say
+    # it truncated is a worse defect than a long one, so every row is still on
+    # the page, one <details> deeper. `<details>` because it survives with
+    # scripting off, like the rest of this dashboard.
+    by_rig: dict[str, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        by_rig.setdefault(str(row.get("rig") or "unknown"), []).append(row)
+
+    summary_rows = []
+    for rig in sorted(by_rig):
+        group = by_rig[rig]
+        orphans = sum(1 for r in group if r.get("is_orphan") is True)
+        harvest = sum(1 for r in group if r.get("harvestable") is True)
+        summary_rows.append(
+            '<tr class="mc-row">'
+            f"<td>{_e(rig)}</td>"
+            f"<td>{len(group)}</td>"
+            f"<td>{orphans or ''}</td>"
+            f"<td>{harvest or ''}</td>"
+            "</tr>"
+        )
+    body += (
+        '<div class="scroll-x"><table class="ntdata">'
+        "<thead><tr><th>Rig</th><th>Worktrees</th><th>Orphan</th><th>Harvestable</th></tr></thead>"
+        f'<tbody>{"".join(summary_rows)}</tbody></table></div>'
+    )
+
+    groups = []
+    for rig in sorted(by_rig):
+        group = by_rig[rig]
+        groups.append(
+            '<details style="margin-top: 8px;">'
+            f'<summary class="mono" style="cursor: pointer; font-size: 11.5px;">'
+            f'{_e(rig)} — {len(group)} worktree{"" if len(group) == 1 else "s"}</summary>'
+            f'<div class="scroll-x"><table class="ntdata">{header}'
+            f'<tbody>{"".join(_row_html(r) for r in group)}</tbody></table></div>'
+            "</details>"
+        )
+    body += (
+        '<p class="lede" style="font-style: italic;">Every worktree is listed below, '
+        "grouped by rig and collapsed. Nothing is truncated — expand a rig to see its "
+        "paths.</p>" + "".join(groups)
+    )
 
     codes = _codes(payload)
     if codes:

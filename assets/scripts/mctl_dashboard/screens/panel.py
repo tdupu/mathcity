@@ -286,6 +286,7 @@ def _move_button(
     struck: bool,
     verdict: str = "",
     option: str = "",
+    reason_policy: str = "none",
 ) -> str:
     """One legal move, rendered as a submit button.
 
@@ -293,6 +294,13 @@ def _move_button(
     value carries both the verdict and the option together) to `/preview`, so
     an illegal verdict×option pair is unexpressible and one press is one
     dry-run -- no radio, no separate Submit, and it works with scripting off.
+
+    `reason_policy` wires Taylor's textbox table (mc-q3m5q). The panel carries a
+    single `required` reason box; a move that needs no reason (approve, reject,
+    defer) carries `formnovalidate` so that required box does not block it, and
+    declares `data-reason="none"`. The one move that requires it (revise) omits
+    `formnovalidate` and declares `data-reason="required"`, so pressing it
+    enforces the box JS-off. The opt-in path is enforced server-side regardless.
     """
     style = (
         "font-family: var(--font-mono); font-size: 11px; padding: 5px 10px; "
@@ -319,6 +327,11 @@ def _move_button(
             "cursor: pointer; background: var(--color-surface, #ffffff);"
         )
     attrs = ' disabled aria-disabled="true"' if disabled else ""
+    # A move that needs no reason skips the required-box validation; revise does
+    # not, so pressing it enforces the box with scripting off.
+    if reason_policy != "required":
+        attrs += " formnovalidate"
+    attrs += f' data-reason="{_e(reason_policy)}"'
     opt_attr = f' data-option="{_e(option)}"' if option else ""
     hint = VERDICT_HINTS.get(verdict, "")
     hint_html = (
@@ -336,55 +349,36 @@ def _move_button(
 
 
 def _defer_window() -> str:
-    """The defer window (days), shown with -- and only with -- the defer move.
+    """The defer DURATION -- a number and a unit -- shown with the defer move.
 
-    Defer is a move here, but the `briefs_defer` tool it routes to needs a
-    window the other moves do not. Rather than a second form, the defer move
-    carries one small field the dashboard reads only when the defer move is
-    pressed (`app._preview` translates it, `_arguments_for` reads `days`). Left
-    blank it defers for the tool's own default. It rides in the defer move's
+    Taylor's spec (mc-q3m5q): defer takes a duration (days / weeks / months), not
+    prose. So the defer move carries a small number field and a unit picker, NOT
+    a textarea. The dashboard reads them only when the defer move is pressed
+    (`app._preview` translates it, `_arguments_for` converts the unit to `days`).
+    Left blank it defers for the tool's own default. It rides in the defer move's
     own group, not at form level for every verdict.
     """
+    units = "".join(
+        f'<option value="{unit}"'
+        + (" selected" if unit == "days" else "")
+        + f">{unit}</option>"
+        for unit in ("days", "weeks", "months")
+    )
     return (
         '<div data-region="defer-window" style="display: flex; align-items: baseline; '
         'gap: 7px; margin: 2px 0 0; padding-left: 26px;">'
         '<label style="font-family: var(--font-mono); font-size: 10.5px; '
-        'color: var(--color-neutral-600);">defer window (days)</label>'
+        'color: var(--color-neutral-600);">defer for</label>'
         '<input type="text" name="days" inputmode="numeric" placeholder="7" '
-        'style="width: 58px; font-family: var(--font-mono); font-size: 11.5px; '
+        'style="width: 52px; font-family: var(--font-mono); font-size: 11.5px; '
         "padding: 3px 6px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); box-sizing: border-box;">'
+        '<select name="days_unit" style="font-family: var(--font-mono); '
+        "font-size: 11.5px; padding: 3px 6px; border: 1px solid var(--color-divider); "
+        f'border-radius: var(--radius-sm); box-sizing: border-box;">{units}</select>'
         '<span style="font-family: var(--font-body); font-size: 10.5px; '
         'color: var(--color-neutral-500);">blank defers for the default window</span>'
         "</div>"
-    )
-
-
-def _option_other_box() -> str:
-    """The free-text box shown with -- and only with -- the Approve (other…) move.
-
-    A decision-maker who can only pick from the options as filed cannot say
-    "none of these, do that". That is a real verdict, not an absence of one;
-    the dashboard records it as a proposed option (a revise carrying the text).
-
-    It rides behind a native `<details>` disclosure, collapsed by default, so the
-    panel does not stack an always-open textarea under a move nobody is taking.
-    `<details>` is HTML, not script, so it collapses with scripting off, and the
-    field stays in the DOM either way -- it posts with the Approve (other…) move.
-    """
-    return (
-        '<details data-region="option-other" style="margin: 3px 0 0 26px;">'
-        '<summary style="font-family: var(--font-body); font-size: 11.5px; '
-        'color: var(--color-neutral-600); cursor: pointer;">'
-        "propose your own disposition</summary>"
-        '<textarea name="option_other" rows="2" '
-        'placeholder="Describe the disposition you want. Recorded as a proposed option '
-        'on the brief bead." '
-        'style="width: 100%; margin: 5px 0 0; font-family: var(--font-body); '
-        "font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--color-divider); "
-        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        "</textarea>"
-        "</details>"
     )
 
 
@@ -444,21 +438,23 @@ def _moves(
             )
             rows.append(_move_group(f"approve:{label}", button, refusal=refusal))
         # "none of these, do that" -- an approve that proposes its own option.
+        # It is a REVISE in the backend and the proposal is the reason, so it
+        # requires the one reason box (mc-q3m5q) rather than a second textarea.
         other_button = _move_button(
             "approve:other",
             '<span style="flex: none; font-weight: 600;">Approve (other&hellip;)</span>'
             '<span style="font-family: var(--font-body); font-size: 11px; '
             'color: var(--color-neutral-600); flex: 1 1 auto; min-width: 0;">'
-            "propose your own disposition</span>",
+            "propose your own disposition in the reason</span>",
             disabled=ratify_disabled,
             struck=struck,
             verdict="approve",
+            reason_policy="required",
         )
         rows.append(
             _move_group(
                 "approve:other",
                 other_button,
-                extra=_option_other_box(),
                 refusal=refusal,
             )
         )
@@ -474,7 +470,9 @@ def _moves(
         )
         rows.append(_move_group("approve", approve_button, refusal=refusal))
 
-    # Returning moves -- never gated, in any state.
+    # Returning moves -- never gated, in any state. Revise requires the reason
+    # box (it is the "go add these fields" instruction); reject does not, unless
+    # the operator opts in, which is enforced server-side.
     for name in ("revise", "reject"):
         button = _move_button(
             name,
@@ -482,6 +480,7 @@ def _moves(
             disabled=False,
             struck=False,
             verdict=name,
+            reason_policy="required" if name == "revise" else "none",
         )
         rows.append(_move_group(name, button))
 
@@ -528,8 +527,8 @@ def _moves(
     )
 
 
-def _no_brainer_control(*, checked: bool = False, reason: str = "") -> str:
-    """The no-brainer flag: "this reached me and should not have".
+def _no_brainer_control(*, checked: bool = False) -> str:
+    """The no-brainer opt-in: "this reached me and should not have".
 
     Deliberately NOT a verdict. Ticking it does not change what is recorded as
     the disposition; it records that surfacing this brief was a pipeline
@@ -538,37 +537,24 @@ def _no_brainer_control(*, checked: bool = False, reason: str = "") -> str:
     at all is the defect -- so the flag has to be capturable at the moment of
     adjudication, when the judgement is fresh, or it never gets captured.
 
-    It rides behind a native `<details>` disclosure so the panel shows one open
-    text box, not a stack. Collapsed by default; `open` when the flag is already
-    set (the empty-brief standing return), because a pre-filled value hidden in a
-    shut box would read as unset. `<details>` needs no script, and both fields
-    stay in the DOM collapsed, so they post with whatever move is pressed.
+    mc-q3m5q: at most one textbox, ever. So the no-brainer no longer carries its
+    own textarea -- ticking it makes the single reason box REQUIRED (declared by
+    `data-requires-reason`, enforced server-side), and that reason is recorded as
+    the classifier signal too. A plain checkbox needs no disclosure.
     """
     return (
-        '<details data-region="no-brainer"'
-        + (" open" if checked else "")
-        + ' style="margin-top: 12px; padding: 9px 11px; '
-        "border: 1px dashed var(--color-neutral-300); "
-        'border-radius: var(--radius-sm); background: var(--color-neutral-050);">'
-        '<summary style="font-size: 12.5px; cursor: pointer;">'
-        "<strong>No-brainer</strong> &mdash; flag if this should not have needed you"
-        "</summary>"
-        '<label style="display: flex; align-items: center; gap: 7px; '
-        'font-size: 12px; cursor: pointer; margin-top: 8px;">'
-        '<input type="checkbox" name="no_brainer" value="1"'
+        '<label data-region="no-brainer" '
+        'style="display: flex; align-items: center; gap: 7px; margin-top: 12px; '
+        "padding: 9px 11px; border: 1px dashed var(--color-neutral-300); "
+        "border-radius: var(--radius-sm); background: var(--color-neutral-050); "
+        'font-size: 12px; cursor: pointer;">'
+        '<input type="checkbox" name="no_brainer" value="1" data-requires-reason'
         + (" checked" if checked else "")
         + ' style="accent-color: var(--color-accent-600); margin: 0;">'
-        "this brief should not have reached me"
+        "<span><strong>No-brainer</strong> &mdash; this brief should not have "
+        "reached me (records a classifier signal; the reason above is required "
+        "when ticked)</span>"
         "</label>"
-        '<textarea name="no_brainer_reason" rows="2" '
-        'placeholder="Why was this a no-brainer? Recorded as a classifier signal, '
-        'not part of the verdict." '
-        'style="width: 100%; margin-top: 7px; font-family: var(--font-body); '
-        "font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--color-divider); "
-        'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
-        + _e(reason)
-        + "</textarea>"
-        "</details>"
     )
 
 
@@ -716,17 +702,20 @@ def entry(
         f"{rig_field}"
         + _moves(brief, state=state, reason=reason)
         + '<div style="font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; '
-        'color: var(--color-neutral-600); margin-bottom: 5px;">Reason &mdash; optional</div>'
-        '<textarea name="reason" rows="3" '
-        'placeholder="Why this move — recorded on the brief bead. Optional." '
+        'color: var(--color-neutral-600); margin-bottom: 5px;">Reason</div>'
+        # mc-q3m5q: one textbox, ever. It is `required`; the moves that need no
+        # reason carry `formnovalidate` and skip it, so it only bites revise (and
+        # an opt-in, enforced server-side). No "optional" -- when it is asked
+        # for, it is asked for.
+        '<textarea name="reason" rows="3" required data-region="reason" '
+        'placeholder="Why this move — recorded on the brief bead. Required for '
+        'revise, and whenever you flag a no-brainer below." '
         'style="width: 100%; font-family: var(--font-body); font-size: 13px; '
         "padding: 6px 8px; border: 1px solid var(--color-divider); "
         'border-radius: var(--radius-sm); resize: vertical; box-sizing: border-box;">'
         + (_e(INCOMPLETE_REASON) if filled else "")
         + "</textarea>"
-        + _no_brainer_control(
-            checked=filled, reason=INCOMPLETE_NO_BRAINER if filled else ""
-        )
+        + _no_brainer_control(checked=filled)
         + _save_draft_control(brief_id)
         + '<div style="margin-top: 13px;">'
         '<span class="mono" style="font-size: 10.5px; color: var(--color-neutral-600);">'

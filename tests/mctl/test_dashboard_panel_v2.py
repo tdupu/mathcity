@@ -312,45 +312,41 @@ def _multi_option_brief():
 
 
 def test_at_rest_only_the_reason_box_is_an_open_text_input():
-    """The no-brainer 'why' box is collapsed behind a <details>, so the panel
-    does not present a stack of open textareas."""
+    """mc-q3m5q: at most one textbox, ever. The reason box is the only textarea;
+    the no-brainer is a plain opt-in checkbox with no textarea of its own."""
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
-    # the no-brainer control is a disclosure, collapsed by default
-    nb = re.search(r'<details[^>]*data-region="no-brainer"[^>]*>', html)
-    assert nb, "the no-brainer control must be a <details> disclosure"
-    assert " open" not in nb.group(0), "no-brainer must be collapsed at rest"
-    # its field is still in the DOM, so it submits with scripting off
-    assert 'name="no_brainer_reason"' in html
+    assert html.count("<textarea") == 1, "there must be exactly one textbox"
+    assert 'name="reason"' in html
+    # the no-brainer is a checkbox, and it no longer carries its own textarea
     assert 'name="no_brainer"' in html
+    assert 'name="no_brainer_reason"' not in html
 
 
-def test_option_other_is_collapsed_behind_a_disclosure():
+def test_the_propose_your_own_disposition_has_no_second_textbox():
+    """mc-q3m5q: approve-other is a revise whose proposal is the one reason box,
+    so there is no separate option_other textarea."""
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry(_multi_option_brief(), _open_option(), state.ViewState())
-    oo = re.search(r'<details[^>]*data-region="option-other"[^>]*>', html)
-    assert oo, "option-other must be a <details> disclosure"
-    assert " open" not in oo.group(0), "option-other must be collapsed at rest"
-    # still present so it posts with the Approve (other…) move when typed
-    assert 'name="option_other"' in html
+    assert 'name="option_other"' not in html
+    assert html.count("<textarea") == 1
 
 
-def test_the_prefilled_no_brainer_disclosure_is_open():
-    """The empty-brief standing return ticks no-brainer and fills its reason,
-    so that disclosure must arrive open — a pre-filled value hidden in a
-    collapsed box would read as if nothing were set."""
+def test_the_prefilled_no_brainer_optin_is_checked():
+    """The empty-brief standing return ticks no-brainer, so its checkbox must
+    arrive checked -- the reason box carries the standing return text."""
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry(
         {"bead_id": "he-1"}, _open_option(), state.ViewState(), prefill="incomplete"
     )
-    nb = re.search(r'<details[^>]*data-region="no-brainer"[^>]*>', html)
-    assert nb and " open" in nb.group(0), "a prefilled no-brainer must be open"
+    nb = re.search(r'<input[^>]*name="no_brainer"[^>]*>', html)
+    assert nb and "checked" in nb.group(0), "a prefilled no-brainer must be checked"
 
 
 def test_the_disclosures_use_no_scripting():

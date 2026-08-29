@@ -900,6 +900,7 @@ def _handle_dashboard_serve(scope: CityScope, arguments: Mapping[str, Any]) -> d
     host = str(arguments.get("host") or "127.0.0.1")
     rig_arg = arguments.get("rig")
     rig = str(rig_arg) if rig_arg else None
+    dashboard = str(arguments.get("dashboard") or "both")
     current = serving.read_commit(serving.PACK_ROOT)
     instances = dashboards.discover(scope.city_root, current_commit=current)
     existing = next((inst for inst in instances if inst.port == port), None)
@@ -916,13 +917,47 @@ def _handle_dashboard_serve(scope: CityScope, arguments: Mapping[str, Any]) -> d
             ],
             "applied": False,
         }
+    # A start that BINDS is not a dashboard that RENDERS. The city screens are
+    # measured at ~112s and trending up (mc-wbwel: 65 -> 81 -> 96 -> 112), so a
+    # confirmed=true on a city selection would report success for something the
+    # operator will experience as a hang. Warn; do not refuse -- the operator
+    # may want it anyway, and refusing would make the selector useless for the
+    # exact dashboard it was asked to name.
+    city_warning = (
+        [
+            Diagnostic(
+                severity=Severity.WARN,
+                code="MDSH_CITY_SCREENS_DEGRADED",
+                message=(
+                    "The city dashboard's own screens are degraded: /city and /orders "
+                    "have been measured taking ~112s with no response. Serving is "
+                    "confirmed by BINDING, which does not mean these screens render."
+                ),
+                hint=(
+                    "Tracked as mc-wbwel. /molecules answers normally; /city and /orders "
+                    "do not. Do not read a confirmed start as a working city dashboard."
+                ),
+                facts={"dashboard": dashboard, "degraded_routes": "/city,/orders"},
+            ).to_dict()
+        ]
+        if dashboard == "city"
+        else []
+    )
     if _dry_run(arguments):
         return {
-            "diagnostics": [],
+            "diagnostics": city_warning,
             "applied": False,
-            "plan": {"port": port, "host": host, "rig": rig, "new_commit": current},
+            "plan": {
+                "port": port,
+                "host": host,
+                "rig": rig,
+                "dashboard": dashboard,
+                "new_commit": current,
+            },
         }
-    started = dashboards.start_instance(city_root=scope.city_root, host=host, port=port, rig=rig)
+    started = dashboards.start_instance(
+        city_root=scope.city_root, host=host, port=port, rig=rig, dashboard=dashboard
+    )
     pid = int(started["pid"])
     outcome = dashboards.confirm_started(scope.city_root, pid=pid)
     elapsed = float(outcome["elapsed"])
@@ -943,6 +978,7 @@ def _handle_dashboard_serve(scope: CityScope, arguments: Mapping[str, Any]) -> d
             "applied": False,
         }
     diags: list[dict] = []
+    diags.extend(city_warning)
     if outcome["state"] == "still_starting":
         diags.append(
             Diagnostic(
@@ -974,6 +1010,7 @@ def _handle_dashboard_serve(scope: CityScope, arguments: Mapping[str, Any]) -> d
         "pid": pid,
         "port": port,
         "host": host,
+        "dashboard": dashboard,
         "url": started.get("url"),
         "serving_commit": started.get("serving_commit"),
         "elapsed_seconds": elapsed,
@@ -2623,7 +2660,9 @@ TOOLS: tuple[ToolSpec, ...] = (
             "instance against the checkout's current HEAD. Emits a WARN per stale instance. "
             "Reports only; it never restarts anything. `current_commit` is null when the "
             "checkout HEAD cannot be read (P6.2): staleness is then unknown, never falsely "
-            "'current'."
+            "'current'. Each instance also names WHICH dashboard it presents -- city | "
+            "briefs | both -- or `unknown` for a stamp written before the selector existed, "
+            "never silently `both`, which would assert a selection nobody made."
         ),
         input_schema=request_schema(),
         output_schema=response_schema(
@@ -2717,6 +2756,21 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "port": {"type": "integer", "description": "The port to serve the dashboard on."},
                 "host": {"type": "string", "description": "Bind address (default 127.0.0.1)."},
                 "rig": nullable_string("The rig to pin the dashboard to, or null for city-wide."),
+                "dashboard": {
+                    "type": "string",
+                    "enum": ["city", "briefs", "both"],
+                    "description": (
+                        "Which dashboard the instance PRESENTS: `city` (rigs, orders, "
+                        "formulas, molecules, pools, health), `briefs` (adjudication -- "
+                        "stack, pile, adjudicated), or `both` (default, today's behaviour). "
+                        "The two are rendered by ONE codebase and served by ONE process, "
+                        "which is why they are conflated; this names which one an instance "
+                        "is, sets its landing route, and is recorded in the stamp so "
+                        "dashboard_status can report it. It does NOT make the other "
+                        "dashboard's routes 404 -- the screens cross-link, and a hard "
+                        "filter would break working views to enforce a label."
+                    ),
+                },
                 "dry_run": DRY_RUN_PROPERTY,
             },
             ["port"],
@@ -2732,6 +2786,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "host": {"type": "string"},
                 "url": nullable_string("The URL the fresh instance is bound to."),
                 "serving_commit": nullable_string("The commit the fresh instance imported."),
+                "dashboard": {"type": "string", "description": "Which dashboard the instance presents: city | briefs | both."},
                 "elapsed_seconds": {"type": "number", "description": "How long confirmation took (P6.3 carries elapsed)."},
             },
             ["applied"],

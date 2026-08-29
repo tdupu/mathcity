@@ -183,19 +183,24 @@ def test_the_defer_window_appears_only_with_the_defer_move():
     assert 'name="days"' in defer_group[1].split("</div>")[0] or 'name="days"' in html
 
 
-def test_the_propose_your_own_box_appears_only_with_the_approve_other_move():
+def test_the_approve_other_move_uses_the_single_reason_box():
+    # mc-q3m5q: approve-other is a revise whose proposal is the one reason box;
+    # there is no separate option_other textarea.
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry(_MULTI, _open_option(), state.ViewState())
-    assert 'name="option_other"' in html
+    assert 'name="option_other"' not in html
     assert 'data-move-group="approve:other"' in html
+    other = re.search(r'<button[^>]*value="approve:other"[^>]*>', html)
+    assert other and 'data-reason="required"' in other.group(0)
 
 
 # --- §1+§3 end to end: the move posts verdict AND option together -----------
 
 
-def test_pressing_approve_a_dry_runs_that_option(tmp_path):
+def test_pressing_approve_a_records_that_option_in_one_click(tmp_path):
+    # mc-pf5pm: a move submission folds the preview and the apply into one click.
     dashboard, _, rig_root = dashboard_for(tmp_path)
     _give_options(rig_root, "mc-open")
 
@@ -205,8 +210,7 @@ def test_pressing_approve_a_dry_runs_that_option(tmp_path):
 
     assert response.status == 200, strip_tags(response.body)[:300]
     assert "MOPT001" not in response.body
-    applied = dashboard.handle(Request.post("/apply", token=token_in(response.body)))
-    assert applied.status == 200
+    assert 'action="/apply"' not in response.body, "no separate apply step should remain"
     row = bead(rig_root, "mc-open")
     assert row["status"] == "closed"
     assert row["metadata"]["verdict"] == "approve"
@@ -231,10 +235,9 @@ def test_defer_move_still_routes_to_briefs_defer(tmp_path):
         Request.post("/preview", operation="adjudicate", brief_id="mc-open", move="defer", reason="wait", days="7")
     )
 
-    assert response.status == 200
+    # mc-pf5pm: one click -- the defer move routes to briefs.defer and applies.
+    assert response.status == 200, strip_tags(response.body)[:300]
     assert "briefs.defer" in strip_tags(response.body)
-    applied = dashboard.handle(Request.post("/apply", token=token_in(response.body)))
-    assert applied.status == 200
     assert bead(rig_root, "mc-open")["status"] == "deferred"
 
 
@@ -248,16 +251,14 @@ def test_approve_other_records_a_revise_with_the_proposal(tmp_path):
             operation="adjudicate",
             brief_id="mc-open",
             move="approve:other",
-            reason="",
-            option_other="do the third thing",
+            reason="do the third thing",
         )
     )
 
+    # mc-pf5pm + mc-q3m5q: one click records it. "Other" is a disposition in the
+    # UI and a REVISE in the backend, carrying the proposal in the one reason box.
     assert response.status == 200, strip_tags(response.body)[:300]
-    applied = dashboard.handle(Request.post("/apply", token=token_in(response.body)))
-    assert applied.status == 200
     row = bead(rig_root, "mc-open")
-    # "Other" is a disposition in the UI and a REVISE in the backend.
     assert row["metadata"]["verdict"] == "revise"
 
 
@@ -309,13 +310,13 @@ def test_the_brief_detail_page_counts_the_lanes_it_already_read(tmp_path):
     assert _nav_count(html, "Pile") == "—"
 
 
-def test_the_reason_is_labelled_optional_and_has_no_minlength():
+def test_the_reason_is_required_and_not_labelled_optional():
+    # mc-q3m5q: the one reason box is required (revise / no-brainer / opt-in);
+    # the moves that need no reason skip it with formnovalidate.
     from mctl_dashboard import state
     from mctl_dashboard.screens import panel
 
     html = panel.entry({"bead_id": "he-1"}, _open_option(), state.ViewState())
-    # rendered as the em-dash entity, consistent with the rest of the panel
-    assert "Reason &mdash; optional" in html
-    tag = re.search(r"<textarea name=\"reason\"[^>]*>", html)
-    assert tag and "required" not in tag.group(0)
-    assert tag and "minlength" not in tag.group(0)
+    assert "optional" not in html.lower()
+    tag = re.search(r"<textarea[^>]*name=\"reason\"[^>]*>", html)
+    assert tag and "required" in tag.group(0)
