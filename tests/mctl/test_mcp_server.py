@@ -59,6 +59,7 @@ DECLARED_TOOLS = (
     "briefs_doctor",
     "briefs_list",
     "briefs_options",
+    "briefs_pile_state",
     "briefs_present",
     "briefs_relay_adjudication",
     "briefs_show",

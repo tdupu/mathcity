@@ -1172,6 +1172,30 @@ def _handle_dashboard_teardown(scope: CityScope, arguments: Mapping[str, Any]) -
     }
 
 
+def _handle_briefs_pile_state(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Per-brief pile state, and the rejections nothing could read (#226).
+
+    Panel v2 re-grounded the error-briefs and HELD views on real failure
+    artifacts (ADR 0004 D4); the artifacts existed and no typed tool served
+    them, so the dashboard rendered an honest "not readable" banner over data
+    sitting on disk.
+
+    The cost of that gap is measured on `mc-x338k`: the three briefs the S63
+    charge told four consecutive Mayors to present FIRST were in
+    `.pile/.rejected/`, which nothing reads. Four sessions recorded "not
+    presented"; none could record "cannot be presented".
+
+    Deliberately does NOT emit PROMOTABLE / WAITING-on-gate. Gate evaluation is
+    in `brief-check.sh` and the shuffler, outside the typed surface (#66), so
+    those would be guesses wearing a measurement's clothes. `gate_state_known`
+    is false and says so.
+    """
+    from .pile_state import briefs_pile_state, city_reader
+    from .redundant_state import artifact_layout
+
+    return briefs_pile_state(city_reader(artifact_layout(ctx).pile))
+
+
 def _handle_briefs_list(
     ctx: MctlContext, arguments: Mapping[str, Any], progress: RigProgress | None = None
 ) -> dict[str, object]:
@@ -3062,6 +3086,38 @@ TOOLS: tuple[ToolSpec, ...] = (
             {"molecules": {"type": "array", "items": {"type": "object"}}}, ["molecules"]
         ),
         handler=_handle_molecules_show,
+    ),
+    ToolSpec(
+        name="briefs_pile_state",
+        title="Pile state per brief, with the rejection artifacts",
+        description=(
+            "Every brief in the rig's pile with its state, plus the verbatim "
+            "`.pile/.rejected/<slug>/rejection.json` payload for rejected ones (#226) -- "
+            "reason, gate_profile, rejected_at, failures, source_path. These artifacts "
+            "existed on disk and no typed tool served them, so the error-briefs and HELD "
+            "views rendered a 'not readable' banner over real data, and a brief moved to "
+            "`.rejected/` left the adjudication queue with NO operator-visible trace. "
+            "REJECTED is a measurement. PENDING means present and not rejected -- it does "
+            "NOT mean promotable, and PROMOTABLE/WAITING-on-gate are deliberately NOT "
+            "emitted because gate evaluation lives in brief-check.sh and the shuffler, "
+            "outside this surface (#66); `gate_state_known` is false rather than guessing. "
+            "`failures` is commonly `[]` beside a non-empty `reason` on the live "
+            "population -- surfaced verbatim, because reading `[]` as 'no failures' "
+            "inverts it. An unlistable pile is `unreachable` with null populations, never "
+            "an empty pile."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "briefs": {"type": ["array", "null"], "items": {"type": "object"}},
+                "pending_count": {"type": ["integer", "null"]},
+                "rejected_count": {"type": ["integer", "null"]},
+                "gate_state_known": {"type": "boolean"},
+            },
+            ["state"],
+        ),
+        handler=_handle_briefs_pile_state,
     ),
     ToolSpec(
         name="briefs_list",
