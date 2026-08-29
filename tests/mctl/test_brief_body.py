@@ -243,6 +243,10 @@ def test_briefs_list_carries_no_bead_body(tmp_path: Path):
         "body_path",
         "brief_id",
         "canonical_source",
+        # #66: the deferral detail (until / reason / deferred_at / expired).
+        # A metadata field, not a body — this assertion's subject is that the
+        # roster carries no BODY, and that is unchanged.
+        "deferral",
         "created_at",
         "decision_state",
         "fields",
