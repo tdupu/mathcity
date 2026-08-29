@@ -926,6 +926,11 @@ severity = "FATAL"
 meaning = "The issue body omits a section the target repo's live issue template marks REQUIRED; refused before any subprocess runs, because the repo's template is the enforcement point."
 module = "effects.py"
 
+[MGHW_TEMPLATE_NO_REQUIRED_SECTIONS]
+severity = "WARN"
+meaning = "Every issue template read for the target repo declares zero required sections, so no conformance check could run on the body. Reported rather than passing silently: a gate that cannot refuse must not read as a gate that approved (mc-8r01j). Advisory, not blocking -- same posture as MGHW_TEMPLATE_UNREADABLE, since refusing to file for want of a usable template turns a hygiene aid into a wall."
+module = "effects.py"
+
 [MGHW_TEMPLATE_UNREADABLE]
 severity = "WARN"
 meaning = "The target repo's issue template could not be read, so no required-section check ran; surfaced as an advisory rather than blocking, since an unreadable template must not become a wall."
