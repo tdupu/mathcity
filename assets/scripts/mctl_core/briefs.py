@@ -579,7 +579,11 @@ def list_briefs_report(
             )
         )
     try:
-        beads = _records(ctx, layout=layout, timeout=bead_timeout)
+        # Snapshots are taken here rather than inside `_records` so the body
+        # attachment below can reuse them (#229). `brief_body` needs the bead
+        # its description came from; re-reading the store per record would turn
+        # a roster read into N subprocesses.
+        bead_snapshots = _beads(ctx, timeout=bead_timeout)
     except BriefError as error:
         return BriefListing(
             records=keep(documents_alone),
@@ -587,8 +591,64 @@ def list_briefs_report(
                 _lane_failed(LANE_BEADS, LANE_DOCUMENTS, error.diagnostic),
             ),
         )
+    beads = _records(ctx, bead_snapshots, layout=layout)
+    beads = _bead_records_with_body_state(ctx, beads, bead_snapshots, bodies=bodies)
     documents = _document_records(ctx, beads, layout, bodies=bodies)
     return BriefListing(records=keep(beads + documents))
+
+
+def _bead_records_with_body_state(
+    ctx: MctlContext,
+    records: tuple[BriefRecord, ...],
+    beads: tuple[Bead, ...],
+    *,
+    bodies: bool,
+) -> tuple[BriefRecord, ...]:
+    """Give every BEAD-sourced record its body, or say the body was withheld.
+
+    #229: `bodies` reached only `_document_records`, so a bead-backed brief came
+    back from the roster with no `body` key at all AND `body_elided: null` --
+    simultaneously carrying nothing and claiming nothing was withheld. Measured
+    2026-08-29 on rig hq: all nine records, every one `source: "bead"`, with
+    `bodies=true` and two of them naming a real `body_path` on disk.
+
+    The consequence was not cosmetic. `to_dict` emits `decision_options` and
+    `recommendation` ONLY when a body is present (#76 Field 8), so no caller
+    could discover from the roster that a brief requires an `option` argument --
+    while `briefs_relay_adjudication` refuses without one (`MOPT001`). Batch
+    adjudication through the typed surface was therefore impossible.
+
+    ATTACHING COSTS NO EXTRA SUBPROCESS. `show_brief` says so in its own
+    docstring -- the bead snapshot already carries the description -- which is
+    why this is safe to do for the whole roster on request. The parsing is not
+    free, so it stays opt-in and the default is unchanged.
+
+    WITH `bodies=False` THE RECORD IS LABELLED, NOT LEFT SILENT.
+    `BODY_ELIDED_ON_ROSTER` already exists for exactly this and its comment says
+    exactly this -- "so a consumer holding a single record can tell 'no body'
+    from 'body not requested'" -- and bead records simply never carried it. A
+    null there is a positive claim that nothing was withheld, and it was false.
+    """
+    by_id = {bead.id: bead for bead in beads}
+    out: list[BriefRecord] = []
+    for record in records:
+        if not bodies:
+            out.append(replace(record, body_elided=BODY_ELIDED_ON_ROSTER))
+            continue
+        body = brief_body(ctx, record.brief_id, by_id.get(record.bead_id or ""))
+        sections, diagnostics = brief_body_report(ctx, record.brief_id, body)
+        out.append(
+            replace(
+                record,
+                body=body,
+                sections=sections,
+                body_diagnostics=diagnostics,
+                # Asked for and delivered: nothing was withheld, so this must be
+                # None rather than the roster label.
+                body_elided=None,
+            )
+        )
+    return tuple(out)
 
 
 def _lane_read(lane: str) -> str:
