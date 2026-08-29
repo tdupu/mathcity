@@ -866,14 +866,50 @@ def plan_create_github_issue(
     # forms -- NOT the union of every form's required sections. The old union
     # refused a valid bug_report body for lacking feature_request/docs_report
     # headings. Refuse only when NO template is satisfied, naming the CLOSEST.
-    if templates:
+    # `mc-8r01j`: only templates that REQUIRE something can be satisfied.
+    #
+    # `.github/ISSUE_TEMPLATE/` holds `config.yml`, the chooser config, which is
+    # not an issue form and declares zero required fields. Under the #211 rule
+    # ("conformant if it satisfies ANY ONE template") its missing-list is always
+    # `[]`, `all()` over a falsy member is False, and the refusal never fires --
+    # so EVERY body passed, including a 13-byte one with no headings. Measured
+    # 2026-08-29: an empty body planned cleanly with no diagnostic at all.
+    #
+    # A template requiring nothing is not a bar a body can clear; it is the
+    # absence of a bar. Filtering on the PROPERTY rather than on the filename
+    # keeps this correct if GitHub adds another non-form file, and if a real
+    # form ever declares all-optional fields it is likewise not something a body
+    # can be checked against.
+    #
+    # #211's per-template logic itself is RIGHT and is kept: a bug_report body
+    # must not be refused for lacking feature_request headings. Only the
+    # degenerate member is removed.
+    gating_templates = {name: reqs for name, reqs in templates.items() if reqs}
+    if templates and not gating_templates:
+        # Every template read was degenerate. Silently passing here is what the
+        # bug did; say so instead, and do not block -- consistent with
+        # MGHW_TEMPLATE_UNREADABLE, which also advises rather than refusing.
+        advisories.append(
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                "MGHW_TEMPLATE_NO_REQUIRED_SECTIONS",
+                (
+                    f"None of {request.repo}'s issue templates declare a required "
+                    "section, so no conformance check could run."
+                ),
+                brief_id="(github-issue)",
+                data_location=f".github/ISSUE_TEMPLATE (of {request.repo})",
+            )
+        )
+    if gating_templates:
         per_template_missing = {
             name: [
                 section
                 for section in reqs
                 if section.strip().lower() not in headings
             ]
-            for name, reqs in templates.items()
+            for name, reqs in gating_templates.items()
         }
         if all(missing for missing in per_template_missing.values()):
             closest, missing = min(
