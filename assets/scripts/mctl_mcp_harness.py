@@ -60,6 +60,7 @@ EXPECTED_TOOLS = (
     "briefs_defer",
     "briefs_doctor",
     "briefs_list",
+    "briefs_pile_state",
     "briefs_options",
     "briefs_present",
     "briefs_show",
