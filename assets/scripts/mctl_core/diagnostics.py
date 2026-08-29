@@ -76,10 +76,31 @@ class Diagnostic:
 
 
 def render_diagnostic(diagnostic: Diagnostic) -> str:
+    """One diagnostic as operator-facing text.
+
+    `suggested_next_command` is rendered beside `hint` rather than left to the
+    facts block (#183). It reached the CLI two different ways and neither
+    worked: set as a typed field it was dropped entirely, and passed through
+    `facts` it surfaced only as a raw `suggested_next_command:` line sorted
+    alphabetically among the machine facts -- present, but not where a reader
+    looks for what to do next. A remedy matters most at the moment something
+    refused, so it goes directly under the message.
+
+    It is emitted ONCE. `__post_init__` promotes a `facts` entry onto the typed
+    field, so a naive append would print the value twice for the call sites
+    that pass it through facts.
+    """
     lines = [f"[{diagnostic.severity.value}] {diagnostic.code}: {diagnostic.message}"]
     if diagnostic.hint:
         lines.append(f"hint: {diagnostic.hint}")
+    if diagnostic.suggested_next_command:
+        lines.append(f"next: {diagnostic.suggested_next_command}")
     for key, value in sorted(diagnostic.facts.items()):
+        # Already rendered as `next:` above -- skip the duplicate rather than
+        # dropping the key from `facts` itself, which is part of the payload
+        # contract and read by JSON consumers.
+        if key == "suggested_next_command":
+            continue
         lines.append(f"{key}: {value}")
     if diagnostic.trace_id:
         lines.append(f"trace_id: {diagnostic.trace_id}")

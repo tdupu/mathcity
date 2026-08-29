@@ -92,11 +92,19 @@ def test_the_refusal_names_the_missing_section_and_a_remedy(tmp_path: Path):
     """CT13.4: a refusal the author cannot act on is a wall."""
     r = create(tmp_path, BODY_WITHOUT_EVIDENCE, "--dry-run")
     assert "Gate Evidence" in r.stderr, "must name WHAT is missing"
-    # `suggested_next_command`, not the `remedy:` label -- that one is the
-    # effects.py workaround for #183. briefs.py's own _diagnostic puts the field
-    # into facts, so it renders here. TWO helpers, two behaviours, one field:
-    # more evidence for #183 rather than a reason to rename anything.
-    assert "suggested_next_command:" in r.stderr, "must say what to do"
+    # `next:` -- #183 is FIXED, and this assertion is the record of what it fixed.
+    #
+    # This comment previously read: "`suggested_next_command`, not the `remedy:`
+    # label -- that one is the effects.py workaround for #183. briefs.py's own
+    # _diagnostic puts the field into facts, so it renders here. TWO helpers, two
+    # behaviours, one field: more evidence for #183 rather than a reason to rename
+    # anything." That description was accurate and is now obsolete.
+    #
+    # render_diagnostic emits the remedy once, as `next:`, beside `hint`, whether
+    # it arrived as a typed field or through `facts`. The two helpers no longer
+    # have two behaviours, so the assertion no longer has to know which helper
+    # produced the refusal. Intent unchanged: it must say what to do.
+    assert "next:" in r.stderr, "must say what to do"
     assert "add a '## Gate Evidence' section" in r.stderr
 
 

@@ -180,7 +180,11 @@ def test_the_SAME_call_SUCCEEDS_on_a_well_filed_body(tmp_path: Path):
 
 def test_the_refusal_says_what_to_do(tmp_path: Path):
     result = create(tmp_path, AS_FILED.read_text(encoding="utf-8") + GATE_EVIDENCE)
-    assert "suggested_next_command:" in result.stderr
+    # `next:`, not `suggested_next_command:` -- #183 moved the remedy out of the
+    # alphabetically-sorted facts block and up beside `hint`, so it reads as a
+    # remedy rather than as one more machine fact. The assertion's INTENT is
+    # unchanged: the refusal must tell the author what to do.
+    assert "next:" in result.stderr
     assert "§6" in result.stderr, "must name where the evidence belongs"
     assert "runtime.go:297" in result.stderr, "must name the offending text"
 
