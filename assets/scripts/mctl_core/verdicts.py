@@ -346,11 +346,21 @@ class Verdict:
     confidence: str
     #: The exact field the text came from, e.g. `metadata.verdict`.
     field: str
+    #: WHICH option the adjudicator picked, when the brief offered a set and
+    #: `briefs_relay_adjudication` recorded a choice (`metadata.verdict_option`).
+    #:
+    #: `None` means no option was recorded, which is NOT the same as "there was
+    #: only one path": a brief offering A-D that closed with no option is a
+    #: verdict whose subject cannot be reconstructed, and that is worth seeing.
+    #: Adjudication has written this since #208; nothing read it, so the
+    #: Adjudicated screen said "The option taken ... is still not exposed".
+    option: str | None = None
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, str | None]:
         return {
             "confidence": self.confidence,
             "field": self.field,
+            "option": self.option,
             "source": self.source,
             "text": self.text,
         }
@@ -634,6 +644,30 @@ def read_verdict(bead: Bead, *, track: DecisionsTrack | None = None) -> Verdict 
     return read_verdict_reading(bead, track=track).verdict
 
 
+def verdict_option(bead: Bead) -> str | None:
+    """WHICH option the adjudicator picked, or None if none was recorded.
+
+    `briefs_relay_adjudication` writes `metadata.verdict_option` when the caller
+    names one (`effects.py`, since #208). Nothing read it, so the Adjudicated
+    screen reported the verdict and not its subject -- its own panel said "The
+    option taken and the follow-up bead are still not exposed."
+
+    Read from the bead rather than from the verdict's own source, because the
+    option is a fact about the ADJUDICATION and does not depend on whether the
+    verdict text was recovered from a typed field, notes, or a close reason. A
+    verdict rescued from a close reason can still have had an option recorded
+    beside it.
+    """
+    metadata = bead.raw.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return None
+    value = metadata.get("verdict_option")
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
 def read_verdict_reading(bead: Bead, *, track: DecisionsTrack | None = None) -> VerdictReading:
     """The verdict, or the typed reason there is not one.
 
@@ -652,7 +686,8 @@ def read_verdict_reading(bead: Bead, *, track: DecisionsTrack | None = None) -> 
     if typed is not None:
         text, field = typed
         return VerdictReading(
-            Verdict(text, SOURCE_TYPED_FIELD, _typed_confidence(text, reading), field),
+            Verdict(text, SOURCE_TYPED_FIELD, _typed_confidence(text, reading), field,
+                    option=verdict_option(bead)),
             kind=reading.kind,
         )
 
@@ -663,13 +698,15 @@ def read_verdict_reading(bead: Bead, *, track: DecisionsTrack | None = None) -> 
             text = " ".join(match.group("verdict").split())
             if text:
                 return VerdictReading(
-                    Verdict(text, SOURCE_NOTES, CONFIDENCE_HIGH, "notes"),
+                    Verdict(text, SOURCE_NOTES, CONFIDENCE_HIGH, "notes",
+                            option=verdict_option(bead)),
                     kind=reading.kind,
                 )
 
     if reading.kind == KIND_VERDICT and reading.text:
         return VerdictReading(
-            Verdict(reading.text, SOURCE_CLOSE_REASON, CONFIDENCE_MEDIUM, "close_reason"),
+            Verdict(reading.text, SOURCE_CLOSE_REASON, CONFIDENCE_MEDIUM, "close_reason",
+                    option=verdict_option(bead)),
             kind=reading.kind,
         )
 
@@ -682,6 +719,7 @@ def read_verdict_reading(bead: Bead, *, track: DecisionsTrack | None = None) -> 
                     SOURCE_DECISIONS_TRACK,
                     CONFIDENCE_LOW,
                     "decisions-track/manifest.jsonl:verdict",
+                    option=verdict_option(bead),
                 ),
                 kind=reading.kind,
             )
