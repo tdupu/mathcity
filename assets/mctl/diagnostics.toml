@@ -740,9 +740,19 @@ severity = "WARN"
 meaning = "The dispatch command exceeded the timeout, but the dispatch IS observable afterwards, so it LANDED. The wait was abandoned; the work was not. Do NOT retry."
 module = "work.py"
 
-[MWRK_DISPATCH_BUDGET_DRIFT]
+[MWRK_DISPATCH_SLOW]
 severity = "WARN"
-meaning = "The dispatch succeeded but took most of its subprocess budget. The early warning that #181 and mc-u9eun did not have: record the new cost and raise the budget before the next call is killed after doing its work."
+meaning = "The dispatch SUCCEEDED and ran past its warn threshold. Nothing was killed -- mc-vtru8 replaced the client-side bound with this report, so a cost that outgrows the threshold costs a line of output rather than a dispatch."
+module = "work.py"
+
+[MWRK_DISPATCH_STILL_RUNNING]
+severity = "WARN"
+meaning = "The dispatch passed its warn threshold while it was STILL RUNNING; elapsed time is reported and the sling continues. This is the non-failure signal that replaced the dispatch timeout (mc-vtru8), and it says nothing about the outcome, which nobody yet knows."
+module = "work.py"
+
+[MWRK_DISPATCH_OPERATOR_BOUND]
+severity = "WARN"
+meaning = "The operator's dispatch-deadline configuration is being reported back: unreadable and therefore ignored, or set below the worst MEASURED cost of the sling it wraps, which is a path that cannot succeed. The default is no deadline at all."
 module = "work.py"
 
 [MWRK_DISPATCH_BLOCKED]

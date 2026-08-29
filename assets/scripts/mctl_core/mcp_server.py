@@ -112,7 +112,7 @@ from .molecules import build_molecule, build_molecules
 from .health import build_city_health
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
-from .redundant_state import artifact_layout
+from .redundant_state import artifact_layout, locate_artifact
 from .schemas import (
     BRIEF_DIAGNOSTICS_SCHEMA,
     BRIEF_DETAIL_SCHEMA,
@@ -152,9 +152,12 @@ from .work import (
     EMPTY_WORK_SCOPE,
     WorkError,
     _open_child_workflow,
+    apply_dispatch_bound,
     apply_dispatch_plan,
+    dispatch_bound_payload,
     dispatch_dry_run_payload,
     plan_dispatch,
+    plan_dispatch_bound,
     plan_dispatch_event,
     ready_work_payload,
     work_claim,
@@ -375,17 +378,38 @@ def assess_artifact_trust(ctx: MctlContext) -> ArtifactTrust:
 
 
 def _untrusted_state_diagnostic(ctx: MctlContext, trust: ArtifactTrust) -> Diagnostic:
+    """Warn that the readings cannot be believed -- without reopening a settled question.
+
+    This used to say "Open design question Q5 must resolve before any
+    artifact-state finding here is acted on." Q5 has been RESOLVED since
+    2026-08-19 (storage per-rig, reporting city-wide; lookup follows bead
+    identity), with implementation deliberately deferred. Untrusting the
+    readings is still correct -- the implementation has not landed, so the
+    lookup still misses frontmatter-addressed files and MBRF021 over-reports --
+    but the REASON was wrong, and wrong in the expensive direction: it sent the
+    reader to re-decide something the owner had already decided. A settled
+    question read as open is how brief mc-tbucy was nearly sent back for a
+    second verdict on 2026-08-28.
+    """
     return Diagnostic(
         severity=Severity.WARN,
         code="MCTL_MCP_ARTIFACT_STATE_UNTRUSTED",
         message=(
             "Redundant-artifact state in this response is not trustworthy: "
-            f"{trust.reason}. Open design question Q5 must resolve before any "
-            "artifact-state finding here is acted on."
+            f"{trust.reason}. Q5 DECIDED this on 2026-08-19 -- storage is "
+            "per-rig, reporting is city-wide, and artifact lookup follows bead "
+            "identity -- but that direction is not yet IMPLEMENTED here, so "
+            "these readings still under-report artifacts that exist. No "
+            "decision is pending; do not re-open it."
         ),
         hint=(
-            f"Read Q5 in {Q5_REFERENCE}. Do not repair the filesystem from "
-            f"withheld codes {list(trust.withheld_codes) or list(UNTRUSTED_ARTIFACT_CODES)}."
+            "Cleared by implementing the decided lookup: resolve artifacts by "
+            "bead identity, including the `artifact:` frontmatter key, not by "
+            "filename alone (see redundant_state.locate_artifact, which does). "
+            f"Background in {Q5_REFERENCE}. Until then do not repair the "
+            "filesystem from withheld codes "
+            f"{list(trust.withheld_codes) or list(UNTRUSTED_ARTIFACT_CODES)} -- "
+            "their remedy would create duplicates of artifacts that already exist."
         ),
         facts={
             "city_path": str(ctx.city_root),
@@ -604,6 +628,36 @@ def _handle_worktrees_status(scope: CityScope, arguments: Mapping[str, Any]) -> 
     from .worktrees import city_reader, worktrees_status
 
     return worktrees_status(city_reader(scope))
+
+
+def _handle_artifact_locate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Where a bead's redundant artifacts are -- and whether that is knowable (mc-8q0g4).
+
+    Note what this handler does NOT do: it never reads a path from `arguments`.
+    The root comes from `artifact_layout(ctx)`, the one resolver, so a caller
+    cannot aim this at the wrong tree. That is the entire point of routing the
+    question through a tool rather than leaving it to `find`.
+    """
+    bead_id = str(arguments.get("bead_id") or "").strip()
+    if not bead_id:
+        return {
+            "artifacts": [],
+            "bead_id": "",
+            "resolved_root": "",
+            "root_exists": False,
+            "diagnostics": [
+                Diagnostic(
+                    severity="ERROR",
+                    code="MLOC_EMPTY_BEAD_ID",
+                    message="artifact_locate requires a bead_id; refusing to answer for nothing.",
+                    hint="Pass the bead id whose artifacts you want located.",
+                ).to_dict()
+            ],
+        }
+    layout = artifact_layout(ctx)
+    payload = dict(locate_artifact(layout, bead_id).to_dict())
+    payload["diagnostics"] = []
+    return payload
 
 
 def _handle_context_resolve(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -1630,6 +1684,32 @@ def _handle_work_dispatch(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
     return payload
 
 
+def _handle_work_dispatch_bound(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Adjust the dispatch bound from an agent, through the one resolver.
+
+    mc-vtru8 part 3 shipped the bound as CLI flags and env keys, which need a
+    human at a shell. Taylor, asked whether it also had to be agent-reachable:
+    *"Yes MCP reachable."*
+
+    The handler parses nothing. `plan_dispatch_bound` layers the caller's raw
+    strings onto the environment and resolves the result through
+    `resolve_dispatch_elapsed_policy` -- the same function `apply_dispatch_plan`
+    reads and the same one the CLI flags feed -- so this surface cannot come to a
+    different answer about the bound than the surface beside it.
+    """
+    plan = plan_dispatch_bound(
+        ctx.trace_id,
+        deadline_seconds=arguments.get("deadline_seconds"),
+        warn_after_seconds=arguments.get("warn_after_seconds"),
+    )
+    applied = not _dry_run(arguments)
+    if applied:
+        apply_dispatch_bound(plan)
+    payload = dispatch_bound_payload(ctx, plan, applied=applied)
+    payload["diagnostics"] = _diagnostics(ctx, ()) + list(payload["diagnostics"])
+    return payload
+
+
 def _handle_work_claim(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     claim = work_claim(
         ctx, arguments["bead_id"], window_seconds=arguments.get("window_seconds")
@@ -1746,6 +1826,64 @@ _EFFECT_RESPONSE = {
             "yet. `pending` is a successful dispatch whose claim has not landed "
             "(recheck with work_status), NOT a failure (#212)."
         ),
+    },
+    "effect_plan": EFFECT_PLAN_SCHEMA,
+}
+
+#: One resolved elapsed policy. `deadline_seconds: null` is the ANSWER -- there
+#: is no bound, which is mc-vtru8's default -- and `bounded` states the same fact
+#: as a boolean so no client has to read a null as a verdict.
+_BOUND_STATE_SCHEMA: Schema = {
+    "type": "object",
+    "title": "DispatchBound",
+    "description": "What a dispatch resolves to: when it starts reporting, and whether it is bounded at all.",
+    "required": ["bounded", "deadline_seconds", "label", "notes", "warn_after_seconds"],
+    "properties": {
+        "bounded": {
+            "type": "boolean",
+            "description": "False -- the default -- means the sling runs to completion however long it takes.",
+        },
+        "deadline_seconds": {
+            "type": ["number", "null"],
+            "description": (
+                "Null means NO deadline, which is the default and the point. When set, "
+                "expiry reports elapsed and UNKNOWN, never `failed` (P6.3)."
+            ),
+        },
+        "label": {"type": "string", "description": "What the elapsed reports name as the thing being waited on."},
+        "notes": dict(
+            STRING_ARRAY,
+            description="Anything about this configuration the operator should hear back, verbatim.",
+        ),
+        "warn_after_seconds": {
+            "type": "number",
+            "description": "How long before the dispatch starts saying how long it has been running.",
+        },
+    },
+}
+
+_DISPATCH_BOUND_RESPONSE = {
+    "applied": {
+        "type": "boolean",
+        "description": "False for a dry run, which writes nothing and leaves `after` a preview.",
+    },
+    "dispatch_bound": {
+        "type": "object",
+        "title": "DispatchBoundChange",
+        "description": (
+            "`before` is what a dispatch resolved to on entry; `after` is what it "
+            "resolves to once `env_writes` are installed -- a preview while "
+            "`applied` is false."
+        ),
+        "required": ["after", "before", "env_writes"],
+        "properties": {
+            "after": _BOUND_STATE_SCHEMA,
+            "before": _BOUND_STATE_SCHEMA,
+            "env_writes": {
+                "type": "object",
+                "description": "The MCTL_DISPATCH_* keys this call sets, with the caller's raw values.",
+            },
+        },
     },
     "effect_plan": EFFECT_PLAN_SCHEMA,
 }
@@ -2152,6 +2290,56 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["rows", "summary"],
         ),
         handler=_handle_tracker_rows,
+    ),
+    ToolSpec(
+        name="artifact_locate",
+        title="Locate a bead's redundant artifacts",
+        description=(
+            "Where a bead's redundant artifacts live under THIS rig, and whether that is "
+            "knowable. Takes a bead id and NEVER a path: the brief root is resolved by "
+            "artifact_layout(), so the wrong tree is not a place this can be aimed at. Each "
+            "kind reports one of present / absent / ambiguous / unknown, and `unknown` is "
+            "mandatory when the brief root does not exist -- there, 'this rig has piled "
+            "nothing yet' and 'the root resolved to the wrong tree' are the same observation. "
+            "Every answer carries `resolved_root` and a per-kind `corpus_size`, so an absence "
+            "states what it was measured against: 'absent out of 119' and 'absent out of 0' "
+            "are different claims. Use this instead of shelling out to find/ls -- a filesystem "
+            "probe under a sibling root returns clean, populated, plausible output about a "
+            "different rig, which is how brief mc-tbucy was falsely reported as unadjudicated."
+        ),
+        input_schema=request_schema(
+            {
+                "bead_id": {
+                    "type": "string",
+                    "description": "The bead whose artifacts to locate. Not a path.",
+                }
+            },
+            ["bead_id"],
+        ),
+        output_schema=response_schema(
+            {
+                "artifacts": {
+                    "type": "array",
+                    "description": (
+                        "One entry per artifact kind (pile, stack, decisions), each with its "
+                        "verdict, resolved path when present, directory, directory_exists, "
+                        "corpus_size, and the detail explaining the verdict."
+                    ),
+                },
+                "bead_id": {"type": "string"},
+                "resolved_root": {
+                    "type": "string",
+                    "description": "The brief root actually searched. Read this before believing an absence.",
+                },
+                "root_exists": {
+                    "type": "boolean",
+                    "description": "False forces every verdict to `unknown`: nothing here was knowable.",
+                },
+            },
+            ["artifacts", "bead_id", "resolved_root", "root_exists"],
+            artifact_state=True,
+        ),
+        handler=_handle_artifact_locate,
     ),
     ToolSpec(
         name="context_resolve",
@@ -3336,6 +3524,46 @@ TOOLS: tuple[ToolSpec, ...] = (
         ),
         output_schema=response_schema(_EFFECT_RESPONSE, ["applied", "effect_plan"]),
         handler=_handle_work_dispatch,
+        mutating=True,
+        external_ready=False,
+    ),
+    ToolSpec(
+        name="work_dispatch_bound",
+        title="Adjust the dispatch bound",
+        description=(
+            "Read or set the client-side bound a `work_dispatch` waits under (mc-vtru8). "
+            "There is NO deadline by default: the sling runs to completion and reports "
+            "how long it has been running, because a caller's deadline is a fact about "
+            "the CALLER and reporting it as a fact about the work is what P6.3 forbids. "
+            "A bound is an operator's choice -- the valve for the case where an unbounded "
+            "dispatch would wedge a shared lock -- and this is that choice made reachable "
+            "from an agent rather than only from a shell. Sets the same "
+            "MCTL_DISPATCH_DEADLINE_SECONDS / MCTL_DISPATCH_WARN_AFTER_SECONDS keys the "
+            "CLI layers `--deadline-seconds` onto, resolved by the same function, so this "
+            "surface cannot disagree with that one. Pass `none` to remove a bound; omit a "
+            "field to leave it alone. A bound smaller than the sling's worst MEASURED cost "
+            "is reported back and still applied -- it is the operator's bound. Expiry "
+            "reports elapsed and UNKNOWN, never that the dispatch did not happen. The "
+            "setting lasts for the life of this server process. Dry run by default, which "
+            "reads the bound in force and writes nothing."
+        ),
+        input_schema=request_schema(
+            {
+                "deadline_seconds": nullable_string(
+                    "Seconds after which the sling is abandoned, as a string; `none`, "
+                    "`off`, or `unbounded` removes the bound. Omit to leave it unchanged."
+                ),
+                "warn_after_seconds": nullable_string(
+                    "Seconds after which the dispatch starts reporting elapsed time, as a "
+                    "string. Omit to leave it unchanged."
+                ),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+        ),
+        output_schema=response_schema(
+            _DISPATCH_BOUND_RESPONSE, ["applied", "dispatch_bound", "effect_plan"]
+        ),
+        handler=_handle_work_dispatch_bound,
         mutating=True,
         external_ready=False,
     ),

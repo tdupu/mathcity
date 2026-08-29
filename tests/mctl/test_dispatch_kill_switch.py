@@ -31,8 +31,18 @@ APPROVED_BRIEF = "mc-approved"
 
 
 def runtime(
-    tmp_path: Path, gc_exit: int = 0, supervisor_up: bool = True
+    tmp_path: Path,
+    gc_exit: int = 0,
+    supervisor_up: bool = True,
+    sling_delay: float = 0.0,
 ) -> tuple[Path, Path, Path, Path]:
+    """Build a city fixture whose `gc` shim can be made deliberately slow.
+
+    `sling_delay` exists for mc-vtru8: the elapsed warning replaces the dispatch
+    timeout, so P6.2 requires a test that drives a genuinely slow sling and reads
+    the warning it actually produced. The delay defaults to 0.0, so every existing
+    caller is unaffected.
+    """
     city_root = tmp_path / "city_root"
     source_checkout = tmp_path / "source_checkout"
     rig_root = city_root / "mathcity"
@@ -73,6 +83,9 @@ def runtime(
         "if argv[:2] == ['supervisor', 'status']:\n"
         "    sys.stderr.write('probe asked the machine-wide daemon\\n'); sys.exit(97)\n"
         f"open({str(gc_log)!r}, 'a').write(json.dumps(argv) + '\\n')\n"
+        # mc-vtru8: a real sling is SLOW, not hung (243.51s measured, exit 0).
+        # Sleeping here after the call is logged reproduces that shape.
+        f"import time; time.sleep({sling_delay!r})\n"
         f"code = {gc_exit}\n"
         "if code:\n"
         "    sys.stderr.write('sling failed\\n')\n"

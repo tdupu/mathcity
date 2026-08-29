@@ -132,6 +132,9 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "molecule_cancel",
         "standardize_github_issue",
         "work_dispatch",
+        # mc-vtru8: it SETS the bound a dispatch runs under, so it is a write,
+        # and a write on this surface is dry-run-first like every other.
+        "work_dispatch_bound",
         "work_dispatch_event",
     ]
     for name in mutating:

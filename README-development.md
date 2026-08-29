@@ -233,6 +233,38 @@ This matters because provenance is what flips readiness to `dispatched` and
 blocks every later attempt via `MWRK_ALREADY_DISPATCHED`. Writing it without
 slinging records a handoff that never happened.
 
+**The dispatch has no client-side deadline (mc-vtru8).** The sling runs to
+completion however long it takes; there is no budget to outgrow. What replaced
+the budget is a repeating elapsed report — `MWRK_DISPATCH_STILL_RUNNING`, printed
+to stderr *while the sling is running* and carried into the payload — because a
+deadline is a fact about the caller, not the work (POLICY P6.3), and the budget
+was raised three times (120 → 200 → 300) after killing a dispatch that had
+already succeeded. An operator who wants a bound sets one:
+`MCTL_DISPATCH_DEADLINE_SECONDS` (or `--deadline-seconds`; `none` spells out the
+default) with `MCTL_DISPATCH_WARN_AFTER_SECONDS` / `--warn-after-seconds` for the
+report interval. A bound is never applied silently: one below the worst MEASURED
+sling cost is reported as `MWRK_DISPATCH_OPERATOR_BOUND`, and an unreadable value
+leaves the dispatch unbounded rather than becoming a kill bound nobody chose. On
+expiry the outcome is still `MWRK_DISPATCH_TIMEOUT_UNKNOWN` with
+`applied=None` — *cannot tell* — never `applied=false`.
+
+Agents reach that same bound through the `work_dispatch_bound` MCP tool, which
+sets those two env keys in the server process and resolves them back through
+`resolve_dispatch_elapsed_policy` — the one function the CLI flags and
+`apply_dispatch_plan` also go through, so the MCP surface cannot come to a
+different answer about the bound than the shell surface beside it. Dry run by
+default, which reads the bound in force and writes nothing; `none` takes a bound
+back off; an omitted field is left alone. The setting lasts for the life of the
+server process, not beyond it.
+
+The mechanism is `mctl_core/deadlines.py` (`ElapsedPolicy` + `run_supervised`),
+written to be reused: the three sites P6.3 named as violators at adoption —
+`fleet.py` `MCTL_FLEET_STATUS_PROBE_FAILED`, `health.py`
+`MCTL_HEALTH_FD_PROBE_FAILED`, `city.py` `MCTL_CITY_RIG_TIMEOUT` — adopt it by
+replacing `subprocess.run(..., timeout=X)` with `run_supervised(cmd,
+policy=bounded_policy(label, deadline_seconds=X))` and branching on
+`result.deadline_exceeded` instead of on a `None` payload.
+
 Every bead read is a full `bd list` subprocess, so core functions that already
 hold a bead snapshot pass it down (`doctor_briefs(ctx, brief_id, beads)`)
 rather than re-reading per brief. `work ready` reads beads once for the whole

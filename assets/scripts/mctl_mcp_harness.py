@@ -47,6 +47,7 @@ from mctl_core.schemas import schema_errors
 MCTL = SCRIPTS_ROOT / "mctl.py"
 
 EXPECTED_TOOLS = (
+    "artifact_locate",
     "bead_close",
     "bead_comment",
     "bead_hold",
@@ -92,6 +93,7 @@ EXPECTED_TOOLS = (
     "trace_show",
     "work_claim",
     "work_dispatch",
+    "work_dispatch_bound",
     "work_dispatch_event",
     "work_provenance",
     "work_ready",

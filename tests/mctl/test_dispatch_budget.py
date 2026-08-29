@@ -1,18 +1,30 @@
-"""#181 — work_dispatch's subprocess budget must clear the measured sling cost.
+"""#181 / mc-u9eun / mc-vtru8 — a bound below the measured cost cannot succeed.
 
-`apply_dispatch_plan` shells out to `gc sling` with a fixed subprocess budget.
-That budget shipped at 120s. S48 measured a live sling at 162.7s (exit 0 -- slow,
-not hung), and #181 measured a live dispatch KILLED at the 120s bound: the budget
-was smaller than the cost of the command it wraps, so no molecule ever reached
-the typed surface.
+**Original subject, unchanged.** `apply_dispatch_plan` shells out to `gc sling`.
+The budget shipped at 120s; S48 measured a live sling at 162.7s (exit 0 -- slow,
+not hung) and #181 measured a live dispatch KILLED at 120s. The budget was smaller
+than the cost of the command it wrapped, so no molecule reached the typed surface.
+The relationship these tests pin is: **a bound below the measurement is a path
+that cannot succeed.**
 
-These pin the same relationship `test_orders_catalog_timeout.py` pins for the
-dashboard: a subprocess bound must accommodate the worst MEASURED cost of the
-call it wraps. A bound below that measurement is a path that cannot succeed, and
-it fails here rather than on a live sling.
+**What changed (mc-vtru8, Taylor, 2026-08-28).** The budget was raised twice more
+on exactly that reasoning -- 120 -> 200 -> 300 -- and killed a successful dispatch
+before each raise. A proposal to raise it again with a warn threshold beneath it
+was REJECTED. Taylor: *"We shouldn't have a dispatch timeout. So yes, if we raise
+the dispatch timeout to infinity and replace it with a warning."* The default now
+carries NO deadline, so there is no default bound left to sit below a measurement.
+
+**Why this file was migrated rather than deleted.** Its subject did not go away;
+it moved. An operator may still set a bound (`MCTL_DISPATCH_DEADLINE_SECONDS`,
+`--deadline-seconds`), and a bound an operator sets below the measured cost fails
+in precisely the way #181 failed. So the assertions that compared two constants
+now interrogate the operator surface, and the evidence pins -- which may only rise
+-- are untouched, because the measurements are evidence and evidence does not
+change when a policy does.
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,63 +32,66 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "assets" / "scripts
 
 from mctl_core.work import (  # noqa: E402
     DISPATCH_BUDGET_WARN_FRACTION,
+    DISPATCH_DEADLINE_ENV,
     DISPATCH_TIMEOUT_CODE,
     DISPATCH_TIMEOUT_LANDED_CODE,
-    DISPATCH_TIMEOUT_SECONDS,
+    DISPATCH_WARN_AFTER_ENV,
+    DISPATCH_WARN_AFTER_SECONDS,
     MEASURED_SLING_WORST_SECONDS,
-    dispatch_budget_drift_warning,
+    classify_dispatch_subprocess_error,
+    dispatch_elapsed_warning,
     dispatch_timeout_is_failure,
+    operator_bound_below_measurement_warning,
+    resolve_dispatch_elapsed_policy,
     resolve_dispatch_timeout,
 )
 
 
-def test_the_dispatch_budget_accommodates_the_measured_sling_cost():
-    """The budget must clear the worst measured cost of the sling it wraps.
+# --- the default: nothing to be below the measurement -------------------------
 
-    120s could not: #181 measured a live dispatch killed at that bound. A budget
-    below the measured cost fails every live sling the same way.
+
+def test_the_default_dispatch_carries_no_deadline():
+    """Part 1 of the verdict, at the site it was ruled about.
+
+    This is the migrated form of `test_the_dispatch_budget_accommodates_the_
+    measured_sling_cost`. That test asked whether the bound cleared the
+    measurement; the strongest possible answer is that there is no bound, so the
+    comparison has no left-hand side.
     """
-    assert DISPATCH_TIMEOUT_SECONDS >= MEASURED_SLING_WORST_SECONDS, (
-        f"dispatch budget {DISPATCH_TIMEOUT_SECONDS}s cannot accommodate the "
-        f"measured worst sling cost {MEASURED_SLING_WORST_SECONDS}s -- it would "
-        "time out before it dispatches, which is exactly #181"
+    policy, notes = resolve_dispatch_elapsed_policy({})
+    assert policy.deadline_seconds is None, (
+        "a client-side deadline reappeared by default -- mc-vtru8 removed it, and "
+        "raising it was explicitly rejected as the wrong fix"
     )
+    assert policy.bounded is False
+    assert notes == ()
+
+
+def test_the_default_still_warns_so_the_cost_stays_observable():
+    """Removing the bound must not remove the signal (P6.2).
+
+    The reason 120 -> 200 -> 243.51 was discovered three times in production is
+    that nothing reported the ACTUAL cost while it still fit. Without a warn
+    threshold, an unbounded dispatch is silent no matter how long it runs, which
+    is a worse blindness than the one the bound caused.
+    """
+    policy, _ = resolve_dispatch_elapsed_policy({})
+    assert policy.warn_after_seconds == DISPATCH_WARN_AFTER_SECONDS
+    assert DISPATCH_WARN_AFTER_SECONDS >= MEASURED_SLING_WORST_SECONDS, (
+        f"warning at {DISPATCH_WARN_AFTER_SECONDS}s about a sling MEASURED at "
+        f"{MEASURED_SLING_WORST_SECONDS}s would warn on every healthy dispatch, "
+        "and a signal that fires always carries nothing"
+    )
+
+
+# --- the evidence pins, untouched: measurements may only rise -----------------
 
 
 def test_the_measured_sling_worst_case_is_pinned_to_the_s48_measurement():
-    """The measurement is evidence, not a knob: it may only rise on new evidence.
-
-    Guards the S48 datum (162.7s) so a future edit cannot quietly lower the
-    budget by lowering the number it is checked against.
-    """
+    """The measurement is evidence, not a knob: it may only rise on new evidence."""
     assert MEASURED_SLING_WORST_SECONDS >= 162.7, (
         "the S48 live sling measured 162.7s; the recorded worst case must not "
         "drop below its own evidence"
-    )
-
-
-# --- mc-u9eun: the third recurrence, and the drift guard that would have caught it ---
-#
-# 2026-08-28 measured a live sling at 243.51s, exit 0, molecule mc-mgejq minted.
-# The budget was 200s, so `subprocess.run` killed a call that HAD succeeded and
-# the caller was told the outcome was UNKNOWN. That is the same defect as #181,
-# for the third time: 120s -> killed -> 200s (on S48's 162.7s) -> killed at 243.51s.
-#
-# The two tests above cannot catch this. They pin the budget against a RECORDED
-# measurement, so they only stop someone LOWERING the constant -- they are blind
-# to the real cost drifting past it. Both stayed green through every recurrence.
-
-
-def test_the_budget_clears_the_2026_08_28_measured_cost():
-    """The 243.51s live measurement must fit inside the budget.
-
-    Direct regression on mc-u9eun: at DISPATCH_TIMEOUT_SECONDS = 200 this fails,
-    which is exactly the production failure (trace 46184eb8).
-    """
-    assert DISPATCH_TIMEOUT_SECONDS >= 243.51, (
-        f"dispatch budget {DISPATCH_TIMEOUT_SECONDS}s is below the 243.51s live "
-        "sling measured 2026-08-28 (exit 0, molecule mc-mgejq) -- it kills a "
-        "dispatch that succeeds and reports UNKNOWN, which is #181 a third time"
     )
 
 
@@ -88,57 +103,105 @@ def test_the_recorded_worst_case_reflects_the_newest_larger_measurement():
     )
 
 
-def test_a_dispatch_near_the_budget_ceiling_warns_before_it_fails():
-    """The guard the previous two tests could not provide.
+# --- the migrated subject: an OPERATOR-set bound below the measurement ---------
 
-    A cost that has drifted to within the headroom band is the ONLY early signal
-    that the next raise is coming. Without it the constant fails silently and is
-    discovered in production, which is how 120 -> 200 -> 243 happened unobserved.
+
+def test_an_operator_bound_below_the_measured_cost_is_reported():
+    """The #181 relationship, retargeted at the surface that can still produce it.
+
+    200s was a real shipped budget that killed a real 243.51s dispatch. An operator
+    who sets 200s today gets told what that number does before it does it.
     """
-    near = DISPATCH_TIMEOUT_SECONDS * 0.95
-    warning = dispatch_budget_drift_warning(near)
-    assert warning is not None, (
-        f"a dispatch costing {near:.1f}s of a {DISPATCH_TIMEOUT_SECONDS}s budget "
-        "must warn -- it is one busier city away from the #181 failure"
-    )
-    assert str(DISPATCH_TIMEOUT_SECONDS) in warning
-    assert f"{near:.1f}s" in warning, "the warning must name the ELAPSED cost (P6.3a)"
+    warning = operator_bound_below_measurement_warning(200.0)
+    assert warning is not None
+    assert str(MEASURED_SLING_WORST_SECONDS) in warning
+    assert "cannot succeed" in warning
+    assert DISPATCH_DEADLINE_ENV in warning
 
 
-def test_a_fast_dispatch_does_not_warn():
-    """Negative control: the check must be capable of NOT firing.
+def test_a_bound_that_clears_the_measurement_is_not_reported():
+    """Negative control (P6.2): the check must be capable of NOT firing."""
+    assert operator_bound_below_measurement_warning(MEASURED_SLING_WORST_SECONDS) is None
+    assert operator_bound_below_measurement_warning(600.0) is None
 
-    Without this, a drift warning that fired unconditionally would pass the test
-    above while telling the operator nothing (P6.2: a check that could not have
-    failed must not render as a check that passed).
+
+def test_no_bound_at_all_cannot_be_below_the_measurement():
+    """The structural reason the default retires this failure class."""
+    assert operator_bound_below_measurement_warning(None) is None
+
+
+def test_the_operator_surface_reports_the_undersized_bound_it_accepted():
+    """The report reaches the caller, not just the helper that computed it.
+
+    The bound is still APPLIED -- it is the operator's -- but it is never applied
+    silently. Silently is how 120s shipped.
     """
-    assert dispatch_budget_drift_warning(1.0) is None
-    assert dispatch_budget_drift_warning(DISPATCH_TIMEOUT_SECONDS * 0.1) is None
+    policy, notes = resolve_dispatch_elapsed_policy({DISPATCH_DEADLINE_ENV: "120"})
+    assert policy.deadline_seconds == 120.0
+    assert any("cannot succeed" in note for note in notes)
 
 
-def test_the_drift_threshold_sits_below_the_budget():
-    """The warn band must leave room to act, not fire as the call is being killed."""
+def test_an_operator_bound_keeps_a_warn_threshold_strictly_beneath_it():
+    """P6.3(a): every deadline carries a warn below it, including operator ones."""
+    policy, _ = resolve_dispatch_elapsed_policy({DISPATCH_DEADLINE_ENV: "400"})
+    assert policy.deadline_seconds == 400.0
+    assert policy.warn_after_seconds is not None
+    assert policy.warn_after_seconds < policy.deadline_seconds
     assert 0.0 < DISPATCH_BUDGET_WARN_FRACTION < 1.0
-    just_under = DISPATCH_TIMEOUT_SECONDS * DISPATCH_BUDGET_WARN_FRACTION - 0.01
-    just_over = DISPATCH_TIMEOUT_SECONDS * DISPATCH_BUDGET_WARN_FRACTION + 0.01
-    assert dispatch_budget_drift_warning(just_under) is None
-    assert dispatch_budget_drift_warning(just_over) is not None
 
 
-# --- mc-u9eun: UNKNOWN-on-timeout is the behaviour that actually caused harm ---
+def test_an_unreadable_bound_leaves_the_dispatch_unbounded_and_says_so():
+    """A config typo must not become a kill bound nobody chose."""
+    policy, notes = resolve_dispatch_elapsed_policy({DISPATCH_DEADLINE_ENV: "5 minutes"})
+    assert policy.deadline_seconds is None
+    assert any("not a number of seconds" in note for note in notes)
+
+
+def test_the_operator_can_also_move_the_warn_threshold():
+    """The surface adjusts what is REPORTED, not only what is enforced."""
+    policy, notes = resolve_dispatch_elapsed_policy({DISPATCH_WARN_AFTER_ENV: "30"})
+    assert policy.warn_after_seconds == 30.0
+    assert policy.deadline_seconds is None
+    assert notes == ()
+
+
+# --- the completed-dispatch report, retargeted to the warn threshold ----------
+
+
+def test_a_dispatch_that_ran_past_the_warn_threshold_is_reported():
+    """The drift signal survives the removal of the bound it used to precede."""
+    elapsed = DISPATCH_WARN_AFTER_SECONDS * 1.2
+    warning = dispatch_elapsed_warning(elapsed, policy=resolve_dispatch_elapsed_policy({})[0])
+    assert warning is not None
+    assert f"{elapsed:.1f}s" in warning, "the report must name the ELAPSED cost (P6.3a)"
+    assert "not a failure" in warning
+
+
+def test_a_fast_dispatch_is_not_reported():
+    """Negative control: a report that fired unconditionally would say nothing."""
+    policy, _ = resolve_dispatch_elapsed_policy({})
+    assert dispatch_elapsed_warning(1.0, policy=policy) is None
+    assert dispatch_elapsed_warning(DISPATCH_WARN_AFTER_SECONDS * 0.1, policy=policy) is None
+
+
+def test_the_report_bands_around_the_warn_threshold():
+    just_under = DISPATCH_WARN_AFTER_SECONDS - 0.01
+    just_over = DISPATCH_WARN_AFTER_SECONDS + 0.01
+    policy, _ = resolve_dispatch_elapsed_policy({})
+    assert dispatch_elapsed_warning(just_under, policy=policy) is None
+    assert dispatch_elapsed_warning(just_over, policy=policy) is not None
+
+
+# --- mc-u9eun: the three-valued verdict, which mc-vtru8 must not regress ------
 #
-# The 2026-08-28 dispatch COMPLETED (exit 0, 243.51s, molecule mc-mgejq) and was
-# then killed by the 200s budget and reported UNKNOWN. UNKNOWN is strictly worse
-# than a refusal: it invites the retry that double-dispatches, and that is exactly
-# what happened -- mc-5wdje ended up with two work streams.
-#
-# The timeout cannot know what happened, but it does not have to GUESS: the same
-# claim observation the success path already runs can be run after a timeout too,
-# turning "unknown" into an answer whenever the dispatch is observable.
+# POLICY P6.3 cites DISPATCH_TIMEOUT_CODE / MWRK_DISPATCH_TIMEOUT_UNKNOWN as the
+# in-house COMPLIANT REFERENCE, and `applied=None` is the #184 fix. Removing the
+# default deadline does not remove this path -- an operator-set bound still
+# reaches it -- so every assertion below is load-bearing for the new default too.
 
 
 def test_a_timeout_whose_dispatch_is_observable_reports_it_landed():
-    """The whole point: stop saying UNKNOWN when we can just look."""
+    """Stop saying UNKNOWN when we can just look."""
     verdict = resolve_dispatch_timeout(claim_observed=True)
     assert verdict.applied is True
     assert verdict.may_have_dispatched is True
@@ -166,15 +229,6 @@ def test_the_unknown_timeout_still_warns_against_a_blind_retry():
     assert "retry" in (verdict.suggested_next_command or "").lower()
 
 
-# --- P6.3 "a deadline is not a verdict" (subdomains/dev/POLICY.md:554) ---
-#
-# P6.3(b): on expiry a deadline path must report a distinctly-named NON-FAILURE
-# state carrying elapsed, and "must never render as `failed`". A dispatch that
-# LANDED is the least-failed outcome there is. Caught by clark reviewing cfd4878:
-# the first cut resolved the verdict correctly and then raised it FATAL anyway,
-# which is the exact violation P6.3 exists to stop.
-
-
 def test_a_landed_timeout_is_not_a_failure():
     """P6.3(b): applied=True must never be rendered as a failure."""
     verdict = resolve_dispatch_timeout(claim_observed=True)
@@ -196,9 +250,24 @@ def test_an_unresolved_timeout_is_still_reported_as_a_problem():
     assert dispatch_timeout_is_failure(verdict)
 
 
-def test_the_drift_warning_names_the_elapsed_time():
-    """P6.3(a): the sub-deadline warn signal must name ELAPSED, not just a bound."""
-    elapsed = DISPATCH_TIMEOUT_SECONDS * 0.9
-    warning = dispatch_budget_drift_warning(elapsed)
-    assert warning is not None
-    assert f"{elapsed:.1f}s" in warning
+def test_a_timeout_expiring_is_still_never_collapsed_to_applied_false():
+    """The #184 fix, asserted against the CLASSIFIER an operator bound reaches.
+
+    `subprocess.TimeoutExpired` is what an operator-set deadline produces, and it
+    must classify as `applied=None` -- cannot tell -- rather than `False`, which
+    would be a claim about the world derived from how long we waited.
+    """
+    verdict = classify_dispatch_subprocess_error(
+        subprocess.TimeoutExpired(cmd=["gc", "sling"], timeout=120.0)
+    )
+    assert verdict.applied is None
+    assert verdict.applied is not False
+    assert verdict.code == DISPATCH_TIMEOUT_CODE
+    assert verdict.may_have_dispatched is True
+
+
+def test_a_command_that_never_ran_is_still_applied_false():
+    """Negative control: `applied` must be capable of False, or None means nothing."""
+    verdict = classify_dispatch_subprocess_error(OSError("no such file"))
+    assert verdict.applied is False
+    assert verdict.may_have_dispatched is False

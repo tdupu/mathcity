@@ -4,15 +4,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, MutableMapping, Sequence
 
 from .beads import BD_LIST_ARGS, Bead, BeadCreate, BeadReadError, BeadRelate, read_beads, BeadUpdate
 from .briefs import BriefError, DoctorReport, doctor_briefs
 from .context import MctlContext
+from .deadlines import (
+    ElapsedNotice,
+    ElapsedPolicy,
+    parse_optional_seconds,
+    run_supervised,
+    unbounded_policy,
+)
 from .diagnostics import Diagnostic, Severity
 from .effects import EffectPlan, JsonlWrite
 from .events import append_jsonl
@@ -578,47 +586,288 @@ LIVE_DISPATCH_ENV = "MCTL_ENABLE_LIVE_DISPATCH"
 #: recorded in gt-ybi8j2.
 MEASURED_SLING_WORST_SECONDS = 243.51
 
-#: The subprocess budget `apply_dispatch_plan` gives `gc sling`. It MUST clear
-#: the measured worst case above -- a bound below it is a path that cannot
-#: succeed, which is what shipped at 120s (#181) and again at 200s (mc-u9eun).
-#: 300s = the 243.51s measurement plus ~23% headroom for a busier city.
-DISPATCH_TIMEOUT_SECONDS = 300
+#: What `apply_dispatch_plan` calls the thing it is waiting on, in every notice.
+DISPATCH_LABEL = "the `gc sling` dispatch"
 
-#: The fraction of the budget at which a COMPLETED dispatch is already close
-#: enough to the ceiling to be worth reporting.
+#: How long a dispatch may run before we START SAYING SO. This is a warn
+#: threshold, NOT a bound: nothing is killed when it is crossed.
 #:
-#: This exists because pinning the budget to a recorded measurement did not stop
-#: the failure recurring three times (120 -> 200 -> 243.51). Those assertions
-#: compare two CONSTANTS, so they only prevent someone lowering the budget; they
-#: are structurally blind to the real cost drifting up underneath them, and they
-#: stayed green through every recurrence. The drift is only observable from an
-#: ACTUAL elapsed time, which nothing was measuring.
+#: mc-vtru8, Taylor: *"We shouldn't have a dispatch timeout. So yes, if we raise
+#: the dispatch timeout to infinity and replace it with a warning."* The 300s
+#: that used to KILL this call now only reports it. That is the whole change --
+#: the same number, moved from a verdict to an observation. Raising it three
+#: times on measurement (120 -> 200 -> 300) never worked, because each raise was
+#: a better guess at a bound that should not have existed; every kill was a true
+#: statement about our patience and a false one about the sling.
+DISPATCH_WARN_AFTER_SECONDS = 300.0
+
+#: Where the warn threshold sits UNDER an operator-set deadline. P6.3(a) requires
+#: a warn strictly below any deadline; this is the fraction `bounded_policy`
+#: derives it at, so an operator who sets a bound cannot accidentally set one
+#: with no early signal beneath it.
 DISPATCH_BUDGET_WARN_FRACTION = 0.75
 
-#: Emitted on a dispatch that SUCCEEDED but took most of its budget.
-DISPATCH_BUDGET_DRIFT_CODE = "MWRK_DISPATCH_BUDGET_DRIFT"
+#: Part 3 of the verdict -- *"There should also be a surface for adjusting the
+#: timeout size."* Unset means UNBOUNDED, which is the default and the point.
+#: `--deadline-seconds` on `mctl work dispatch` overrides this per call.
+DISPATCH_DEADLINE_ENV = "MCTL_DISPATCH_DEADLINE_SECONDS"
+
+#: Companion surface for the warn threshold, for an operator who wants to hear
+#: about a slow dispatch earlier (or later) than 300s.
+DISPATCH_WARN_AFTER_ENV = "MCTL_DISPATCH_WARN_AFTER_SECONDS"
+
+#: Emitted WHILE a dispatch is still running and has passed its warn threshold.
+#: This is the signal that replaces the deadline: a visible non-failure statement
+#: of elapsed time, made at a moment when nobody yet knows the outcome.
+DISPATCH_STILL_RUNNING_CODE = "MWRK_DISPATCH_STILL_RUNNING"
+
+#: Emitted on a dispatch that FINISHED but ran past the warn threshold.
+DISPATCH_SLOW_CODE = "MWRK_DISPATCH_SLOW"
+
+#: Emitted when the operator's own bound configuration needs reporting back --
+#: unreadable, or set below the worst cost this dispatch has been MEASURED to
+#: take. Never silently corrected: it is the operator's bound.
+DISPATCH_OPERATOR_BOUND_CODE = "MWRK_DISPATCH_OPERATOR_BOUND"
 
 
-def dispatch_budget_drift_warning(elapsed_seconds: float) -> str | None:
-    """Detail for a completed dispatch that is nearing its budget, else None.
+def operator_bound_below_measurement_warning(deadline_seconds: float | None) -> str | None:
+    """Detail when an operator's bound is smaller than the cost it wraps, else None.
+
+    This carries forward the subject of `test_dispatch_budget.py`: *a bound below
+    the measurement is a path that cannot succeed.* That test was written against
+    a hardcoded budget that shipped at 120s while a live sling measured 162.7s,
+    and the same relationship now applies to whatever an operator can set.
+
+    Returns None when there is no bound -- the default. A bound that does not
+    exist cannot sit below a measurement, which is the structural reason the
+    unbounded default retires this failure class rather than re-tuning it.
+    """
+    if deadline_seconds is None:
+        return None
+    if deadline_seconds >= MEASURED_SLING_WORST_SECONDS:
+        return None
+    return (
+        f"the operator-set dispatch deadline of {deadline_seconds:.1f}s is below "
+        f"the worst MEASURED cost of the sling it wraps "
+        f"({MEASURED_SLING_WORST_SECONDS}s, mc-u9eun 2026-08-28, exit 0). A bound "
+        "below the measurement is a path that cannot succeed: it kills a dispatch "
+        "that would have landed and reports the outcome UNKNOWN, which is #181 and "
+        "mc-u9eun. The default is NO deadline; unset "
+        f"{DISPATCH_DEADLINE_ENV} to restore it."
+    )
+
+
+def resolve_dispatch_elapsed_policy(
+    env: Mapping[str, str] | None = None,
+) -> tuple[ElapsedPolicy, tuple[str, ...]]:
+    """Read the operator surface into a policy, plus anything worth reporting back.
+
+    Default: warn at `DISPATCH_WARN_AFTER_SECONDS`, deadline None. An unusable
+    value is reported and IGNORED rather than coerced -- a typo must not become a
+    kill bound nobody chose.
+    """
+    source = os.environ if env is None else env
+    notes: list[str] = []
+
+    deadline, complaint = parse_optional_seconds(source.get(DISPATCH_DEADLINE_ENV))
+    if complaint:
+        notes.append(f"{DISPATCH_DEADLINE_ENV}: {complaint}")
+    warn_after, warn_complaint = parse_optional_seconds(source.get(DISPATCH_WARN_AFTER_ENV))
+    if warn_complaint:
+        notes.append(f"{DISPATCH_WARN_AFTER_ENV}: {warn_complaint}")
+    if warn_after is None:
+        warn_after = DISPATCH_WARN_AFTER_SECONDS
+
+    below = operator_bound_below_measurement_warning(deadline)
+    if below:
+        notes.append(below)
+
+    if deadline is None:
+        return unbounded_policy(DISPATCH_LABEL, warn_after_seconds=warn_after), tuple(notes)
+    if warn_after >= deadline:
+        # P6.3(a) leaves no discretion here: the warn must sit strictly below the
+        # deadline. Derive one rather than refusing the operator's bound.
+        warn_after = deadline * DISPATCH_BUDGET_WARN_FRACTION
+    return (
+        ElapsedPolicy(
+            label=DISPATCH_LABEL, warn_after_seconds=warn_after, deadline_seconds=deadline
+        ),
+        tuple(notes),
+    )
+
+
+#: The operator surface's two keys, indexed by the argument name each is set
+#: from. `work_dispatch_bound` writes THESE keys -- the same two the env surface
+#: documents and the CLI flags layer onto -- so an agent, an operator's shell,
+#: and a per-call flag all end up in one store, read back by one function.
+#:
+#: Taylor, asked whether the surface built for mc-vtru8 part 3 had to be
+#: reachable from an agent and not only from a shell: *"Yes MCP reachable."*
+#: A tool that parsed its own seconds into its own policy would have made the
+#: MCP answer to "what is the bound" independent of the CLI answer, and two
+#: surfaces that can disagree about a kill bound are worse than one surface that
+#: is merely inconvenient.
+DISPATCH_BOUND_ENV_KEYS: Mapping[str, str] = {
+    "deadline_seconds": DISPATCH_DEADLINE_ENV,
+    "warn_after_seconds": DISPATCH_WARN_AFTER_ENV,
+}
+
+
+def dispatch_bound_state(
+    policy: ElapsedPolicy, notes: Sequence[str] = ()
+) -> dict[str, object]:
+    """One resolved policy, rendered for a payload.
+
+    `deadline_seconds` is null for the default, and null is the ANSWER here --
+    *there is no bound* -- not a missing value. `bounded` states the same fact
+    as a boolean so a client never has to infer it from a null.
+    """
+    return {
+        "bounded": policy.bounded,
+        "deadline_seconds": policy.deadline_seconds,
+        "label": policy.label,
+        "notes": list(notes),
+        "warn_after_seconds": policy.warn_after_seconds,
+    }
+
+
+@dataclass(frozen=True)
+class DispatchBoundPlan:
+    """What adjusting the dispatch bound intends to do, before it does it.
+
+    `in_force` is what a dispatch resolves to right now; `resolved` is what it
+    would resolve to once `requested` is installed. Both come from
+    `resolve_dispatch_elapsed_policy`, so a preview cannot describe a policy the
+    apply would not produce.
+    """
+
+    trace_id: str
+    #: Env key -> the caller's raw string, unparsed. Raw on purpose: the parsing
+    #: and the complaining both belong to the resolver, and a value this class
+    #: had already normalised could not be reported back as the operator typed it.
+    requested: Mapping[str, str]
+    in_force: ElapsedPolicy
+    resolved: ElapsedPolicy
+    notes: tuple[str, ...]
+
+    @property
+    def operation(self) -> str:
+        return "work.dispatch_bound"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "operation": self.operation,
+            "provenance": {
+                "env_writes": dict(sorted(self.requested.items())),
+                "in_force": dispatch_bound_state(self.in_force),
+                "resolved": dispatch_bound_state(self.resolved, self.notes),
+            },
+            "trace_id": self.trace_id,
+        }
+
+
+def plan_dispatch_bound(
+    trace_id: str,
+    *,
+    deadline_seconds: str | None = None,
+    warn_after_seconds: str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> DispatchBoundPlan:
+    """Read the bound in force, and what the caller's request would make it.
+
+    An omitted field writes nothing: absent means *leave it alone*, never *reset
+    it to the default*, so an agent adjusting the warn threshold cannot silently
+    drop a deadline an operator set in the environment.
+
+    Nothing here interprets a number. The caller's raw strings are layered onto
+    the environment and the whole mapping goes to
+    `resolve_dispatch_elapsed_policy` -- exactly what `cli.py` does with
+    `--deadline-seconds`, and exactly what `apply_dispatch_plan` reads.
+    """
+    source = dict(os.environ if env is None else env)
+    in_force, _ = resolve_dispatch_elapsed_policy(source)
+
+    asked = {"deadline_seconds": deadline_seconds, "warn_after_seconds": warn_after_seconds}
+    requested = {
+        DISPATCH_BOUND_ENV_KEYS[name]: str(value)
+        for name, value in asked.items()
+        if value is not None
+    }
+    resolved, notes = resolve_dispatch_elapsed_policy({**source, **requested})
+    return DispatchBoundPlan(
+        trace_id=trace_id,
+        requested=requested,
+        in_force=in_force,
+        resolved=resolved,
+        notes=tuple(notes),
+    )
+
+
+def apply_dispatch_bound(
+    plan: DispatchBoundPlan, env: MutableMapping[str, str] | None = None
+) -> dict[str, str]:
+    """Install the plan's env writes where the resolver reads them.
+
+    The store is the process environment, which is the same store an operator's
+    `export` writes to and the only one `resolve_dispatch_elapsed_policy` reads.
+    A separate MCP-only store would have been a second source of truth; there is
+    deliberately none.
+
+    Scope, stated plainly because a client cannot see it: this lasts for the life
+    of the server process and does not survive its restart. It is a session
+    control, not a configuration file.
+    """
+    target = os.environ if env is None else env
+    for key, value in plan.requested.items():
+        target[key] = value
+    return dict(plan.requested)
+
+
+def dispatch_bound_payload(
+    ctx: MctlContext, plan: DispatchBoundPlan, *, applied: bool
+) -> dict[str, object]:
+    """The bound before, the bound after, and anything the operator should hear.
+
+    `applied` is what tells `after` apart from a preview: on a dry run nothing
+    was written, so `after` is what a dispatch WOULD resolve to. The notes ride
+    as `MWRK_DISPATCH_OPERATOR_BOUND` WARNs -- the same code `apply_dispatch_plan`
+    reports them under, because they are the same notes from the same resolver.
+    """
+    return {
+        "applied": applied,
+        "dispatch_bound": {
+            "after": dispatch_bound_state(plan.resolved, plan.notes),
+            "before": dispatch_bound_state(plan.in_force),
+            "env_writes": dict(sorted(plan.requested.items())),
+        },
+        "diagnostics": [
+            _diagnostic(
+                ctx,
+                Severity.WARN,
+                DISPATCH_OPERATOR_BOUND_CODE,
+                "The operator's dispatch-deadline configuration needs reporting back.",
+                detail=note,
+            ).to_dict()
+            for note in plan.notes
+        ],
+        "effect_plan": plan.to_dict(),
+        "trace_id": plan.trace_id,
+    }
+
+
+def dispatch_elapsed_warning(
+    elapsed_seconds: float, *, policy: ElapsedPolicy | None = None
+) -> str | None:
+    """Detail for a dispatch that FINISHED but ran long, else None.
 
     Returns None for a comfortable dispatch: the check must be capable of not
     firing, or it reports nothing (P6.2 -- a check that could not have failed
     must not render as a check that passed).
     """
-    threshold = DISPATCH_TIMEOUT_SECONDS * DISPATCH_BUDGET_WARN_FRACTION
-    if elapsed_seconds <= threshold:
+    active = policy if policy is not None else resolve_dispatch_elapsed_policy()[0]
+    if not active.exceeds_warn(elapsed_seconds):
         return None
-    return (
-        f"this dispatch took {elapsed_seconds:.1f}s of its "
-        f"{DISPATCH_TIMEOUT_SECONDS}s budget "
-        f"(warn threshold {threshold:.1f}s = {DISPATCH_BUDGET_WARN_FRACTION:.0%}). "
-        "It SUCCEEDED, but the cost is approaching the bound; when it crosses, "
-        "the call is killed after doing the work and the outcome is reported "
-        "UNKNOWN. Record the new cost in MEASURED_SLING_WORST_SECONDS and raise "
-        "DISPATCH_TIMEOUT_SECONDS before that happens -- this is the early "
-        "warning that #181 and mc-u9eun did not have."
-    )
+    return active.notice(elapsed_seconds, still_running=False).message()
 
 
 def live_dispatch_enabled(env: Mapping[str, str] | None = None) -> bool:
@@ -673,7 +922,28 @@ def dispatch_disarmed_payload(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[
     return payload
 
 
-def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, object]:
+def announce_dispatch_notice(notice: ElapsedNotice) -> None:
+    """Put a still-running notice where a human can see it AS IT HAPPENS.
+
+    P6.2: the warning replaces a check, so a warn path that never emits is
+    indistinguishable from a dispatch that was never slow. The returned payload
+    carries the same notices, but a payload is rendered after the call returns --
+    which, for the case this exists for, may be many minutes later. stderr is the
+    only channel that is visible while the dispatch is still running, and `--json`
+    callers read stdout, so this cannot corrupt a machine consumer.
+    """
+    print(f"[mctl] {notice.message()}", file=sys.stderr, flush=True)
+
+
+def apply_dispatch_plan(
+    ctx: MctlContext, plan: WorkDispatchPlan, *, env: Mapping[str, str] | None = None
+) -> dict[str, object]:
+    """Sling the plan, watching elapsed time rather than bounding it (mc-vtru8).
+
+    `env` is the operator surface, defaulting to the process environment; the CLI
+    layers `--deadline-seconds` / `--warn-after-seconds` on top of it so a per-call
+    bound and a per-process one resolve through exactly one code path.
+    """
     if not live_dispatch_enabled():
         # Not armed: no side effect, and say so. Writing provenance here would
         # flip readiness to `dispatched` and block every future attempt,
@@ -701,17 +971,69 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         )
 
     command = [str(part) for part in plan.formula_invocation["command"]]
-    started_at = time.monotonic()
+    # mc-vtru8: no client-side deadline unless an operator set one. `run_supervised`
+    # reports elapsed WHILE the sling runs and kills nothing by default, so the
+    # only claim this function makes about time is how much of it has passed.
+    active_policy, policy_notes = resolve_dispatch_elapsed_policy(env)
+    run = None
+    error: BaseException | None = None
     try:
-        result = subprocess.run(
+        run = run_supervised(
             command,
+            policy=active_policy,
             cwd=ctx.rig_root,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=DISPATCH_TIMEOUT_SECONDS,
+            on_notice=announce_dispatch_notice,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except OSError as spawn_error:
+        error = spawn_error
+    else:
+        # An operator-set bound expiring is the ONLY way to reach the timeout
+        # branch now, and it lands in it unchanged -- same classifier, same
+        # three-valued verdict, same `applied=None`.
+        error = run.timeout_error if run.deadline_exceeded else None
+
+    elapsed_notices = tuple(run.notices) if run is not None else ()
+    elapsed_seconds = run.elapsed_seconds if run is not None else 0.0
+
+    def elapsed_diagnostics() -> list[dict[str, object]]:
+        """Carry the live elapsed reports and the operator's own config into the payload.
+
+        The still-running notices were already announced on stderr as they fired;
+        repeating the LAST one here is what a `--json` consumer sees, and it is the
+        non-failure elapsed signal P6.3(a) requires a deadline path to emit.
+        """
+        rows: list[dict[str, object]] = []
+        for note in policy_notes:
+            rows.append(
+                _diagnostic(
+                    ctx,
+                    Severity.WARN,
+                    DISPATCH_OPERATOR_BOUND_CODE,
+                    "The operator's dispatch-deadline configuration needs reporting back.",
+                    brief_id=plan.target_brief_id,
+                    bead_id=plan.bead_id,
+                    detail=note,
+                ).to_dict()
+            )
+        if elapsed_notices:
+            rows.append(
+                _diagnostic(
+                    ctx,
+                    Severity.WARN,
+                    DISPATCH_STILL_RUNNING_CODE,
+                    "The dispatch passed its warn threshold while it was still running.",
+                    brief_id=plan.target_brief_id,
+                    bead_id=plan.bead_id,
+                    detail=(
+                        f"{len(elapsed_notices)} elapsed report(s) were emitted while "
+                        f"the sling was running; the last read: "
+                        f"{elapsed_notices[-1].message()}"
+                    ),
+                ).to_dict()
+            )
+        return rows
+
+    if error is not None:
         # #184: these are opposite worlds and shared one message. A timeout means
         # the command RAN; `applied: false` after one is a claim about the world
         # derived from how long we waited, and a caller who believes it retries.
@@ -765,12 +1087,14 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
                         brief_id=plan.target_brief_id,
                         bead_id=plan.bead_id,
                         detail=(
-                            f"exceeded the {DISPATCH_TIMEOUT_SECONDS}s subprocess "
-                            "budget; the dispatch is observable, so it landed"
+                            f"ran {elapsed_seconds:.1f}s and exceeded the "
+                            f"operator-set {active_policy.deadline_seconds}s deadline; "
+                            "the dispatch is observable, so it landed"
                         ),
                         suggested_next_command=verdict.suggested_next_command,
                     ).to_dict()
-                ],
+                ]
+                + elapsed_diagnostics(),
             }
         raise WorkError(
             _diagnostic(
@@ -780,10 +1104,23 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
                 verdict.message,
                 brief_id=plan.target_brief_id,
                 bead_id=plan.bead_id,
-                detail=str(error),
+                # P6.3(b): even the unresolved case names ELAPSED. The bound that
+                # expired is the operator's own, and saying so keeps the fact
+                # attributed to the caller who chose it.
+                detail=(
+                    f"ran {elapsed_seconds:.1f}s against an operator-set "
+                    f"{active_policy.deadline_seconds}s deadline: {error}"
+                    if run is not None
+                    else str(error)
+                ),
                 suggested_next_command=verdict.suggested_next_command,
             )
         ) from error
+
+    # Every path where the command did not report an outcome returned or raised
+    # above, so `run.completed` is the real `CompletedProcess` here -- never a
+    # synthesised one, which is the substitution P6.3 exists to prevent.
+    result = run.completed
     if result.returncode != 0:
         raise WorkError(
             _diagnostic(
@@ -807,7 +1144,6 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
     # and mint a duplicate input convoy (#213). So: write provenance on exit 0
     # (mirrors #184's UNKNOWN-not-failure contract), and report the claim as
     # `observed` or `pending` rather than raising.
-    elapsed_seconds = time.monotonic() - started_at
     try:
         beads_after = _beads(ctx)
     except WorkError:
@@ -846,18 +1182,20 @@ def apply_dispatch_plan(ctx: MctlContext, plan: WorkDispatchPlan) -> dict[str, o
         "provenance": provenance.to_dict(),
         "trace_id": plan.trace_id,
     }
-    diagnostics: list[dict[str, object]] = []
-    drift = dispatch_budget_drift_warning(elapsed_seconds)
+    diagnostics: list[dict[str, object]] = elapsed_diagnostics()
+    drift = dispatch_elapsed_warning(elapsed_seconds, policy=active_policy)
     if drift is not None:
-        # mc-u9eun: the budget has been outgrown three times (120 -> 200 -> 243.51)
-        # and each was discovered in production, because nothing reported the
-        # ACTUAL cost while it still fit. This is that report.
+        # mc-u9eun: the cost has outgrown three successive budgets (120 -> 200 ->
+        # 243.51) and each was discovered in production, because nothing reported
+        # the ACTUAL cost while it still fit. This is that report -- now against a
+        # warn threshold that kills nothing, so growing past it costs a line of
+        # output instead of a dispatch.
         diagnostics.append(
             _diagnostic(
                 ctx,
                 Severity.WARN,
-                DISPATCH_BUDGET_DRIFT_CODE,
-                "The dispatch succeeded but is approaching its subprocess budget.",
+                DISPATCH_SLOW_CODE,
+                "The dispatch succeeded and ran past its warn threshold.",
                 brief_id=plan.target_brief_id,
                 bead_id=plan.bead_id,
                 detail=drift,

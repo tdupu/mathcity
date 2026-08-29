@@ -36,6 +36,14 @@ from mctl_dashboard.client import ALLOWED_TOOLS  # noqa: E402
 #: Server tools the dashboard deliberately may not call, with the reason.
 #: An entry here is a decision; absence from both lists is an oversight.
 DELIBERATELY_UNREACHABLE: dict[str, str] = {
+    "artifact_locate": (
+        "an agent-facing diagnostic (mc-8q0g4): it answers 'is this bead's artifact "
+        "there, and could I even tell?' for a caller deciding whether to trust an "
+        "absence. No screen asks that question -- the dashboard already renders "
+        "artifact state through briefs_list/briefs_show, which carry the same "
+        "artifact_trust verdict. Allowlisting it would assert a reachability nobody "
+        "built, same footing as beads_show."
+    ),
     "beads_list": (
         "a raw store read (#245); no screen consumes it. The dashboard reads beads "
         "through the domain surfaces it already has (briefs_list, queue_status, "
@@ -44,6 +52,16 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
     ),
     "beads_show": "a raw single-bead read (#245); no screen consumes it, same footing as beads_list",
     "work_dispatch": "mutating dispatch is not driven from the dashboard",
+    "work_dispatch_bound": (
+        "mutating, and no screen consumes it -- but the reason to keep it that way "
+        "is stronger than 'nobody built it'. The bound is PROCESS-WIDE for the "
+        "server that receives the call and carries no per-caller scoping, so a page "
+        "shortening it would silently retarget dispatches it did not make: a "
+        "Mayor's live sling abandoned mid-flight, and that sling's outcome reported "
+        "UNKNOWN (P6.3, #184) with nothing on the page saying who moved the bound. "
+        "This is an operator's valve (mc-vtru8 part 3), belonging to whoever is "
+        "doing the dispatching, and it is reachable to an agent that is."
+    ),
     "work_dispatch_event": "provenance events are written by the dispatcher, not the page",
     "briefs_create": "briefs are produced by the pipeline, not authored in the dashboard",
     "decisions_to_briefs": (

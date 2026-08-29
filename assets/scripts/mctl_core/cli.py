@@ -45,10 +45,14 @@ from .effects import (
     plan_deferral,
 )
 from .work import (
+    DISPATCH_DEADLINE_ENV,
+    DISPATCH_WARN_AFTER_ENV,
+    DISPATCH_WARN_AFTER_SECONDS,
     EMPTY_WORK_SCOPE,
     WorkError,
     apply_dispatch_plan,
     dispatch_dry_run_payload,
+    resolve_dispatch_elapsed_policy,
     plan_dispatch,
     plan_dispatch_event,
     ready_work_payload,
@@ -556,6 +560,27 @@ def _add_work_dispatch_parser(commands: argparse._SubParsersAction[argparse.Argu
     parser = commands.add_parser("dispatch", help="dispatch brief-backed work through an effect plan")
     parser.add_argument("brief_id")
     parser.add_argument("--dry-run", action="store_true")
+    # mc-vtru8 part 3: "There should also be a surface for adjusting the timeout
+    # size." There is NO deadline by default -- the sling runs to completion and
+    # its elapsed time is reported while it runs. A bound is an operator's choice,
+    # made per call here or per process via MCTL_DISPATCH_DEADLINE_SECONDS.
+    parser.add_argument(
+        "--deadline-seconds",
+        default=None,
+        help=(
+            "abandon the sling after N seconds (default: no deadline). "
+            "Expiry reports elapsed and UNKNOWN, never failure. Use `none` to "
+            "spell out the default."
+        ),
+    )
+    parser.add_argument(
+        "--warn-after-seconds",
+        default=None,
+        help=(
+            "report elapsed time while the sling is still running, every N "
+            f"seconds (default: {DISPATCH_WARN_AFTER_SECONDS:.0f}s)"
+        ),
+    )
     _add_runtime_arguments(parser)
 
 
@@ -837,10 +862,18 @@ def _work_command(args: argparse.Namespace, context: MctlContext) -> int:
             payload.setdefault("trace_id", context.trace_id)
         else:
             plan = plan_dispatch(context, args.brief_id)
+            # mc-vtru8: the flags are layered ONTO the environment rather than
+            # parsed here, so a per-call bound and a per-process one resolve
+            # through one function and produce the same reports.
+            dispatch_env = dict(os.environ)
+            if args.deadline_seconds is not None:
+                dispatch_env[DISPATCH_DEADLINE_ENV] = str(args.deadline_seconds)
+            if args.warn_after_seconds is not None:
+                dispatch_env[DISPATCH_WARN_AFTER_ENV] = str(args.warn_after_seconds)
             payload = (
                 dispatch_dry_run_payload(plan)
                 if args.dry_run
-                else apply_dispatch_plan(context, plan)
+                else apply_dispatch_plan(context, plan, env=dispatch_env)
             )
     except MutationError as error:
         _record_refusal(

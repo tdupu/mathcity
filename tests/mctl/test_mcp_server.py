@@ -32,6 +32,14 @@ BRIEF_STATE = FIXTURES / "brief_state"
 WORK_STATE = FIXTURES / "work_state"
 
 DECLARED_TOOLS = (
+    # mc-8q0g4: the typed answer to "where does this artifact live, and is it
+    # there?" -- 48 tools and none answered it, so agents shelled out to `find`
+    # against a hand-typed path. The wrong root is NOT empty (11 decision tomls
+    # under the city root against the rig root's 119), so that probe returns
+    # clean, plausible output about a different rig. This takes a bead id and
+    # never a path, and reports `unknown` rather than `absent` when the root is
+    # missing.
+    "artifact_locate",
     # mc-p0wps: the three typed bead-write verbs -- close/hold/release.
     "bead_close",
     # mc-ilia: the surface's only append-only correction path for an existing bead.
@@ -85,6 +93,9 @@ DECLARED_TOOLS = (
     "tracker_rows",
     "work_claim",
     "work_dispatch",
+    # mc-vtru8: the dispatch bound built as CLI flags and env keys, made
+    # agent-reachable. Taylor: "Yes MCP reachable."
+    "work_dispatch_bound",
     "work_dispatch_event",
     "work_provenance",
     "work_ready",
