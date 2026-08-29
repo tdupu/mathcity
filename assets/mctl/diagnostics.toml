@@ -1018,6 +1018,16 @@ module = "gc_events.py"
 # (#164/#210), and every read obeys P6.2: an unknown serving commit is reported
 # unknown, never a placeholder compared against origin/main.
 
+[MEVT_EVENTS_UNREACHABLE]
+severity = "WARN"
+meaning = "The city event log could not be read, so events_list reports every population as null rather than an empty list. A city with no events and a log we could not open are different answers and this keeps them apart."
+module = "ticker_read.py"
+
+[MEVT_SCAN_TRUNCATED]
+severity = "WARN"
+meaning = "events_list read a bounded TAIL of the event log (measured 218 MB live), so its counts describe the window scanned and not the whole log. `available_in_scan` is named that way for the same reason: a tail must never be quoted as the population (#124). Treat every figure as a floor; `scan` reports log_bytes, scanned_bytes and truncated."
+module = "ticker_read.py"
+
 [MDSH_STALE_INSTANCE]
 severity = "WARN"
 meaning = "A running dashboard is serving a commit other than the checkout's current HEAD; dashboard_status flags it so an operator can rebind deliberately with dashboard_restart. Not automatic -- #164 keeps restart a decision."
