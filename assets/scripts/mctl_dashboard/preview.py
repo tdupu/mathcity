@@ -50,6 +50,12 @@ VOLATILE_KEYS = frozenset(
         "mctl_trace_id",
         "adjudicated_at",
         "deferred_at",
+        # gt-5yxup1's aggregated-decision CacheUpdate stamps `decided_at = _now()`
+        # into the effect plan. Left in the digest it varies between the preview
+        # and the confirm whenever they straddle a one-second boundary, so an
+        # unchanged adjudication is reported stale at random -- the same per-call
+        # volatility `adjudicated_at`/`deferred_at` are redacted for.
+        "decided_at",
     }
 )
 
