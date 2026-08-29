@@ -326,6 +326,14 @@ class BriefFrontmatterUnwritable(OSError):
 
 
 
+#: The sentinel `create-brief`'s frontmatter contract requires when no unlock
+#: count was computed (SKILL.md:60,67). A STRING on purpose: the field is typed
+#: `<int> | UNKNOWN-NOT-COMPUTED`, and "the field is typed <int>" is explicitly
+#: not a reason to supply one. `0` is forbidden because it is a MEASUREMENT
+#: claiming the brief blocks nothing.
+UNLOCK_COUNT_NOT_COMPUTED = "UNKNOWN-NOT-COMPUTED"
+
+
 def _pile_document(body: str, sources: Sequence[str] = ()) -> str:
     """The created document, WITH a frontmatter block adjudication can write into.
 
@@ -367,6 +375,25 @@ def _pile_document(body: str, sources: Sequence[str] = ()) -> str:
     header = "status: open"
     if sources:
         header += f"\nsource_bead: {sources[0]}"
+    # `mc-mft4c`: say that no unlock count was computed, rather than omitting
+    # the field. `create-brief`'s contract (SKILL.md:60) declares
+    # `unlock_count: <int> | UNKNOWN-NOT-COMPUTED` and this producer wrote
+    # neither, so a typed brief could not state that it had not computed one --
+    # absent is indeterminate (skipped? not computed? field unknown to the
+    # writer?) where the sentinel is a positive claim.
+    #
+    # NEVER a number here, and specifically never 0. `0` is a MEASUREMENT
+    # asserting the brief blocks nothing, and it sorts a live blocker to the
+    # bottom of an unlock_count-ranked stack -- which is why the contract
+    # forbids it in as many words.
+    #
+    # And never a DERIVED count either: `briefs.py` records that counting what
+    # a brief's bead unblocks returns ~0 (508 of 528 live edges are `related`;
+    # 1 bead in 264 carries a blocking edge), so a derivation would produce
+    # exactly the false zero the sentinel exists to prevent. The number in a
+    # document is written by whoever knew what the brief unblocked, and this
+    # producer does not know.
+    header += f"\nunlock_count: {UNLOCK_COUNT_NOT_COMPUTED}"
     return f"---\n{header}\n---\n\n{body}"
 
 
