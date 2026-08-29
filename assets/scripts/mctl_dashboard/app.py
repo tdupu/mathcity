@@ -505,8 +505,22 @@ class Dashboard:
         so it lets them switch which rig's briefs they VIEW even when the
         instance was launched pinned. The city dashboard keeps "pinned => no
         picker": a rig picker there would imply a choice the deployment made.
+
+        `both` COUNTS. It was excluded, and since `both` is the DEFAULT
+        selector that made the out-of-the-box deployment the broken one: a
+        pinned `both` instance serves `/queue` -- it IS the briefs manager on
+        those routes -- while `_is_briefs_manager` said otherwise, so the
+        view-switch below never fired AND `rig_filter_field` never rendered
+        (it is gated on `city_wide`, false when pinned). Neither branch, no
+        control, no way to change rigs. Reported from the live instance
+        2026-08-29: pid 76065, `rig=mathcity`, `dashboard=both`.
+
+        This widens what an operator may LOOK at, never what a write touches.
+        `_rig_for` is the write router and is deliberately blind to `?rig=`
+        when pinned; that guard is untouched here and is what makes widening
+        the view safe.
         """
-        return self.dashboard == "briefs"
+        return self.dashboard in ("briefs", "both")
 
     def _view_rig(self, request: Request) -> str | None:
         """Which rig a READ view shows -- distinct from `_rig_for`.
