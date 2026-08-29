@@ -242,6 +242,41 @@ def _pile_artifact(layout: ArtifactLayout, brief_id: str) -> RedundantArtifact:
                 + ", ".join(path.name for path in candidates)
             ),
         )
+    # mc-crc4o: last, resolve by BEAD IDENTITY -- the `artifact:` frontmatter key
+    # -- for files whose name says nothing about which bead they belong to.
+    #
+    # Q5 (RESOLVED 2026-08-19) settled the convention: "the briefs are supposed
+    # to be decision beads so it should be however beads are looked-up", and
+    # names this exact consequence -- scan_artifacts "would fail to find these
+    # files even if it were pointed at the correct root."
+    #
+    # Measured on the live mathcity pile the day this landed: 99 files, four
+    # addressable ONLY this way and by no filename at all (mc-g4k2 in
+    # mc-cbks.md, mc-99jj in mc-j6uh.md, mc-k4t1s in mc-kjot0.md, mc-jvqq in
+    # mc-tfp4.md). Without this they report `missing`, and MBRF021's documented
+    # remedy would then CREATE duplicates of artifacts that already exist.
+    #
+    # Shared with `locate_artifact` rather than reimplemented: one resolution
+    # rule, so the validate path and the locate tool cannot disagree about
+    # whether an artifact exists -- which is the split this bead is closing.
+    claimants = _frontmatter_claimants(layout.pile, brief_id, ".md")
+    if len(claimants) == 1:
+        return RedundantArtifact(
+            kind="pile",
+            path=claimants[0],
+            state="present",
+            detail="redundant cache file, resolved by `artifact:` frontmatter",
+        )
+    if len(claimants) > 1:
+        return RedundantArtifact(
+            kind="pile",
+            path=layout.pile,
+            state="ambiguous",
+            detail=(
+                f"{len(claimants)} cache files claim this brief id in `artifact:` "
+                "frontmatter: " + ", ".join(path.name for path in claimants)
+            ),
+        )
     return _file_artifact("pile", exact)
 
 

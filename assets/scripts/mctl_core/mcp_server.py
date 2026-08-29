@@ -383,13 +383,16 @@ def _untrusted_state_diagnostic(ctx: MctlContext, trust: ArtifactTrust) -> Diagn
     This used to say "Open design question Q5 must resolve before any
     artifact-state finding here is acted on." Q5 has been RESOLVED since
     2026-08-19 (storage per-rig, reporting city-wide; lookup follows bead
-    identity), with implementation deliberately deferred. Untrusting the
-    readings is still correct -- the implementation has not landed, so the
-    lookup still misses frontmatter-addressed files and MBRF021 over-reports --
-    but the REASON was wrong, and wrong in the expensive direction: it sent the
-    reader to re-decide something the owner had already decided. A settled
-    question read as open is how brief mc-tbucy was nearly sent back for a
-    second verdict on 2026-08-28.
+    identity). That lookup HAS now landed (mc-crc4o), so the reason changed
+    again: the readings no longer miss frontmatter-addressed files. Untrusting
+    is still correct, but now for a different reason -- the gate untrusts on the
+    filename/frontmatter MISMATCH EXISTING, not on the lookup failing, and those
+    were the same condition before mc-crc4o and are not the same condition after.
+    Whether a divergence should untrust a rig at all is mc-ss6xz, still OPEN.
+
+    Twice now the VERDICT was right and its stated REASON rotted underneath it,
+    which is the expensive direction: a settled question read as open is how
+    brief mc-tbucy was nearly sent back for a second verdict on 2026-08-28.
     """
     return Diagnostic(
         severity=Severity.WARN,
@@ -398,14 +401,16 @@ def _untrusted_state_diagnostic(ctx: MctlContext, trust: ArtifactTrust) -> Diagn
             "Redundant-artifact state in this response is not trustworthy: "
             f"{trust.reason}. Q5 DECIDED this on 2026-08-19 -- storage is "
             "per-rig, reporting is city-wide, and artifact lookup follows bead "
-            "identity -- but that direction is not yet IMPLEMENTED here, so "
-            "these readings still under-report artifacts that exist. No "
-            "decision is pending; do not re-open it."
+            "identity -- and that lookup IS now implemented (mc-crc4o): these "
+            "readings no longer under-report frontmatter-addressed artifacts. "
+            "What remains undecided is whether a filename/frontmatter divergence "
+            "should still untrust a rig at all; that is mc-ss6xz. Until it is "
+            "ruled, this stays untrusted and MBRF021 stays withheld."
         ),
         hint=(
-            "Cleared by implementing the decided lookup: resolve artifacts by "
-            "bead identity, including the `artifact:` frontmatter key, not by "
-            "filename alone (see redundant_state.locate_artifact, which does). "
+            "Cleared by ruling mc-ss6xz, not by further implementation -- the "
+            "decided lookup is in place in both redundant_state.locate_artifact "
+            "and _pile_artifact. "
             f"Background in {Q5_REFERENCE}. Until then do not repair the "
             "filesystem from withheld codes "
             f"{list(trust.withheld_codes) or list(UNTRUSTED_ARTIFACT_CODES)} -- "
