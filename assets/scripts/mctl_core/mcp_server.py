@@ -1686,7 +1686,11 @@ def _handle_tracker_rows(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict
     except BeadReadError as error:
         beads, store_unreadable = None, str(error)
 
-    rows = build_rows(issues, beads, None, store_unreadable=store_unreadable)
+    # `repo` is threaded through so pairing can consult `metadata["gh.issue"]`,
+    # which is repo-qualified and is where `create_issue_bead` actually records
+    # the pairing (mc-mbf3a). Without it that key is skipped and the screen
+    # reports beads that exist as absent -- measured 5 paired vs 56 in store.
+    rows = build_rows(issues, beads, None, store_unreadable=store_unreadable, repo=repo)
     return {
         "diagnostics": _diagnostics(ctx, ()),
         "issues_unreadable": None,
