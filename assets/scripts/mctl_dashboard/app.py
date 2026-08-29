@@ -1495,6 +1495,7 @@ class Dashboard:
             ("queue_status", city_screen.queue),
             ("costs_summary", city_screen.costs),
             ("worktrees_status", city_screen.worktrees),
+            ("events_list", city_screen.events),
         )
         # Five of those seven carry CITY_SCOPE and answer with no rig named.
         # `queue_status` and `costs_summary` do not, so on a city-wide dashboard
@@ -1612,13 +1613,10 @@ class Dashboard:
                 )
             sections.extend(city_screen.needs_rig(tool, rig_ids, rig) for tool in deferred)
 
-        # Built, tested, and unreachable: no MCP tool exists, so no page can
-        # call them. Named rather than omitted -- an absent panel reads as
-        # "the city has none of these", which is false.
-        for tool, module, issue in (
-            ("events_list", "mctl_core/ticker.py", 116),
-        ):
-            sections.append(city_screen.unwired(tool, module=module, issue=issue))
+        # `city_screen.unwired()` is deliberately still exported and tested: it
+        # is the honest rendering for a built-but-unreachable surface, and the
+        # next one will want it. Nothing on this page is unwired today --
+        # events_list was the last, and it is fanned out above (#116).
 
         return self._city_page("City", "/city", context, sections, state=city_state)
 

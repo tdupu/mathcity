@@ -586,6 +586,29 @@ def _handle_orders_status(ctx: MctlContext, arguments: Mapping[str, Any]) -> dic
     return orders_status(city_reader(ctx.city_root), mode=EVENT_LOG_ONLY)
 
 
+def _handle_events_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """The city ticker (#116) -- the read `ticker.py` never had.
+
+    `mctl_core/ticker.py` held the tier vocabulary and the cause/response
+    pairing, tested, since it was written. It had no reader and no tool, so the
+    dashboard's Events panel rendered `city_screen.unwired()` naming this issue.
+    That was an honest gap and this closes it.
+
+    Reads `<city-root>/.gc/events.jsonl` directly rather than shelling to `gc`,
+    exactly as `_handle_orders_status` and `_handle_costs_summary` do -- the log
+    is a local file and the `gc` catalog read measures ~89 s in-city (#156).
+    """
+    from .ticker_read import city_reader, events_list
+
+    tiers = arguments.get("tiers")
+    return events_list(
+        city_reader(ctx.city_root),
+        limit=int(arguments.get("limit") or 100),
+        include_chatter=bool(arguments.get("include_chatter")),
+        tiers=list(tiers) if tiers else None,
+    )
+
+
 def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     """Every formula the city knows about (#117 / #156)."""
     from .orders import city_reader, formulas_catalog
@@ -2080,6 +2103,63 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["state", "total", "formulas"],
         ),
         handler=_handle_formulas_catalog,
+    ),
+    ToolSpec(
+        name="events_list",
+        title="City ticker: recent events, tiered, with unanswered causes",
+        description=(
+            "Recent city events newest-first, classified into alarm/milestone/progress/"
+            "chatter, with every CAUSE that produced no response named (#116). The "
+            "vocabulary lived in mctl_core/ticker.py and was tested, but had no reader "
+            "and no tool, so the dashboard's Events panel rendered an honest 'built and "
+            "not reachable from any page' gap. Chatter is hidden by default; an event "
+            "type the tiering has never been told about is UNKNOWN and always survives "
+            "the filter, so a newly-introduced type cannot silently vanish. READS A "
+            "BOUNDED TAIL of a log measured at 218 MB, so `available_in_scan` counts "
+            "within the window read -- deliberately not named `available` -- and `scan` "
+            "reports log_bytes/scanned_bytes/truncated. When truncated the counts are a "
+            "floor, and a WARN says so. `unanswered_causes` is paired across the whole "
+            "window, never per page, so page boundaries cannot invent breaks."
+        ),
+        input_schema=request_schema(
+            {
+                "limit": {
+                    "type": "integer",
+                    "description": "Rows to return, newest first (default 100).",
+                },
+                "include_chatter": {
+                    "type": "boolean",
+                    "description": (
+                        "Include the high-volume bookkeeping tier. Off by default: "
+                        "bead.updated alone measured 52.8% of the stream."
+                    ),
+                },
+                "tiers": {
+                    "type": ["array", "null"],
+                    "items": {"type": "string"},
+                    "description": (
+                        "Explicit tier allowlist. Honoured exactly, including asking "
+                        "for chatter alone. Omit for the default band."
+                    ),
+                },
+            }
+        ),
+        output_schema=response_schema(
+            {
+                "state": {"type": "string"},
+                "events": {"type": ["array", "null"], "items": {"type": "object"}},
+                "unanswered_causes": {"type": ["array", "null"], "items": {"type": "object"}},
+                "page_size": {"type": ["integer", "null"]},
+                "returned": {"type": ["integer", "null"]},
+                "available_in_scan": {"type": ["integer", "null"]},
+                "truncated": {"type": ["boolean", "null"]},
+                "tiers": {"type": "array", "items": {"type": "string"}},
+                "chatter_included": {"type": "boolean"},
+                "scan": {"type": ["object", "null"]},
+            },
+            ["state"],
+        ),
+        handler=_handle_events_list,
     ),
     ToolSpec(
         name="queue_status",

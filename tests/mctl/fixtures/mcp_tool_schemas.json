@@ -14914,6 +14914,251 @@
     },
     "title": "File a decision TO BE MADE as an undecided brief on the pile"
   },
+  "events_list": {
+    "description": "Recent city events newest-first, classified into alarm/milestone/progress/chatter, with every CAUSE that produced no response named (#116). The vocabulary lived in mctl_core/ticker.py and was tested, but had no reader and no tool, so the dashboard's Events panel rendered an honest 'built and not reachable from any page' gap. Chatter is hidden by default; an event type the tiering has never been told about is UNKNOWN and always survives the filter, so a newly-introduced type cannot silently vanish. READS A BOUNDED TAIL of a log measured at 218 MB, so `available_in_scan` counts within the window read -- deliberately not named `available` -- and `scan` reports log_bytes/scanned_bytes/truncated. When truncated the counts are a floor, and a WARN says so. `unanswered_causes` is paired across the whole window, never per page, so page boundaries cannot invent breaks.",
+    "external_ready": true,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "include_chatter": {
+          "description": "Include the high-volume bookkeeping tier. Off by default: bead.updated alone measured 52.8% of the stream.",
+          "type": "boolean"
+        },
+        "limit": {
+          "description": "Rows to return, newest first (default 100).",
+          "type": "integer"
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tiers": {
+          "description": "Explicit tier allowlist. Honoured exactly, including asking for chatter alone. Omit for the default band.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "mutating": false,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "available_in_scan": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "chatter_included": {
+          "type": "boolean"
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "events": {
+          "items": {
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "page_size": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "returned": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scan": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "state": {
+          "type": "string"
+        },
+        "tiers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        },
+        "truncated": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "unanswered_causes": {
+          "items": {
+            "type": "object"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "diagnostics",
+        "state",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "City ticker: recent events, tiered, with unanswered causes"
+  },
   "fleet_sessions": {
     "description": "Every configured agent slot for this city, joined against the live session list: occupied slots carry the session's state, template, and idle time; empty slots are rows too, so absence renders the same as presence rather than shrinking the roster. `limit_state` is always 'unknown' -- no quota/usage-window recording exists yet; see the MCTL_FLEET_LIMIT_STATE_UNRECORDED diagnostic.",
     "external_ready": true,
