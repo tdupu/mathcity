@@ -1027,6 +1027,10 @@ module = "ticker_read.py"
 severity = "WARN"
 meaning = "events_list read a bounded TAIL of the event log (measured 218 MB live), so its counts describe the window scanned and not the whole log. `available_in_scan` is named that way for the same reason: a tail must never be quoted as the population (#124). Treat every figure as a floor; `scan` reports log_bytes, scanned_bytes and truncated."
 module = "ticker_read.py"
+[MDSH_SELECTOR_UNRECORDED]
+severity = "INFO"
+meaning = "dashboard_restart was asked to rebind an instance whose stamp records no dashboard selection (pre-selector stamps carry 'unknown'), so the replacement serves 'both' -- which is what such an instance was already serving, making this a statement of fact rather than a change. Reported rather than substituted quietly, because 'both' asserted without a choice is the value dashboard_status deliberately refuses to invent (mc-i4d6u)."
+module = "mcp_server.py"
 
 [MDSH_STALE_INSTANCE]
 severity = "WARN"
