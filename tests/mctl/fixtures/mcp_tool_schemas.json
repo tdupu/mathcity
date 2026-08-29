@@ -13312,6 +13312,13 @@
           "description": "False for a dry run or a refusal.",
           "type": "boolean"
         },
+        "dashboard": {
+          "description": "Which dashboard the replacement presents, carried across from the stopped instance (mc-i4d6u). A restart changes the CODE and nothing else; an unrecorded selection resolves to 'both' with an INFO.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "diagnostics": {
           "description": "Structured diagnostics for this call.",
           "items": {

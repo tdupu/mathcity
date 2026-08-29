@@ -927,16 +927,57 @@ def _handle_dashboard_restart(scope: CityScope, arguments: Mapping[str, Any]) ->
             "applied": False,
         }
     dashboards.remove_stamp(scope.city_root, target.pid)
+    # `mc-i4d6u`: carry the instance's OWN dashboard selection across the
+    # rebind. It was omitted here, so `start_instance` applied its `both`
+    # default and an instance started as `city` came back as `both` -- with no
+    # diagnostic. That is precisely the silent contract swap #164/#210 gate
+    # restart against, occurring inside the tool built to prevent it: the
+    # operator asks to change one thing (the code) and gets a second change
+    # they did not request. It also defeats `dashboard_status`'s care in never
+    # reporting `both` unless someone chose it.
+    #
+    # `unknown` is NOT a selection and must not be forwarded. It is what a
+    # stamp written before the selector existed reports, and `start_instance`
+    # appends `--dashboard <value>` for anything that is not `both` -- so
+    # passing it through would put `--dashboard unknown` on the child's command
+    # line, which its `choices` reject, and the restart would fail to start
+    # anything. Such an instance WAS serving both, so `both` is the truthful
+    # value; the substitution is reported rather than made quietly.
+    restart_diagnostics: list[dict[str, object]] = []
+    dashboard = target.dashboard
+    if dashboard not in ("city", "briefs", "both"):
+        restart_diagnostics.append(
+            Diagnostic(
+                severity=Severity.INFO,
+                code="MDSH_SELECTOR_UNRECORDED",
+                message=(
+                    f"The stopped instance recorded no dashboard selection "
+                    f"({dashboard!r}); the replacement serves 'both'."
+                ),
+                hint=(
+                    "Stamps written before the selector existed carry 'unknown'. "
+                    "'both' is what such an instance was serving, so nothing changes "
+                    "behaviourally; the replacement's stamp now records that explicitly."
+                ),
+                facts={"port": str(port), "recorded_dashboard": str(dashboard)},
+            ).to_dict()
+        )
+        dashboard = "both"
     started = dashboards.start_instance(
-        city_root=scope.city_root, host=target.host, port=target.port, rig=target.rig
+        city_root=scope.city_root,
+        host=target.host,
+        port=target.port,
+        rig=target.rig,
+        dashboard=dashboard,
     )
     return {
-        "diagnostics": [],
+        "diagnostics": restart_diagnostics,
         "applied": True,
         "old_pid": target.pid,
         "new_pid": int(started["pid"]),
         "old_commit": target.serving_commit,
         "new_commit": started.get("serving_commit"),
+        "dashboard": dashboard,
         "url": started.get("url"),
     }
 
@@ -2854,6 +2895,11 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "new_pid": {"type": "integer"},
                 "old_commit": nullable_string("The commit the stopped instance was serving."),
                 "new_commit": nullable_string("The commit the fresh instance will serve."),
+                "dashboard": nullable_string(
+                    "Which dashboard the replacement presents, carried across from the "
+                    "stopped instance (mc-i4d6u). A restart changes the CODE and nothing "
+                    "else; an unrecorded selection resolves to 'both' with an INFO."
+                ),
                 "url": nullable_string("The URL the fresh instance is bound to."),
             },
             ["applied"],
