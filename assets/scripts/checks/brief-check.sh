@@ -290,14 +290,14 @@ check_jsonl() {
 check_test_evidence() {
   path="$(brief_path)"
   require_file "$path"
-  require_text "$path" '^##*[[:space:]]+Gate Evidence\b|^Gate Evidence\b' "missing Gate Evidence section"
+  require_text "$path" '^##*[[:space:]]+([^A-Za-z]*[[:space:]])?Gate Evidence\b|^Gate Evidence\b' "missing Gate Evidence section"
   require_gate "$path" "G1 Test-evidence"
 }
 
 check_mechanical_gates() {
   path="$(brief_path)"
   require_file "$path"
-  require_text "$path" '^##*[[:space:]]+Gate Evidence\b|^Gate Evidence\b' "missing Gate Evidence section"
+  require_text "$path" '^##*[[:space:]]+([^A-Za-z]*[[:space:]])?Gate Evidence\b|^Gate Evidence\b' "missing Gate Evidence section"
   require_gate "$path" "G1 Test-evidence"
   require_gate "$path" "G3 Shell-scripts-testable"
   require_gate "$path" "G5 Server-touching"
@@ -328,7 +328,7 @@ check_pile_entry() {
     path="$(find "$ROOT/.pile" -mindepth 1 -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort | head -n 1)"
   fi
   require_file "$path"
-  require_text "$path" '^##*[[:space:]]+Gate Evidence\b|^Gate Evidence\b' "pile entry lacks Gate Evidence"
+  require_text "$path" '^##*[[:space:]]+([^A-Za-z]*[[:space:]])?Gate Evidence\b|^Gate Evidence\b' "pile entry lacks Gate Evidence"
 }
 
 check_pile_nonempty() {
