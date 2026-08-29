@@ -132,7 +132,13 @@ def classifier_error(text: str) -> str | None:
     if len(lines) != 1:
         return "G9 evidence must contain exactly one G9 No-brainer-filter line"
     line = lines[0]
-    if not re.search(r"G9 No-brainer-filter:\s*PASS\b", line):
+    # `[*_]*` before the whitespace: the line is FOUND by a substring test, so a
+    # producer that bolds the label (`**G9 No-brainer-filter:** PASS`) reached this
+    # check and was told its PASS was not a PASS -- the character after the colon is
+    # `*`, which `\s*` cannot match. Emphasis is tolerated around the LABEL only;
+    # the verdict stays a bare token, since widening the value side is how a check
+    # stops discriminating. Live case: hecke `he-tzcm-cbmf-264-K-rational-v2-brief`.
+    if not re.search(r"G9 No-brainer-filter:[*_]*\s*PASS\b", line):
         return "G9 No-brainer-filter evidence must be PASS"
     if not CLASSIFIER_TIMESTAMP.search(line):
         return "G9 evidence must set classified_at=<ISO-8601-utc>"
