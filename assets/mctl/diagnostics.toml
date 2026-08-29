@@ -1023,6 +1023,11 @@ severity = "WARN"
 meaning = "A running dashboard is serving a commit other than the checkout's current HEAD; dashboard_status flags it so an operator can rebind deliberately with dashboard_restart. Not automatic -- #164 keeps restart a decision."
 module = "mcp_server.py"
 
+[MDSH_CHECKOUT_BEHIND_REMOTE]
+severity = "WARN"
+meaning = "The checkout the dashboards are served from is itself behind its remote-tracking ref, so an instance reporting stale=false may still be rendering old code -- MDSH_STALE_INSTANCE compares the PROCESS against ITS CHECKOUT and is structurally blind to this second axis (mc-dhsgo). The remedy is a pull THEN dashboard_restart; restarting alone rebinds to the same old code. The count is measured against the ref on disk and nothing fetches, so 0 means level-with-the-ref, never proof of freshness; when the ref does not resolve the count is null and checkout_freshness_known is false, never 0."
+module = "mcp_server.py"
+
 [MDSH_NO_INSTANCE]
 severity = "ERROR"
 meaning = "dashboard_restart was asked to restart a port with no live dashboard stamped for this city; refused rather than silently no-opping in a way that reads like success."
