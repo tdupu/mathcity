@@ -54,6 +54,7 @@ CLIENT_INFO = {"name": "mctl-dashboard", "version": "0.8.0"}
 ALLOWED_TOOLS = frozenset(
     {
         "orders_status",
+        "briefs_pile_state",
         "formulas_catalog",
         "events_list",
         "queue_status",
