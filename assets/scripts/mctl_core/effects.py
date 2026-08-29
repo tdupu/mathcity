@@ -1126,12 +1126,24 @@ def plan_adjudication(
     }
     if adjudicated_by and adjudicated_by.strip():
         frontmatter_fields["adjudicated_by"] = adjudicated_by.strip()
+    # gt-5yxup1: mirror the verdict into the aggregated global root the three
+    # brief.decided consumer formulas scan, in the `decision`/`reason`/`source_bead`
+    # schema they read. Without this the global root is empty and every `revise`
+    # verdict re-files nothing.
+    aggregated_update = _aggregated_decision_update(
+        ctx,
+        brief_id,
+        decision=normalized,
+        reason=reason,
+        source_bead=_brief_source_bead(ctx, brief_id),
+    )
     return _plan(
         ctx,
         operation="briefs.adjudicate",
         brief_id=brief_id,
         preconditions=diagnostics,
         extra_advisories=tuple(returned_advisories),
+        extra_cache_updates=(aggregated_update,),
         bead_update=BeadUpdate(
             brief_id,
             status="closed",
@@ -1926,6 +1938,65 @@ def apply_file_create(file_create: FileCreate) -> None:
     _atomic_write(file_create.path, file_create.content)
 
 
+def _aggregated_brief_root() -> Path:
+    """The single global root the brief.decided consumer formulas scan.
+
+    Decision records live PER-RIG (`<rig>/.beads/briefs/decisions/`), but
+    revise-return, brief-decision-dispatch and brief-archive-sweep are city-dog
+    formulas built on ONE scan point (gt-5yxup1). mctl mirrors each decided record
+    here so that single-scan-point design keeps working without a per-rig fan-out.
+    Overridable via `MCTL_AGGREGATED_BRIEF_ROOT` (test isolation); defaults to
+    `~/.gc/mathcity/aggregated-briefs` — the literal the three formulas default to.
+    """
+    override = os.environ.get("MCTL_AGGREGATED_BRIEF_ROOT")
+    base = override or os.path.expanduser("~/.gc/mathcity/aggregated-briefs")
+    return Path(base)
+
+
+def _brief_source_bead(ctx: MctlContext, brief_id: str) -> str:
+    """The bead this brief decides on -- its first source dependency (B2.1).
+
+    The same value `_pile_document` writes as `source_bead`, read from the bead's
+    dependency edges (canonical, B2.8) rather than a cache. Empty string when the
+    brief declares no subject (B2.1a): revise-return terminalizes a record with no
+    source rather than re-pouring `brief-prep` against nothing.
+    """
+    for bead in read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture):
+        if bead.id == brief_id:
+            return bead.source_dependencies[0] if bead.source_dependencies else ""
+    return ""
+
+
+def _aggregated_decision_update(
+    ctx: MctlContext,
+    brief_id: str,
+    *,
+    decision: str,
+    reason: str,
+    source_bead: str,
+) -> CacheUpdate:
+    """Plan the mirror write of a verdict into the aggregated global root.
+
+    Written in the schema the consumer formulas grep -- `decision`, `reason`,
+    `source_bead` -- NOT the per-rig `verdict`/`verdict_reason` schema, because a
+    record in the wrong schema is as invisible to revise-return as an absent one.
+    """
+    path = _aggregated_brief_root() / "decisions" / f"{brief_id}.toml"
+    return CacheUpdate(
+        "aggregated_decision",
+        path,
+        brief_id,
+        {
+            "brief_id": brief_id,
+            "decision": decision,
+            "reason": reason,
+            "source_bead": source_bead,
+            "rig": ctx.rig_id,
+            "decided_at": _now(),
+        },
+    )
+
+
 def _plan(
     ctx: MctlContext,
     *,
@@ -1938,6 +2009,7 @@ def _plan(
     frontmatter_fields: Mapping[str, str] | None = None,
     manifest_row_fields: Mapping[str, str] | None = None,
     manifest_drop_fields: tuple[str, ...] = (),
+    extra_cache_updates: tuple[CacheUpdate, ...] = (),
 ) -> EffectPlan:
     cache_updates = _cache_updates(
         ctx,
@@ -1946,7 +2018,7 @@ def _plan(
         frontmatter_fields=frontmatter_fields,
         manifest_row_fields=manifest_row_fields,
         manifest_drop_fields=manifest_drop_fields,
-    )
+    ) + tuple(extra_cache_updates)
     event_row = {
         "brief_id": brief_id,
         "operation": operation,
@@ -2218,6 +2290,12 @@ def _resolve_until(ctx: MctlContext, until: str | None, days: int | None, brief_
 
 def _apply_cache_update(update: CacheUpdate) -> None:
     if update.kind == "decision_toml":
+        _update_simple_toml(update.path, update.fields)
+        return
+    if update.kind == "aggregated_decision":
+        # Unlike `decision_toml` (a sync of an existing per-rig record), this
+        # record is CREATED lazily in the global root; `_update_simple_toml`
+        # writes it and its parents atomically.
         _update_simple_toml(update.path, update.fields)
         return
     if update.kind == "stack_index":
