@@ -4,8 +4,8 @@ Parent: [README.md](./README.md)
 
 | Field | Value |
 | --- | --- |
-| Status | **Draft** — compiled 2026-07-23 from the human adjudicator's city-behavior directives; rules marked **PROPOSED** are Claude suggestions not yet adopted and require a grilling pass |
-| Date | 2026-08-22 |
+| Status | **Adopted** 2026-09-07 (Draft→Adopted on the pack owner's explicit in-session sign-off, PP2.2). **Scope of adoption:** rules tagged **Adopted** are now enforceable and citable by gates; rules still tagged **PROPOSED** remain individually non-binding (PP2.1) until a grilling pass adopts each — adopting the document did NOT adopt the PROPOSED rules. |
+| Date | 2026-09-07 |
 | Decided | the pack owner (directives, 2026-07-23 session); PROPOSED rules pending |
 | Applies to | The running Gas City instance: dispatch, scheduling, molecules, formulas, and every rig the city manages |
 | Rule prefix | **CT** (City Operations) — reserved in [rule-prefix-registry.md](../../docs/rule-prefix-registry.md); distinct from the Computing domain's `C` prefix |
@@ -207,6 +207,49 @@ the in-flight work instead of racing it.*
   no molecule is still executing the obsolete plan. Fail: old and new plans
   running concurrently, or in-flight work discarded wholesale when salvage
   was possible → **revise**.
+
+- **CT2.4 Remote-confirmed ownership is a precondition for work.** A worker
+  may not begin work on a bead unless it is the **confirmed owner of that
+  bead on the rig's dolt remote**. Claiming locally is not sufficient: the
+  claim must be committed and pushed, and the push must succeed. A rejected
+  push means another claimant won — the loser **releases its local claim and
+  selects different work**; it does not proceed, and does not retain an
+  assignee the remote contradicts. Pulling before pushing is permitted and
+  surfaces the collision explicitly; what is prohibited is proceeding on an
+  unconfirmed claim. Where the remote is unreachable the precondition is
+  unmet and work does not start. This is the cross-machine enforcement half
+  of CT2.1/[P1.21](./POLICY.md), whose pre-sling assignee check is local-only
+  and therefore blind to a peer city holding the same bead. *Implementation
+  note:* the claim must use the raw dolt push/pull path — `bd sync`
+  auto-settles "last-write-wins on issue cells" and would destroy the
+  arbiter. Pass: every claim path publishes the claim to the remote and
+  confirms it before work begins. Fail: work proceeds on a bead whose
+  ownership was never confirmed remotely, or a losing claimant continues or
+  keeps a local claim the remote refuses → **fail**.
+
+- **CT2.5 Worker identity is the session ID.** `assignee` is the **session
+  ID**, in one canonical form used by **every** writer, comparator, and
+  verifier in the claim path — the dispatcher that writes it, the claim guard
+  that checks it, and the verifier that confirms it. A tolerant compare is
+  permitted **only during migration**, and any retry loop around identity
+  reconciliation MUST be **bounded**. Like CT2.4 this is written as the
+  standard to meet, not a description of today: as of adoption **no policy
+  fixed the identity form at all** (measured 2026-09-07 — zero
+  `assignee`/identity rules across every `POLICY*.md` in the pack), which is
+  precisely why the dispatcher (writes the session id) and the verifier
+  (compares the session *name*) diverged for months with **neither being
+  wrong** — the absence of a rule, not a violated one. That divergence is the
+  claim livelock recorded on gt-fb7g64: every `gc hook --claim` runs ~60s and
+  exits without claiming while the discovery query returns sub-second with
+  exactly one candidate. *General principle (broader than identity — Taylor
+  attached it to the whole class):* where alternatives are **merely different**
+  rather than better or worse, **consistency is the criterion** and the only
+  test that matters is *"does it break."* Apply it to the class, not just to
+  identity. Pass: every writer, comparator, and verifier in the claim path uses
+  the identical session-ID form; migration compares are tolerant and
+  time-boxed; retry loops are bounded. Fail: two call sites in the claim path
+  compare `assignee` in different forms, or an identity-reconciliation loop is
+  unbounded → **fail**.
 
 ## Pillar CT3 — Planning structure
 
@@ -802,6 +845,15 @@ test-outcome labels, not artifact or review verdicts.
   reliability-as-a-dial (already reflected in CT9.2)
 
 ## Change log
+
+### 2026-09-07 — POLICY-city.md ADOPTED (Draft → Adopted)
+The document transitioned from Draft to Adopted on the pack owner's explicit in-session sign-off (PP2.2, 2026-09-07). Adoption is scoped: Adopted-tagged CT rules are now enforceable and citable by `check-city-policy` and gates; PROPOSED-tagged rules remain individually non-binding (PP2.1) until each is adopted through a grilling pass. The CT prefix row in `docs/rule-prefix-registry.md` is updated Draft→Adopted in the same change to keep registry and document coherent (avoiding the PP-row drift found 2026-09-07). Triggered by: the pack owner's directive — the four keystone rulings (gt-m50xwa) needed an enforceable home, and CT is the correct domain for city-runtime/claim rules; adopting the document makes the whole Adopted CT ruleset citable rather than splitting rulings across documents by enforceability.
+
+### 2026-09-07 — CT2.5 added: Worker identity is the session ID
+`assignee` is the session ID, in one canonical form used by every writer, comparator, and verifier in the claim path; a tolerant compare is permitted only during migration and any identity-reconciliation retry loop must be bounded. Triggered by: Taylor's ruling 2 of the four keystone rulings (gt-m50xwa, 2026-09-07) — "I would say session id. It really doesn't matter as long as you are consistent … the only things that matter are things that don't break." QUIMBY 67 verified at his request that no `POLICY*.md` fixed the identity form (zero hits) — so the dispatcher (writes session id) and verifier (compares session name) diverged for months with neither violating any rule, which is the claim livelock on gt-fb7g64. Carries Taylor's broader rule: where alternatives are merely different, consistency is the criterion and "does it break" the only test. Written as the standard to meet, per CT2.4's precedent.
+
+### 2026-09-06 — CT2.4 added: Remote-confirmed ownership is a precondition for work
+A worker may not begin work on a bead until its claim is confirmed on the rig's dolt remote; a rejected push means it lost, and it must release the local claim rather than proceed. Pulling first is permitted and surfaces the collision; the raw dolt path is required because `bd sync` auto-settles last-write-wins and would destroy the arbiter. Triggered by: two cities measured sharing one dolt remote with 100 co-visible ready beads (defect `mc-1nmzg`, brief `mc-xrxvt`), and the pack owner's directive of 2026-09-06 — "you can't work on a bead unless you are the claimed owner on the dolt remote". The enforcing mechanism was verified before the rule was written: with two clones of one remote, the second `dolt push` is rejected (`rc=1`, "tip of your current branch is behind") and a raw `dolt pull` by the loser raises `CONFLICT (content): Merge conflict in issues` with a `dolt_conflicts` row — so no new Dolt capability is required. Known state at adoption: every claim path in the city currently violates this rule; it is written as the standard to meet, not as a description of today.
 
 ### 2026-08-22 — CT13.4 added (Adopted): a refusal is a result, and it must be loud
 A typed MCP tool that cannot complete an operation must refuse with a named code, a severity, and a suggested next command where one exists; a refusal in that form satisfies the policy, and the defect is silence — success-shaped output, an empty diagnostics list, or a payload identical to one the caller did not request. Two caller-side corollaries bind as well: a refusal is reported rather than routed around (a violation whether or not the work then succeeds), and is never branched on to alter control flow. Triggered by: the pack owner's directive, 2026-08-22 — "being blocked on an MCP call is a loud error and hence a good thing" — drafted by the Mayor session against four issues filed the same night (#146 origin; #155, #157 and a gc status timeout as the failing cases) that had no rule ID to cite between them.
