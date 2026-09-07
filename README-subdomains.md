@@ -12,6 +12,7 @@ Canonical index of mathcity child packs under `subdomains/`.
 | `latex` | `mathcity-latex` | Notes-tier LaTeX screening, label/reference checks, and LaTeX workflow policy. | [README](./subdomains/latex/README.md) | [POLICY](./subdomains/latex/POLICY.md) |
 | `lmfdb` | `mathcity-lmfdb` | LMFDB queries, database pipelines, object serialization, and schema/type workflows. | [README](./subdomains/lmfdb/README.md) | [POLICY](./subdomains/lmfdb/POLICY.md) |
 | `magma` | `mathcity-magma` | Magma package standards, README/test conventions, profiling, and package hygiene. | [README](./subdomains/magma/README.md) | [POLICY](./subdomains/magma/POLICY.md) |
+| `mayor` | `mathcity-mayor` | Opt-in city-scope Mayor agent: mathcity doctrine, the prime/handoff continuity loop, and the mctl MCP surface. Ships the agent only — a city gets a Mayor only if its own `pack.toml` declares a `[[named_session]]`. | [README](./subdomains/mayor/README.md) | [POLICY](./subdomains/mayor/POLICY.md) |
 | `proof-assist` | `mathcity-proof-assist` | Proof-assistant and search surfaces for Lean/Mathlib, Stacks, arXiv, and scholarly lookup. | [README](./subdomains/proof-assist/README.md) | none |
 
 ## Maintenance

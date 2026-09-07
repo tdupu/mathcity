@@ -1,0 +1,25 @@
+[pack]
+name = "mathcity-mayor"
+version = "0.1.0"
+schema = 2
+description = "An opt-in city-scope Mayor agent for a mathcity city: mathcity doctrine, the prime/handoff continuity loop, and the mctl MCP surface. Ships the agent only — instantiation requires a [[named_session]] in the CITY's own pack.toml, so importing this pack does not start a mayor."
+
+# Opus for the Mayor, without touching the city's shared providers.
+#
+# The Mayor's work is judgment under incomplete information — deciding what the
+# city should do next, reading contradictory signals, and refusing work that
+# should not run. That is the one role where model capability changes the
+# answer rather than the latency, so it is pinned here rather than inherited.
+#
+# Declared in the pack (not hand-added to city.toml) so a city gets it by
+# importing, per the Pack Portability & Boundary Policy P1.2. Precedent: the
+# mathcity root pack already ships [providers.codex] the same way.
+#
+# `base = "builtin:claude"` inherits whatever CLAUDE_CONFIG_DIR the city's own
+# claude provider sets, so this does NOT pin an account — only the model. A
+# city that runs its agents under a particular Claude account keeps that
+# account for the Mayor too.
+[providers.claude-opus]
+base = "builtin:claude"
+display_name = "Claude Opus (mayor)"
+args_append = ["--model", "opus"]

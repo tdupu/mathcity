@@ -1,0 +1,33 @@
+description = "City-scope Mayor for a mathcity city: surveys city state, decides what should run next, dispatches through the fleet, and hands off to its successor. Adjudicates nothing — verdicts belong to the human adjudicator; the Mayor prepares and routes, never decides a brief."
+
+scope = "city"
+wake_mode = "fresh"
+
+# Opus, from this pack's own [providers.claude-opus]. The Mayor's job is
+# judgment under incomplete information; that is the role where model
+# capability changes the answer rather than the latency.
+provider = "claude-opus"
+
+# No work_dir: the Mayor runs at the city root, which is the scope it manages.
+# Setting one would point it at a subtree it does not own.
+
+idle_timeout = "1h"
+
+# MUST stay 0 while wake_mode = "fresh". This is the same trap documented at
+# length on mathcity's brief-operator (their issue #10): min >= 1 creates
+# standing pool demand, so the reconciler issues a RESUME against the existing
+# session bead whenever no member is live; wake_mode = "fresh" makes that
+# resume replay a dead session's pre_start hook, which hangs and is killed at
+# the resume deadline, and every following reconcile re-attempts the identical
+# doomed resume. The result is permanently ZERO members — strictly worse than
+# the cold start it was meant to avoid.
+#
+# gascity guards this only when the session bead is StateAsleep
+# (cmd/gc/pool_desired_state.go, gastownhall/gascity#4849); wedged sessions sit
+# in `creating`/`start-pending` and never reach `asleep`, so the guard does not
+# fire. Do not "keep the Mayor warm" by raising this.
+min_active_sessions = 0
+
+# One Mayor. Two would race on the same city-scope decisions and dispatch the
+# same work twice; the role is a serialization point by design, not a pool.
+max_active_sessions = 1

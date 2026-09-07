@@ -27,6 +27,12 @@ Run this as one shell script so scan, move, and record stay in one process:
 ```bash
 set -euo pipefail
 ROOT="${BRIEF_ROOT:-{{artifact_root}}}"
+# The default artifact_root is stored with a literal `~` (see the bead's
+# gc.var.artifact_root). Tilde does NOT expand inside double quotes, so
+# without this the sweep scans a path that can never exist -- and fails
+# SILENTLY, because find on a missing root returns nothing rather than
+# erroring. Same expansion brief-decision-dispatch and revise-return do.
+ROOT="${ROOT/#\\~/$HOME}"
 WORK_BEAD="${GC_BEAD_ID:-}"
 DRAIN_ACKED=0
 

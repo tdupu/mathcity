@@ -1,0 +1,54 @@
+# The MathCity control CLI, projected to the Mayor as an MCP server.
+#
+# `name` MUST equal the filename stem — gc rejects the file otherwise
+# (materialize/mcp.go: `name %q must match filename stem %q`).
+name = "mctl"
+description = "MathCity control surface: briefs, work, beads, formulas, and formula_dispatch."
+
+# WHY sh -c RATHER THAN A DIRECT COMMAND
+#
+# `bin/mctl` is the ONLY supported entry point (template-fragments/
+# mctl-entry-point.md, enforced by tests/mctl-shim-callsite/smoke_test.sh).
+# The shim resolves its own checkout root and hands off to
+# assets/scripts/mctl.py; invoking that script directly is a second discovery
+# rule that works in one checkout and silently addresses the wrong city in
+# another.
+#
+# But the path to `bin/mctl` is machine-local, and P1.10 forbids absolute
+# home paths in pack content — so it cannot be written here. It is resolved at
+# launch instead, in the order the entry-point fragment itself establishes:
+#
+#   1. $MATHCITY_PACK_ROOT              -- the fragment's own primary lookup
+#   2. source_checkout in city.toml     -- the key mctl's context resolver reads
+#
+# Ordinary `[imports.mathcity] source` is deliberately NOT consulted: on a city
+# that pins the pack by URL it holds "https://github.com/..." and joining that
+# onto a filesystem path yields the nonsense that tdupu/mathcity#265 is filed
+# for. Resolving to garbage is worse than resolving to nothing.
+#
+# P1.14: if neither resolves, say so and exit non-zero. A silent fallback here
+# would hand the Mayor an MCP server that fails on first use with no reason.
+command = "sh"
+args = [
+  "-c",
+  '''
+set -eu
+CITY_ROOT="{{.CityRoot}}"
+PACK_ROOT="${MATHCITY_PACK_ROOT:-}"
+if [ -z "$PACK_ROOT" ]; then
+  PACK_ROOT=$(sed -n 's/^ *source_checkout *= *"\([^"]*\)".*/\1/p' "$CITY_ROOT/city.toml" 2>/dev/null | head -1)
+fi
+if [ -z "$PACK_ROOT" ] || [ ! -x "$PACK_ROOT/bin/mctl" ]; then
+  echo "I am sorry, I cannot start the mctl MCP server - the mathcity pack checkout was not found." >&2
+  echo "Set MATHCITY_PACK_ROOT, or add source_checkout to a rig in $CITY_ROOT/city.toml." >&2
+  echo "(This server is what gives the Mayor briefs, work, beads and formula_dispatch.)" >&2
+  exit 1
+fi
+exec "$PACK_ROOT/bin/mctl" mcp serve --city "$CITY_ROOT"
+'''
+]
+
+# `internal` is the full typed surface. `external` is the closed rollout gate
+# and would give the Mayor a server with no tools at all.
+[env]
+MCTL_MCP_CLIENT_CLASS = "internal"
