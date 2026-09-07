@@ -1,12 +1,12 @@
 ---
 name: catch-no-brainer
-description: PRELIMINARY v0.4 — classify a brief against the he-lele 5-criterion no-brainer test, plus recognize the capability-blocker shape (would-be no-brainer stalled by a permission/capability gap) and signal compact-form eligibility to downstream present-it consumers. Emits one JSON-line verdict to stdout per brief; copies no-brainer matches into <city-root>/.beads/briefs/.pile/.no-brainer/ and novel-shape descriptors into <city-root>/.beads/.gates-candidate-pile/. This skill CLASSIFIES ONLY — it never edits bead he-xkq3, never auto-merges, never closes briefs, never runs `bd update`. Auto-execution of a match is a separate, gated step (`no-brainer-classify` formula, `guarded-execute`); ARMED is the default runtime mode and a matched no-brainer executes unless DRY-RUN is pinned via `brief-check.sh no-brainer-disarm`. Triggers triaging a brief that just landed in the main stack for the human adjudicator-bypass eligibility (stale-scratch cleanup, mechanical promotion, sibling-PASS); architecture-class briefs (deep design, coupling, judgment-load) bypass this skill and go straight to Mayor/the human adjudicator.
+description: PRELIMINARY v0.4 — classify a brief against the he-lele 5-criterion no-brainer test, plus recognize the capability-blocker shape (would-be no-brainer stalled by a permission/capability gap) and emit a machine-readable classifier verdict. It does NOT choose a brief body shape — every brief is full-form per ADR 0001, and the legacy `compact_eligible` field is deprecated and inert. Emits one JSON-line verdict to stdout per brief; copies no-brainer matches into <city-root>/.beads/briefs/.pile/.no-brainer/ and novel-shape descriptors into <city-root>/.beads/.gates-candidate-pile/. This skill CLASSIFIES ONLY — it never edits bead he-xkq3, never auto-merges, never closes briefs, never runs `bd update`. Auto-execution of a match is a separate, gated step (`no-brainer-classify` formula, `guarded-execute`); ARMED is the default runtime mode and a matched no-brainer executes unless DRY-RUN is pinned via `brief-check.sh no-brainer-disarm`. Triggers triaging a brief that just landed in the main stack for the human adjudicator-bypass eligibility (stale-scratch cleanup, mechanical promotion, sibling-PASS); architecture-class briefs (deep design, coupling, judgment-load) bypass this skill and go straight to Mayor/the human adjudicator.
 ---
 
 > **Canonical copy**: `mathcity.catch-no-brainer` in this mathcity pack. Materialized agent-skills copies are fallback only.
 
 > **PRELIMINARY v0.4 — CLASSIFIER ONLY; EXECUTION IS SEPARATELY ARMED.**
-> This skill still mutates nothing. It emits verdicts + proposed gates-registry extensions + the compact-form eligibility signal.
+> This skill still mutates nothing. It emits verdicts + proposed gates-registry extensions.
 > NEVER writes to [[he-xkq3]], NEVER auto-merges, NEVER closes briefs, NEVER calls `bd update`/`bd close`/`bd link`.
 > Allowed side effects: `mkdir -p` + file write in `.pile/.no-brainer/` and `.gates-candidate-pile/`. Nothing else.
 >
@@ -49,7 +49,7 @@ description: PRELIMINARY v0.4 — classify a brief against the he-lele 5-criteri
 ## Purpose
 Triage briefs so non-architecture cleanups bypass human adjudication. Composes by reference (does not re-implement): [[he-lele]] (5-criterion legacy classes), [[he-xkq3]] G5 (cat-E server-touching) + G9 (no-brainer), [[he-9czp]] gate-order, [[he-cnat]] preliminary-skill-first.
 
-Also signals [[present-it]] consumers whether the brief may be output in **compact form** (`DECISION` + `CONTEXT` + `RECOMMEND` + `CONFIRM y/n/grill-me-further`) or MUST be full-form.
+This classifier does NOT select a brief body shape. Every brief is full-form §1–§7 — ADR 0001 §1, "Every brief is full-form §1–§7. The compact form is retired" — no matter what this classifier emits.
 
 The he-lele `cat-A`/`cat-B`/`cat-C`/`cat-D` labels are policy-class aliases,
 not emitted category IDs. Emitted category IDs must match
@@ -82,26 +82,44 @@ Given a brief at `<path>` (frontmatter + body + diff summary inside the brief):
 
 8. **Else** (shape not in A/B/C/D, not steps 5/6/7, and not a capability-blocker) → emit `{no_brainer:"candidate", proposed_registry_extension:"<one-line gate criterion>", requires_human_adjudication:true, compact_eligible:false}`.
 
-## Compact-form eligibility signal
+## `compact_eligible` is deprecated and inert
 
-`compact_eligible: true` means the downstream [[present-it]] consumer MAY output the brief in compact form (`DECISION` / `CONTEXT` / `RECOMMEND` / `CONFIRM y/n/grill-me-further`) instead of the full 7-section grill-ordered brief. Necessary but not sufficient — [[brief-prep]] also requires BOTH safety-override booleans (`server_touching`, `user_skill_touching_override`) to be `false` before compact form ships.
+**No consumer may use this field to select a brief body shape.** Every brief is
+full-form §1–§7 (ADR 0001 §1). The field authorizes nothing; a reader that
+branches on it to pick a body shape is defective, and the defect is in the
+reader, not in this classifier.
 
-`compact_eligible: false` means the brief MUST be full-form. Applies to: server-touching, user-skill-touching, capability-blocker, and novel-shape (candidate) outputs. The three new path categories (defer-ratify-held, close-done-cited-commit, execution-confirmation-proof) emit `compact_eligible:true` when their trigger conditions are met — but ONLY because the safety overrides (steps 1 and 2) were already checked and did not fire.
+It is retained, always emitted, and always a boolean purely so an unknown
+reader cannot break on its absence — `fixtures/run.sh:127` asserts
+`.compact_eligible | type == "boolean"`. Treat its value as meaningless.
+Whichever value a step below emits is legacy noise, not a permission.
 
-`capability-blocker` shape is a hard "not compact, not full-form-yet" — the brief should not be presented in either shape until the blocker is resolved. Mayor / dispatcher's job to route the blocker for resolution.
+**The two safety-override booleans are NOT deprecated, and were never about
+form.** `server_touching` and `user_skill_touching_override` must both be
+`false` before any matched no-brainer may be auto-executed (steps 1 and 2
+above; [[he-xkq3]] G5 and [[as-wjv]]). They gate *execution*, never
+presentation, so retiring the compact form does not touch them. Nor does it
+touch the rest of the classifier contract that [[he-xkq3]] G9 and ADR 0001 §3
+gate-minting consume: `no_brainer`, `category`, and `confidence`.
+
+`capability-blocker` is unchanged and is not a form verdict: the brief should
+not be presented **at all** until the blocker is resolved. Mayor / dispatcher's
+job to route the blocker for resolution.
 
 ## Output schema (one JSON-line per brief, to stdout)
 ```json
 {"brief_path":"<abs>","bead_id":"<id|null>","no_brainer":true|false|"candidate",
  "category":"stale-branch|capability-blocker|defer-ratify-held|close-done-cited-commit|execution-confirmation-proof|null",
  "reason":"cat-E-server-touching|user-skill-touching-override|resolve <blocker>|null",
- "compact_eligible":true|false,
+ "compact_eligible":true|false,          // DEPRECATED, inert: never selects body shape
  "confidence":0.0,
  "proposed_registry_extension":"<text|null>","requires_human_adjudication":true|false,
  "classified_at":"<ISO-8601-utc>"}
 ```
 
 `confidence` is a float in [0.0, 1.0] expressing the classifier's certainty in the emitted `category`. Always emit it — even stop-gate outputs (server-touching, user-skill-touching) emit `confidence:1.0` because those are deterministic rule checks. "Confident" threshold for N2/N5 auto-execution eligibility is `confidence >= 0.85`; below that, treat as non-no-brainer regardless of category. The verdict recorded on the brief bead at auto-execution (B2.9 / N7 — one-bead model: the brief bead IS the decision bead; no separate bead is created) must include this value so the empirical wrong rate α can be estimated from the audit ledger (N8).
+
+`compact_eligible` is a deprecated compatibility field. It is still emitted as a boolean so existing readers do not break, but it is inert: it must not influence brief body shape, and every brief is full-form regardless of its value. Every other field above is live contract.
 
 Category IDs must be present in `assets/brief-pipeline/no-brainer-categories.toml` unless the output is `candidate` or a stop-gate `no_brainer:false` result. The registry is the machine-readable category contract; `POLICY.md` remains authoritative for rule semantics.
 
@@ -118,6 +136,8 @@ Category IDs must be present in `assets/brief-pipeline/no-brainer-categories.tom
 
 ## Fixture (pass-bar: all classify correctly)
 Run `bash fixtures/run.sh`:
+
+The `compact_eligible` values below are recorded only because the harness still emits and type-checks the deprecated field. They are inert legacy values, not form permissions — every one of these briefs is presented full-form.
 
 | # | Fixture | Expected verdict |
 |---|---|---|
@@ -137,6 +157,7 @@ Pass iff `fixtures/run.sh` exits 0.
 PRELIMINARY v0.4 under [[he-cnat]]. FP-converge follow-up [[he-ahfr]] (gated on ≥3 dogfood examples). Self-bead [[he-6wej]]. Sling [[he-h3p2]].
 
 ## Versioning
+- **compact-form retirement — `compact_eligible` deprecated and inert** (2026-09-07, mc-1rbet / WI-001 of mc-dx91, source mc-hr80 / tdupu/mathcity#220, per ADR 0001 §1 "The compact form is retired"): this skill no longer advertises `compact_eligible` as permission to emit a compact brief body, and the "Compact-form eligibility signal" section is now "`compact_eligible` is deprecated and inert". The field is RETAINED and still emitted as a boolean (REQ-008 permits removal or retain-inert; retain-inert was chosen because it cannot break an unknown reader and keeps `fixtures/run.sh:127` green). Nothing the [[he-xkq3]] G9 / ADR 0001 §3 catch-#1 accumulator consumes was touched: `no_brainer`, `category`, `confidence`, both safety-override booleans (`server_touching`, `user_skill_touching_override`), and the `capability-blocker` shape all survive unchanged. **The `v0.4` version string is deliberately NOT bumped**: `assets/scripts/checks/brief-check.sh:590` pins `"mathcity.catch-no-brainer v0.4 (PRELIMINARY)"`, and that file is outside this work item's boundary.
 - **v0.4 — dry-run becomes a runtime mode with a real gate** (2026-08-19): "DRY-RUN ONLY" was a designation that could only be changed by editing this file and could not be queried at all; it is now a two-position runtime mode (ARMED / DRY-RUN) selected by tokens, observable via `brief-check.sh no-brainer-mode`, and pinnable in one command via `brief-check.sh no-brainer-disarm`. **ARMED is the default** per the owner's ruling of 2026-08-19: the tokens are brakes, not enablers, so absent means auto-execute and either level alone can pin DRY-RUN. A `false` token may carry `expires=` to hold dry-run temporarily; an unreadable token holds dry-run rather than falling through to the default, and is recorded distinguishably from a deliberate pin. Behind the mode, the execution step gained a real gate. `brief-check.sh no-brainer-execute-safety` now (a) refuses when the brief cannot be resolved instead of passing silently, (b) refuses category-E/server-touching and user-skill-touching briefs from **frontmatter as well as gate tokens**, before any switch or arming state is consulted, (c) refuses unless the G9 evidence is a registry-backed `known_no_brainer` with `stop_gates_clear=true` and `confidence >= 0.85`, (d) keeps the N5 kill-switch brakes, (e) honours a pinned DRY-RUN at either level, and (f) appends a durable N7 audit line per evaluation, refusing if that record cannot be written. Those four refusals in (a)–(c) are what make an ARMED default defensible: before this change the gate permitted all four. The gate also moved: it was attached to the classification step (where the classifier evidence it needs did not yet exist) while the mutating `guarded-execute` step carried a check that never read the switch at all. Tests: `tests/brief-no-brainer-arming/test_no_brainer_arming.sh` (33 cases). Decision record for the default, including the declined dry-run-by-default proposal and the owner's ruling: `subdomains/brief-system/DRAFT-N5-ARMING-AMENDMENT.md`.
 - **v0.0 — PRELIMINARY DRY-RUN** (2026-06-24): initial 5-criterion classifier + cat-E override + fixture harness (5 fixtures).
 - **v0.1 — capability-blocker shape + compact-form signal** (2026-06-30, per as-niek per the human adjudicator "better briefs" epic): added step 2 (user-skill-touching-override consistency with [[as-wjv]]); added step 3 (capability-blocker shape — would-be no-brainer stalled by permission/capability gap; route as "resolve, then re-classify" rather than presenting A/B/C/D; data point he-gu79 n=5+); added `compact_eligible` output field consumed by [[present-it]] for compact-form eligibility; added capability-blocker.md fixture (6th case).
