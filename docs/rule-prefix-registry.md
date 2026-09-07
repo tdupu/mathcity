@@ -10,14 +10,14 @@ All rule ID prefixes for mathcity policies are reserved here. Rule IDs are globa
 | P | Dev / build hygiene | `subdomains/dev/POLICY.md` | Adopted (amended 2026-07-12) | P1.6, P5.3 |
 | SK | Agent skills | `POLICY-skills.md` (pack root) | Draft (2026-07-21) | SK1.1 |
 | BP | Bead policy | `POLICY-beads.md` (pack root) | Draft (2026-07-12) | BP1.1, BP4.3 |
-| PP | Policy-policy (meta) | `POLICY-POLICY.md` (pack root) | Draft (2026-07-12) | PP1.1, PP3.2 |
+| PP | Policy-policy (meta) | `POLICY-POLICY.md` (pack root) | Adopted (2026-09-07 — registry corrected to match the document, which has been Adopted; was stale-labelled Draft) | PP1.1, PP3.2 |
 | LX | LaTeX subdomain (bead-side LaTeX work) | `subdomains/latex/POLICY.md` | Draft (2026-07-12) | LX1.1, LX4.6 |
 | M | Magma packages (naming, READMEs, testing, bead lifecycle, profiling, pipelines) | `subdomains/magma/POLICY.md` | Draft (2026-07-12) | M1.3, M7.5 |
 | LM | LMFDB subdomain (labels, experiments, server usage, type creation) | `subdomains/lmfdb/POLICY.md` | Draft (2026-07-12) | LM1.3, LM3.4 |
 | C | Computing (caching/memoization, DRY/code-factoring, intrinsic testing, regression testing) | `subdomains/computing/POLICY.md` | Draft (2026-07-12) | C1.1, C3.2, C4.1 |
 | F | Formula policy (agent-tier separation, clean-up discipline, policy conformance for formula TOMLs) | `POLICY-formulas.md` (pack root) | Draft (2026-07-23) | F1.1, F2.1, F3.1 |
 | CT | City Operations (runtime dispatch/scheduling/molecules/cleanup) | `subdomains/dev/POLICY-city.md` | Adopted (2026-09-07) | CT1.1, CT3.2, CT9.1 |
-| DOC | Documentation (source-aligned docs, examples, setup, navigation, indexes, documentation workflow) | `subdomains/dev/POLICY-documentation.md` | Draft (2026-08-11) | DOC1.1, DOC3.2 |
+| DOC | Documentation (source-aligned docs, examples, setup, navigation, indexes, documentation workflow) | `subdomains/dev/POLICY-documentation.md` | Adopted (2026-09-07 — registry corrected to match the document, which has been Adopted; was stale-labelled Draft) | DOC1.1, DOC3.2 |
 
 ## Rules
 

@@ -295,6 +295,25 @@ recreate what you're running; upstream must remain pullable.*
   build work without a §E wheel-check section → **revise**. (Origin: the human adjudicator
   directive 2026-07-22; triggered by Opus fork finding 5 missing wheel-check
   entries in design-master-methodology.md; filed via new-hygiene-policy.)
+- **P1.22 One declared canonical root per artifact class.** Each class of
+  artifact the city produces — briefs, decision records, commissions, plans,
+  dispatch ledgers — has **exactly one declared canonical root**, and every
+  producer and reader of that class resolves to it. The *choice* among adequate
+  layouts is free; the **declaration and the adherence are not**. A layout is
+  judged by **how it evolves**, not by how it reads today: a root that is
+  convenient now but forecloses a foreseeable class of artifact fails this rule
+  even while it looks clean. Consistent with per-bead `artifact_root` scoping
+  (gsp-1bmxuz). Pass: every artifact class names one canonical root in a
+  declared location; every producer/reader resolves to it; a proposed layout
+  states how it accommodates foreseeable evolution. Fail: an artifact class with
+  no declared canonical root, two producers writing one class to different
+  roots, or a layout adopted with no stated evolution rationale → **fail**.
+  (Origin: Taylor's ruling 3 of four keystone rulings, `gt-m50xwa`, 2026-09-07,
+  verbatim — "it doesn't matter as long as we keep things clean and we follow a
+  layout. It should be well thought out. We need to make decisions thinking
+  about how things could evolve in the future." Resolves the artifact-path
+  default cluster (mc-897zw / mc-9cr72 — a completed plan for mc-fhv3 one
+  instruction from destruction) and the commission-slug collisions, 9 of 9.)
 
 ## Pillar 2 — Ownership boundary
 
@@ -815,6 +834,9 @@ no parallel vocabulary is introduced:
 ---
 
 ## Change Log
+
+### 2026-09-07 — P1.22 added: one declared canonical root per artifact class
+Each artifact class (briefs, decision records, commissions, plans, dispatch ledgers) has exactly one declared canonical root that every producer and reader resolves to; the choice among adequate layouts is free, the declaration and adherence are not, and a layout is judged by how it evolves rather than how it reads today. Triggered by: Taylor's ruling 3 of the four keystone rulings (gt-m50xwa, 2026-09-07) — "it doesn't matter as long as we keep things clean and we follow a layout … We need to make decisions thinking about how things could evolve in the future." Consistent with gsp-1bmxuz (per-bead artifact_root scoping). Resolves the artifact-path default cluster (mc-897zw/mc-9cr72; a completed mc-fhv3 plan was one instruction from destruction) and the 9/9 commission-slug collisions. Exceptions: none.
 
 ### 2026-08-11 — P3.6 added: feature work runs improve-documentation
 Feature, formula, skill, policy, setup, and user-facing workflow changes must

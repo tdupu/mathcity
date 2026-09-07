@@ -546,6 +546,29 @@ by what adjudication unlocks, not by arrival time.*
   fleet-event `drained`/`drain-acked` is gascity's session sense and is
   unrelated to the brief pile. Separate entries, always.
 
+- **B2.16 A mechanical gate failure is a defect signal, not a disposition.** A
+  form-, schema-, or gate-mechanical rejection of a brief is a **defect signal
+  about the PRODUCER**, never a disposition of the brief. It MUST flag the brief
+  **in place**, and the brief **remains adjudicable**: a mechanical failure MUST
+  NOT remove the brief from any pile, index, queue, view, or presentation
+  surface, and MUST NOT be recorded as a verdict. A brief that fails a form gate
+  is still presented and can still be decided on its content — "cannot be
+  presented" is never a silent outcome. **Where the repair lives (and the honest
+  limit of this rule):** the brief system owns and can guarantee the two halves
+  above — flag-in-place and non-removal — because both are within this surface.
+  It does **not** own the producer repair; a mechanical failure "must trigger a
+  repair," but raising and routing that repair is a city/dev action, not
+  something a B-rule can perform from the brief surface. This rule is therefore
+  written to be **falsifiable by what the brief surface controls** (a
+  mechanically-failed brief that got de-indexed, hidden, or verdict-stamped is a
+  B2.16 failure) and to **delegate** the repair-trigger explicitly rather than
+  assert a guarantee it cannot keep — a rule whose only satisfaction lived on a
+  surface it cannot reach would be a rule that cannot fail here (P6.2). Pass: a
+  mechanically-rejected brief stays in its pile/index and adjudicable, carries
+  the defect flag, and the repair is raised through the owning (city/dev)
+  surface. Fail: a mechanical / form / schema failure removes a brief from any
+  queue or view, is recorded as a verdict, or strands it where nothing reads it
+  → **fail**.
 
 ## Pillar 3 — Work closure discipline (B3.x)
 
@@ -1055,3 +1078,4 @@ the brief bead and the bead is closed (B2.2).
 | 2026-08-20 | Amend B2.13 to an explicit JUDGEMENT rule (naming what is weighed and the three items a reasoned verdict must cite, per `check-zero`) rather than a mechanical clause; add a paths.toml cross-check to `tests/brief-writer-authority` after `check-zero` found `mctl_core/redundant_state.py::artifact_layout` already models artifact locations | the human adjudicator: "Sometimes we need to defer to agent judgement. That is the power of agents." A bad mechanical proxy for a judgement call passes confidently on cases it cannot see |
 | 2026-08-20 | Add B2.11/B2.12/B2.13: `mctl` is the sole writer of every brief artifact; non-`mctl` writers are violations recorded in a dated register (`assets/brief-pipeline/brief-writers.toml`) that may only shrink; and no write path may report a state it did not verify. Enforced by `tests/brief-writer-authority`, which compares references rather than attempting write-detection (a proximity heuristic was prototyped and rejected for classifying `brief-shuffle-fast-drain.py` as read-only when `append_index()` writes the index) | the human adjudicator, verbatim: "We want to factor repeated work through a single point of failure" and "There is a central failure point which is the mctl commands. Debugging those will fix the whole thing." Five violations registered at adoption rather than fixed, so the burn-down is visible |
 | 2026-08-20 | Add B2.1a: a brief may declare it has no bead subject (`MBRF056`), scoping B2.1 rather than rewriting it; declaration is explicit-only, so an omitting brief still raises `MBRF004` | the human adjudicator ruled YES on the principle (bead `mc-csr`, workflow `mc-sxz`); the explicit-only shape follows the measurement — 30 of a 40-brief sample of the 135 `MBRF004` population are omissions, 27 of them with a still-recoverable subject, so an inferred declaration would be a loophole three times larger than the category it serves |
+| 2026-09-07 | Add B2.16: a mechanical/form/schema gate failure is a **defect signal about the producer**, not a disposition — it flags the brief in place, the brief stays indexed and adjudicable, and it must NOT be removed from any queue/view or recorded as a verdict; the "must trigger a repair" half is explicitly delegated to the city/dev surface, and the rule is written to be falsifiable by what the brief surface controls rather than by a repair it cannot reach (P6.2) | Taylor's ruling 1 of four keystone rulings (`gt-m50xwa`, 2026-09-07): "mechanical failures are bugs … It should automatically trigger repairs." QUIMBY 67 measured the stranded population: 28/31 mathcity `.rejected/` rejected on a `gate_profile` mismatch not content; hecke 8/8 rejections were schema failures (no hecke brief ever judged on content); the three briefs S63 told four consecutive Mayors to present (`mc-s0a4j`/`mc-vmcc5`/`mc-7a98s`) could record "not presented" but never "cannot be presented" because nothing reads `.rejected/`; Taylor's own PROMOTE verdict was lost to FATAL MBRF010 (preserved out-of-band as `gt-kzca38`). `33207a2` fixes recurrence at the producer but not the existing population, which is what makes the "must repair" half load-bearing |
