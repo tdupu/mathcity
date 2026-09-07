@@ -33,9 +33,17 @@ The caller supplies the read; this module does the shaping.
 THREE-VALUED, NOT BOOLEAN. A read that fails reports `state="unreachable"` with
 `total=None`. It never reports zero orders -- "we could not look" and "there
 are none" are different facts and a zero would collapse them.
+
+THE CATALOG IS LOCAL FILES. `read_order_catalog` reads order TOML off disk, so
+the catalog half costs a directory walk instead of the 89s subprocess that made
+it unservable in the first place. Which root it read is a decision the caller
+gets to see: roots that disagree, and roots that were never materialized, are
+typed diagnostics -- never a quietly partial catalog wearing a total.
 """
 from __future__ import annotations
 
+import tomllib
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .diagnostics import Diagnostic, Severity
@@ -49,6 +57,12 @@ MORD_CATALOG_UNREACHABLE = "MORD_CATALOG_UNREACHABLE"
 MORD_CATALOG_NOT_READ = "MORD_CATALOG_NOT_READ"
 MORD_HISTORY_UNAVAILABLE = "MORD_HISTORY_UNAVAILABLE"
 MORD_EVENT_LOG_UNAVAILABLE = "MORD_EVENT_LOG_UNAVAILABLE"
+
+#: Bounded-reader codes. Root selection and per-file failures are REPORTED, on
+#: the standing rule that a partial catalog must never render as a complete one.
+MORD_CATALOG_ROOT_MISMATCH = "MORD_CATALOG_ROOT_MISMATCH"
+MORD_CATALOG_ROOT_UNAVAILABLE = "MORD_CATALOG_ROOT_UNAVAILABLE"
+MORD_CATALOG_FILE_UNREADABLE = "MORD_CATALOG_FILE_UNREADABLE"
 
 #: Reserved for orders the event log has never seen -- NOT a blanket default.
 #: The earlier version of this module reported `unknown` for every order, on a
@@ -270,6 +284,176 @@ def formulas_catalog(read: Callable[[str], Any]) -> dict[str, Any]:
         "total": len(rows),
         "formulas": rows,
         "diagnostics": [],
+    }
+
+
+#: Where order definitions live in a pack checkout: the root set and each
+#: sub-pack's set. A reader that scans only the first silently drops every
+#: subdomain order and still reports a total, which reads as a full catalog.
+ORDER_GLOBS = ("orders/*.toml", "subdomains/*/orders/*.toml")
+
+
+def _order_row(path: Path, root: Path, rig_name: str | None) -> dict[str, Any]:
+    """Shape one `[order]` table the way `gc order list --json` shapes it.
+
+    Field derivation follows gc so the two readers cannot disagree about the
+    same file: `orderToJSON` (cmd/gc/cmd_order.go:562) for `type`/`enabled`,
+    `orderDecode.normalized` for the `gate` spelling of `trigger`, and
+    `Order.ScopedName` (internal/orders/order.go:141) for the scoped name.
+    """
+    with path.open("rb") as handle:
+        order = (tomllib.load(handle) or {}).get("order") or {}
+
+    name = path.stem
+    scope = str(order.get("scope") or "")
+    # `ScopedName()`: the bare name unless the order is rig-scoped.
+    scoped_name = f"{name}:rig:{rig_name}" if scope == "rig" and rig_name else name
+
+    enabled = order.get("enabled")
+    try:
+        source = str(path.relative_to(root))
+    except ValueError:  # outside the scanned root; an absolute path is the honest answer
+        source = str(path)
+
+    return {
+        "name": name,
+        "scoped_name": scoped_name,
+        "description": str(order.get("description") or ""),
+        # `IsExec()`: an order that execs is exec-typed, everything else is a formula.
+        "type": "exec" if order.get("exec") else "formula",
+        # `normalized()` reads `gate` when `trigger` is absent.
+        "trigger": str(order.get("trigger") or order.get("gate") or ""),
+        "interval": str(order.get("interval") or ""),
+        # `IsEnabled()`: absent means enabled.
+        "enabled": True if enabled is None else bool(enabled),
+        "source": source,
+        "scope": scope,
+        "formula": str(order.get("formula") or ""),
+        "exec": str(order.get("exec") or ""),
+        "on": str(order.get("on") or ""),
+        "target": str(order.get("pool") or ""),
+        "timeout": str(order.get("timeout") or ""),
+    }
+
+
+def read_order_catalog(
+    *,
+    city_root: Any = None,
+    rig_root: Any = None,
+    source_checkout: Any = None,
+    pack_root: Any = None,
+    rig_name: str | None = None,
+) -> dict[str, Any]:
+    """Every registered order, read from local TOML -- no subprocess, ever.
+
+    `gc order list --json` is the only catalog `orders_status` has ever had, and
+    it costs a measured 28-89s. That is why the request path serves
+    `EVENT_LOG_ONLY` and reports the catalog `unreachable`: not because the
+    catalog is unknowable, but because the one reader for it could not be
+    afforded. The definitions are files; this reads the files.
+
+    ROOT SELECTION IS EXPLICIT. `source_checkout` (or `pack_root`) wins when it
+    resolves, and `rig_root` is the fallback -- never a guess, and never silent.
+    A declared root that is not materialized, and a `rig_root` that disagrees
+    with the chosen source root, each raise a typed diagnostic, because the
+    failure this guards against is a confidently incomplete catalog.
+
+    Three-valued like the rest of this module: with no root to read, `state` is
+    `unreachable` and `total` is None. It never returns zero orders to mean
+    "we could not look".
+    """
+    facts = {k: str(v) for k, v in (("city_path", city_root), ("rig_name", rig_name)) if v}
+    diagnostics: list[dict] = []
+
+    def _note(severity: Severity, code: str, message: str, **extra: str) -> None:
+        diagnostics.append(Diagnostic(severity, code, message, facts={**facts, **extra}).to_dict())
+
+    # Preference order. `pack_root` is the source root under its other name, so
+    # it sits with `source_checkout` and ahead of the rig fallback.
+    declared = (
+        ("source_checkout", source_checkout),
+        ("pack_root", pack_root),
+        ("rig_root", rig_root),
+    )
+    root: Path | None = None
+    chosen_as = ""
+    incomplete = False
+    for label, value in declared:
+        if value is None:
+            continue
+        candidate = Path(value)
+        if not candidate.is_dir():
+            # An unmaterialized import root. Reported, not skipped in silence.
+            incomplete = True
+            _note(
+                Severity.WARN,
+                MORD_CATALOG_ROOT_UNAVAILABLE,
+                f"{label} {candidate} is not a materialized directory; it was not scanned",
+                data_location=str(candidate),
+            )
+            continue
+        if root is None:
+            root, chosen_as = candidate, label
+
+    if root is None:
+        return {
+            "state": "unreachable",
+            "total": None,
+            "orders": [],
+            "scan_root": None,
+            "diagnostics": diagnostics
+            or [
+                Diagnostic(
+                    Severity.WARN,
+                    MORD_CATALOG_ROOT_UNAVAILABLE,
+                    "no order catalog root was supplied; nothing was scanned",
+                    facts=facts,
+                ).to_dict()
+            ],
+        }
+
+    # A source root was chosen while a different rig root was also declared.
+    # Both are real roots; say which one the rows came from.
+    if chosen_as != "rig_root" and rig_root is not None:
+        rig_path = Path(rig_root)
+        if rig_path.is_dir() and rig_path.resolve() != root.resolve():
+            _note(
+                Severity.INFO,
+                MORD_CATALOG_ROOT_MISMATCH,
+                f"{chosen_as} {root} and rig_root {rig_path} disagree; "
+                f"the catalog was read from {chosen_as} only",
+                data_location=str(root),
+            )
+
+    rows: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for pattern in ORDER_GLOBS:
+        for path in sorted(root.glob(pattern)):
+            if not path.is_file() or path in seen:
+                continue
+            seen.add(path)
+            try:
+                rows.append(_order_row(path, root, rig_name))
+            except (OSError, tomllib.TOMLDecodeError, AttributeError) as err:
+                # One malformed file is not a dead catalog -- the same stance
+                # the event log reader takes toward one malformed line.
+                incomplete = True
+                _note(
+                    Severity.WARN,
+                    MORD_CATALOG_FILE_UNREADABLE,
+                    f"order definition {path.name} could not be read: {err}",
+                    data_location=str(path),
+                )
+
+    rows.sort(key=lambda row: (row["name"], row["source"]))
+    return {
+        # `degraded` when something declared could not be read: the rows are
+        # real, the catalog is not provably complete, and those differ.
+        "state": "degraded" if incomplete else "healthy",
+        "total": len(rows),
+        "orders": rows,
+        "scan_root": str(root),
+        "diagnostics": diagnostics,
     }
 
 

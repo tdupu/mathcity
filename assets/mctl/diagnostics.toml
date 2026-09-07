@@ -837,6 +837,21 @@ severity = "WARN"
 meaning = "The city event log could not be read, so order outcomes could not be folded; outcomes are reported unreachable rather than as failures."
 module = "orders.py"
 
+[MORD_CATALOG_ROOT_MISMATCH]
+severity = "INFO"
+meaning = "The bounded catalog reader was given a source checkout and a rig root that resolve to different directories; rows came from the source checkout alone and the other root was not scanned."
+module = "orders.py"
+
+[MORD_CATALOG_ROOT_UNAVAILABLE]
+severity = "WARN"
+meaning = "A declared order catalog root was not a materialized directory (or none was supplied), so it was not scanned; the catalog is unreachable or incomplete rather than empty."
+module = "orders.py"
+
+[MORD_CATALOG_FILE_UNREADABLE]
+severity = "WARN"
+meaning = "An order TOML file could not be parsed and was skipped; the remaining orders are still reported and the catalog state is degraded."
+module = "orders.py"
+
 # MQUE: queue_status reads (#113). Each of the four `bd` reads that build the
 # six queue populations degrades independently -- a failure nulls only the
 # population(s) that read feeds, never collapses to a silent empty list.
