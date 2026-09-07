@@ -80,6 +80,7 @@ EXPECTED_TOOLS = (
     "decisions_to_briefs",
     "events_list",
     "fleet_sessions",
+    "formula_dispatch",
     "formulas_catalog",
     "gates_status",
     "mayor_boot",

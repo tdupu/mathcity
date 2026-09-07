@@ -609,6 +609,42 @@ def _handle_events_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[
     )
 
 
+def _handle_formula_dispatch(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """#256: the catalogue was readable and none of it was runnable.
+
+    `formulas_catalog` reported 96 formulas and no tool on this surface could
+    invoke one, so every real dispatch left the typed surface for a hand-typed
+    `gc sling`. The catalogue read here is the SAME reader that tool uses, so
+    the set this will dispatch and the set that tool lists cannot disagree --
+    which is what makes refusing an unknown formula a fact rather than an
+    opinion.
+    """
+    from .formula_dispatch import apply_formula_dispatch, plan_formula_dispatch
+    from .orders import city_reader, formulas_catalog
+
+    catalogue = [
+        row.get("name")
+        for row in formulas_catalog(city_reader(ctx.city_root)).get("formulas", [])
+        if isinstance(row, dict) and row.get("name")
+    ]
+    plan = plan_formula_dispatch(
+        formula=arguments["formula"],
+        catalogue=catalogue,
+        target=arguments.get("target") or f"{ctx.rig_id}/gc.run-operator",
+        bead_id=arguments.get("bead_id"),
+        variables=arguments.get("vars") or {},
+    )
+    if not plan.get("ok"):
+        payload: dict[str, object] = {"applied": False, "dispatch": plan}
+    elif _dry_run(arguments):
+        payload = {"applied": False, "dispatch": plan}
+    else:
+        payload = {"applied": True, "dispatch": apply_formula_dispatch(plan)}
+        payload["applied"] = bool(payload["dispatch"].get("applied"))
+    payload["diagnostics"] = _diagnostics(ctx, ())
+    return payload
+
+
 def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
     """Every formula the city knows about (#117 / #156)."""
     from .orders import city_reader, formulas_catalog
@@ -2152,6 +2188,61 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["state", "total", "orders", "failing", "outcome_recorded"],
         ),
         handler=_handle_orders_status,
+    ),
+    ToolSpec(
+        name="formula_dispatch",
+        title="Dispatch a formula",
+        description=(
+            "Run any formula from `formulas_catalog`, with variables. Closes the "
+            "#256 gap: the catalogue was listable and nothing on this surface "
+            "could invoke it, so dispatch meant leaving the typed surface for a "
+            "hand-typed `gc sling`. Takes a formula NAME and vars as data and "
+            "composes the argv itself -- it accepts no command string, because a "
+            "caller-supplied command would run with this surface's authority "
+            "while being audited less than the shell it replaced. An unknown "
+            "formula is refused by name against the same catalogue "
+            "`formulas_catalog` reads. Pass `bead_id` for a convoy-targeted "
+            "formula (`--on`); omit it for the untargeted `--formula` form -- "
+            "they are not interchangeable, and guessing wrong yields "
+            "`convoy_id requires a targeted formulas v2 invocation`. Dry run by "
+            "default, which returns the exact argv without running it."
+        ),
+        input_schema=request_schema(
+            {
+                "formula": {
+                    "type": "string",
+                    "description": "Formula name, as listed by `formulas_catalog`.",
+                },
+                "vars": {
+                    "type": "object",
+                    "description": (
+                        "Formula variables as key/value strings. Each becomes its own "
+                        "`--var k=v` argv entry; nothing is joined on spaces, so a "
+                        "value may safely contain spaces, quotes or semicolons."
+                    ),
+                    "additionalProperties": {"type": "string"},
+                },
+                "bead_id": nullable_string(
+                    "Target bead for a convoy-targeted (`--on`) invocation. Omit for "
+                    "the untargeted `--formula` form."
+                ),
+                "target": nullable_string(
+                    "Agent to route to; defaults to `<rig>/gc.run-operator`."
+                ),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["formula"],
+        ),
+        output_schema=response_schema(
+            {
+                "applied": {"type": "boolean", "description": "False for a dry run or a refusal."},
+                "dispatch": {"type": "object", "description": "The plan, refusal, or run result."},
+            },
+            ["applied", "dispatch"],
+        ),
+        handler=_handle_formula_dispatch,
+        mutating=True,
+        external_ready=False,
     ),
     ToolSpec(
         name="formulas_catalog",

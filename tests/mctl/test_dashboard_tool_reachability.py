@@ -52,6 +52,10 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
     ),
     "beads_show": "a raw single-bead read (#245); no screen consumes it, same footing as beads_list",
     "work_dispatch": "mutating dispatch is not driven from the dashboard",
+    "formula_dispatch": (
+        "mutating dispatch is not driven from the dashboard, same footing as "
+        "work_dispatch (#256)"
+    ),
     "work_dispatch_bound": (
         "mutating, and no screen consumes it -- but the reason to keep it that way "
         "is stronger than 'nobody built it'. The bound is PROCESS-WIDE for the "

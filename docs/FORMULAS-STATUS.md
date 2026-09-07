@@ -135,3 +135,60 @@
   four routes or direct `gc sling`.
 - The full pack universe is larger (~150 TOMLs incl. bmad/compound/gstack/pr-review/ops
   packs not imported into this city's catalog); this file tracks only the 94 the city serves.
+
+---
+
+## Addendum — kolchin MCP sweep, 2026-09-07
+
+Every formula in the live catalog (91 on that host) was exercised **through the
+MCP tool** `formula_dispatch` (#256), applied for real, on the isolated
+`mathcity-testrig` rig. Rig and method: [KOLCHIN-TESTRIG.md](./KOLCHIN-TESTRIG.md).
+Raw per-formula results: `MCP-SWEEP-LOG.md` in that rig.
+
+**What this evidence does and does not establish.** `DISPATCHED` below means gc
+accepted the invocation and instantiated a workflow — strictly more than
+`NOT PROBED`, and strictly less than a completed end-to-end run. It is not a
+pass. Do not promote these rows to "PROVEN" on the strength of this addendum.
+
+| Outcome | Count | What it means |
+|---|---|---|
+| DISPATCHED | 21 | instantiated; workflow started |
+| refused: `variable "X" is required` | 36 | parameterized; invoked bare on purpose |
+| refused: `requires a target convoy` | 29 | convoy-targeted; needs `--on <bead>` |
+| refused: container root | 1 | `codex-dispatch` is not directly slingable |
+| blocked by #261 | 4 | `unknown formulas v2 target "superpowers.code-reviewer"` |
+| unexplained | **0** | — |
+
+The 66 refusals are the intended result, not failures: each formula was invoked
+bare to check the tool surfaces gc's own validation rather than swallowing or
+mangling it. It does.
+
+### DISPATCHED on kolchin 2026-09-07 (21)
+
+`brief-archive-sweep`, `brief-decision-dispatch`, `brief-present-next`,
+`brief-producer-failure-record`, `brief-producer-failure-rollup`,
+`brief-review-patrol`, `brief-shuffle`, `brief-shuffle-fast-drain`,
+`brief-watchdog-refill`, `build-basic-review`, `file-or-sendback-route`,
+`github-issue-fix-design-review-work`, `implementation-base`,
+`implementation-item-base`, `lost-bead-classification-rollup`,
+`lost-bead-upstream-repair-rollup`, `mol-dog-stale-db`,
+`no-brainer-candidate-curate`, `no-brainer-classify`, `on-merge-brief-record`,
+`revise-return`.
+
+### Blocked by #261 (4)
+
+`superpowers-brainstorming`, `superpowers-code-review`,
+`superpowers-plan-review`, `superpowers-task-review` — all fail identically on
+`unknown formulas v2 target "superpowers.code-reviewer"`. This upgrades #261's
+blast radius from one formula to four.
+
+### Separately proven end-to-end (earlier the same day)
+
+The brief/adjudication chain ran to completion on the same rig —
+`staging → draft → review → 18 gates → .pile → stack → decision → archive`,
+canonical verdict recorded on decision bead `mt-q5m` (closed). Formulas
+exercised to closure there: `brief-prep`, `brief-gate-keep`,
+`brief-record-decision`, `brief-shuffle`, `no-brainer-classify`,
+`lost-bead-classification-rollup`, plus `do-work`, `review`, `gap-analysis`,
+`publish`, `decomposition-base` and `mol-do-work` (whose root cannot close —
+#258). Detail in `FORMULA-TEST-LOG.md` in the rig.

@@ -121,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         return _trace_command(args, context)
     if args.command == "mayor":
         return _mayor_command(args, context)
+    if args.command == "formula":
+        return _formula_command(args, context)
     return _work_command(args, context)
 
 
@@ -365,6 +367,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_runtime_arguments(mayor_boot)
     _add_mcp_parser(commands)
     _add_dashboard_parser(commands)
+    _add_formula_parser(commands)
     work = commands.add_parser("work", help="inspect and dispatch brief-backed work")
     work_commands = work.add_subparsers(dest="work_command", required=True)
     _add_work_ready_parser(work_commands)
@@ -568,6 +571,100 @@ def _add_work_provenance_parser(commands: argparse._SubParsersAction[argparse.Ar
     parser = commands.add_parser("provenance", help="show validated dispatch provenance")
     parser.add_argument("brief_id")
     _add_runtime_arguments(parser)
+
+
+def _add_formula_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """`mctl formula dispatch` -- the CLI half of #256.
+
+    Reads through the SAME `plan_formula_dispatch` the MCP tool calls, so the
+    two adapters cannot come to different answers about what a dispatch IS:
+    which formulas exist, which argv a formula becomes, and which names are
+    refused. One binary, two adapters, one resolver -- the pattern
+    `_add_mcp_parser` already documents for the server.
+
+    Unlike the MCP tool this defaults to APPLYING, matching `work dispatch`:
+    a human at a shell typed the formula name, where an agent gets the
+    dry-run-first default because it did not.
+    """
+    parser = commands.add_parser("formula", help="dispatch a formula by name, with vars")
+    sub = parser.add_subparsers(dest="formula_command", required=True)
+
+    listing = sub.add_parser("list", help="every formula this city knows")
+    _add_runtime_arguments(listing)
+
+    dispatch = sub.add_parser("dispatch", help="sling a formula by name")
+    dispatch.add_argument("formula")
+    dispatch.add_argument(
+        "--var",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="formula variable; repeatable. Each becomes its own --var argv entry.",
+    )
+    dispatch.add_argument(
+        "--on",
+        dest="bead_id",
+        default=None,
+        help=(
+            "target bead for a convoy-targeted invocation. Omit for the "
+            "untargeted --formula form; the two are not interchangeable."
+        ),
+    )
+    dispatch.add_argument(
+        "--target", default=None, help="agent to route to (default <rig>/gc.run-operator)"
+    )
+    dispatch.add_argument("--dry-run", action="store_true", help="print the argv, run nothing")
+    dispatch.add_argument("--deadline-seconds", type=float, default=None)
+    _add_runtime_arguments(dispatch)
+
+
+def _formula_command(args: argparse.Namespace, context) -> int:
+    """Plan (and optionally run) one formula dispatch."""
+    from .formula_dispatch import apply_formula_dispatch, plan_formula_dispatch
+    from .orders import city_reader, formulas_catalog
+
+    catalogue = [
+        row.get("name")
+        for row in formulas_catalog(city_reader(context.city_root)).get("formulas", [])
+        if isinstance(row, dict) and row.get("name")
+    ]
+
+    if args.formula_command == "list":
+        for name in sorted(catalogue):
+            print(name)
+        return 0
+
+    variables: dict[str, str] = {}
+    for item in args.var:
+        key, sep, value = item.partition("=")
+        if not sep:
+            print(f"--var must be KEY=VALUE; got {item!r}", file=sys.stderr)
+            return 2
+        variables[key] = value
+
+    plan = plan_formula_dispatch(
+        formula=args.formula,
+        catalogue=catalogue,
+        target=args.target or f"{context.rig_id}/gc.run-operator",
+        bead_id=args.bead_id,
+        variables=variables,
+    )
+    if not plan.get("ok"):
+        print(f"{plan['code']}: {plan['message']}", file=sys.stderr)
+        if plan.get("did_you_mean"):
+            print("did you mean: " + ", ".join(plan["did_you_mean"]), file=sys.stderr)
+        return 1
+
+    if args.dry_run:
+        print(" ".join(plan["command"]))
+        return 0
+
+    result = apply_formula_dispatch(plan, timeout=args.deadline_seconds)
+    if result.get("stdout"):
+        print(result["stdout"])
+    if result.get("stderr"):
+        print(result["stderr"], file=sys.stderr)
+    return 0 if result.get("applied") else 1
 
 
 def _add_work_dispatch_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

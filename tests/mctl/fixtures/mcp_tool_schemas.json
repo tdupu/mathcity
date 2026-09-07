@@ -15634,6 +15634,214 @@
     },
     "title": "List fleet slots, occupied and empty"
   },
+  "formula_dispatch": {
+    "description": "Run any formula from `formulas_catalog`, with variables. Closes the #256 gap: the catalogue was listable and nothing on this surface could invoke it, so dispatch meant leaving the typed surface for a hand-typed `gc sling`. Takes a formula NAME and vars as data and composes the argv itself -- it accepts no command string, because a caller-supplied command would run with this surface's authority while being audited less than the shell it replaced. An unknown formula is refused by name against the same catalogue `formulas_catalog` reads. Pass `bead_id` for a convoy-targeted formula (`--on`); omit it for the untargeted `--formula` form -- they are not interchangeable, and guessing wrong yields `convoy_id requires a targeted formulas v2 invocation`. Dry run by default, which returns the exact argv without running it.",
+    "external_ready": false,
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "bead_id": {
+          "description": "Target bead for a convoy-targeted (`--on`) invocation. Omit for the untargeted `--formula` form.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "city": {
+          "description": "Registered Gas City root; defaults to the server's --city.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "default": true,
+          "description": "Preview the effect plan without applying it. Defaults to true.",
+          "type": "boolean"
+        },
+        "formula": {
+          "description": "Formula name, as listed by `formulas_catalog`.",
+          "type": "string"
+        },
+        "rig": {
+          "description": "Registered rig identifier; defaults to the server's --rig.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Agent to route to; defaults to `<rig>/gc.run-operator`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vars": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Formula variables as key/value strings. Each becomes its own `--var k=v` argv entry; nothing is joined on spaces, so a value may safely contain spaces, quotes or semicolons.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "formula"
+      ],
+      "type": "object"
+    },
+    "mutating": true,
+    "outputSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "applied": {
+          "description": "False for a dry run or a refusal.",
+          "type": "boolean"
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics for this call.",
+          "items": {
+            "additionalProperties": false,
+            "description": "A structured mctl diagnostic: severity, stable code, and provenance.",
+            "properties": {
+              "bead_id": {
+                "description": "Canonical bead this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brief_slug": {
+                "description": "Brief slug this diagnostic is about.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city_path": {
+                "description": "Resolved Gas City root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "code": {
+                "description": "Stable code from assets/mctl/diagnostics.toml.",
+                "type": "string"
+              },
+              "data_location": {
+                "description": "File or store the finding was read from.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "facts": {
+                "description": "Untyped supporting facts.",
+                "type": "object"
+              },
+              "hint": {
+                "description": "Suggested operator action.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "description": "Human-readable finding.",
+                "type": "string"
+              },
+              "policy_ref": {
+                "description": "Policy clause the finding is grounded in.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provenance_ref": {
+                "description": "Implementation surface that raised it.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_name": {
+                "description": "Resolved rig identifier.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "rig_path": {
+                "description": "Resolved rig root.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "INFO",
+                  "WARN",
+                  "ERROR",
+                  "FATAL"
+                ],
+                "type": "string"
+              },
+              "suggested_next_command": {
+                "description": "Command that would advance the situation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "trace_id": {
+                "description": "Trace this diagnostic belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "bead_id",
+              "brief_slug",
+              "city_path",
+              "code",
+              "data_location",
+              "facts",
+              "message",
+              "policy_ref",
+              "provenance_ref",
+              "rig_name",
+              "rig_path",
+              "severity",
+              "suggested_next_command"
+            ],
+            "title": "Diagnostic",
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "dispatch": {
+          "description": "The plan, refusal, or run result.",
+          "type": "object"
+        },
+        "trace_id": {
+          "description": "Trace id for this tool call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "applied",
+        "diagnostics",
+        "dispatch",
+        "trace_id"
+      ],
+      "type": "object"
+    },
+    "title": "Dispatch a formula"
+  },
   "formulas_catalog": {
     "description": "Every formula the city knows about.",
     "external_ready": true,

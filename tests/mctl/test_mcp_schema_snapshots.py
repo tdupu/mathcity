@@ -129,6 +129,7 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "dashboard_serve",
         "dashboard_teardown",
         "decisions_to_briefs",
+        "formula_dispatch",
         "molecule_cancel",
         "standardize_github_issue",
         "work_dispatch",
