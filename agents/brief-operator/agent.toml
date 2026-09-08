@@ -1,5 +1,28 @@
 description = "Pack-local operator that runs the deterministic brief-pipeline machine steps (shuffle bookkeeping, watchdog refill measurement, decision dispatch, archive sweeps, no-brainer classification). Never adjudicates, never presents to the human adjudicator."
-scope = "city"
+# NO scope FIELD, deliberately. gc instantiates an agent with scope omitted in
+# BOTH the city and the rig expansion contexts (internal/config/config.go:
+# "Omit the field for an unscoped agent instantiated in both city and rig
+# expansion contexts"). This agent needs both, and having only the city
+# instance caused a livelock:
+#
+# Every brief-* formula poured into a RIG routes its STEP beads to the bare
+# target `mathcity.brief-operator`. With scope = "city" that agent exists only
+# at city level, so its work query resolves against the HQ store and it sees
+# only hq-* beads. The rig's step beads were therefore invisible to it and
+# unclaimable by anything else, while the same formulas' gc.kind=workflow latch
+# beads DID route to the rig's run-operator pool - which claimed them, held a
+# slot to lease expiry, and handed them back. Measured on kolchin 2026-09-08:
+# all three run-operator sessions holding a latch, zero legitimate work routed
+# to the pool, 11 step beads never claimed. See mathcity-testrig bead mt-ab3c.
+#
+# Every other mathcity.* agent is already instantiated per-rig; brief-operator
+# was the lone exception, which is what made it read as an oversight rather
+# than a design. Restoring the city instance alone is not enough and restoring
+# only a rig instance would break city-scope brief work, so: omit, get both.
+#
+# NOTE this is half the fix. Latch beads remain claimable by normal role
+# workers until the pool work query / GC_CLAIM block gains a gc.kind guard
+# (fault 2 in mt-ab3c). The two are independent and both are needed.
 wake_mode = "fresh"
 work_dir = "{{.AgentBase}}"
 nudge = "Run gc hook --claim --json now; if it returns a brief-pipeline machine step, execute the claimed formula immediately."
