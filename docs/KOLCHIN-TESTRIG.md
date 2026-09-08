@@ -373,3 +373,128 @@ Note `gc reload` warns `unknown field "rigs.source_checkout"` three times per
 reload: gc discards it, and it works only because mctl parses `city.toml`
 itself. That is the same silent-discard class as #257 and should not be relied
 on indefinitely.
+
+---
+
+## 10. Restart behaviour, and what a restart caught (2026-09-07)
+
+The city was restarted deliberately, as a test. It found a fatal defect that a
+running city was hiding, so the exercise is documented rather than just the
+outcome.
+
+### What it caught: an MCP target conflict that is fatal to init
+
+The mayor agent had been given **no `work_dir`**, so it ran at the city root.
+MCP is projected **per workdir**, so it collided with the other city-scope
+agent on the same file:
+
+    MCP target conflict at <city-root>/.mcp.json (claude):
+      mayor.mayor projects 83e1aded... but claude-agexplained projects 3fb2b392...
+    gc-fatal: init: project MCP
+    city 'HQ': init failure #5, next retry in 2m40s
+
+The city never started — it retried with escalating backoff (1m20s, 2m40s).
+
+**The important property: this fires only during init.** The city had been
+running for hours with the defect in place, because the MCP had been projected
+by hand. Nothing would have revealed it until the next unplanned restart, at
+which point the cause would have been weeks in the past. That is the argument
+for restarting deliberately.
+
+The fix was to restore `work_dir = ".gc/agents/mayor"`, which the stock Gas City
+mayor had shipped all along. It reads like an arbitrary subtree and is not: it
+exists to keep the Mayor off the shared MCP target.
+
+### A work_dir change needs `gc session close`, not a session kill
+
+After the fix, the Mayor *still* projected to the old path. Config and runtime
+disagreed:
+
+    gc config explain   ->  work_dir = .gc/agents/mayor     (correct)
+    gc session list     ->  WORKDIR  = <city-root>          (stale)
+
+The **session bead outlives the tmux session**. Killing the pane, and even
+restarting the supervisor, both reuse the existing session record and its
+recorded workdir. Only
+
+    gc session close <session-id>
+
+retires the record; the reconciler then mints a new one from current config.
+`gc session list` is the surface that shows the disagreement — nothing else did.
+
+### Startup profile (measured)
+
+| Phase | Duration |
+|---|---|
+| `loading_config` | fast |
+| `starting_bead_store` | **32.4s** — dominates |
+| `checking_bead_store_health` | 3.1s |
+| `projecting_mcp` | 5.1s |
+| Mayor session start | 19.3s (`outcome=success`) |
+| Init-failure backoff | 1m20s, then 2m40s, escalating |
+
+Sessions **survive** a supervisor restart: the dispatchers kept their original
+creation timestamps across it, courtesy of
+`GC_SUPERVISOR_PRESERVE_SESSIONS_ON_SIGNAL=1` in the LaunchAgent plist.
+
+### Do not hand-edit the pack cache
+
+An early attempt to unblock the city renamed the offending directory inside
+`~/.gc/cache/repos/<hash>/`. gc detected it immediately:
+
+    city import "mayor": cached import ... has local worktree
+
+and refused, replacing one failure with another. The cache is gc's, not an
+editing surface. The correct route is fix the pack, commit, push, re-pin the
+import sha, `gc import install`.
+
+---
+
+## 11. Correction to the build-hygiene audit: F1 was wrong about gc
+
+Finding F1 reported that neither `gc` nor `bd` carried a VCS stamp and treated
+both as unverifiable. That was right for `bd` and **wrong for `gc`**, in a way
+worth recording because the audit rule itself is affected.
+
+**`bd` — the finding was valid, and is now fixed.** Its Makefile does not
+disable VCS stamping; the binary simply had not been built from a local
+checkout. Cloning the fork and running the sanctioned `make install` produced:
+
+    vcs.revision = eabeb78b1e7c91e253a2a16a894762938c276da1
+    vcs.modified = false
+    git rev-parse HEAD = eabeb78b1e7c91e253a2a16a894762938c276da1
+
+**`gc` — the finding was backwards.** gascity's Makefile passes
+`-buildvcs=false` **deliberately**, and documents why:
+
+> Go's buildvcs identifies a repository by a `.git` *directory*, so from inside
+> a worktree it keeps walking up and stamps whichever repository *encloses* it.
+> That makes the toolchain stamp actively wrong for a worktree nested in
+> another checkout — a polecat worktree under the city directory picks up the
+> city's commit and the city's dirtiness (`ga-u7fb`).
+
+So for `gc` the absence of a `vcs.*` stamp is the **correct** state; its
+presence would be the bug. Provenance is carried by ldflags instead
+(`main.commit`), and is checkable through the running API:
+
+    api build_id : 02c9e97f8
+    repo HEAD    : 02c9e97f8      (match)
+
+**Consequence for the audit rule.** P1.6 states the check as
+"`go version -m <binary>` shows `vcs.revision` equal to the checkout's HEAD".
+That mechanism does not apply to `gc` and never will while gascity builds
+worktree-aware. The rule needs a stated exception naming the ldflags/`build_id`
+channel as gc's provenance surface, or `check-build-hygiene` will keep
+reporting a correct build as unverifiable — a false positive that trains
+readers to ignore the check.
+
+Also observed: the rebuild stamped `main.commit=02c9e97f8-dirty`. The `-dirty`
+comes from untracked city artifacts in the gascity checkout
+(`.beads/`, `.claude/skills/…`), not from source edits.
+
+**One thing the rebuild did not change.** The LaunchAgent runs
+`/usr/local/bin/gc`, while `make install` writes `~/go/bin/gc`. They are
+different files, and the running supervisor keeps using the former. Here it did
+not matter — both are the same commit — but a rebuild does **not** reach the
+supervisor on this host without updating `/usr/local/bin/gc` (admin-owned) or
+repointing the plist.
