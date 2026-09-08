@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-134 skills across the parent pack and 7 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+142 skills across the parent pack and 7 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -13,7 +13,7 @@ Parent: [README.md](./README.md)
 
 _Regenerate/verify with `/update-README`._
 
-### Parent pack — `mathcity/skills/`  (57)
+### Parent pack — `mathcity/skills/`  (60)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -48,6 +48,7 @@ _Regenerate/verify with `/update-README`._
 | `fp-finder-skill` | `mathcity.fp-finder-skill` | Fixed-point convergence engine for SKILL.md files |
 | `gate-test-execution-silent` | `mathcity.gate-test-execution-silent` | G14 gate (test-execution-silent) |
 | `gc-recycle-bead` | `mathcity.gc-recycle-bead` | Handle graceful lifecycle transitions for research beads — beads that contain mathematical decisions, session notes, or research context rather than purely actionable task steps |
+| `generate-prompt` | `mathcity.generate-prompt` | Turn a mathematical issue, note, or vague problem into one evidence-grounded, execution-ready prompt pinned to project data, references, computations, and deliverables |
 | `get-best-apis` | `mathcity.get-best-apis` | Fetches live LLM benchmark rankings (IFScale / AA Intelligence Index) and current API pricing (input $/1M, output $/1M) across OpenRouter, Ollama, OpenCode, Anthropic, and OpenAI, then renders a self-contained HTML table sorted by score… |
 | `get-best-models` | `mathcity.get-best-models` | Recommends the best open-weights / local LLM for a given hardware constraint and use case, using IFScale as the primary ranking metric and the memory-constraint formula (P*b <= available RAM) to filter candidates |
 | `github-issues-to-briefs` | `mathcity.github-issues-to-briefs` | Hourly self-terminating drain of the GitHub issue tracker into per-issue decision briefs — standardize each issue against the repo templates, mint its bead, deposit ONE full-form brief titled "github-issue N — ...", comment the bead id back onto the issue, auto-adjudicate evidence-backed resolved/moot classes, and close issues when their briefs resolve |
@@ -61,6 +62,7 @@ _Regenerate/verify with `/update-README`._
 | `mayor-math-prime` | `mathcity.mayor-math-prime` | Prime a fresh math-city Mayor session from the restart prompt, durable operation docs, session catalog, and handoff bead |
 | `mayor-math-restart` | `mathcity.mayor-math-restart` | Full Mayor session orientation |
 | `mayor-math` | `mathcity.mayor-math` | Supplement to gc.mayor for Gas Town (gt HQ) context |
+| `new-beads-policy` | `mathcity.new-beads-policy` | Check for an existing bead before creating dispatch work, or amend the policy governing bead creation and lifecycle |
 | `nudge-city` | `mathcity.nudge-city` | Revive city workers that are stalled/asleep after a usage-limit reset by nudging each one to resume, finish its task, and free its run-operator slot |
 | `present-briefs` | `mathcity.present-briefs` | Batch-present N briefs in parallel and maintain a hot queue (≥2 pre-presented at all times) |
 | `present-it` | `mathcity.present-it` | Dump decision-ready context into the CURRENT conversation for ONE specific question about a code artifact (branch, bead, PR, diff, GH-issue), so the decision-maker can decide with no prior knowledge |
@@ -98,10 +100,12 @@ _Regenerate/verify with `/update-README`._
 | `profile-magma` | `mathcity-computing.profile-magma` | Wrap the Magma code the user is working on in a profiling harness to find bottlenecks (slow intrinsics, memory hogs) |
 | `update-issue` | `mathcity-computing.update-issue` | Replace a GitHub issue's body with a single up-to-date canonical statement, consolidating all prior body versions into ONE archive comment per issue (folded via HTML <details> blocks) |
 
-### Pack development / hygiene — `subdomains/dev/skills/`  (26)
+### Pack development / hygiene — `subdomains/dev/skills/`  (30)
 
 | Skill | Alias | What it does |
 |---|---|---|
+| `add-to-gascity-ledger` | `mathcity-dev.add-to-gascity-ledger` | Record a gc-layer problem or lifecycle event in the gascity issue ledger, then display the updated ledger |
+| `add-to-surface-ledger` | `mathcity-dev.add-to-surface-ledger` | Record new evidence about an MCP command or skill in the surface-status ledger, then display the updated ledger |
 | `adjust-workers` | `mathcity-dev.adjust-workers` | Scale the number of concurrent run-operators on a Gas City rig — reads live session counts, proposes a max_active_sessions patch, and routes it through the briefed pack-change path (city-toml-via-packs-not-hand policy). |
 | `audit-recent-work` | `mathcity-dev.audit-recent-work` | Produce a full accounting of work adjudicated in a session or date range — brief-record beads, decision beads, stack archives, and in-flight molecules — across all rigs. Distinguishes mid-flight build-basic-briefed molecules from genuine dispatch gaps. |
 | `city-status` | `mathcity-dev.city-status` | Read-only Gas City fleet and work-queue snapshot — checks tmux liveness, active sessions, in-progress beads (with lease/heartbeat status), molecule step tables (steps done, +1h change, start/completion times), brief pipeline state (.pile/.stack counts, shuffler lock), and Dolt health. |
@@ -116,6 +120,7 @@ _Regenerate/verify with `/update-README`._
 | `check-wheel` | `mathcity-dev.check-wheel` | Gate a plan, implementation, or data artifact against the "no reinventing the wheel" invariant — detects existing resources that cover the proposed work, then produces a hygienic import recommendation via check-plan-hygiene when reinvention is found. |
 | `check-zero` | `mathcity-dev.check-zero` | Wheel-check — survey existing gascity formulas/skills/orders, prior beads, code, Magma intrinsics, math databases (LMFDB, Stacks), Python packages, and known theorems before building anything from scratch. |
 | `check-defer` | `mathcity-dev.check-defer` | Framework-cognition compliance checker — scans a skill, formula, or pipeline artifact and flags every place a framework makes a reasoning decision that should be a model call. |
+| `gascity-ledger` | `mathcity-dev.gascity-ledger` | Display the gascity issue ledger's problem index and lifecycle-command log |
 | `hourly-check` | `mathcity-dev.hourly-check` | 12-hour city health watchdog — fires every hour, shows fleet/molecule/brief/Dolt snapshot, raises a prominent inline alert to the invoking session if stalls or usage limits are detected. |
 | `improve-documentation` | `mathcity-dev.improve-documentation` | Update mathcity documentation hygienically after user-facing feature, formula, skill, policy, setup, or workflow changes; keeps examples, tests, parent links, and indexes aligned |
 | `new-city-policy` | `mathcity-dev.new-city-policy` | Propose and apply an amendment to the City Operations Policy (mathcity/subdomains/dev/POLICY-city.md, CT-rules) — sole write path, human-gated |
@@ -125,6 +130,7 @@ _Regenerate/verify with `/update-README`._
 | `push-the-fleet` | `mathcity-dev.push-the-fleet` | Saturate the city fleet — finds all ready, unblocked beads across rigs and dispatches them via build-basic-briefed (mathcity.work pattern) until active workers reach TARGET (default 10). |
 | `skill-creator-math` | `mathcity-dev.skill-creator-math` | Create a new skill in the mathcity pack family (parent `skills/` or a subdomain child pack per ADR 0002) and expose it to plain sessions and city agents through the configured skill materialization paths |
 | `strand-sweep` | `mathcity-dev.strand-sweep` | Find beads and molecules slung but never run — detects immediate strands (empty assignee), dead formula run_target addresses, prose-only-blocked beads bd ready can't see, orphaned wisps (pool absent), and deadlocked molecules via flat step-count. |
+| `surface-ledger` | `mathcity-dev.surface-ledger` | Display the reconciled surface-status tables for MCP commands and skills |
 | `switch-city-worker-provider` | `mathcity-dev.switch-city-worker-provider` | Controlled runbook for temporarily switching selected Gas City worker sessions between Claude-backed and Codex-backed providers and rolling them back. |
 | `testing-work` | `mathcity-dev.testing-work` | Dispatch a bead to the smoke-test-briefed formula for lightweight test execution with a brief at the end |
 | `update-README` | `mathcity-dev.update-README` | Keep the mathcity pack family's READMEs and skill exposure in sync after ANY owned-pack change — the pack-dev sibling of improve-package-README (which serves Magma/Sage packages) |

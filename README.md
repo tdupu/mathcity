@@ -120,6 +120,7 @@ Planned surfaces are tracked in the issue tracker and summarized in
 | Verify Superpowers availability | local shell or live city | shell, Python 3.11+, `rg`, a local `gascity-packs` checkout (sibling of the primary checkout, or `SUPERPOWERS_PACK`); optional `gc` for live catalog check | `bash tests/superpowers-availability/smoke_test.sh`; live: `RUN_LIVE_GC=1 GC_CITY_PATH=<city-root> bash tests/superpowers-availability/smoke_test.sh` | `tests/superpowers-availability/smoke_test.sh` | current | none |
 | Verify Dolt pre-flight exit codes and reporting/working classification | local shell | shell (no live `gc`, `bd`, or Dolt server needed — uses stubs) | `bash tests/dolt-preflight-exit-codes/smoke_test.sh` | `tests/dolt-preflight-exit-codes/smoke_test.sh` | current | `#7`, `#8` |
 | Audit documentation policy | Codex or Claude Code | mathcity checkout | `/check-documentation-policy` | acceptance check in this documentation refactor | current | none |
+| Generate an evidence-grounded mathematical research prompt | Codex or Claude Code | mathcity skill pack plus the target repository and cited sources | `/generate-prompt <research problem>` | `tests/generate-prompt/cases.md` | current | none |
 
 ## Development And Tests
 
