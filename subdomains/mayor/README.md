@@ -3,8 +3,8 @@
 Parent: [../../README-subdomains.md](../../README-subdomains.md)
 
 This pack ships a city-scope **Mayor** agent for a mathcity city: the agent
-definition, its prompt (mathcity doctrine and the continuity loop), an Opus
-provider, and the mctl MCP surface. The rulebook is
+definition, its prompt (mathcity doctrine and the continuity loop), and the
+mctl MCP surface. The rulebook is
 [POLICY.md](./POLICY.md); this README is the guided tour.
 
 ## Importing it does not start a Mayor
@@ -42,18 +42,43 @@ root pack, where it would be forced on every consumer.
 | Agent | `agents/mayor/agent.toml` | `scope = "city"`, one session, `wake_mode = "fresh"` |
 | Prompt | `agents/mayor/prompt.template.md` | doctrine, boundaries, continuity, dispatch discipline |
 | MCP | `agents/mayor/mcp/mctl.template.toml` | the mctl typed surface, including `formula_dispatch` |
-| Model | `pack.toml` → `[providers.claude-opus]` | Opus, without touching the city's shared providers |
+| Model | agent names `mayor-model` | the **city** defines it; see "The model contract" |
 
-### Why Opus
+### The model contract
 
-The Mayor's work is judgment under incomplete information: deciding what the
-city should do next, reading contradictory signals, and refusing work that
-should not run. That is the one role where model capability changes the
-*answer* rather than the latency. Worker roles are not pinned here.
+The agent names a provider called **`mayor-model`**, which the **city** must
+define. The pack does not ship it, and that is deliberate.
 
-The provider sets only the model. `base = "builtin:claude"` inherits whatever
-`CLAUDE_CONFIG_DIR` the city's own Claude provider supplies, so a city running
-its agents under a particular account keeps that account for the Mayor.
+A working Claude provider carries a `CLAUDE_CONFIG_DIR` pointing at an
+authenticated account directory. That is machine-local and an absolute home
+path, which pack content may not contain. So the pack names the provider and
+the city supplies it, extending its own account provider so authentication is
+inherited and only the model is pinned:
+
+```toml
+# <city-root>/city.toml
+[providers.mayor-model]
+base = "provider:claude-agexplained"   # whatever the city's account provider is
+args_append = ["--model", "opus"]
+```
+
+`base = "provider:<name>"` forces a custom-provider lookup; a bare `"<name>"`
+tries custom first, then built-in.
+
+**Do not** define it as `base = "builtin:claude"` with no env. A provider with
+no `CLAUDE_CONFIG_DIR` gets an unauthenticated config dir, and the Mayor comes
+up sitting on Claude Code's "Select login method" prompt — a session that looks
+alive, holds its slot, and can never do anything. This pack shipped exactly
+that mistake once; the note in `pack.toml` records it.
+
+A city that does not want to pin a model can define `mayor-model` as a plain
+alias of its account provider with no `args_append`.
+
+**Why pin Opus at all:** the Mayor's work is judgment under incomplete
+information — deciding what the city should do next, reading contradictory
+signals, and refusing work that should not run. That is the one role where
+model capability changes the *answer* rather than the latency. Worker roles are
+not pinned here.
 
 ### Why the MCP definition looks the way it does
 
@@ -77,18 +102,29 @@ set — resolving to garbage is worse than resolving to nothing.
 
 ```bash
 # 1. import the pack into the city
-gc import add mathcity-mayor \
-  https://github.com/tdupu/mathcity/tree/main/subdomains/mayor
+gc import add https://github.com/tdupu/mathcity/tree/main/subdomains/mayor \
+  --version sha:<commit>
 
-# 2. declare the session in <city-root>/pack.toml (this is the opt-in step)
-#    [[named_session]]
-#      template = "mayor"
-#      mode = "always"
+# 2. define the model provider in <city-root>/city.toml (see "The model
+#    contract" above) — extend the city's OWN account provider:
+#      [providers.mayor-model]
+#      base = "provider:<the-city's-claude-provider>"
+#      args_append = ["--model", "opus"]
 
-# 3. verify
-gc mcp list --agent mayor      # should name the mctl server
-gc status                      # the mayor should materialize
+# 3. declare the session in <city-root>/pack.toml — this is the opt-in step.
+#    The agent's qualified name is <import-key>.mayor:
+#      [[named_session]]
+#        template = "mayor.mayor"
+#        mode = "always"
+
+# 4. verify
+gc mcp list --agent mayor.mayor    # should name the mctl server
+gc config explain | grep -A4 "Agent: mayor"   # provider should be mayor-model
+gc status                                      # the Mayor should materialize
 ```
+
+Check the pane after it starts. A Mayor sitting on "Select login method" means
+`mayor-model` resolved to an unauthenticated provider — see the model contract.
 
 If `gc mcp list --agent mayor` reports "No projected MCP servers", the MCP
 directory was not picked up — gc discovers it by convention at

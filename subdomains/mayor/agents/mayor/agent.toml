@@ -3,10 +3,14 @@ description = "City-scope Mayor for a mathcity city: surveys city state, decides
 scope = "city"
 wake_mode = "fresh"
 
-# Opus, from this pack's own [providers.claude-opus]. The Mayor's job is
-# judgment under incomplete information; that is the role where model
-# capability changes the answer rather than the latency.
-provider = "claude-opus"
+# The city defines `mayor-model` (see this pack's pack.toml for why the pack
+# cannot). Naming it here rather than inheriting the city default is what lets
+# a city pin the Mayor's model without changing every other agent's.
+#
+# The Mayor's work is judgment under incomplete information — deciding what the
+# city should do next and refusing work that should not run — so it is the one
+# role where model capability changes the answer rather than the latency.
+provider = "mayor-model"
 
 # No work_dir: the Mayor runs at the city root, which is the scope it manages.
 # Setting one would point it at a subtree it does not own.

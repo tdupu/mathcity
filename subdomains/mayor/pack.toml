@@ -4,22 +4,34 @@ version = "0.1.0"
 schema = 2
 description = "An opt-in city-scope Mayor agent for a mathcity city: mathcity doctrine, the prime/handoff continuity loop, and the mctl MCP surface. Ships the agent only — instantiation requires a [[named_session]] in the CITY's own pack.toml, so importing this pack does not start a mayor."
 
-# Opus for the Mayor, without touching the city's shared providers.
+# NO [providers.*] HERE — and that is deliberate, learned the hard way.
 #
-# The Mayor's work is judgment under incomplete information — deciding what the
-# city should do next, reading contradictory signals, and refusing work that
-# should not run. That is the one role where model capability changes the
-# answer rather than the latency, so it is pinned here rather than inherited.
+# The Mayor's agent.toml names the provider `mayor-model`, which the CITY must
+# define. This pack cannot define it, because a working Claude provider carries
+# a CLAUDE_CONFIG_DIR pointing at an authenticated account directory, and that
+# is (a) machine-local and (b) an absolute home path, which P1.10 forbids in
+# pack content.
 #
-# Declared in the pack (not hand-added to city.toml) so a city gets it by
-# importing, per the Pack Portability & Boundary Policy P1.2. Precedent: the
-# mathcity root pack already ships [providers.codex] the same way.
+# The failure this replaces: a first cut shipped
 #
-# `base = "builtin:claude"` inherits whatever CLAUDE_CONFIG_DIR the city's own
-# claude provider sets, so this does NOT pin an account — only the model. A
-# city that runs its agents under a particular Claude account keeps that
-# account for the Mayor too.
-[providers.claude-opus]
-base = "builtin:claude"
-display_name = "Claude Opus (mayor)"
-args_append = ["--model", "opus"]
+#     [providers.claude-opus]
+#     base = "builtin:claude"
+#     args_append = ["--model", "opus"]
+#
+# on the assumption that `builtin:claude` would inherit the city's
+# CLAUDE_CONFIG_DIR. It does not. A provider with no env gets an unauthenticated
+# config dir, and the Mayor came up sitting on Claude Code's "Select login
+# method" prompt — a session that looks alive, burns a slot, and can never work.
+#
+# The city defines it by EXTENDING its own account provider, so authentication
+# is inherited and only the model is pinned:
+#
+#     [providers.mayor-model]
+#     base = "provider:<the-city's-claude-provider>"   # e.g. claude-agexplained
+#     args_append = ["--model", "opus"]
+#
+# `base = "provider:<name>"` forces custom lookup (internal/config/provider.go);
+# a bare "<name>" tries custom first, then built-in.
+#
+# A city that does not want to pin a model can define `mayor-model` as a plain
+# alias of its account provider with no args_append.
