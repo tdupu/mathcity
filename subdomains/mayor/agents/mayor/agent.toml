@@ -12,8 +12,25 @@ wake_mode = "fresh"
 # role where model capability changes the answer rather than the latency.
 provider = "mayor-model"
 
-# No work_dir: the Mayor runs at the city root, which is the scope it manages.
-# Setting one would point it at a subtree it does not own.
+# The Mayor gets its OWN work_dir, and this is load-bearing, not cosmetic.
+#
+# MCP is projected per-workdir: every agent sharing a workdir projects to the
+# same <workdir>/.mcp.json. Two city-scope agents that share the city root and
+# project DIFFERENT content collide, and that collision is FATAL to city init:
+#
+#   MCP target conflict at <city-root>/.mcp.json (claude):
+#     mayor.mayor projects <hash-a> but claude-agexplained projects <hash-b>
+#   gc-fatal: init: project MCP
+#
+# The city then never starts; it retries with backoff. Measured 2026-09-07:
+# dropping this line took a live city down through five init failures.
+#
+# The stock Gas City mayor shipped work_dir = ".gc/agents/mayor". It read as an
+# arbitrary subtree and was removed on that assumption. It exists to keep the
+# Mayor off the shared MCP target. The path is inside the city root, so gc
+# still discovers the city by walking up; the Mayor manages the city, it does
+# not need to sit in its root.
+work_dir = ".gc/agents/mayor"
 
 idle_timeout = "1h"
 
