@@ -769,6 +769,99 @@ def _handle_blast_radius_registry(scope: CityScope, arguments: Mapping[str, Any]
     return {"diagnostics": [], **registry_report()}
 
 
+def _handle_pools_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Worker-pool limits, which no typed surface could see (#197).
+
+    Measured when #197 was filed: zero matches for `pool_size`, `poolDesired`,
+    `adjust_pool`, `scale_pool`, `seats` or `capacity` anywhere in `mctl_core`.
+    `fleet_sessions` observes SLOTS but says nothing about the configured
+    ceiling those slots fill, so "are we at the limit or is the limit absent?"
+    had no answer through the typed surface.
+
+    READ-ONLY. #197 also asks for `adjust_worker_pool`; that writes `city.toml`
+    -- the file whose hand-editing broke `gc rig list` earlier in this campaign
+    -- and changes live concurrency for every agent in the city. It is a
+    separate decision with a separate blast radius and is deliberately not
+    bundled into a reporting tool.
+
+    `config_readable` is the load-bearing field, for the reason
+    `registry_present` is load-bearing on `blast_radius_registry`: an empty
+    `pools` list means "this city configures no session limits" ONLY when the
+    config was read. Rendered without it, "no limits are set" and "we failed to
+    look" are both an empty list, and those two demand opposite reactions.
+
+    EVERY REGISTERED RIG IS A ROW, limits or not -- the same principle
+    `fleet_sessions` states as "empty slots are rows too, so absence renders
+    the same as presence rather than shrinking the roster". A first version of
+    this handler only emitted sections that CARRIED a limit key, and the live
+    city exposed why that is wrong: `rigs[hecke]` and `rigs[gascity-packs]`
+    carry max=12, and `rigs[mathcity]` carries neither key, so the rig the city
+    is named for was absent from its own pool report. An uncapped rig is the
+    interesting row, not the omissible one.
+
+    So `max_active_sessions: null` means "no ceiling configured", never "we did
+    not look" -- that second meaning belongs to `config_readable` alone.
+    """
+    config = scope.config or {}
+    pools: list[dict[str, object]] = []
+
+    def visit(node: object, path: str, kind: str) -> None:
+        if isinstance(node, dict):
+            if "max_active_sessions" in node or "min_active_sessions" in node:
+                pools.append({
+                    "name": path,
+                    "kind": kind,
+                    "max_active_sessions": node.get("max_active_sessions"),
+                    "min_active_sessions": node.get("min_active_sessions"),
+                })
+            for key, value in node.items():
+                child_kind = key if key in ("rigs", "agent", "patches") else kind
+                visit(value, f"{path}.{key}" if path else key, child_kind)
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                label = value.get("name") if isinstance(value, dict) else None
+                visit(value, f"{path}[{label or index}]", kind)
+
+    visit(config, "", "city")
+
+    # Registered rigs that declared no limit at all never appear above (there
+    # is no key to notice), so they are added explicitly rather than being
+    # silently absent. See the docstring: an uncapped rig is the row a reader
+    # most needs.
+    named = {str(pool["name"]) for pool in pools}
+    for rig in scope.rigs:
+        label = f"rigs[{rig.name}]"
+        if label not in named:
+            pools.append({
+                "name": label,
+                "kind": "rigs",
+                "max_active_sessions": None,
+                "min_active_sessions": None,
+            })
+
+    # Deduplicate on identity, not on name: the live city.toml repeats
+    # `patches.agent[gc.run-operator]` and two rows for one pool would read as
+    # two pools.
+    seen: set[tuple] = set()
+    unique: list[dict[str, object]] = []
+    for pool in pools:
+        key = (pool["name"], pool["max_active_sessions"], pool["min_active_sessions"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(pool)
+
+    return {
+        "diagnostics": [],
+        "config_readable": bool(config),
+        "pools": sorted(unique, key=lambda p: str(p["name"])),
+        "pool_count": len(unique),
+        "unlimited_pools": sorted(
+            str(p["name"]) for p in unique if p["max_active_sessions"] is None
+        ),
+    }
+
+
 def _handle_gates_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
     """Dashboard handoff #119, made reachable.
 
@@ -2815,6 +2908,35 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["registry_present", "operations", "awaiting_emitter"],
         ),
         handler=_handle_blast_radius_registry,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="pools_status",
+        title="Configured worker-pool session limits, and which pools have none",
+        description=(
+            "Every section of the city config carrying `max_active_sessions` or "
+            "`min_active_sessions`, which no typed tool could previously see (#197): "
+            "`fleet_sessions` reports SLOTS but not the ceiling they fill, so 'are we at "
+            "the limit, or is there no limit?' had no answer through the typed surface. "
+            "`config_readable` is the load-bearing field -- an empty `pools` list means "
+            "'this city sets no session limits' ONLY when the config was actually read, "
+            "and rendered without it a failed read is indistinguishable from a permissive "
+            "city. `unlimited_pools` names pools with no `max_active_sessions` rather than "
+            "defaulting them to a number: unlimited and capped-at-a-guess are different "
+            "facts, and the live config contains both. READ-ONLY -- adjusting a pool "
+            "writes city.toml and changes live concurrency, which is a separate decision."
+        ),
+        input_schema=request_schema(),
+        output_schema=response_schema(
+            {
+                "config_readable": {"type": "boolean"},
+                "pools": {"type": "array", "items": {"type": "object"}},
+                "pool_count": {"type": "integer"},
+                "unlimited_pools": {"type": "array", "items": {"type": "string"}},
+            },
+            ["config_readable", "pools", "pool_count", "unlimited_pools"],
+        ),
+        handler=_handle_pools_status,
         scope=CITY_SCOPE,
     ),
     ToolSpec(

@@ -358,6 +358,17 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     `_city_operations` fan-out. CITY_SCOPE, same footing as `fleet_sessions`/
     `gates_status` -- it fans across every registered rig rather than one.
 
+    34 since `pools_status` was added (#197): the configured
+    `max_active_sessions`/`min_active_sessions` ceilings, which NO typed tool
+    could see -- zero matches for `pool_size`, `poolDesired`, `adjust_pool`,
+    `scale_pool`, `seats` or `capacity` anywhere in `mctl_core`.
+    `fleet_sessions` reports the slots; nothing reported the limit those slots
+    fill. Read-only CITY_SCOPE, same footing as `fleet_sessions` and
+    `worktrees_status`. It deliberately does NOT include #197's
+    `adjust_worker_pool`: that writes city.toml and changes live concurrency,
+    which is exactly the kind of reach this tripwire exists to keep out of the
+    dashboard.
+
     Raise this number only alongside the tool that justifies it, and say which
     tool in the docstring.
     """
@@ -374,7 +385,7 @@ def test_the_dashboard_allowlist_contains_no_command_execution_tool():
     # here: it is mutating and mints briefs that are approved and dispatchable
     # at creation, and the MCP has no caller identity. Recorded in
     # DELIBERATELY_UNREACHABLE with the reason.
-    assert len(ALLOWED_TOOLS) == 33  # +commission_brief (#190), +briefs_present (#177), +queue_status (#113), +costs_summary (#118), +worktrees_status (#120), +molecule_cancel (mc-x06e), +tracker_rows (#186), +events_list (#116)
+    assert len(ALLOWED_TOOLS) == 34  # +commission_brief (#190), +briefs_present (#177), +queue_status (#113), +costs_summary (#118), +worktrees_status (#120), +molecule_cancel (mc-x06e), +tracker_rows (#186), +events_list (#116), +pools_status (#197)
 
 
 def test_the_client_refuses_a_tool_outside_the_typed_surface(tmp_path: Path):

@@ -90,6 +90,7 @@ EXPECTED_TOOLS = (
     "molecules_list",
     "molecules_show",
     "orders_status",
+    "pools_status",
     "queue_status",
     "standardize_github_issue",
     "trace_replay_preview",
