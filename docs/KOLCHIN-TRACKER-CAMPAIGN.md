@@ -106,3 +106,37 @@ positional is a formula name.
 | 244 | **Reproduced** on kolchin: /queue 1.08s idle -> 5.69s during /city (5.3x). Lock is per MCP call, not per request — inflation scales with rig count |
 | 22 | Config gap real (no `work_query` anywhere) but 0 hold-labelled beads of 970, and the label convention is retired upstream. Needs a decision, not a patch |
 | 19 | Legacy `gascity-packs/mathcity` tree still present — genuinely open |
+
+## Second tranche — the tool surface
+
+| # | How it was settled |
+|---|---|
+| 203 | `orders_status` returns a valid payload; no `MCTL_MCP_OUTPUT_SCHEMA_VIOLATION`. 52 outcomes, all string values, one INFO diagnostic |
+| 206 | `priority=priority_from_labels(issue.labels)` is wired in; mapping verified p0-p4 in the live module |
+| 202 | `_emit_brief_submitted` attached as an `on_apply` hook; a real `briefs_create` minted `mt-yftq` with no WARN advisory |
+| 214 | `trace_show` on a FAILED dispatch returns `outcome: "refused"` with the full diagnostic — not `MCTL_TRACE_NOT_FOUND` |
+| 212 | `MWRK003` is `Severity.WARN` at its single emit site, with "recheck rather than retry" |
+| 213 | Provenance written before the claim check; pre-sling detector matches the leftover synthetic convoy |
+| 228 | `_walk_sources` skips in-flight sources; `execution.work_associated` is now the claim signal, not `assignee` |
+
+### #204 is reproducing, and the mechanism is narrower than filed
+
+    total order-run beads: 7      by status: {'open': 7}
+    every order fired exactly once, across 2026-09-06 .. 09-09
+    gc doctor -> order-firing-current: scheduled orders are stale
+    orders_status -> 27 completed / 25 failed
+
+Not one order-run bead has ever closed. But a root-only wisp is **not**
+inherently uncloseable: `brief-archive-sweep` is a vapor formula without
+`pour = true` (gc says so on dispatch), and the copy I slung through
+`formula_dispatch` closed cleanly. The difference is who is on the other end —
+a slung wisp reaches a pool that materialises an operator; an order-run wisp is
+minted by the order runner and nobody claims it. The fix surface is the order
+runner's run-bead lifecycle, not root-only wisps.
+
+## Host gap that blocks three tools
+
+`gh` is unauthenticated for `gascity-user` on kolchin (no `~/.config/gh/hosts.yml`,
+no `GH_TOKEN`). git works — that is the SSH key. So `create_issue_bead`,
+`create_github_issue` and `standardize_github_issue` all fail at the fetch with
+a loud `MISS004` naming the cause. Needs an interactive `gh auth login`.
