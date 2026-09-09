@@ -49,6 +49,7 @@ from .briefs import (
     show_brief,
     validate_brief_input,
 )
+from . import blast_radius as _blast_radius
 from .context import MctlContext
 from .commission import brief_labels, tracker_metadata, validate_commission
 from .diagnostics import Diagnostic, Severity
@@ -212,6 +213,25 @@ class BeadComment:
         }
 
 
+def _classify_operation(operation: str) -> dict[str, object]:
+    """Blast-radius classification for a plan's operation (#163).
+
+    Never raises: a plan that cannot be serialized because classification blew
+    up would turn a reporting feature into an outage. A failure is reported as
+    an explicit gate value rather than a missing key, so a caller can tell
+    "classifier broke" from "operation is fine".
+    """
+    try:
+        return dict(_blast_radius.classify(operation, plan_contents={}))
+    except Exception as exc:  # pragma: no cover - defensive
+        return {
+            "blast_radius": None,
+            "blast_radius_floor": None,
+            "blast_radius_reason": f"classification failed: {exc}",
+            "gate": "classifier-error",
+        }
+
+
 @dataclass(frozen=True)
 class EffectPlan:
     trace_id: str
@@ -254,6 +274,32 @@ class EffectPlan:
             "event_writes": [write.to_dict() for write in self.event_writes],
             "file_creates": [create.to_dict() for create in self.file_creates],
             "github_writes": [write.to_dict() for write in self.github_writes],
+            # #163: the classification was reachable by NO caller -- it lived in
+            # mctl_core/blast_radius.py with 17 passing tests and appeared in no
+            # EffectPlan and no to_dict(). Every caller that inspects a plan now
+            # sees it.
+            #
+            # REPORTED, NOT ENFORCED, and that is a measurement rather than a
+            # preference. `classify` fails closed: an operation absent from
+            # assets/mctl/blast_radius.toml returns gate="unclassified" and
+            # refuses(). Measured on this tree, the registry classifies 3 of the
+            # 13 operations EffectPlans actually carry:
+            #
+            #   classified   briefs.adjudicate, briefs.create, briefs.defer
+            #   NOT          bead.close, bead.hold, bead.release, bead_comment,
+            #                create_defect_bead, create_github_issue,
+            #                create_issue_bead, molecule.cancel,
+            #                standardize_github_issue, work.dispatch_event
+            #
+            # Refusing on `gate` today would therefore refuse 10 of 13 mutations
+            # -- the whole close/hold/release path included. The ladder cannot be
+            # switched on before those 10 are classified, and classifying them is
+            # a safety judgment per operation, not a mechanical fill-in.
+            #
+            # Surfacing it here is what makes that gap visible instead of
+            # invisible: "gate": "unclassified" now appears in the plan of every
+            # unclassified mutation, which is the condition #163 was filed about.
+            "blast_radius": _classify_operation(self.operation),
             "operation": self.operation,
             "preconditions": [diagnostic.to_dict() for diagnostic in self.preconditions],
             "target_brief_id": self.target_brief_id,
