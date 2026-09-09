@@ -727,5 +727,52 @@ else
 fi
 
 echo ""
+
+# --- #107: the REPORT must say UNKNOWN, not pick the safe answer ------------
+#
+# Fail-closed is right for the GATE and wrong for the REPORT. A gate exists to
+# decide, so when it cannot evaluate it must refuse -- that is shipped and
+# correct. A report exists to DESCRIBE, so when it cannot evaluate it must say
+# unknown rather than state the safe answer as fact.
+#
+# `nb_resolve_mode` collapsed an unresolved rig root to NB_MODE="dry-run", and
+# the comment there defends that against reporting ARMED. It is right about
+# ARMED and wrong that those are the only two options: reporting DRY-RUN as
+# fact, when the truth is "cannot tell from here", produced a false alarm on an
+# ARMED city. Repeated false alarms are how an operator learns to disbelieve
+# the instrument they will need during an incident.
+echo
+echo "--- #107: unknown is reported as unknown ---"
+
+nb107_dir="$(mktemp -d)"
+nb107_out="$(cd "$nb107_dir" && GC_CITY="$nb107_dir" GC_RIG_ROOT="/nonexistent-rig-107" \
+  sh "$CHECK" no-brainer-mode 2>&1 || true)"
+
+if printf '%s' "$nb107_out" | grep -q 'UNKNOWN'; then
+  ok "an unresolvable rig root reports UNKNOWN, not a fabricated DRY-RUN"
+else
+  no "an unresolvable rig root still reports a mode as fact"
+fi
+
+# The JSON surface must agree with the banner -- a machine reader seeing
+# "dry-run" while the human banner said UNKNOWN is the same defect one
+# consumer over.
+if printf '%s' "$nb107_out" | grep -q '"mode":"unknown"'; then
+  ok "the JSON mode field says unknown too"
+else
+  no "JSON mode disagrees with the banner"
+fi
+
+# POSITIVE CONTROL: a resolvable rig must still report a DEFINITE mode, or the
+# checks above would pass by reporting UNKNOWN for everything.
+nb107_def="$(sh "$CHECK" no-brainer-mode 2>&1 || true)"
+if printf '%s' "$nb107_def" | grep -qE 'mode: (ARMED|DRY-RUN)'; then
+  ok "a resolvable rig still reports a definite mode"
+else
+  no "the definite-mode path regressed"
+fi
+rm -rf "$nb107_dir"
+
 echo "=== SUMMARY: $PASS_COUNT passed, $FAIL_COUNT failed ==="
 [ "$FAIL_COUNT" -eq 0 ]
+

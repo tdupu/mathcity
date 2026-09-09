@@ -716,6 +716,7 @@ nb_resolve_mode() {
   # An unresolvable environment is NOT evidence that the brake is off, so
   # callers fail closed on this flag rather than inferring from the flag file.
   NB_RIG_ROOT_RESOLVED=yes
+  NB_MODE_KNOWN=yes
   if [ -z "$NB_RIG_ROOT" ] || [ ! -d "$NB_RIG_ROOT/.beads" ]; then
     NB_RIG_ROOT_RESOLVED=no
   fi
@@ -743,7 +744,19 @@ nb_resolve_mode() {
   # requirement-2 failure on its own: a banner asserting a cleared brake,
   # printed immediately before a refusal saying the brake was never read.
   if [ "$NB_RIG_ROOT_RESOLVED" != "yes" ]; then
+    # The GATE keeps failing closed: NB_MODE stays "dry-run", so nothing
+    # auto-executes on a rig we could not read. That part was always right.
+    #
+    # #107: but the REPORT must not state it as fact. A gate exists to decide,
+    # so when it cannot evaluate it must refuse. A report exists to DESCRIBE,
+    # so when it cannot evaluate it must say UNKNOWN. The comment above rules
+    # out reporting ARMED, correctly -- and then treats DRY-RUN as the only
+    # alternative. It is not: "cannot tell from here" is a third answer, and
+    # the true one. Reporting DRY-RUN as fact on an ARMED city produced a false
+    # alarm, and repeated false alarms are how an operator learns to disbelieve
+    # the instrument they will need during an incident.
     NB_MODE="dry-run"
+    NB_MODE_KNOWN="no"
   fi
 }
 
@@ -760,6 +773,14 @@ report_no_brainer_mode() {
       echo "  ARMED is the DEFAULT — this rig is armed because no token pins it,"
       echo "  not because anyone configured it. That is the intended semantics."
     fi
+  elif [ "${NB_MODE_KNOWN:-yes}" != "yes" ]; then
+    # #107: describe, do not decide. The gate still refuses regardless.
+    echo "no-brainer auto-execution mode: UNKNOWN"
+    echo "  the rig root could not be resolved, so the rig-level brake could"
+    echo "  not be read. This is NOT a report that dry-run is pinned."
+    echo "  Nothing will auto-execute regardless: the gate fails closed on an"
+    echo "  unreadable brake. Re-run from inside the rig, or set GC_RIG_ROOT,"
+    echo "  to get a definite answer."
   else
     echo "no-brainer auto-execution mode: DRY-RUN"
     echo "  no-brainers are classified and recorded; nothing is executed."
@@ -784,7 +805,8 @@ report_no_brainer_mode() {
   echo "    rm -f $NB_ARM_CITY_PATH $NB_ARM_RIG_PATH   # absent = armed default"
   echo ""
   printf '{"mode":"%s","armed_city":"%s","armed_rig":"%s","kill_switch_city":"%s","kill_switch_rig":"%s","classifier_version":"%s"}\n' \
-    "$NB_MODE" "$NB_ARM_CITY" "$NB_ARM_RIG" "$NB_KS_CITY" "$NB_KS_RIG" \
+    "$([ "${NB_MODE_KNOWN:-yes}" = "yes" ] && printf '%s' "$NB_MODE" || printf 'unknown')" \
+    "$NB_ARM_CITY" "$NB_ARM_RIG" "$NB_KS_CITY" "$NB_KS_RIG" \
     "$(nb_json_escape "$NB_CLASSIFIER_VERSION")"
 }
 
