@@ -67,6 +67,27 @@ BEAD_SCAN = re.compile(r'\b([a-z]{2,4}-(?=[a-z0-9]*\d)[a-z0-9]{3,9})\b')
 ADJUDICATED_STATUSES = {"adjudicated", "decided", "approved"}
 OPEN_STATUSES = {"open", "in_progress"}
 
+#: Verdicts under which an OPEN source bead is CORRECT, not stalled.
+#:
+#: Found on kolchin's mathcity-testrig, where this audit reported `mt-4a6n` as
+#: "decided but never finished". Its brief reads:
+#:
+#:     status: adjudicated
+#:     verdict: revise
+#:     source_bead: mt-4a6n          <- open
+#:
+#: A `revise` verdict SENDS THE WORK BACK -- the bead staying open is the
+#: verdict being honoured, not work going missing. Same for `defer`: the brief
+#: is decided, the work is deliberately postponed, and the bead must remain.
+#:
+#: The audit read only `status:` and never `verdict:`, so every adjudicated
+#: brief with an open bead was "stalled" regardless of what was actually
+#: decided. #209 is about exactly this lane -- revise verdicts having no route
+#: back -- and an audit that counts them as lost work would inflate the very
+#: population #209 needs measured accurately.
+NON_TERMINAL_VERDICTS = {"revise", "defer", "deferred", "send-back", "sendback",
+                         "needs-revision", "throwback"}
+
 
 def brief_bead_id(path: Path, text: str) -> str | None:
     """Frontmatter first, filename second -- never prose.
@@ -168,10 +189,17 @@ def main() -> int:
     )
 
     adjudicated = []
+    non_terminal: list[str] = []
     for path in briefs:
         text = path.read_text(errors="replace")[:6000]
         status = re.search(r'^status:\s*(\S+)', text, re.M)
         if not status or status.group(1).strip().lower() not in ADJUDICATED_STATUSES:
+            continue
+        verdict = re.search(r'^verdict:\s*["\']?([A-Za-z-]+)', text, re.M)
+        if verdict and verdict.group(1).strip().lower() in NON_TERMINAL_VERDICTS:
+            # Decided, and the decision was "not yet". An open bead here is the
+            # verdict working. See NON_TERMINAL_VERDICTS.
+            non_terminal.append(path.name)
             continue
         adjudicated.append((path, status.group(1).strip(), brief_bead_id(path, text)))
 
@@ -285,6 +313,7 @@ def main() -> int:
         "stalled": [{"bead": b, "brief": n, "state": s} for b, _, n, s in stalled],
         "unreadable_stores": unreadable,
         "unresolvable_bead_id": unresolvable,
+        "non_terminal_verdict_skipped": sorted(non_terminal),
     }
 
     if args.json:
@@ -303,6 +332,10 @@ def main() -> int:
                   f"NOT IN its store -- broken reference, a different repair:")
             for bead, brief_status, name in missing:
                 print(f"    {bead:<12} brief={brief_status:<12} {name[:50]}")
+        if non_terminal:
+            print(f"ADJ_AUDIT: {len(non_terminal)} brief(s) skipped -- adjudicated "
+                  f"with a NON-TERMINAL verdict (revise/defer); an open bead is "
+                  f"correct there")
         if unresolvable:
             print(f"ADJ_AUDIT: {len(unresolvable)} adjudicated brief(s) name no "
                   f"resolvable bead id (not scored either way)")

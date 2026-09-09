@@ -128,5 +128,23 @@ else
   fail=$((fail + 1)); echo "  FAIL three briefs naming one bead gave $n findings (want 1)"
 fi
 
+# 12. A NON-TERMINAL VERDICT IS NOT A STALL.
+#     Found on kolchin's mathcity-testrig: mt-4a6n was reported "decided but
+#     never finished" while its brief read `verdict: revise`. A revise verdict
+#     SENDS THE WORK BACK -- the bead staying open is the verdict being
+#     honoured. #209 is about that lane having no route back, and counting
+#     these as lost work inflates the population #209 needs measured.
+mkdir -p "$TMP/s12"; echo '[{"id":"gt-a1b2","status":"open"}]' > "$TMP/s12/_beads.json"
+mkdir -p "$TMP/r12/stack"
+printf -- '---\nstatus: adjudicated\nverdict: revise\nsource_bead: gt-a1b2\n---\n\nbody\n' \
+  > "$TMP/r12/stack/revise.md"
+run "revise verdict with an open bead is NOT stalled" 0 --brief-root "$TMP/r12" --store "gt=$TMP/s12"
+
+# 12b. CONTROL: the same brief with an APPROVE verdict IS stalled.
+mkdir -p "$TMP/r12b/stack"
+printf -- '---\nstatus: adjudicated\nverdict: approve\nsource_bead: gt-a1b2\n---\n\nbody\n' \
+  > "$TMP/r12b/stack/approve.md"
+run "approve verdict with an open bead IS stalled"    1 --brief-root "$TMP/r12b" --store "gt=$TMP/s12"
+
 echo "adjudicated-bead-open-audit: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
