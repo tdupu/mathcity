@@ -537,6 +537,44 @@ def plan_create_brief(ctx: MctlContext, request: BriefCreateInput) -> EffectPlan
                 ),
             ),
         )
+    else:
+        # #187: MBRF034 above checks that a source was SUPPLIED. It does not
+        # check that one RESOLVES, so a fabricated id passed the gate and a
+        # complete plan was returned -- measured live 2026-09-09 with
+        # `sources: ["mt-DOES-NOT-EXIST"]` returning `diagnostics: none`.
+        #
+        # On a live store `bd` refuses one layer down
+        # (MCTL_CANONICAL_BEAD_CREATE_FAILED, "no issue found"), so production
+        # was protected by an ACCIDENT OF ORDERING rather than by the gate --
+        # and against a fixture store, which is what the tests use, the
+        # fabricated source passed end to end. B2.1 is about the source
+        # EXISTING; a check that cannot tell a real id from a typo does not
+        # enforce it.
+        #
+        # This is a READ (#188: a planner must not mutate), and it names every
+        # id it could not resolve -- naming only the first would be unactionable
+        # on a multi-source brief.
+        known = {bead.id for bead in read_beads(ctx.rig_root, fixture_path=ctx.beads_fixture)}
+        unresolved = [str(s) for s in request.sources if str(s) not in known]
+        if unresolved:
+            preconditions = preconditions + (
+                _diagnostic(
+                    ctx,
+                    Severity.FATAL,
+                    "MBRF_SOURCE_UNRESOLVED",
+                    (
+                        "Source bead(s) not found in this rig: "
+                        + ", ".join(sorted(unresolved))
+                        + "."
+                    ),
+                    brief_id=NEW_BRIEF_ID_PLACEHOLDER,
+                    policy_ref="B2.1",
+                    suggested_next_command=(
+                        "check the id with `bd show <id>`, or create the source "
+                        "bead first; a brief cannot decide on a bead that does not exist"
+                    ),
+                ),
+            )
     metadata = {"created_by": "mctl", "mctl_trace_id": ctx.trace_id, "created_at": _now()}
     if request.requested_by:
         metadata["requested_by"] = request.requested_by

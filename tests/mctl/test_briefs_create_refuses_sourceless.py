@@ -153,3 +153,37 @@ def test_the_refusal_still_tells_the_operator_what_to_do(tmp_path: Path):
     assert "blocking_reason:" in result.stderr, "the refusal must say WHY"
     assert "remedy:" in result.stderr, "the refusal must say what to do instead"
     assert "--source" in result.stderr, "the remedy must be followable at creation"
+
+
+# --- #187: a source must RESOLVE, not merely be supplied ---------------------
+#
+# MBRF034 fires on `if not request.sources` — it checks that a source was
+# SUPPLIED. A fabricated id passes it. Measured on the live kolchin city
+# 2026-09-09: `sources: ["mt-DOES-NOT-EXIST"]` returned `diagnostics: none`
+# and a complete effect plan.
+#
+# On a live store `bd` refuses one layer down (MCTL_CANONICAL_BEAD_CREATE_FAILED,
+# "no issue found"), so production is protected by an ACCIDENT OF ORDERING
+# rather than by the gate — and in tests, which run against a fixture, the
+# fabricated source passes end to end. B2.1 is about the source EXISTING; a
+# check that cannot tell a real id from a typo does not enforce it.
+
+
+def test_a_fabricated_source_is_REFUSED(tmp_path: Path):
+    result, _rig, _before = create(tmp_path, "--source", "mc-DOES-NOT-EXIST", "--dry-run")
+    assert result.returncode != 0, "a source that resolves to nothing must be refused"
+    assert "MBRF_SOURCE_UNRESOLVED" in result.stderr, result.stderr
+
+
+def test_the_refusal_names_the_id_it_could_not_resolve(tmp_path: Path):
+    """A refusal that does not say WHICH id failed is unactionable on a
+    multi-source brief."""
+    result, _rig, _before = create(tmp_path, "--source", "mc-DOES-NOT-EXIST", "--dry-run")
+    assert "mc-DOES-NOT-EXIST" in result.stderr, result.stderr
+
+
+def test_a_REAL_source_still_passes(tmp_path: Path):
+    """Positive control (P6.2). Without it, a checker that refused every source
+    would pass the two tests above."""
+    result, _rig, _before = create(tmp_path, "--source", "mc-source", "--dry-run")
+    assert "MBRF_SOURCE_UNRESOLVED" not in result.stderr, result.stderr

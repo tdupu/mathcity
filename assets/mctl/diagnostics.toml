@@ -12,6 +12,11 @@ severity = "WARN"
 meaning = "A bead was closed with no reason, so the closure is not attributable (BP4.3)."
 module = "bead_writes.py"
 
+[MBRF_SOURCE_UNRESOLVED]
+severity = "FATAL"
+meaning = "A brief names a source bead that does not exist in the rig (B2.1)."
+module = "effects.py"
+
 [MBRF001]
 severity = "ERROR"
 meaning = "Stack index row points at a missing file."
