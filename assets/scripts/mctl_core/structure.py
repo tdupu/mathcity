@@ -30,16 +30,58 @@ def required_sections(path: Path | None = None) -> list[dict[str, Any]]:
         return list(tomllib.load(handle).get("section") or [])
 
 
-def missing_sections(body: str, path: Path | None = None) -> list[dict[str, Any]]:
-    """Required sections absent from `body`.
+#: The frontmatter key `brief-check.sh` gates on
+#: (`require_frontmatter_key_value "$path" "gate_profile" "$profile"`). Read
+#: here with a five-line parser rather than by importing the document layer,
+#: because this module is imported BY `briefs.py` and must not import it back.
+_GATE_PROFILE_RE = re.compile(r"^gate_profile:\s*[\"\']?([A-Za-z0-9_.-]+)", re.MULTILINE)
+
+
+def declared_profile(body: str) -> str | None:
+    """The `gate_profile` a body declares in its leading frontmatter, if any.
+
+    Only the leading `---` block counts: a `gate_profile:` line further down is
+    prose or an example, and treating it as a declaration would let a body
+    opt itself into (or out of) a profile's rules by mentioning one.
+    """
+    stripped = body.lstrip()
+    if not stripped.startswith("---"):
+        return None
+    end = stripped.find("\n---", 3)
+    if end == -1:
+        return None
+    match = _GATE_PROFILE_RE.search(stripped[3:end])
+    return match.group(1) if match else None
+
+
+def missing_sections(
+    body: str, path: Path | None = None, profile: str | None = None
+) -> list[dict[str, Any]]:
+    """Required sections absent from `body`, for `profile`.
 
     Matched with the shell checker's own regex, translated only where POSIX and
     Python classes differ (`[[:space:]]` -> `\\s`). Anchored per line, because
     the shell patterns are `^`-anchored and a substring search would accept a
     body that merely mentions the section name in prose.
+
+    A rule carrying `profile` applies ONLY to that gate profile, because the
+    shell checker scopes its own rules the same way: `check_action_block` is
+    called from `check_decision_profile` and nowhere else, so requiring an
+    action_block of a `lost_bead_filter` or `producer_repair` brief would
+    refuse briefs that correctly have none.
+
+    An UNKNOWN profile (`None`) applies only the unscoped rules. That is
+    deliberately permissive in the same direction as an absent rules file: this
+    gate runs at creation, and refusing a brief on a rule we cannot establish
+    applies would take the tool down for bodies that are actually fine. The
+    drain-time checker still holds the line, so the worst case is today's
+    behaviour rather than a hole.
     """
     absent: list[dict[str, Any]] = []
     for section in required_sections(path):
+        scope = section.get("profile")
+        if isinstance(scope, str) and scope and scope != profile:
+            continue
         pattern = str(section.get("match") or "").replace("[[:space:]]", r"\s")
         if not pattern:
             continue

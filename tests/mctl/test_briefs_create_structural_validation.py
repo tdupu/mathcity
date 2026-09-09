@@ -105,7 +105,12 @@ def test_the_refusal_names_the_missing_section_and_a_remedy(tmp_path: Path):
     # have two behaviours, so the assertion no longer has to know which helper
     # produced the refusal. Intent unchanged: it must say what to do.
     assert "next:" in r.stderr, "must say what to do"
-    assert "add a '## Gate Evidence' section" in r.stderr
+    # The remedy names the missing rule and its SHAPE. It no longer hard-codes
+    # "add a '## X' section", because a required rule is not always a heading:
+    # `action_block` is a top-level YAML key (#96), and telling an author to add
+    # "## action_block" would produce a body that still fails the drain gate.
+    # Intent unchanged -- the remedy must name this section and be actionable.
+    assert "'## Gate Evidence' section" in r.stderr
 
 
 def test_the_python_rule_and_the_shell_rule_agree(tmp_path: Path):

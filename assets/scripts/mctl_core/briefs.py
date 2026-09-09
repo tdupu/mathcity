@@ -38,7 +38,7 @@ from .manifest import (
     SOURCE_MANIFEST,
     ManifestIssue,
 )
-from .structure import missing_sections, section_discipline_violations
+from .structure import declared_profile, missing_sections, section_discipline_violations
 from .verdicts import (
     NON_BRIEF_MESSAGES,
     Verdict,
@@ -850,7 +850,10 @@ def validate_brief_input(
         # The rule is read from data both checkers can share rather than
         # rewritten here, because two independently written structural checkers
         # drift -- which is what #35 was about.
-        absent = missing_sections(clean_body)
+        # #96: scope the rules to the profile the body declares. The
+        # action_block rule is decision-only, mirroring brief-check.sh, where
+        # `check_action_block` is called from `check_decision_profile` alone.
+        absent = missing_sections(clean_body, profile=declared_profile(clean_body))
         if absent:
             names = ", ".join(str(section.get("name")) for section in absent)
             raise BriefError(
@@ -860,8 +863,23 @@ def validate_brief_input(
                     "MBRF036",
                     f"Proposed brief body is missing a required section: {names}.",
                     policy_ref="B1.5",
+                    # A rule is not always a heading: `action_block` is a
+                    # top-level YAML key, and telling an author to add
+                    # "## action_block" would produce a body that still fails.
+                    # The rule's own name is what the checker matches, so the
+                    # remedy quotes it rather than assuming a markdown heading.
                     suggested_next_command=(
-                        f"add a '## {names}' section to the body and retry"
+                        "add the missing structure to the body and retry: "
+                        + ", ".join(
+                            (
+                                f"'## {name}' section"
+                                if str(name)[:1].isupper()
+                                else f"a top-level '{name}:' block"
+                            )
+                            for name in (
+                                str(section.get("name")) for section in absent
+                            )
+                        )
                     ),
                 )
             )

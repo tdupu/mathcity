@@ -236,4 +236,20 @@ def brief_body(
         "Checked before this brief was written; each corresponds to a dispatch "
         "blocker in `work.py` that was tested and did not fire:\n\n"
         f"{evidence_lines}\n"
+        # The DECISION profile rejects a pile entry with no action_block
+        # (brief-check.sh:188, reached from check_decision_profile). Emitting
+        # one here is what keeps this tool's own output drainable: a body
+        # composed without it passes creation and is bounced at shuffle time,
+        # which is the CT13.4 shape #96 measured as "pile drained 5 -> 0
+        # entirely by auto-reject". Observed live on the kolchin testrig as
+        # `mt-yftq` -> .pile/.rejected/ "decision brief missing action_block".
+        #
+        # The verbs are deliberately inert. An action_block is a DECLARATION of
+        # what a verdict authorises, never authorisation to act: the HARD
+        # SAFETY INVARIANT holds, and this tool composes a question rather than
+        # a plan, so it cannot know an irreversible action is wanted.
+        "\naction_block:\n"
+        f"  on_approve: dispatch work against `{source_bead_id}`\n"
+        "  on_reject: record the verdict and close; no action taken\n"
+        "  on_defer: leave the source open and revisit\n"
     )

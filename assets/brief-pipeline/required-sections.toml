@@ -23,3 +23,26 @@
 name = "Gate Evidence"
 match = '^##*[[:space:]]+([^A-Za-z]*[[:space:]])?Gate Evidence\b|^Gate Evidence\b'
 reason = "the pipeline rejects a pile entry without it, at shuffle time, after creation reported success"
+
+# DECISION PROFILE ONLY.
+#
+# `brief-check.sh check_action_block` is called from `check_decision_profile`
+# and nowhere else, so this is scoped rather than global: a `lost_bead_filter`
+# or `producer_repair` brief correctly carries no action_block, and requiring
+# one of them would refuse briefs that are fine.
+#
+# Why it is here at all: `## Gate Evidence` was the ONLY create-time rule, so a
+# decision brief missing its action_block passed creation, was reported
+# `applied: true`, and was then bounced at shuffle time. Measured on the kolchin
+# testrig 2026-09-08 -- brief `mt-yftq`, created through `briefs_create`, landed
+# in `.pile/.rejected/` with `reason: "decision brief missing action_block"`.
+# That is the CT13.4 shape #96 quantified as "pile drained 5 -> 0 entirely by
+# auto-reject".
+#
+# `match` is brief-check.sh:188's regex character for character; the reader
+# translates `[[:space:]]` to `\s`.
+[[section]]
+name = "action_block"
+profile = "decision"
+match = '^action_block:[[:space:]]*$'
+reason = "the decision profile rejects a pile entry without it, at shuffle time, after creation reported success"
