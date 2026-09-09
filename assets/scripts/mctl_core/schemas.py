@@ -460,6 +460,20 @@ BODY_DIAGNOSTICS_SCHEMA: Schema = {
 #: which is the author's `{id, label, description}` INPUT. `label` is the
 #: option letter; `title` is its prose (what the panel renders); `recommended`
 #: is the advisory `*(recommended)*` marker (#194 -- never a verdict).
+#: NAMING TRAP (#221). The `title` below is a JSON-SCHEMA title, not a Python
+#: type name, and no type called `ParsedDecisionOption` exists anywhere in this
+#: tree. The Python type is `BriefDecisionOption` (mctl_core/briefs.py); this
+#: schema describes its serialized form.
+#:
+#: Recorded here because this is where someone greps. ADR 0004 specced the
+#: verdict panel against "ParsedDecisionOption" for months; the #221
+#: backend-match audit found the name resolves to nothing, and a reader who
+#: greps for it and comes up empty concludes the backing is MISSING when it is
+#: present under another name. That is the exact confusion ADR 0004's own
+#: history records -- "options rendered 'NAMES NO OPTIONS' for weeks".
+#:
+#: Renaming the schema title is NOT the fix: it is a wire-format string that
+#: consumers may key on. Naming the Python type here is.
 PARSED_DECISION_OPTION_SCHEMA: Schema = {
     "type": "object",
     "title": "ParsedDecisionOption",
