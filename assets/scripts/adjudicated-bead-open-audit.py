@@ -45,6 +45,9 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent))
+from mctl_limits import resolve as _resolve_limit  # noqa: E402
 from collections import Counter
 from pathlib import Path
 
@@ -130,9 +133,17 @@ def main() -> int:
                     default=None, metavar="NAME",
                     help="brief lane under --brief-root to scan; repeatable "
                          "(default: stack, archive, decisions-track)")
-    ap.add_argument("--timeout", type=int, default=300)
+    ap.add_argument("--timeout", type=int, default=None,
+                    help="seconds; 0 = no deadline. Default comes from assets/mctl/limits.toml [bead_store_read_seconds], overridable with $MATHCITY_BEAD_STORE_READ_SECONDS.")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+
+    # POLICY, not a baked-in constant (owner, 2026-09-09). See
+    # assets/mctl/limits.toml. `--timeout 0` means NO deadline.
+    args.timeout, _timeout_source = _resolve_limit("bead_store_read_seconds", args.timeout)
+    if _timeout_source == "fallback":
+        print("NOTE: assets/mctl/limits.toml unreadable; using the built-in "
+              f"fallback of {args.timeout}s for this run", file=sys.stderr)
     # argparse `append` with a list default would ACCUMULATE onto the default
     # rather than replace it, so --lane x would silently scan x plus all three.
     if not args.lane:

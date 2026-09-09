@@ -1,0 +1,43 @@
+# Operational limits for mathcity's audit and check scripts.
+#
+# POLICY (owner, 2026-09-09): "no baked-in timeouts, that should be a policy.
+# We can give warnings or timeout options but it can't be baked in."
+#
+# WHY THIS FILE EXISTS. Four scripts written on 2026-09-09 hardcoded their own
+# subprocess deadlines -- 300s in three, 120s in a fourth -- chosen by whoever
+# wrote them and invisible to whoever ran them. A store slower than one agent's
+# guess fails as "unreadable" on a machine where nothing is wrong, and the
+# operator has no lever short of editing the script. That is the same shape as
+# every other defect this campaign found: a decision baked into code where it
+# should have been declared.
+#
+# THREE RULES:
+#
+#   1. A timeout is a POLICY VALUE, declared here.
+#   2. It is OVERRIDABLE at the call site (`--timeout`), so an operator on a
+#      slow or loaded machine is never blocked by someone else's guess.
+#   3. Exceeding it is a WARNING PATH, not a silent failure. A script that
+#      cannot finish reports that it could not finish -- distinct from
+#      "finished and found nothing". Every script here exits 2 for "could not
+#      look", never 0.
+#
+# UNSET MEANS UNLIMITED. A value of 0 disables the deadline entirely, for the
+# case where the honest answer is "wait as long as it takes". That is a real
+# option, not a footgun: the alternative is an agent silently reporting a clean
+# store because a query was cut off.
+
+[subprocess]
+# Reading a bead store. The default is generous because `bd list --all` on a
+# large store legitimately takes minutes, and the failure mode of being too
+# short (a false "unreadable") is worse than the failure mode of being too long
+# (a slow run someone can interrupt).
+bead_store_read_seconds = 300
+
+# Querying a remote (gh api, git ls-remote). Shorter because a network call
+# that has not answered in two minutes is not going to.
+remote_query_seconds = 120
+
+[warning]
+# Emit a "still working" notice after this long, so a long run is visibly
+# alive rather than apparently hung. 0 disables.
+progress_notice_seconds = 30

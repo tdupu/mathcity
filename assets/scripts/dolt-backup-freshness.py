@@ -38,6 +38,9 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent))
+from mctl_limits import resolve as _resolve_limit  # noqa: E402
+
 DEFAULT_MAX_LAG_DAYS = 3
 
 
@@ -84,9 +87,17 @@ def main() -> int:
                          "OWNER/REPO=/path/to/local/store to compare against "
                          "local writes rather than the calendar.")
     ap.add_argument("--max-lag-days", type=int, default=DEFAULT_MAX_LAG_DAYS)
-    ap.add_argument("--timeout", type=int, default=120)
+    ap.add_argument("--timeout", type=int, default=None,
+                    help="seconds; 0 = no deadline. Default comes from assets/mctl/limits.toml [remote_query_seconds], overridable with $MATHCITY_REMOTE_QUERY_SECONDS.")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+
+    # POLICY, not a baked-in constant (owner, 2026-09-09). See
+    # assets/mctl/limits.toml. `--timeout 0` means NO deadline.
+    args.timeout, _timeout_source = _resolve_limit("remote_query_seconds", args.timeout)
+    if _timeout_source == "fallback":
+        print("NOTE: assets/mctl/limits.toml unreadable; using the built-in "
+              f"fallback of {args.timeout}s for this run", file=sys.stderr)
 
     now = dt.datetime.now(dt.timezone.utc)
     rows, stale, unreachable = [], [], []

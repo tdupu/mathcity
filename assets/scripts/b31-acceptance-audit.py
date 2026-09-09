@@ -37,6 +37,9 @@ import json
 import subprocess
 import sys
 
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent))
+from mctl_limits import resolve as _resolve_limit  # noqa: E402
+
 #: Date `mctl_close_acceptance` began being written (76c84cb). A closure before
 #: this could not have carried the field. Bump this only when the capture
 #: mechanism itself changes -- not to quiet a failing run.
@@ -66,9 +69,17 @@ def main() -> int:
     ap.add_argument("--rig-root", required=True)
     ap.add_argument("--since", default=ACCEPTANCE_CAPTURE_SINCE,
                     help="YYYY-MM-DD; closures on/after this date are in scope")
-    ap.add_argument("--timeout", type=int, default=300)
+    ap.add_argument("--timeout", type=int, default=None,
+                    help="seconds; 0 = no deadline. Default comes from assets/mctl/limits.toml [bead_store_read_seconds], overridable with $MATHCITY_BEAD_STORE_READ_SECONDS.")
     ap.add_argument("--json", action="store_true", help="machine-readable report")
     args = ap.parse_args()
+
+    # POLICY, not a baked-in constant (owner, 2026-09-09). See
+    # assets/mctl/limits.toml. `--timeout 0` means NO deadline.
+    args.timeout, _timeout_source = _resolve_limit("bead_store_read_seconds", args.timeout)
+    if _timeout_source == "fallback":
+        print("NOTE: assets/mctl/limits.toml unreadable; using the built-in "
+              f"fallback of {args.timeout}s for this run", file=sys.stderr)
 
     try:
         beads = load_beads(args.rig_root, args.timeout)
