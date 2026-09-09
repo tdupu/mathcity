@@ -41,6 +41,11 @@ from .molecules import (
 class BeadCloseInput:
     bead_id: str
     reason: str | None = None
+    #: Which B3.1 limb was satisfied, and its evidence (#233). Free text by
+    #: design: (b) "a linked test passes" and (c) "an external review says PASS"
+    #: live OUTSIDE the bead, so no enumeration here could carry their evidence.
+    #: What matters is that the closer states which one and where to look.
+    acceptance: str | None = None
     force: bool = False
 
 
@@ -127,6 +132,12 @@ def plan_bead_close(ctx: MctlContext, request: BeadCloseInput) -> EffectPlan:
     reason_text = (request.reason or "").strip()
     if reason_text:
         metadata["mctl_close_reason"] = reason_text
+    acceptance_text = (request.acceptance or "").strip()
+    if acceptance_text:
+        # Stored ON THE BEAD, beside the reason: an acceptance that lives only
+        # in a tool response is not auditable later, which is what B3.1 needs it
+        # for (#233).
+        metadata["mctl_close_acceptance"] = acceptance_text
 
     update = BeadUpdate(
         bead_id,
@@ -147,6 +158,33 @@ def plan_bead_close(ctx: MctlContext, request: BeadCloseInput) -> EffectPlan:
     # universally and start failing closes that legitimately need no criterion.
     # Surfacing it costs nothing and makes a silent sweep visible.
     advisories: tuple[Diagnostic, ...] = ()
+    if not acceptance_text:
+        # #233 / B3.1: "Closure requires verifiable acceptance ... Closing on
+        # vibes -> fail." Stated policy with zero code, until now.
+        #
+        # ADVISORY, and detection is NOT attempted. B3.1's limbs (b) and (c) --
+        # a linked test, an external review -- live outside the bead entirely,
+        # so a checker inferring acceptance from the description would fire on
+        # legitimate test-backed and review-backed closes. That is the
+        # over-refusal trap #219 reverted for and #195's detector avoids.
+        #
+        # Asking is honest where guessing is not: the closer states which limb
+        # and where the evidence is, and it lands on the bead.
+        advisories = advisories + (
+            Diagnostic(
+                Severity.WARN,
+                "MBCL_ACCEPTANCE_ABSENT",
+                f"Closing {bead_id} with no recorded B3.1 acceptance.",
+                hint=(
+                    "Pass acceptance= naming which limb was satisfied and where "
+                    "the evidence is: (a) criteria checked off, (b) a linked test "
+                    "passes, (c) an external review says PASS, or (d) the "
+                    "adjudicator said close it."
+                ),
+                policy_ref="B3.1",
+                trace_id=ctx.trace_id,
+            ),
+        )
     if not reason_text:
         advisories = (
             Diagnostic(

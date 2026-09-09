@@ -7,6 +7,11 @@
 # plan and the code drift apart silently, which is how MBRF010-MBRF013 came to
 # exist in code but nowhere in the plan.
 
+[MBCL_ACCEPTANCE_ABSENT]
+severity = "WARN"
+meaning = "A bead was closed with no recorded B3.1 acceptance, so the closure is not verifiable."
+module = "bead_writes.py"
+
 [MBCL_REASON_ABSENT]
 severity = "WARN"
 meaning = "A bead was closed with no reason, so the closure is not attributable (BP4.3)."

@@ -377,6 +377,13 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "acceptance": {
+          "description": "B3.1: which acceptance limb was satisfied and where the evidence is -- (a) criteria checked off, (b) a linked test passes, (c) an external review says PASS, or (d) the adjudicator said close it. Recorded on the bead; its absence is a WARN, not a refusal.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "bead_id": {
           "description": "The bead to close.",
           "type": "string"

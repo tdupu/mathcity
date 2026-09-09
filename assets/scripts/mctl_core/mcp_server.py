@@ -1710,6 +1710,7 @@ def _handle_bead_close(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[s
         BeadCloseInput(
             bead_id=arguments.get("bead_id") or "",
             reason=arguments.get("reason"),
+            acceptance=arguments.get("acceptance"),
             force=bool(arguments.get("force", False)),
         ),
     )
@@ -3709,6 +3710,12 @@ TOOLS: tuple[ToolSpec, ...] = (
             {
                 "bead_id": {"type": "string", "description": "The bead to close."},
                 "reason": nullable_string("Why the bead is being closed; recorded in metadata."),
+                "acceptance": nullable_string(
+                    "B3.1: which acceptance limb was satisfied and where the evidence is "
+                    "-- (a) criteria checked off, (b) a linked test passes, (c) an external "
+                    "review says PASS, or (d) the adjudicator said close it. Recorded on the "
+                    "bead; its absence is a WARN, not a refusal."
+                ),
                 "force": {
                     "type": "boolean",
                     "default": False,
