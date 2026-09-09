@@ -364,6 +364,66 @@ check_shuffle_result() {
 check_manifest() {
   mkdir -p "$ROOT/stack"
   check_jsonl "$ROOT/stack/.index.jsonl"
+
+  # CURRENCY, not just well-formedness (#102). check_jsonl opens with
+  # `[ -f "$manifest" ] || return 0`, so before this block the gate named
+  # "manifest-CURRENT" passed on an index that was absent entirely, and on one
+  # that was valid but listed 1 of 3 briefs. Only malformed JSON could fail it
+  # — it looked like coverage while testing something else.
+  #
+  # The currency logic is NOT reimplemented here. `brief-stack-index.py check`
+  # already computes index/disk divergence, matches rows to files on basename
+  # (the three path serializations disagree about everything else), and is
+  # read-only by construction. Reimplementing it in shell would have produced a
+  # second, subtly different notion of "current".
+  #
+  # Its exit codes are load-bearing and are NOT collapsed:
+  #     0  every stack file has one row, every row resolves to a file
+  #     1  divergence — orphan files, phantom rows, or duplicates
+  #     2  index unreadable or malformed (a DIFFERENT failure from divergence)
+  #
+  # Why this does not break bootstrap: #102 left a fix unshipped pending a
+  # ruling on whether an absent index is an error or a legitimate fresh-city
+  # state. Framed as DIVERGENCE the question dissolves — an absent index over
+  # an empty stack is zero divergence and exits 0. Absence only fails once
+  # there are briefs to index, which is exactly when it should.
+  bmi_script="$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd || true)/brief-stack-index.py"
+  if [ -n "$bmi_script" ] && [ -f "$bmi_script" ] && command -v python3 >/dev/null 2>&1; then
+    # `|| true` is load-bearing under this script's `set -eu` (line 2): an
+    # assignment whose command substitution exits non-zero terminates the
+    # script AT THE ASSIGNMENT, before `bmi_rc=$?` is ever reached. Measured
+    # without it: fixture C exited 1 with NO message — the stale index was
+    # detected and the diagnosis thrown away, which reads as an unexplained
+    # gate failure. Same trap as `grep -q` under `set -o pipefail`.
+    # The `if` is load-bearing under this script's `set -eu` (line 2), and is
+    # the reason this is not the more obvious two-liner. An assignment whose
+    # command substitution exits non-zero terminates the script AT THE
+    # ASSIGNMENT, before any `$?` read. Measured, both wrong ways:
+    #   bmi_out="$(...)"; bmi_rc=$?              -> C exited 1, NO message
+    #   bmi_out="$(...)" || true; bmi_rc=$(...;echo $?)
+    #                                            -> C exited 1, NO message
+    #                                               (same trap inside the $( ))
+    # `if cmd; then` suspends `set -e` for the condition, so the exit code
+    # survives -- and the tool runs ONCE, which the double-invocation form
+    # above got wrong even where it worked. Same family as `grep -q` under
+    # `set -o pipefail`.
+    if bmi_out="$(python3 "$bmi_script" check --brief-root "$ROOT" 2>&1)"; then
+      bmi_rc=0
+    else
+      bmi_rc=$?
+    fi
+    case "$bmi_rc" in
+      0) : ;;
+      2) fail "stack index is unreadable or holds malformed rows (not a currency failure — see below): $bmi_out" ;;
+      *) fail "stack index is STALE: it parses, but does not describe the stack on disk. $bmi_out" ;;
+    esac
+  else
+    # Say so rather than passing silently: a check that could not run must not
+    # render as a check that passed (P6.2). This is the same UNKNOWN discipline
+    # #107 added to the notebook-mode banner.
+    printf 'MANIFEST_CURRENCY: UNKNOWN — %s\n' \
+      "brief-stack-index.py or python3 unavailable; validated JSONL shape only, NOT currency" >&2
+  fi
 }
 
 claim_item_metadata_value() {
