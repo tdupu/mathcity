@@ -468,8 +468,45 @@ def _import_source(imports: object) -> str | None:
     return None
 
 
+#: gascity >=1.0 moved the rig->on-disk-path binding OUT of `city.toml` and
+#: into this file. A city.toml that still carries `rig.path` is refused
+#: outright ("unsupported pre-1.0 rig.path for rig %q; move it to
+#: .gc/site.toml"), so on any current city the rig entry has no path and the
+#: `<city_root>/<rig>` fallback below is the only thing left. That fallback is
+#: correct only when rigs are subdirectories of the city; when they are not,
+#: it names a directory that does not exist and every bead read fails as an
+#: opaque BeadReadError that never mentions the path it tried.
+SITE_FILE_NAME = "site.toml"
+
+
+def _site_rig_paths(city_root: Path) -> dict[str, str]:
+    """Rig name -> configured path, read from `<city_root>/.gc/site.toml`.
+
+    A missing or unparseable site.toml is not an error here: plenty of cities
+    keep their rigs under the city root and never grow one. It only means
+    there is no binding to apply, so resolution falls through unchanged.
+    """
+    site = city_root / ".gc" / SITE_FILE_NAME
+    try:
+        with site.open("rb") as handle:
+            data = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    bindings: dict[str, str] = {}
+    for entry in data.get("rig", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        path = entry.get("path")
+        if isinstance(name, str) and isinstance(path, str) and name and path:
+            bindings[name] = path
+    return bindings
+
+
 def _resolve_rig_root(rig: dict[str, object], city_root: Path) -> Path:
     configured = rig.get("path")
+    if not (isinstance(configured, str) and configured):
+        configured = _site_rig_paths(city_root).get(str(rig["name"]))
     if isinstance(configured, str) and configured:
         candidate = Path(configured).expanduser()
         return (candidate if candidate.is_absolute() else city_root / candidate).resolve()

@@ -136,3 +136,43 @@ def test_context_fails_when_required_pipeline_file_is_missing(
     assert result.returncode != 0
     assert "FATAL" in result.stderr
     assert "MCTL_CONTEXT_MISSING" in result.stderr
+
+
+def test_context_reads_rig_root_from_site_toml(tmp_path: Path):
+    """gascity >=1.0 binds a rig to its on-disk path in `.gc/site.toml`.
+
+    `rig.path` in city.toml is a rejected pre-1.0 field ("unsupported pre-1.0
+    rig.path ... move it to .gc/site.toml"), so on any current city the rig
+    entry carries no path at all and the `<city_root>/<rig>` fallback fires.
+    When the rig lives outside the city tree that fallback names a directory
+    that does not exist, and every bead read against it fails as an opaque
+    BeadReadError with no mention of the path it tried.
+    """
+    city_root = tmp_path / "city_root"
+    rig_root = tmp_path / "elsewhere" / "mathcity"
+    shutil.copytree(CITY_ROOT, city_root)
+    shutil.copytree(SOURCE_CHECKOUT, tmp_path / "source_checkout")
+    rig_root.mkdir(parents=True)
+
+    (city_root / "city.toml").write_text(
+        "[[rigs]]\n"
+        'name = "mathcity"\n\n'
+        "[rigs.imports.mathcity]\n"
+        'source = "../source_checkout"\n'
+    )
+    site = city_root / ".gc"
+    site.mkdir(exist_ok=True)
+    (site / "site.toml").write_text(
+        'workspace_name = "HQ"\n\n'
+        "[[rig]]\n"
+        'name = "mathcity"\n'
+        f'path = "{rig_root}"\n'
+    )
+
+    result = run_mctl(
+        "--city", str(city_root), "--rig", "mathcity", "--json", cwd=tmp_path
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["rig_root"] == str(rig_root.resolve())
