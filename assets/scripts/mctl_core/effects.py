@@ -2488,7 +2488,103 @@ def _apply_cache_update(update: CacheUpdate) -> None:
             update.path, update.row_key, update.fields, update.drop_fields
         )
         return
+    if update.kind == "brief_archive":
+        _archive_brief(update.path, update.target_brief_id, update.fields)
+        return
     raise OSError(f"unknown cache update kind: {update.kind}")
+
+
+def _archive_brief(stack_path: Path, brief_id: str, fields: Mapping[str, str]) -> None:
+    """Move a decided brief off the pending stack and de-index it, as ONE act.
+
+    THE GAP THIS CLOSES (tdupu/mathcity#95, brief mc-up5vd). `EffectPlan` had
+    creates, updates and writes and NO move, rename or delete; `apply_file_create`
+    refuses to overwrite. So nothing in mctl could relocate a file, and 28 briefs
+    carrying a TERMINAL status sat on the PENDING stack -- a count that went
+    8 -> 27 -> 28 while the gap stayed open.
+
+    The de-index half already existed and was already correct.
+    `brief-stack-index.py::should_reconcile_remove` REFUSES to de-index a brief
+    with no archive copy, returning `terminal_index_status_no_archive_match`,
+    because "saying adjudicated is a claim, and a claim is not an archive". It
+    was correctly refusing to act because nothing performed the move. This is
+    the move.
+
+    BOTH HALVES IN ONE CRITICAL SECTION, under `_stack_index_lock`. A move
+    without a de-index leaves a stack index row pointing at a file that is no
+    longer there; a de-index without a move loses the brief. The lock is the
+    same one the shuffler takes (B2.11's carve-out), so the two writers cannot
+    interleave.
+
+    VERIFY AFTER WRITE (B2.13). Every step is re-read before the next begins.
+    `remove-archived-row` shipped exactly this bug once -- it computed
+    `archive_hit` and then ignored it -- and that precedent is why the checks
+    here are assertions rather than comments.
+    """
+    archive_path = Path(str(fields["archive_path"]))
+    index_path = Path(str(fields["index_path"]))
+
+    with _stack_index_lock(index_path):
+        # 1. PRECONDITION -- the source must be there. A missing source is not
+        #    "already archived": it may be a slug collision or a concurrent
+        #    writer, and guessing between those is how a brief gets lost.
+        if not stack_path.is_file():
+            raise OSError(
+                f"brief_archive: {stack_path} is not a file; refusing to archive "
+                "a brief that is not on the stack"
+            )
+        # 2. REFUSE TO OVERWRITE, matching apply_file_create's contract. An
+        #    existing archive copy with different content is the #95 defect-3
+        #    shape (a slug in BOTH lanes) and must be surfaced, not resolved.
+        payload = stack_path.read_bytes()
+        if archive_path.exists():
+            if archive_path.read_bytes() != payload:
+                raise OSError(
+                    f"brief_archive: {archive_path} already exists with DIFFERENT "
+                    "content; refusing to overwrite an archived decision"
+                )
+        else:
+            archive_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = archive_path.with_suffix(archive_path.suffix + ".partial")
+            tmp.write_bytes(payload)
+            os.replace(tmp, archive_path)
+
+        # 3. VERIFY THE COPY BEFORE DESTROYING THE ORIGINAL. This ordering is
+        #    the whole safety property: if the read-back fails, the stack file
+        #    is still there and nothing has been lost.
+        if not archive_path.is_file() or archive_path.read_bytes() != payload:
+            raise OSError(
+                f"brief_archive: archive copy at {archive_path} did not verify; "
+                "the stack file is untouched"
+            )
+
+        stack_path.unlink()
+        if stack_path.exists():
+            raise OSError(f"brief_archive: {stack_path} survived unlink")
+
+        # 4. De-index LAST, so a crash leaves a row pointing at an archived
+        #    brief (recoverable, and what reconcile-archive is for) rather than
+        #    a brief with no row (invisible).
+        if index_path.is_file():
+            lines = index_path.read_text(encoding="utf-8").splitlines()
+            kept = []
+            removed = 0
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    kept.append(line)  # a malformed row stays as malformed as it was
+                    continue
+                if str(row.get("slug") or "") == brief_id or Path(
+                    str(row.get("path") or "")
+                ).name == stack_path.name:
+                    removed += 1
+                    continue
+                kept.append(line)
+            if removed:
+                _atomic_write(index_path, "".join(f"{line}\n" for line in kept))
 
 
 def _update_decisions_track_row(
