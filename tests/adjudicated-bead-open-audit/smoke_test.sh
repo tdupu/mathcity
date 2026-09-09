@@ -113,5 +113,20 @@ else
   fail=$((fail + 1)); echo "  FAIL missing inventory passed silently"
 fi
 
+# 11. ONE BEAD NAMED BY SEVERAL BRIEFS IS ONE FINDING.
+#     Measured on kolchin's mathcity-testrig: the raw list reported 4 stalled
+#     findings for 2 distinct beads, because mt-5yq was named by three separate
+#     brief files. Counting it three times inflates a number someone acts on.
+mkdir -p "$TMP/s11"; echo '[{"id":"gt-a1b2","status":"open"}]' > "$TMP/s11/_beads.json"
+brief "$TMP/r11" stack "one.md"   adjudicated gt-a1b2
+brief "$TMP/r11" stack "two.md"   adjudicated gt-a1b2
+brief "$TMP/r11" stack "three.md" adjudicated gt-a1b2
+n=$(PATH="$TMP/bin:$PATH" python3 "$SCRIPT" --brief-root "$TMP/r11" --store "gt=$TMP/s11" --json 2>/dev/null       | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["stalled"]))' 2>/dev/null)
+if [ "$n" = "1" ]; then
+  pass=$((pass + 1)); echo "  ok   three briefs naming one bead = 1 finding"
+else
+  fail=$((fail + 1)); echo "  FAIL three briefs naming one bead gave $n findings (want 1)"
+fi
+
 echo "adjudicated-bead-open-audit: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

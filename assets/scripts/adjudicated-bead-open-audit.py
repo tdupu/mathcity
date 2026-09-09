@@ -248,6 +248,32 @@ def main() -> int:
         elif state == "NOT-FOUND":
             missing.append((bead_id, brief_status, path.name))
 
+    # DEDUPLICATE BY BEAD, not by brief. One bead named by several briefs is ONE
+    # stalled bead, not several. Measured on kolchin's mathcity-testrig, where
+    # the raw list reported 4 findings for 2 distinct beads -- mt-5yq appeared
+    # three times, from brief.md, e2e-adjudication-smoke.md and a second copy of
+    # the same smoke brief. Reporting it three times inflates a number someone
+    # acts on, which is the failure this tool's own docstring warns about for
+    # the stalled/missing split.
+    #
+    # The extra briefs are not discarded: each finding now carries how many
+    # briefs named that bead, because several briefs for one decision is itself
+    # worth seeing.
+    def _by_bead(rows: list) -> list:
+        first: dict[str, list] = {}
+        for row in rows:
+            first.setdefault(row[0], []).append(row)
+        out = []
+        for bead, group in first.items():
+            head = list(group[0])
+            if len(group) > 1:
+                head[2] = f"{head[2]} (+{len(group) - 1} more brief(s) naming this bead)"
+            out.append(tuple(head))
+        return out
+
+    stalled = _by_bead(stalled)
+    missing = _by_bead(missing)
+
     report = {
         "adjudicated": len(adjudicated),
         "bead_states": dict(counts),
