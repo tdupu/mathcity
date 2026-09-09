@@ -112,7 +112,9 @@ from .molecules import build_molecule, build_molecules
 from .health import build_city_health
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
-from .redundant_state import artifact_layout, locate_artifact
+import re
+
+from .redundant_state import _frontmatter_claimants, artifact_layout, locate_artifact
 from .schemas import (
     BRIEF_DIAGNOSTICS_SCHEMA,
     BRIEF_DETAIL_SCHEMA,
@@ -280,13 +282,79 @@ def _frontmatter_artifact_id(path: Path) -> str | None:
     return read_frontmatter(text).get("artifact", "").strip("\"'") or None
 
 
+#: A pile file's `artifact:` value that actually names a BEAD. The key carries
+#: two different things in the live corpus and only one of them is a lookup
+#: target -- see `_frontmatter_lookup_mismatch`.
+_BEAD_SHAPED_ARTIFACT = re.compile(r"^[a-z]{2,4}-[a-z0-9]{3,9}$")
+
+
 def _frontmatter_lookup_mismatch(pile: Path) -> tuple[str, str] | None:
+    """A pile file whose bead id is genuinely unreachable by any lookup.
+
+    NARROWED (#148). This used to fire on ANY `artifact:` value differing from
+    the filename, and both halves of that were wrong by the time it was
+    written:
+
+    1. THE LOOKUP ALREADY RESOLVES BY FRONTMATTER. `redundant_state` tries
+       exact `<brief_id>.md`, then `<brief_id>-*.md`, then `artifact:`
+       claimants (added by mc-crc4o, whose comment records "Q5 (RESOLVED
+       2026-08-19)"). A file carrying its bead id in frontmatter is FOUND.
+       Untrusting a rig for it asserted a failure that no longer happens.
+
+    2. `artifact:` OFTEN DOES NOT NAME A BEAD AT ALL. `materialize_plan`
+       documents the key as naming the brief's SUBJECT. Measured on the live
+       city:
+
+           he-equ713.md   artifact=he-6nb                  -> resolved
+           he-sojlhr.md   artifact=he-x7vc1u               -> resolved
+           he-x9xi5p.md   artifact=feat/snfs-scaling-test  -> a BRANCH
+           gsp-oodpqb.md  artifact=gsp-ioek                -> resolved
+           gsp-mkp5uq.md  artifact=.gc-builds              -> a PATH
+
+       Three of five were bead ids and all three resolve. The other two are a
+       branch name and a directory. Reporting "the <bead_id>.md lookup cannot
+       find artifacts that exist" about a brief whose subject is a branch is a
+       category error, not a measurement.
+
+    So this now fires only when the value is BEAD-SHAPED **and** the shared
+    resolver returns something other than exactly one claimant -- i.e. two or
+    more files claim the same bead id. That is the surviving case where a
+    reading really is unbelievable: the resolver reports `ambiguous`, and no
+    caller can tell which file is that bead's cache.
+
+    A SINGLE claimant is NOT a defect, which is the correction the positive
+    control below forced. Walking file `X.md` whose `artifact:` names bead `B`,
+    X.md itself always claims B -- so one claimant means "B's cache is X.md,
+    reachable by frontmatter", exactly the case mc-crc4o made work. An earlier
+    draft of this docstring called that "unreachable"; the code was right and
+    the description was wrong.
+
+    Verified against fixtures, all three behaving:
+
+        one claimant for a bead-shaped id     -> trusted   (resolvable)
+        two claimants for one bead-shaped id  -> UNTRUSTED (ambiguous)
+        subject-style value (feat/..., .gc-)  -> trusted   (not a bead)
+
+    It deliberately does NOT decide Q5's open half (rig-root vs city-root
+    resolution) or #148's blast-radius question: a rig with a genuinely
+    ambiguous artifact is still untrusted whole.
+    """
     if not pile.is_dir():
         return None
     for path in sorted(pile.glob("*.md")):
         artifact_id = _frontmatter_artifact_id(path)
-        if artifact_id and artifact_id != path.stem:
-            return path.name, artifact_id
+        if not artifact_id or artifact_id == path.stem:
+            continue
+        if not _BEAD_SHAPED_ARTIFACT.match(artifact_id):
+            # Names a subject (branch, path, slug), not a bead. Never a lookup
+            # target, so its "mismatch" says nothing about artifact state.
+            continue
+        if len(_frontmatter_claimants(pile, artifact_id, ".md")) == 1:
+            # Exactly one file claims this bead -- the resolver reaches it.
+            # (That file is this one; see the docstring on why a single
+            # claimant is the HEALTHY case, not a self-match artefact.)
+            continue
+        return path.name, artifact_id
     return None
 
 

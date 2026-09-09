@@ -749,12 +749,52 @@ def test_untrusted_state_is_reported_even_when_it_hides_nothing(tmp_path: Path):
     assert "Q5" in warning["message"] or "Q5" in (warning["hint"] or "")
 
 
-def test_pile_filenames_that_carry_the_bead_id_in_frontmatter_are_untrusted(tmp_path: Path):
-    """Q5's second half: the live pile is <NN>-<slug>-brief.md, not <bead_id>.md."""
+def test_pile_filenames_that_carry_the_bead_id_in_frontmatter_are_TRUSTED(tmp_path: Path):
+    """INVERTED by #148, because the lookup this asserted against was fixed.
+
+    This used to assert `trusted is False` for a pile file naming its bead in
+    `artifact:` frontmatter -- Q5's "the live pile is <NN>-<slug>-brief.md, not
+    <bead_id>.md". That premise is stale. `redundant_state` resolves by
+    `artifact:` claimants (mc-crc4o, whose comment records "Q5 (RESOLVED
+    2026-08-19)"), so the file IS found. Verified directly against this exact
+    fixture: `_frontmatter_claimants(pile, "mc-open", ".md")` returns
+    `['12-inspect-open-brief-brief.md']`.
+
+    Untrusting here asserted "the <bead_id>.md lookup cannot find artifacts
+    that exist" about an artifact the resolver reaches -- and it untrusted the
+    WHOLE rig for it, which is #148's blast-radius complaint. Measured on the
+    live city, this condition alone was untrusting hecke, lmfdb and
+    gascity-packs.
+
+    The untrusting case is now ambiguity, covered by
+    `test_two_pile_files_claiming_one_bead_are_untrusted` below.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
     pile = rig_root / ".beads" / "briefs" / ".pile"
     (pile / "12-inspect-open-brief-brief.md").write_text(
         "---\nartifact: mc-open\n---\n\n# Inspect open brief\n", encoding="utf-8"
+    )
+
+    structured = call(server(city_root, rig_root), "briefs_list", {})["result"]["structuredContent"]
+
+    assert structured["artifact_trust"]["trusted"] is True
+
+
+def test_two_pile_files_claiming_one_bead_are_untrusted(tmp_path: Path):
+    """The control for the test above: trust must still be losable.
+
+    Narrowing an untrust condition can silently turn it into a no-op, and a
+    rig that can never be untrusted renders exactly like one that is fine.
+    Two files claiming `mc-open` make the resolver report `ambiguous`: the
+    artifact exists, and no caller can tell which file it is.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    pile = rig_root / ".beads" / "briefs" / ".pile"
+    (pile / "12-inspect-open-brief-brief.md").write_text(
+        "---\nartifact: mc-open\n---\n\n# Inspect open brief\n", encoding="utf-8"
+    )
+    (pile / "13-inspect-open-brief-duplicate.md").write_text(
+        "---\nartifact: mc-open\n---\n\n# Duplicate claimant\n", encoding="utf-8"
     )
 
     structured = call(server(city_root, rig_root), "briefs_list", {})["result"]["structuredContent"]
@@ -804,11 +844,19 @@ def test_an_absent_pile_still_untrusts_when_the_root_is_also_absent(tmp_path: Pa
 
 
 def test_a_malformed_pile_is_still_untrusted_when_absence_is_not(tmp_path: Path):
-    """The distinction #149 draws: absent cannot lie, malformed does."""
+    """The distinction #149 draws: absent cannot lie, malformed does.
+
+    "Malformed" is now AMBIGUITY rather than frontmatter-naming (#148) -- the
+    latter is resolvable and no longer lies. #149's actual point is untouched:
+    an absent pile stays trusted, a lying one does not.
+    """
     city_root, rig_root = runtime_fixture(tmp_path)
     pile = rig_root / ".beads" / "briefs" / ".pile"
     (pile / "12-inspect-open-brief-brief.md").write_text(
         "---\nartifact: mc-open\n---\n\n# Inspect open brief\n", encoding="utf-8"
+    )
+    (pile / "13-inspect-open-brief-duplicate.md").write_text(
+        "---\nartifact: mc-open\n---\n\n# Duplicate claimant\n", encoding="utf-8"
     )
 
     structured = call(server(city_root, rig_root), "briefs_list", {})["result"]["structuredContent"]

@@ -56,16 +56,29 @@ def runtime_fixture(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def untrusted_fixture(tmp_path: Path) -> tuple[Path, Path]:
-    """The live pile convention Q5 describes: bead id in frontmatter, not stem.
+    """A rig whose artifact readings genuinely cannot be believed.
 
-    Reproducing it here is what makes `artifact_trust.trusted` false and
-    pushes `MBRF021` into `untrusted_diagnostics`, so the dashboard's handling
-    of untrusted state is tested against the shape that actually occurs.
+    This used to be "bead id in `artifact:` frontmatter rather than the stem".
+    #148 retired that as an untrusting condition, and correctly so:
+    `redundant_state` resolves by `artifact:` claimants (mc-crc4o), so such a
+    file IS found -- verified directly, `_frontmatter_claimants` returns
+    `['12-inspect-open-brief-brief.md']` for bead `mc-open`. A fixture pinned
+    to that shape would test the dashboard's untrusted rendering against a
+    state the code no longer produces.
+
+    AMBIGUITY is the surviving one: two files claiming the same bead id, where
+    the resolver reports `ambiguous` and no caller can tell which is the cache.
+    That still makes `artifact_trust.trusted` false and still pushes `MBRF021`
+    into `untrusted_diagnostics`, so every assertion downstream keeps its
+    meaning.
     """
     city_root, rig_root = runtime_fixture(tmp_path)
     pile = rig_root / ".beads" / "briefs" / ".pile"
     (pile / "07-inspect-open-brief.md").write_text(
         "---\nartifact: mc-open\n---\n\n# Inspect open brief\n", encoding="utf-8"
+    )
+    (pile / "08-inspect-open-brief-duplicate.md").write_text(
+        "---\nartifact: mc-open\n---\n\n# Duplicate claimant\n", encoding="utf-8"
     )
     return city_root, rig_root
 

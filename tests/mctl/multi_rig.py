@@ -104,13 +104,28 @@ def build(tmp_path: Path) -> MultiRigCity:
         _populate(rig_roots[rig], PREFIXES[rig])
         env[f"MCTL_BEADS_FIXTURE_{rig}"] = str(rig_roots[rig] / ".beads" / "issues.jsonl")
 
-    # Q5's live pile convention, in ONE rig only: the bead id lives in
-    # `artifact:` frontmatter rather than the filename, so `<bead_id>.md`
-    # cannot find a file that is sitting right there. That makes this rig's
-    # artifact state untrusted while the other rig's stays trusted.
+    # An UNTRUSTED rig, in ONE rig only, so per-rig trust reporting has
+    # something to report. The untrusting condition changed with #148 and this
+    # fixture changed with it.
+    #
+    # It used to be "the bead id lives in `artifact:` frontmatter rather than
+    # the filename". That is no longer untrusting, and correctly so:
+    # `redundant_state` resolves by `artifact:` claimants (mc-crc4o), so such a
+    # file IS found. Verified directly -- `_frontmatter_claimants` returns
+    # `['12-inspect-open-brief-brief.md']` for bead `mc-open`. Keeping the old
+    # shape here would have pinned a rig as untrusted for a condition the code
+    # handles, and the four tests relying on it would have been asserting a
+    # stale premise rather than per-rig reporting.
+    #
+    # AMBIGUITY is the surviving unbelievable reading: two files claiming the
+    # same bead id, where the resolver reports `ambiguous` and no caller can
+    # tell which one is that bead's cache.
     pile = rig_roots["gascity_packs"] / ".beads" / "briefs" / ".pile"
     (pile / "07-inspect-open-brief.md").write_text(
         "---\nartifact: gs-open\n---\n\n# Inspect open brief\n", encoding="utf-8"
+    )
+    (pile / "08-inspect-open-brief-duplicate.md").write_text(
+        "---\nartifact: gs-open\n---\n\n# Duplicate claimant\n", encoding="utf-8"
     )
 
     # The unreadable rig: a bead store path that is not a file. Resolving its
