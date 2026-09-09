@@ -36,6 +36,10 @@ GATE_BODY = (
     "# Brief\n\n"
     "## §1 — What is being decided\n\nWhether to do the thing.\n\n"
     "## Gate Evidence\n\nChecked before writing.\n"
+    "\naction_block:\n"
+    "  on_approve: proceed\n"
+    "  on_reject: record the verdict and stop\n"
+    "  on_defer: revisit\n"
 )
 
 

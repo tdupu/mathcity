@@ -239,7 +239,12 @@ def test_create_builds_the_expected_bd_create_and_link_argv(tmp_path: Path):
     # #169: carries `## Gate Evidence`; briefs_create refuses without it.
     body.write_text(
         "## What is being decided\n\nShip it?\n\n"
-        "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n",
+        "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+        # #96: the decision profile rejects a pile entry with no action_block.
+        "\naction_block:\n"
+        "  on_approve: proceed\n"
+        "  on_reject: record the verdict and stop\n"
+        "  on_defer: revisit\n",
         encoding="utf-8",
     )
 

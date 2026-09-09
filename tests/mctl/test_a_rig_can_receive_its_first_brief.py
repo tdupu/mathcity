@@ -71,6 +71,10 @@ BODY = (
     "Whether a fresh rig can receive a brief.\n\n"
     "## Gate Evidence\n\n"
     "N/A -- this brief exists only to exercise brief-root creation.\n"
+    "\naction_block:\n"
+    "  on_approve: proceed\n"
+    "  on_reject: record the verdict and stop\n"
+    "  on_defer: revisit\n"
 )
 
 

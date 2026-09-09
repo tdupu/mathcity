@@ -172,6 +172,10 @@ def test_plan_commission_brief_carries_commission_semantics_into_the_effect_plan
         body=(
             "## What is being decided\n\nProceed.\n\n"
             "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+    "\naction_block:\n"
+    "  on_approve: proceed\n"
+    "  on_reject: record the verdict and stop\n"
+    "  on_defer: revisit\n"
         ),
         issue_url="https://github.com/tdupu/mathcity/issues/190",
         issue_labels=("kind/feature", "priority/p1"),

@@ -267,8 +267,15 @@ def brief_body(tmp_path: Path) -> Path:
         # #169: carries `## Gate Evidence` because briefs_create now refuses
         # without it. This fixture drives a REAL bd store, so a brief it mints
         # would have been a real brief the drain auto-rejects.
+        # #96: and an `action_block`, by the same argument -- this fixture
+        # drives a REAL bd store, so without one it mints a real decision brief
+        # that the drain destroys while creation reports success.
         "## What is being decided\n\nShip the dispatch policy?\n\n"
-        "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n",
+        "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+        "\naction_block:\n"
+        "  on_approve: proceed\n"
+        "  on_reject: record the verdict and stop\n"
+        "  on_defer: revisit\n",
         encoding="utf-8",
     )
     return path

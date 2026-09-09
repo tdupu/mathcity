@@ -151,7 +151,17 @@ def create(tmp_path: Path, body: str):
     )
 
 
-GATE_EVIDENCE = "\n## Gate Evidence\n\nG5: n/a — no server surface touched.\n"
+#: #96: the suffix also carries an `action_block`. Every brief briefs_create
+#: mints is stamped `gate_profile: decision`, and the decision profile
+#: rejects a pile entry without one -- so a body lacking it was again a
+#: fixture minting a brief the drain destroys while creation reports success.
+GATE_EVIDENCE = (
+    "\n## Gate Evidence\n\nG5: n/a — no server surface touched.\n"
+    "\naction_block:\n"
+    "  on_approve: proceed\n"
+    "  on_reject: record the verdict and stop\n"
+    "  on_defer: revisit\n"
+)
 
 CLEAN_BODY = (
     "## §1 — What is being decided\n\nWhether to take the terminal-root interlock.\n\n"

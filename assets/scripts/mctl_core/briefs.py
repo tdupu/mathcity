@@ -863,7 +863,7 @@ def validate_brief_input(
         # every producer, and 44 tests fail on it. Closing that gap means
         # teaching every producer to compose one, which is #219's full-form pass,
         # not a default.
-        absent = missing_sections(clean_body, profile=declared_profile(clean_body))
+        absent = missing_sections(clean_body, profile=declared_profile(clean_body) or "decision")
         if absent:
             names = ", ".join(str(section.get("name")) for section in absent)
             raise BriefError(

@@ -34,6 +34,11 @@ from test_briefs_create_validate_cli import (  # noqa: E402
     REPO_ROOT, beads_fixture, body_file, brief_command, run_mctl, runtime_fixture,
 )
 
+#: #96: this is the P6.2 POSITIVE CONTROL -- it must SUCCEED, so it must satisfy
+#: every rule the create gate applies, not only the one under test. It now
+#: carries an `action_block` because the decision profile requires one and every
+#: brief `briefs_create` mints is stamped `gate_profile: decision`. If this body
+#: stops passing, the control is dead and the negative test above proves nothing.
 BODY_WITH_EVIDENCE = """## What is being decided
 
 Whether to adopt X.
@@ -41,6 +46,11 @@ Whether to adopt X.
 ## Gate Evidence
 
 G5: n/a -- no server surface touched.
+
+action_block:
+  on_approve: proceed
+  on_reject: record the verdict and stop
+  on_defer: revisit
 """
 
 BODY_WITHOUT_EVIDENCE = """## What is being decided

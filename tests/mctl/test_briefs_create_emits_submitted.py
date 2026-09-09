@@ -34,6 +34,10 @@ from test_mcp_server import call, server, work_fixture  # noqa: E402
 BODY = (
     "## What is being decided\n\nShip it?\n\n"
     "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+    "\naction_block:\n"
+    "  on_approve: proceed\n"
+    "  on_reject: record the verdict and stop\n"
+    "  on_defer: revisit\n"
 )
 
 #: An OPEN task in the work fixture with a CLOSED brief, usable as a B2.1 source

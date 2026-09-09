@@ -89,9 +89,20 @@ def read_jsonl(path: Path) -> list[dict[str, object]]:
 #: file and test_real_bead_store used this default; every one of them was
 #: creating a brief that #96 shows would be destroyed at shuffle time while
 #: reporting success. The fixture was wrong, not the new check.
+#: #96: it now also carries an `action_block`, for the same reason and by the
+#: same argument as the Gate Evidence line above. `brief-check.sh` rejects a
+#: DECISION-profile pile entry without one, and every brief `briefs_create`
+#: mints is stamped `gate_profile: decision`. A fixture body without it was
+#: again testing a path that produces a brief the drain destroys while creation
+#: reports success -- measured live as `mt-yftq` in `.pile/.rejected/`
+#: ("decision brief missing action_block"). The fixture was wrong, not the check.
 DEFAULT_BODY = (
     "## What is being decided\n\nShip it?\n\n"
     "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
+    "\naction_block:\n"
+    "  on_approve: proceed\n"
+    "  on_reject: record the verdict and stop\n"
+    "  on_defer: revisit\n"
 )
 
 
