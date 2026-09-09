@@ -260,7 +260,33 @@ require_toml_key_value() {
 # literal `PASS` token is what gate-test-evidence.sh keys on to fire G1's
 # five-field structural check, so accepting `PASSED` for G1 would silently
 # skip that check.
-GATE_STATUS_DEFAULT="PASS|N/A"
+# The tokens POLICY actually mandates, plus the legacy spellings still in the
+# live corpus (#67).
+#
+# THE BUG: this was `PASS|N/A`, and `\b` after `PASS` cannot match `PASSED`
+# (S->E is word-to-word, no boundary). So the gate REJECTED both tokens T7/G14
+# mandates and ACCEPTED two it does not:
+#
+#     PASS             matched      (legacy spelling, not in POLICY)
+#     PASSED           NO MATCH     <- POLICY-mandated
+#     N/A              matched      (legacy spelling, not in POLICY)
+#     NOT APPLICABLE   NO MATCH     <- POLICY-mandated
+#     REQUIRED         NO MATCH     <- correct, see below
+#
+# #67 measured the consequence: 4 of 89 stack files passed G14.
+#
+# `REQUIRED` IS DELIBERATELY ABSENT. T7 makes G14 a TRI-state, and the third
+# state is not a pass: "REQUIRED means execution is owed before adjudication
+# and the brief says by whom". Adding it here to make more briefs pass would
+# convert an owed obligation into a satisfied gate -- the failure mode this
+# whole campaign keeps finding. A silent or absent declaration continues to
+# fail, which is T7's auto-throwback.
+#
+# The legacy spellings are KEPT rather than tightened to POLICY alone: briefs
+# already carrying `PASS`/`N/A` are declaring the same thing, and failing them
+# would move briefs AWAY from the front end, which is the opposite of #67's
+# requirement.
+GATE_STATUS_DEFAULT="PASSED|PASS|NOT APPLICABLE|N/A"
 
 require_gate() {
   path="$1"
