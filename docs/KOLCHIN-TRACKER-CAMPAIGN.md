@@ -231,3 +231,52 @@ a real injected `if grep -q mcp__mctl__...; then`.
 - **#99** — needs upstream pool-scaling knowledge; I would be guessing.
 - **#204** — my kolchin evidence is confounded by a local `max=0` patch;
   retracted the "reproduced" framing on the issue.
+
+## Fifth tranche — building, and one correction that mattered
+
+### #168 was working as designed, and my earlier comment was wrong
+
+I had said the gap was "which planner the create path uses" and suggested
+routing `plan_create_brief` through `_plan` so it would emit a stack row.
+Following that would have introduced a policy violation. The docstring says so
+at the top of the function:
+
+    The presentable stack index is deliberately NOT written:
+    B2.10 makes brief-shuffle the single `.pile -> stack` writer.
+
+POLICY.md:373 confirms it. A brief reaches the front end by brief-shuffle
+promoting it, not by its creator writing a stack row. Retracted on the issue.
+
+### #96 — fixed, after walking into it
+
+`mt-yftq` — the brief I created through `briefs_create` earlier in this
+session, which returned `applied: true` — was found in `.pile/.rejected/`:
+
+    mt-yftq             | decision brief missing action_block
+    rig-scope-live-test | G8 Brief-record: BLOCKED
+
+The create gate checked ONE rule (`## Gate Evidence`); the drain gate also
+requires `action_block:` with on_approve/on_reject/on_defer. Creation reports
+success, the shuffler bounces it — the CT13.4 shape.
+
+Fixed by giving `required-sections.toml` profile-scoped rules and adding the
+action_block rule scoped to `decision`. The scoping is load-bearing:
+`check_action_block` is reached from `check_decision_profile` alone, so an
+unscoped rule would refuse `lost_bead_filter` and `producer_repair` briefs.
+`decisions_to_briefs` now emits an action_block too — its own output was a
+decision brief without one.
+
+Live: `gate_profile: decision` + no action_block -> MBRF036 with a remedy
+naming the SHAPE; `lost_bead_filter` -> not refused; no profile -> unchanged.
+
+### The 44-test measurement
+
+The scoped rules only fire when the body declares a profile — and bodies
+arriving at `briefs_create` carry none, because `_created_document` stamps the
+frontmatter later. Defaulting to `decision` is factually right
+(`plan_create_brief` mints `issue_type="decision"` unconditionally) and **44
+tests fail on it**, each a producer that composes no action_block.
+
+That is not test debt. It is #219's scope, measured: making the create gate
+real means teaching every producer the full form FIRST, then defaulting the
+profile. Tried it, measured it, reverted it, left the finding at the call site.
