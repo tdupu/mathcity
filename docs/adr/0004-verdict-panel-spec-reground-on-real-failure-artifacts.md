@@ -46,7 +46,7 @@ own follow-up admits "today gates reject into the pile; nothing files a brief."
 5. **The per-option `blast` / `reversible` / `gates` chips are DROPPED —
    confirmed fixture fiction** (Taylor: "these chips are fake... the python
    types will answer this"; verified: no such fields anywhere in the types).
-   The option cards render what `ParsedDecisionOption` actually carries —
+   The option cards render what `BriefDecisionOption` actually carries —
    label/title, `recommended` marker, `confidence`, `source` — and the panel's
    enabled/locked states read from `briefs_options`' `BriefOption`
    (`enabled` + typed `disabled_reason`), which is the REAL grounding for the
@@ -57,6 +57,15 @@ own follow-up admits "today gates reject into the pile; nothing files a brief."
    labeled as not following the user. NET RESULT of decisions 5+6: the port
    demands ZERO new backend — every panel element reads from types that exist
    on main today.
+
+   > **Naming corrected 2026-09-10 (#221's audit).** This decision originally
+   > named `ParsedDecisionOption`. There is no such Python type: the name
+   > appears only as a JSON-schema `"title"` string (`schemas.py:465`) and in a
+   > `panel.py:200` comment noting it *is* core's `BriefDecisionOption`. The
+   > backing was correct all along; only the name was wrong. Left uncorrected it
+   > invites the reader to conclude a backing is missing when it is not —
+   > exactly the confusion this ADR's own history records ("options rendered
+   > 'NAMES NO OPTIONS' for weeks").
 
 6. **Backend-match audit commissioned**: one table, panel control → backend
    field/tool → EXISTS / PARTIAL / ABSENT (the #87 shape scoped to this
