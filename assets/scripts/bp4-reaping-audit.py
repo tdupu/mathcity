@@ -40,10 +40,35 @@ BEAD_ID = re.compile(r'\b([a-z]{2,4}-(?=[a-z0-9]*\d)[a-z0-9]{3,9})\b')
 #: requires the criterion to appear there.
 DUPLICATE_RE = re.compile(r'\bduplicate|\bdupe?\b', re.I)
 SUPERSEDE_RE = re.compile(r'supersed|absorb|subsumed|folded into|rolled into', re.I)
-#: A reaping closure, as opposed to closing because the work got done. Used only
-#: for BP4.4(d), where the rule is about REAPING decision beads specifically.
-REAP_RE = re.compile(r'\bduplicate|supersed|absorb|old.useless|reap|ghost bead|'
-                     r'orphaned step|stale', re.I)
+#: An AUTOMATED reaping closure. BP4.4(d) forbids REAPING a decision bead; it
+#: does not forbid a human adjudicating one closed.
+#:
+#: NARROWED after this check produced two false positives on its first live run
+#: against the kolchin mathcity rig:
+#:
+#:   mc-wg331  "REJECTED by Taylor 2026-08-27 18:46 EDT. Candidate 1 ... is
+#:              refuted at source and must not ship: ..."
+#:   mc-kjot0  "Superseded by mc-y88p0 (P0), which revises the same mc-67snh
+#:              and carries a finding this one lacked: ..."
+#:
+#: Both are ADJUDICATIONS. The first is a verdict with an authorizer and a
+#: date; the second supersedes one decision with a newer one and names it.
+#: B2.2 makes adjudication history permanent -- it does not make a decision
+#: bead unclosable. The old pattern matched the word "supersed" anywhere in
+#: the reason, so any reasoned human verdict that used the word was reported
+#: as a policy violation.
+#:
+#: So this now matches only the literal close reasons an automated sweep
+#: writes. gascity's reaper has exactly one
+#: (reaper.sh:68 WORKFLOW_ROOT_CLOSE_REASON), and it is unambiguous.
+#: A sweep that grows a new signature must be added here -- which is a smaller
+#: and more honest failure mode than guessing from prose.
+REAP_RE = re.compile(
+    r'stale inactive workflow root auto-closed by reaper'
+    r'|auto-closed by reaper'
+    r'|old.useless bead',
+    re.I,
+)
 
 
 def close_reason(bead: dict) -> str:

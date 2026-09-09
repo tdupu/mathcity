@@ -51,10 +51,31 @@ run "survivor closed AFTER the duplicate is clean"    "$TMP/c" 0
 mkbd "$TMP/d" '[{"id":"he-a1a1","status":"closed","closed_at":"2026-07-10T00:00:00Z","close_reason":"superseded, no longer needed"}]'
 run "supersede naming no absorbing bead is a violation" "$TMP/d" 1
 
-# 5. BP4.4(d): a DECISION bead closed with a reaping reason
-mkbd "$TMP/e" '[{"id":"he-a1a1","status":"closed","issue_type":"decision","closed_at":"2026-07-10T00:00:00Z","close_reason":"duplicate: canonical copy is he-b2b2"},
+# 5. BP4.4(d): a DECISION bead closed by an AUTOMATED SWEEP.
+#    The fixture uses gascity's literal reaper close reason
+#    (reaper.sh:68 WORKFLOW_ROOT_CLOSE_REASON) because that is what the rule is
+#    actually about -- a sweep reaping adjudication history.
+mkbd "$TMP/e" '[{"id":"he-a1a1","status":"closed","issue_type":"decision","closed_at":"2026-07-10T00:00:00Z","close_reason":"stale inactive workflow root auto-closed by reaper"},
                 {"id":"he-b2b2","status":"open"}]'
-run "reaped DECISION bead is a violation"             "$TMP/e" 1
+run "swept DECISION bead is a violation"              "$TMP/e" 1
+
+# 5b. THE FALSE-POSITIVE GUARD. A human closing a decision as a duplicate or a
+#     supersede is ADJUDICATION, not reaping -- B2.2 makes adjudication history
+#     permanent, it does not make a decision bead unclosable.
+#
+#     This check's first live run against the kolchin mathcity rig reported two
+#     violations, and BOTH were adjudications:
+#       mc-wg331  "REJECTED by Taylor 2026-08-27 18:46 EDT..."
+#       mc-kjot0  "Superseded by mc-y88p0 (P0), which revises the same..."
+#     The old pattern matched "supersed" anywhere in the reason, so any reasoned
+#     human verdict using the word was reported as a policy violation.
+mkbd "$TMP/e2" '[{"id":"he-a1a1","status":"closed","issue_type":"decision","closed_at":"2026-07-10T00:00:00Z","close_reason":"Superseded by he-b2b2 (P0), which revises the same source and carries a finding this one lacked."},
+                 {"id":"he-b2b2","status":"open"}]'
+run "human supersede of a decision is NOT a violation" "$TMP/e2" 0
+
+mkbd "$TMP/e3" '[{"id":"he-a1a1","status":"closed","issue_type":"decision","closed_at":"2026-07-10T00:00:00Z","close_reason":"REJECTED by Taylor 2026-07-10. Candidate 1 is refuted at source and must not ship."},
+                 {"id":"he-b2b2","status":"open"}]'
+run "human REJECTED verdict is NOT a violation"        "$TMP/e3" 0
 
 # 6. a decision bead closed on a VERDICT is normal, not a reaping
 mkbd "$TMP/f" '[{"id":"he-a1a1","status":"closed","issue_type":"decision","closed_at":"2026-07-10T00:00:00Z","close_reason":"Adjudicated: approve by the human adjudicator"}]'
