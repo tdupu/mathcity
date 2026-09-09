@@ -6,6 +6,15 @@ This document explains how gascity rig repositories and the HQ repository (where
 
 ---
 
+> **⚠️ CORRECTION (2026-07-31 — verified against gascity source + `git` behavior; supersedes the `.repo.git` claims below):**
+> 1. **`.repo.git` is NOT bare.** It's a stock git *separate git directory* (`git init --separate-git-dir`) — non-bare, `core.worktree=..`.
+> 2. **`gc rig add` does NOT create `.repo.git`.** Nothing in gascity renames `.git`→`.repo.git`; `gc rig add` leaves a **normal `.git`**, and `gascity-packs` runs as a rig on a normal `.git` in production. The `.repo.git` rigs were hand-created / legacy.
+> 3. **The `.repo.git` NAME is a latent hazard, not a feature.** Git hard-protects the literal name `.git` (refuses to ever track it); `.repo.git` is an ordinary name, so a branch can commit `.repo.git/**` and a later `checkout` overwrites the live database — the hecke "checkout-bomb" (2026-07-31). **Prefer a normal `.git`** (what `gc rig add` produces, inherently safe). Convert a `.repo.git` rig with `rm .git && mv .repo.git .git`.
+>
+> A rig needs its own git marker only so `git worktree` doesn't walk up to a parent repo; a normal `.git` does that identically. Cross-ref `gt-08ddnd` (the parallel `~/gt` git-on-a-dolt-repo violation).
+>
+> <sub>Ported from the legacy `gascity-packs/mathcity` tree 2026-09-09 (tdupu/mathcity#19). The correction was written there on 2026-07-31 and never reached this canonical copy, so this document carried the refuted "bare" claim — and the hazard in point 3 — for five weeks after it was known to be wrong.</sub>
+
 ## The core pattern: `.repo.git` + linked worktrees
 
 Every rig uses a **split git layout**: the bare git database lives at `<rig>/.repo.git/` and the rig root becomes a linked worktree of it. Agent beads each get their own additional worktree under `.gc/worktrees/<rig>/<bead-id>/`. All worktrees share the same `.repo.git` object store — different branches, same history.
