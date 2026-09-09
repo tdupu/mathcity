@@ -376,3 +376,70 @@ not a bar a body can clear; it is the absence of a bar."
   constraint range, and it reports "Upgraded import" for what is a no-op.
 - **`gh auth login`** on kolchin: three typed tools and arrow 1 of #180.
 - **`gc dolt restart`**: the 15s read_timeout (#263) is still unapplied.
+
+---
+
+# Final state
+
+**117 open at start → 60. 57 closed, 24 code fixes, 7 platform defects re-homed.**
+
+Every close carries a live payload or a passing pinned test. Every issue left
+open carries a measurement, a specified next step, or the named decision it is
+waiting on.
+
+## The failure class that dominated
+
+Seven of the fixes were one shape: **a check that cannot evaluate must say so
+rather than substitute the safe answer**, and its inverse, **a check that fires
+on prose trains people to ignore it.**
+
+| # | what it was reporting instead of "I cannot tell" |
+|---|---|
+| 94 | disarm wrote a rig token to whatever the cwd happened to be |
+| 107 | `no-brainer-mode` said DRY-RUN when it meant UNKNOWN |
+| 191 | an unresolved recipient delivered to a directory nobody watches |
+| 196 | one refused socket fails the whole city closed |
+| 252 | a `bd link` TIMEOUT reported as "nothing was written" |
+| 178 | a path-B run reported as "never dispatched" |
+| 195 | a gate that fired on a comment mentioning a governed path |
+
+Two more were checks that had gone **dark**: the shell-branch gate (matching the
+English word "if") and `test_inbox.sh`, which exited 1 after 2 of 7 sections
+having printed no failure at all.
+
+## What live testing found that reading would not
+
+- **#209** — the run-operator executing the formula diagnosed the one-dirname
+  pack-root bug itself, in its close notes. I had read past that line twice.
+- **#96** — the brief I created earlier in the session was sitting in
+  `.pile/.rejected/` for the exact defect.
+- **#266** — a "rotation never fires" bug that was a test asserting the SENDER
+  rotates. The code was right; the docs never said who rotates.
+- **#191** — the suite that would have caught the bug was dying silently.
+
+## Three retractions
+
+Posted and corrected on the issues: #168 (my proposed fix would have violated
+B2.10), and #209 twice (conflated a two-day-old wisp with my own run; read a
+file-count difference as a starved scan root). Each was caught by checking
+rather than by reasoning further.
+
+## Blocked on one command each
+
+    pack pin              -> 24 fixes live, closes #209
+    superpowers binding   -> unblocks 4 formulas, closes #261
+    gh auth login         -> 3 typed tools, arrow 1 of #180
+    gc dolt restart       -> applies read_timeout=600000 (#263 half 1)
+
+`gc import upgrade` cannot advance an exact sha pin — it reports
+"Upgraded import" for a no-op.
+
+## Two things worth knowing
+
+- **#145 costs more than its title suggests.** `bd list --json` omits null
+  fields, so an absent key cannot be told from an empty one. It blocked a
+  measurement #67 needs. `bd dep list` is the workaround. It currently has
+  nowhere to be filed: the beads fork has issues disabled.
+- **#219's second half needs #220 first.** The §1-§7 rules are `create_only`
+  because drain-side enforcement would auto-reject the compact-form briefs
+  already in the pile. Four producers still compose partial forms.
