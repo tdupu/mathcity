@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import socket
+import time
 import json
 import subprocess
 from typing import TYPE_CHECKING
@@ -21,6 +22,26 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard, context imports this
 
 
 PROBE_TIMEOUT_SECONDS = 0.5
+
+#: How many times to try the handshake before calling the city down (#196).
+#:
+#: One connect used to decide it, and `city_not_active_diagnostic` is the shared
+#: fail-closed gate BOTH adapters run through -- so a single refused packet
+#: became MCTL_CITY_NOT_ACTIVE for every rig, every read, on the CLI and the MCP
+#: server at once. Measured live as a dashboard showing a healthy populated city
+#: on one page and "17/17 rigs not reachable" on the next.
+#:
+#: Fail-closed is right for the gate. Deciding it from one packet is not: a
+#: managed Dolt server briefly saturated is not a city that is down, and a single
+#: connect cannot tell those apart.
+#:
+#: THE COST IS PAID ONLY WHEN DOWN. A healthy endpoint answers on attempt 1 and
+#: costs exactly what it did before -- pinned by a test. A genuinely dead
+#: endpoint now costs up to 3 x timeout + 2 x delay (~1.8s) instead of 0.5s.
+#: That is the right trade for a gate that closes the whole city: the slow path
+#: is the one that was already broken.
+PROBE_ATTEMPTS = 3
+PROBE_RETRY_DELAY_SECONDS = 0.15
 SERVER_MODE_MARKERS = ("dolt.mode: server", "dolt.mode:server")
 
 
@@ -96,13 +117,31 @@ def probe_city(
         )
 
     endpoint = f"127.0.0.1:{port}"
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
-            return CityLiveness(active=True, endpoint=endpoint, detail="endpoint accepted a connection")
-    except OSError as error:
-        return CityLiveness(
-            active=False, endpoint=endpoint, detail=f"{endpoint} refused a connection: {error}"
-        )
+    last_error: OSError | None = None
+    for attempt in range(1, PROBE_ATTEMPTS + 1):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+                detail = "endpoint accepted a connection"
+                if attempt > 1:
+                    # Say that it took retries. A caller that sees only "alive"
+                    # cannot distinguish a healthy endpoint from a flapping one,
+                    # and a flapping data plane is worth knowing about.
+                    detail += f" on attempt {attempt} of {PROBE_ATTEMPTS}"
+                return CityLiveness(active=True, endpoint=endpoint, detail=detail)
+        except OSError as error:
+            last_error = error
+            if attempt < PROBE_ATTEMPTS:
+                time.sleep(PROBE_RETRY_DELAY_SECONDS)
+    # The detail names the attempt COUNT, not just the last error: without it a
+    # reader cannot tell a one-packet blip from a sustained outage, which is the
+    # distinction #196 is about.
+    return CityLiveness(
+        active=False,
+        endpoint=endpoint,
+        detail=(
+            f"{endpoint} refused a connection on {PROBE_ATTEMPTS} attempt(s): {last_error}"
+        ),
+    )
 
 
 def city_not_active_diagnostic(ctx: "MctlContext") -> Diagnostic:
