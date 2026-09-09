@@ -140,3 +140,37 @@ runner's run-bead lifecycle, not root-only wisps.
 no `GH_TOKEN`). git works — that is the SSH key. So `create_issue_bead`,
 `create_github_issue` and `standardize_github_issue` all fail at the fetch with
 a loud `MISS004` naming the cause. Needs an interactive `gh auth login`.
+
+## Third tranche — verifying the "cited in code" set
+
+Triage signal that worked: grep the pack for `#<n>` where `n` is an open issue.
+33 open issues are named in **code** (not just docs), usually in a comment
+recording the fix. That set is dense with already-fixed-never-closed work.
+
+| # | How it was settled |
+|---|---|
+| 226 | `briefs_pile_state` live: testrig `{state: healthy, rejected_count: 2}`; mathcity `{state: unreachable, counts: null}` with the path named |
+| 183 | CLI renders `next: mctl briefs create --source ...` on a real MBRF034 refusal |
+| 192 | Same refusal left **no** stray bead — `bd search "probe 183"` → none |
+| 188 | Dry run on a rig with no brief root: directories absent before AND after |
+| 185 | `create_defect_bead` plans cleanly; labels mapped to `defect.labels` metadata, which the schema says ("mapped, not landed") |
+| 162 | `test_roster_docs_defer_to_live.py` 6 passed; 56 tools live vs the 16 the docs froze |
+| 215 | `if offered and normalized == "approve"` — the option gate scopes to approve |
+| 208 | `MBRF_RECOMMENDATION_UNKNOWN_OPTION` on `recommendation: "Z"`; `no_brainer`/`no_brainer_reason` on the adjudication schema |
+
+### #168 — the one that looked closeable and is not
+
+`_cache_updates` plans `CacheUpdate("stack_index", ...)` guarded on the index
+existing, so the obvious reading is "the testrig has no index yet." I tested
+that: created an empty `.index.jsonl` in the testrig stack dir, re-ran
+`briefs_create`, and got **0 stack_index mentions**. The live plan is still the
+exact five effects #168 reported — bead_create, pile_markdown,
+`decision_toml` cache_update, event_write, trace_write.
+
+So the guard is not what suppresses it; the create path does not reach that
+seam. `_cache_updates` is called from `_plan`; `plan_create_brief` evidently is
+not routed through it. The index file was removed afterwards.
+
+**Lesson worth keeping: a fix cited in a comment is not a fix observed.** Every
+close in this campaign that rested on source reading alone should be treated as
+weaker than one with a live payload behind it.
