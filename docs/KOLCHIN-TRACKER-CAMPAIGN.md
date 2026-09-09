@@ -280,3 +280,51 @@ tests fail on it**, each a producer that composes no action_block.
 That is not test debt. It is #219's scope, measured: making the create gate
 real means teaching every producer the full form FIRST, then defaulting the
 profile. Tried it, measured it, reverted it, left the finding at the call site.
+
+## Sixth tranche — the city diagnosed its own defect
+
+### #219: the §1–§7 step is blocked, and the blocker is real
+
+`test_the_python_rule_and_the_shell_rule_agree` asserts every rule in
+`required-sections.toml` appears verbatim in `brief-check.sh`. That guard is
+why #35 cannot recur, and it means a create-time rule cannot be added without
+its drain-time counterpart. The `action_block` rule was safe because
+`^action_block:[[:space:]]*$` already existed at brief-check.sh:188.
+
+§1–§7 have no shell counterpart, so adding them turns on retroactive drain
+enforcement against briefs already in the pile:
+
+    kolchin testrig: 12 brief files, 9 full-form, 3 compact  (25%)
+    corpus figure in section-discipline.toml: 59 of 178      (33%)
+
+Turning that on without a migration auto-rejects all of them — the #96 harm,
+re-created. #219's own title names the answer ("failure routes to
+revise-return"), which made #209 a hard prerequisite.
+
+### #209: driven live, and the run-operator found the bug
+
+Created `mt-3ezn`, relayed `verdict: revise`. The verdict recorded correctly,
+the brief closed (correct — `post-decision-file-or-sendback` archives the
+original by design), `brief.decided` rang, the revise-return order fired, its
+wisp `mt-t71o` was claimed and closed — **and no brief was re-deposited.**
+
+`revise-return.toml:137` resolved the pack root with ONE dirname. `Source:` is
+the ORDER FILE, so it yielded `<pack-root>/orders` and LIB pointed at
+`<pack-root>/orders/assets/scripts/revise-return-lib.sh`. The P1.14 guard fired
+and the step exited 1 **before any scan**. The formula's own comment said "the
+parent of the orders/ directory" — code and comment disagreed.
+
+Live proof against the real pack cache:
+
+    one dirname:  .../repos/<hash>/orders
+    two dirnames: .../repos/<hash>        lib exists? YES
+
+**The run-operator that executed the formula diagnosed this**, verified both
+paths on disk, and reported the fix in its close notes — including that the
+comment's claim to mirror brief-decision-dispatch's resolution is inaccurate
+(every other formula uses a literal placeholder; this was the pack's only
+dirname-chain, so it had no sibling to be checked against). Both the fix and
+that correction are now at the call site.
+
+This is the dogfooding the campaign was for: the city found a defect in its own
+pack that I had walked past twice.
