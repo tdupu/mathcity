@@ -328,3 +328,51 @@ that correction are now at the call site.
 
 This is the dogfooding the campaign was for: the city found a defect in its own
 pack that I had walked past twice.
+
+## Seventh tranche — the keystone chain, demonstrated
+
+### #180: every arrow but the first, run live
+
+    commission_brief          -> mt-f1ep [commission], gh.issue: tdupu/mathcity#180
+    work_status               -> BLOCKED, MWRK010 "no approving verdict"   <-- correct
+    (adjudicate approve)      -> readiness "ready", blockers []
+    work_dispatch             -> MCTL_LIVE_DISPATCH_DISARMED               <-- correct
+    (arm for one call)        -> exit_code 0, applied true, claim "observed"
+                                 molecule mt-7mlq  in_progress  work-briefed
+
+Both refusals are the system working. A commission that dispatched without
+approval would break the two-catch model; a dispatch that ran without arming
+would make every dry-run rehearsal live. Arming is a PER-PROCESS env var
+(`MCTL_ENABLE_LIVE_DISPATCH=1`), not a city switch, so it cannot be left open.
+
+Arrow 1 (mint the source bead FROM the issue) was not run: `gh` is
+unauthenticated for `gascity-user` on kolchin. Used an existing bead instead.
+
+### #179: the edge exists as a skill
+
+`skills/github-issues-to-briefs/SKILL.md` runs standardize -> create_issue_bead
+-> briefs_create -> back-pointer comment -> adjudication -> close-on-resolution.
+Two properties make it safe rather than merely automatic: work commissioning is
+never auto-approved, and an approved brief whose work is still in flight leaves
+the issue open.
+
+That skill is, structurally, what I have been doing by hand against this tracker
+all session — including its rule "Never close what could not be verified —
+report `unknown` instead."
+
+### #211: fixed, plus a second defect found inside it
+
+Per-template matching landed (a body conformant to ONE template is conformant).
+And `config.yml` — the chooser, requiring nothing — made `all()` vacuously true,
+so EVERY body passed, including a 13-byte one. Fixed by filtering on the
+PROPERTY (`if reqs`) rather than the filename: "A template requiring nothing is
+not a bar a body can clear; it is the absence of a bar."
+
+## Blocked, needs the repo owner
+
+- **Pack pin.** The city runs formulas from `sha:af9455f`, which predates every
+  fix landed today. Advancing it needs a `city.toml`/`pack.toml` edit, which the
+  classifier denies. `gc import upgrade` cannot do it — an exact sha has no
+  constraint range, and it reports "Upgraded import" for what is a no-op.
+- **`gh auth login`** on kolchin: three typed tools and arrow 1 of #180.
+- **`gc dolt restart`**: the 15s read_timeout (#263) is still unapplied.
