@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -93,6 +94,14 @@ def main() -> int:
     if _timeout_source == "fallback":
         print("NOTE: assets/mctl/limits.toml unreadable; using the built-in "
               f"fallback of {args.timeout}s for this run", file=sys.stderr)
+
+    # WHICH STORE DID THIS ACTUALLY READ? (#273)
+    # Every rig has two stores -- ~/repos/X and ~/gt/X -- and they diverge by up
+    # to 16x (gascity-packs: 598 vs 9,895). Running an audit against the wrong
+    # one produces a clean, plausible, wrong answer: on 2026-09-09 that nearly
+    # became a data-loss report on a store that was fine. A findings header that
+    # does not name its root is unfalsifiable by the reader.
+    print(f"BP4_AUDIT: reading {os.path.abspath(os.path.expanduser(args.rig_root))}", file=sys.stderr)
 
     try:
         proc = subprocess.run(

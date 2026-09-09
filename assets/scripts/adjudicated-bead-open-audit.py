@@ -149,6 +149,14 @@ def main() -> int:
     if not args.lane:
         args.lane = ["stack", "archive", "decisions-track"]
 
+    # WHICH STORE DID THIS ACTUALLY READ? (#273)
+    # Every rig has two stores -- ~/repos/X and ~/gt/X -- and they diverge by up
+    # to 16x (gascity-packs: 598 vs 9,895). Running an audit against the wrong
+    # one produces a clean, plausible, wrong answer: on 2026-09-09 that nearly
+    # became a data-loss report on a store that was fine. A findings header that
+    # does not name its root is unfalsifiable by the reader.
+    print(f"ADJ_AUDIT: reading {os.path.abspath(os.path.expanduser(args.brief_root))}", file=sys.stderr)
+
     # A prefix may name SEVERAL stores, and repeating --store for one prefix
     # ADDS rather than replaces. This is not a convenience -- it prevents a
     # whole class of false finding that this tool produced on its first live
