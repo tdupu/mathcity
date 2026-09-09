@@ -64,6 +64,26 @@ REGISTRIES = (
      "tests/mctl/fixtures/mcp_tool_schemas.json", "all tools"),
 )
 
+#: A SIXTH place a tool must be edited, and it is a different SHAPE -- a pinned
+#: COUNT with a mandatory docstring justification, not a name set. That is why
+#: it was missing from REGISTRIES above: the comparison there is set-based and
+#: this one has no set to compare.
+#:
+#: It was missing anyway, and this file's own guard docstring names the harm:
+#: "If someone adds a sixth registry without listing it here, this file becomes
+#: the thing it was written to prevent -- an authoritative-looking list that is
+#: quietly incomplete."
+#:
+#: Observed 2026-09-09 adding `pools_status` (#197): all five registries above
+#: were satisfied, the suite was green on this file, and
+#: test_dashboard_views.py THEN went red separately on the count. Exactly the
+#: "fix four, run, believe you are done" failure this file exists to prevent,
+#: reproduced one layer up.
+COUNT_REGISTRIES = (
+    ("dashboard allowlist size", "tests/mctl/test_dashboard_views.py",
+     "ALLOWED_TOOLS count + a docstring saying which tool justifies the raise"),
+)
+
 
 def _declared() -> set[str]:
     return {spec.name for spec in TOOLS}
@@ -120,13 +140,18 @@ def test_every_registry_lists_every_tool_and_the_failure_names_all_of_them() -> 
             problems.append(f"  [{name}] {'; '.join(detail)}\n      edit: {where}  ({scope})")
 
     assert not problems, (
-        "Tool registries are out of sync. ALL FIVE places a tool must be listed "
-        f"are checked here; {len(problems)} of {len(REGISTRIES)} need editing:\n"
+        "Tool registries are out of sync. Every place a tool must be listed is "
+        f"checked here; {len(problems)} of {len(REGISTRIES)} need editing:\n"
         + "\n".join(problems)
         + "\n\n  The other registries are in sync. The complete set is:\n"
         + "\n".join(f"      {n}  ->  {w}  ({s})" for n, w, s in REGISTRIES)
         + "\n\n  Note the mutating-tools list fires ONLY for mutating tools, which is why "
         "a read-only tool's author learns four registries and a write's author learns five."
+        + "\n\n  AND ONE MORE, which is a COUNT rather than a list and so cannot be "
+        "checked above:\n"
+        + "\n".join(f"      {n}  ->  {w}  ({s})" for n, w, s in COUNT_REGISTRIES)
+        + "\n      A dashboard-reachable tool must ALSO bump that count and say in the "
+        "docstring which tool justifies the raise."
     )
 
 
@@ -138,6 +163,7 @@ def test_the_enumeration_covers_every_registry_this_repo_actually_has() -> None:
     quietly incomplete.
     """
     assert len(REGISTRIES) == 5
-    for name, where, _ in REGISTRIES:
+    assert len(COUNT_REGISTRIES) == 1
+    for name, where, _ in (*REGISTRIES, *COUNT_REGISTRIES):
         for path in where.split(" + "):
             assert (REPO_ROOT / path.strip()).exists(), f"{name} names a missing path: {path}"
