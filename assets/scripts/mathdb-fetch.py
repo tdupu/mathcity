@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import ssl
 import sys
@@ -101,25 +102,51 @@ def _refuse_if_disallowed(path: str) -> None:
             )
 
 
+#: CA bundles to try when the interpreter's own trust path is broken. Ordered
+#: most-specific first. Every entry was verified to exist on at least one
+#: machine in this fleet.
+CA_BUNDLE_CANDIDATES = (
+    "/usr/local/etc/ca-certificates/cert.pem",   # Homebrew (kolchin)
+    "/opt/homebrew/etc/ca-certificates/cert.pem",  # Homebrew (arm)
+    "/etc/ssl/cert.pem",                          # macOS system
+    "/private/etc/ssl/cert.pem",
+)
+
+
 def _ssl_context():
     """A verifying SSL context that works on every python3 in this fleet.
 
-    NOT a convenience. The laptop's default `python3` is SageMath's, whose
-    OpenSSL trust path points at `/var/tmp/sage-10.8-current/local/ssl/cert.pem`
-    -- a directory that does not exist -- so `urlopen` fails with
-    CERTIFICATE_VERIFY_FAILED while `curl` on the same machine succeeds.
-    kolchin's python3 (Homebrew 3.14) has a working store.
+    NOT a convenience, and NOT theoretical -- BOTH machines ship a python3
+    whose OpenSSL trust path points at a file that does not exist, for
+    different reasons, while `curl` on the same machine succeeds:
 
-    `certifi` is used when importable, the system default otherwise.
-    Verification is NEVER disabled: an unverified fetch of a remote page is how
-    a tool ends up trusting content it cannot attribute, and this tool exists to
-    bring outside text into a decision record.
+        laptop   default python3 is SageMath's; openssl_cafile is
+                 /var/tmp/sage-10.8-current/local/ssl/cert.pem   -> absent
+        kolchin  /usr/local/bin/python3; openssl_cafile is
+                 /usr/local/etc/openssl@3/cert.pem               -> absent
+                 and `certifi` is not importable there at all
+
+    An earlier version of this function used `certifi` with a plain
+    `create_default_context()` fallback and asserted in its own docstring that
+    "kolchin's python3 has a working store". Running it on kolchin disproved
+    that in one command. The fleet has no interpreter that is right by default.
+
+    Order: certifi if importable, else the first CA bundle on disk, else the
+    interpreter default (which may work on a machine neither of these covers).
+
+    VERIFICATION IS NEVER DISABLED. An unverified fetch is how a tool ends up
+    trusting content it cannot attribute, and this tool exists to carry outside
+    text into a decision record.
     """
     try:
         import certifi
         return ssl.create_default_context(cafile=certifi.where())
     except ImportError:
-        return ssl.create_default_context()
+        pass
+    for bundle in CA_BUNDLE_CANDIDATES:
+        if os.path.exists(bundle):
+            return ssl.create_default_context(cafile=bundle)
+    return ssl.create_default_context()
 
 
 def get(url: str, timeout: int | None) -> str:
