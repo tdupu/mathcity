@@ -161,9 +161,18 @@ Then invoke the brief-prep skill with:
 - type: `{{brief_type}}`
 - artifact_root: `$BRIEF_ROOT` (the resolved brief deposit root above)
 
-The brief's "What is being decided" section must describe the action taken
-and what the human adjudicator needs to approve, reject, or defer. Include the subagent
-output as the primary evidence section.
+FULL FORM (#219/#220, ADR 0001) comes from `brief-prep`, which composes all
+seven `§` sections -- this formula does NOT hand-assemble a body and must not
+start. What it owes brief-prep is the content for two specific sections:
+
+- `## §1 — What is being decided` — the action taken, and what the human
+  adjudicator needs to approve, reject or defer.
+- `## §6 — Supporting evidence` — the subagent output, as the primary evidence.
+
+Named with their `§` markers because the drain-side gate matches on the marker,
+not the prose. This formula previously said "the brief's 'What is being
+decided' section", which is §1 under a name the gate cannot see -- correct in
+substance and invisible to the check.
 
 The deposited brief must include this provenance frontmatter:
 
