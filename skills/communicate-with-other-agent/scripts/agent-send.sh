@@ -71,8 +71,38 @@ resolve_name() {
     [[ -z "$name" ]] && name="${uuid:0:8}"
     printf '%s' "$name"
 }
+
+# Did the map actually resolve this uuid, or did we fall back? (#191)
+resolved_from_map() {
+    local uuid="$1"
+    [[ -f "$NAMES_FILE" ]] || return 1
+    awk -v u="$uuid" '$1==u {found=1; exit} END {exit !found}' "$NAMES_FILE"
+}
+
 TO_NAME="$(resolve_name "$TO")"
 FROM_NAME="$(resolve_name "$FROM")"
+
+# #191: ROUTING never fails; DELIVERY does. On a map miss the recipient's mail
+# lands in <inbox>/<8-char-prefix>/, a real directory nobody watches -- and
+# neither side learned: the sender saw a success line naming the path, and the
+# recipient's monitor, watching the MAPPED name, reported nothing. No bounce.
+#
+# The asymmetry is the point. The SENDER's name falling back is harmless: it is
+# a label inside the filename. Only the RECIPIENT's fallback misdelivers, so
+# only that one is announced.
+#
+# It WARNS and still delivers, rather than refusing. Refusing would trade a
+# silent misdelivery for a silent drop, and the message is real mail someone
+# wrote. Loud-and-delivered lets the sender re-send to the right name; the
+# alternative loses the content.
+if ! resolved_from_map "$TO"; then
+    {
+        echo "UNRESOLVED_RECIPIENT: $TO is not in $NAMES_FILE"
+        echo "  delivering to the uuid-prefix inbox '$TO_NAME/' — a real directory"
+        echo "  that the recipient's monitor is probably NOT watching."
+        echo "  Add a line to fix it:  echo '$TO <name>' >> $NAMES_FILE"
+    } >&2
+fi
 
 # --- Subject slug (filesystem-safe) ---
 slug="$(printf '%s' "$SUBJECT" | tr '[:upper:]' '[:lower:]' \
