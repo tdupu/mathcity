@@ -545,3 +545,29 @@ author who reached it declined to choose; #86 says so verbatim.
     #5    surface orphaned spec beads?        (drain-reservation class is empty)
     #268  should adjust_worker_pool exist?    (gate it needs classifies 3 of 13)
     #267  reopen 20 over-closures, or comment?
+
+
+## Provenance correction — commit `9945308`
+
+`9945308` is titled *"mathdb: read open problems into the city, on MathDB's
+stated terms (Mathathon)"* and contains two files that belong to **#235**, not
+to the Mathathon work:
+
+    assets/scripts/stale-options-audit.py     122 lines
+    tests/stale-options-audit/smoke_test.sh    68 lines
+
+**Cause: two sessions, one working tree.** A forked session and this one were
+both writing to `/Users/tdupuy/repos/mathcity`; the fork ran `git add -A` while
+these files were unstaged and swept them into its commit.
+
+Nothing was lost and the code is correct. The history is simply wrong about why
+those files exist — which is the same class of defect this campaign spent the
+day finding, arriving from a direction none of the checks watch.
+
+Not rewritten: the commit is pushed and shared, and rewriting shared history is
+worse than an inaccurate message. Recorded here and on issue #235 instead.
+
+**The structural fix is `EnterWorktree`**, which gives a forked session its own
+checkout. It should have been used before forking rather than after the
+collision. Failing that, `git add <explicit paths>` instead of `git add -A`
+while sessions overlap.
