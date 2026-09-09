@@ -1,0 +1,381 @@
+# Files that name a brief path literal — the drift register for tdupu/mathcity#65.
+#
+# #65 asks for "one resolver" and, as its third condition, "a test that fails
+# when a NEW writer appears with its own path logic". This file plus
+# tests/brief-path-resolver-drift is that test.
+#
+# THE POPULATION IS THE POINT. Measured 2026-09-09: 70 files name a brief path
+# literal and 63 of them never call `artifact_layout()`. That is too many to
+# convert in one pass, and #65 says so — it is a stabilise-then-harden issue,
+# not a sweep. So this register does what brief-writers.toml does for writers:
+# records the known population with a date, and fails on anything NEW.
+#
+# THE LIST MAY SHRINK; IT MAY NOT GROW. Same rule as B2.12. A new file naming
+# `.beads/briefs` fails the check until it either routes through
+# `redundant_state.artifact_layout()` or is admitted here deliberately with a
+# reason.
+#
+# `resolver = true` means the file ALSO calls artifact_layout — it names the
+# literal but is not inventing its own answer (usually prose, a docstring, or a
+# default that the resolver overrides). Those are not violations.
+#
+# The canonical resolver is:
+#   assets/scripts/mctl_core/redundant_state.py :: artifact_layout(ctx)
+# which resolves rig-relative via `_rig_relative(ctx.rig_root, ...)` and is what
+# effects.py, briefs.py, work.py, schemas.py and mcp_server.py all use.
+
+[meta]
+measured = "2026-09-09"
+canonical_resolver = "assets/scripts/mctl_core/redundant_state.py::artifact_layout"
+total_files = 70
+without_resolver = 63
+
+[[file]]
+path = "assets/scripts/adjudicated-bead-open-audit.py"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/brief-compact-repair.py"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/brief-decisions-track-inventory.py"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/brief-quality-failure-record.py"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/brief-shuffle-fast-drain.py"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/brief-stack-index.py"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/brief-stack-low.sh"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/brief-check.sh"
+literal_hits = 4
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/brief-drain-manifest.sh"
+literal_hits = 3
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/brief-quality-failure-record-backfill.sh"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/brief-review-patrol-record-required.sh"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/brief-section-discipline.sh"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/brief-stack-low-check.sh"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/decision-alignment-check.sh"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/decision-record-exists.sh"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/gate-test-evidence.sh"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/gate-test-execution-declaration.sh"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/gate-test-execution-evidence.sh"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/checks/stack-index-divergence-check.sh"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/mctl_core/briefs.py"
+literal_hits = 1
+uses_resolver = true
+
+[[file]]
+path = "assets/scripts/mctl_core/documents.py"
+literal_hits = 3
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/mctl_core/effects.py"
+literal_hits = 1
+uses_resolver = true
+
+[[file]]
+path = "assets/scripts/mctl_core/gates.py"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/mctl_core/materialize_plan.py"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "assets/scripts/mctl_core/mcp_server.py"
+literal_hits = 1
+uses_resolver = true
+
+[[file]]
+path = "assets/scripts/mctl_core/redundant_state.py"
+literal_hits = 1
+uses_resolver = true
+
+[[file]]
+path = "assets/scripts/mctl_core/schemas.py"
+literal_hits = 2
+uses_resolver = true
+
+[[file]]
+path = "assets/scripts/revise-return-lib.sh"
+literal_hits = 3
+uses_resolver = false
+
+[[file]]
+path = "skills/adjudicate-brief/SKILL.md"
+literal_hits = 3
+uses_resolver = false
+
+[[file]]
+path = "skills/brief-prep/SKILL.md"
+literal_hits = 6
+uses_resolver = true
+
+[[file]]
+path = "skills/catch-no-brainer/SKILL.md"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "skills/catch-no-brainer/fixtures/defer-ratify-held.md"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "skills/catch-no-brainer/fixtures/execution-confirmation-proof.md"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "skills/check-briefs/SKILL.md"
+literal_hits = 3
+uses_resolver = false
+
+[[file]]
+path = "skills/create-brief/SKILL.md"
+literal_hits = 2
+uses_resolver = true
+
+[[file]]
+path = "skills/file-briefs/SKILL.md"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "skills/gate-test-execution-silent/SKILL.md"
+literal_hits = 3
+uses_resolver = false
+
+[[file]]
+path = "skills/present-briefs/SKILL.md"
+literal_hits = 9
+uses_resolver = false
+
+[[file]]
+path = "skills/prime-clerk/SKILL.md"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "skills/simple-work/SKILL.md"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "skills/work/SKILL.md"
+literal_hits = 6
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-briefed-base.formula.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-prep.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-present-next.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-producer-failure-record.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-producer-failure-rollup.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-producer-repair.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-record-decision.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-review-patrol.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-shuffle-fast-drain.toml"
+literal_hits = 2
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-shuffle.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/brief-watchdog-refill.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/commission-work-briefed.toml"
+literal_hits = 4
+uses_resolver = false
+
+[[file]]
+path = "formulas/create-issue-briefed.formula.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/decision-enforce.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/file-or-sendback-route.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/formula-creator-math.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/lost-bead-classification-rollup.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/lost-bead-upstream-repair-rollup.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/math-brief-prep.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/no-brainer-candidate-curate.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/no-brainer-classify.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/on-merge-brief-record.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/planning-briefed.formula.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/pr-pipeline-briefed.formula.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/simple-work-briefed.toml"
+literal_hits = 4
+uses_resolver = false
+
+[[file]]
+path = "formulas/smoke-test-briefed.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/test-execution-request.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/upf-experiment-dispatch.toml"
+literal_hits = 1
+uses_resolver = false
+
+[[file]]
+path = "formulas/work-briefed.toml"
+literal_hits = 1
+uses_resolver = false
