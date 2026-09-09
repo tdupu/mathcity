@@ -56,13 +56,32 @@ Input shapes accepted:
    rejection cause.
 6. **ATTACH the ACTION-BLOCK** (schema below) as a fenced `yaml` block in
    the brief. Apply the safety invariant BEFORE writing any auto-action.
-7. **DEPOSIT on the unified pile via [[create-brief]] conventions** — for a
-   policy-disposition, write one file per decision to
-   `<city-root>/.beads/briefs/.pile/` as `NN-<slug>-brief.md`, plus one line
-   in that pile's `manifest.jsonl`. Never present in the Mayor's terminal;
-   `brief-shuffle` promotes gate-clean briefs to the stack and the clerk /
-   present-briefs channel drains the stack. Do not file new presentation
-   briefs in decisions-track.
+7. **DEPOSIT through `mctl` — never by writing pile files yourself.** Use the
+   typed tool, which mints the brief bead, writes the pile markdown, the
+   decision TOML, and the event and trace rows as ONE planned effect:
+
+   ```
+   decisions_to_briefs
+     decision       = the decision TO BE MADE (the question, not a verdict)
+     source_bead_id = the OPEN bead this decision is about (never minted here)
+     title          = optional; defaults to the decision text
+     decision_options / recommendation = optional, rendered into §4
+     dry_run        = true to inspect the effect plan first
+   ```
+
+   Equivalent CLI: `mctl briefs create --source <bead> ...`.
+
+   **Do not write `.pile/*.md` or append to `manifest.jsonl` by hand** (#85).
+   Two writers of the same artifact drift, and the hand-written path skips the
+   B2.1 source-dependency check and the required-section gate — a brief that
+   looks deposited but is rejected at shuffle time, which is the CT13.4 shape
+   #169 and #96 measured. The tool refuses BEFORE writing (`MBRF034` for a
+   missing source, `MBRF036` for a missing `## Gate Evidence`) instead of
+   depositing something the gate will bounce.
+
+   Never present in the Mayor's terminal; `brief-shuffle` promotes gate-clean
+   briefs to the stack and the clerk / present-briefs channel drains the stack.
+   Do not file new presentation briefs in decisions-track.
 
 ## Branch-artifact pipeline
 
@@ -110,10 +129,12 @@ session). Required sections:
 
 After [[create-brief]] produces the brief:
 
-1. Deposit to the brief stack pile as `NN-<slug>-brief.md`. Verify the correct
-   pile root against existing create-brief depositions before hardcoding the path.
-2. Append one line to `manifest.jsonl` beside the pile:
-   `{"n": NN, "slug": "<slug>", "source_bead": "<branch>", "form": "full", "track": "branch-disposition", "status": "ready"}`
+1. Deposit through `mctl` (`decisions_to_briefs`, or
+   `mctl briefs create --source <bead>`), exactly as procedure step 7 requires.
+   It resolves the pile root itself, so no path is hardcoded here.
+2. The manifest row is written by that same planned effect. **Do not append to
+   `manifest.jsonl` by hand** (#85) — a hand-written row is not validated and
+   drifts from the canonical bead state, which is what B2.8 forbids.
 3. Do NOT write an inline condensed record to the decisions-track for branch-artifact
    items (see TS-6 for the pointer format written after TS-4).
 
@@ -136,9 +157,13 @@ After all briefs in the batch are deposited (TS-3 complete), filter each
 brief through [[catch-no-brainer]]:
 
 1. Invoke `catch-no-brainer` on the brief file.
-2. **If no-brainer criteria are met:** Move the brief file to the no-brainer
-   pile directory (`<city-root>/.beads/briefs/.pile/.no-brainer/`) and update the
-   corresponding `manifest.jsonl` entry to `"status": "auto-dispatched"`.
+2. **If no-brainer criteria are met:** record the no-brainer signal on the
+   brief rather than moving files — `briefs_relay_adjudication` carries
+   `no_brainer` and `no_brainer_reason`, and the reason is stored on the bead
+   beside the flag so the classification is auditable. **Do not `mv` the brief
+   or hand-edit `manifest.jsonl` to `"auto-dispatched"`** (#85): the bead is the
+   canonical state, and a moved file with an edited row is a second source of
+   truth that the shuffler does not read.
    SAFETY NOTE: moving to the no-brainer pile does NOT execute branch
    deletion or any irreversible action. The HARD SAFETY INVARIANT governs —
    auto-dispatch of a brief is not authorization to act on its verdict.

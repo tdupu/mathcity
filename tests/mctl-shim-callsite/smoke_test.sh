@@ -335,8 +335,21 @@ echo "ok: every prime teaches the MCP surface, its detection, and the bin/mctl f
 # 10e -- the tool list is not observable from the shell, so a shell test against
 # mcp__mctl__ can only ever take the wrong branch. It is also the shape that
 # turns an absent optional surface into a dead prime (`... || exit 1`).
+# Scan FENCED CODE BLOCKS only. The previous form grepped whole files for
+# `(if |case |...)` before `mcp__mctl__`, which matched ordinary English -- a
+# sentence like "if a brief/bead exists for it, `mcp__mctl__briefs_relay_...`"
+# is prose describing agent behaviour, not a shell branch, and it failed this
+# check for months. A gate that fires on prose is one readers learn to ignore,
+# which costs more than the case it was built to catch (P6.2: a check must be
+# able to fail, and its failures must mean something).
+extract_fenced() {
+  awk '/^[[:space:]]*```/ { infence = !infence; next } infence { print FILENAME ":" FNR ":" $0 }' "$1"
+}
+
 for d in $SEARCH_DIRS; do
-  hits=$(grep -rnE '(if |case |grep -q|test |\[ |\[\[ ).*mcp__mctl__' "$d" || true)
+  hits=$(find "$d" -name '*.md' -type f 2>/dev/null | while IFS= read -r f; do
+    extract_fenced "$f"
+  done | grep -E '(if |case |grep -q|test |\[ |\[\[ ).*mcp__mctl__' || true)
   [ -z "$hits" ] || fail "a skill branches in SHELL on the MCP tool surface:
 $hits
 Detection is the agent reading its own tool list, not a shell probe."
