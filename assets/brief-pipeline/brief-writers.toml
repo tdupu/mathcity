@@ -40,6 +40,18 @@
 
 [[artifact]]
 path = "stack/.index.jsonl"
+# DECLARED, not derived (#90). This was the only one of the four artifacts still
+# relying on the derive-from-last-path-segment fallback
+# (`art["path"].split("/")[-1]`), which is the exact mechanism that produced the
+# bare-"manifest.jsonl" collision `c14b54c` moved away from for
+# `decisions/<id>.toml`. Safe by coincidence is not safe by design: the
+# derivation happened to yield a distinctive basename here, and would not have
+# if the file were ever renamed to something a sibling also uses.
+#
+# Both spellings, for the same reason `.pile/manifest.jsonl` declares two: the
+# shuffler takes it as a `--brief-root`-relative path while prose and comments
+# name the bare file, and each form finds writers the other misses.
+literals = ["stack/.index.jsonl", ".index.jsonl"]
 sole_writer = "mctl"
 
   [[artifact.referencer]]
