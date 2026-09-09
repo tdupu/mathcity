@@ -28,7 +28,8 @@ def main():
         print("usage: mcpcall.py <tool>|--list [json-args]")
         return 2
     tool = sys.argv[1]
-    args = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+    args = (json.loads(sys.argv[2])
+            if len(sys.argv) > 2 and tool not in ("--schema", "--list") else {})
 
     p = subprocess.Popen(
         CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -58,7 +59,24 @@ def main():
     recv()
     send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
 
-    if tool == "--list":
+    if tool == "--schema":
+        send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+        r = recv() or {}
+        want = sys.argv[2] if len(sys.argv) > 2 else ""
+        for t in r.get("result", {}).get("tools", []):
+            if t["name"] == want:
+                sch = t.get("inputSchema", {})
+                props = sch.get("properties", {})
+                print("TOOL:", want)
+                print("required:", sch.get("required", []))
+                for k, v in sorted(props.items()):
+                    print("  %-22s %-28s %s" % (
+                        k, json.dumps(v.get("type") or v.get("anyOf") or "?")[:28],
+                        str(v.get("description", ""))[:70]))
+                break
+        else:
+            print("no such tool:", want)
+    elif tool == "--list":
         send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
         r = recv() or {}
         names = [t["name"] for t in r.get("result", {}).get("tools", [])]
