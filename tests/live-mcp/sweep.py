@@ -7,9 +7,14 @@ argv, without dispatching anything into the city.
 import json
 import os
 import subprocess
+from pathlib import Path
 import sys
 
-CMD = ["./bin/mctl", "mcp", "serve", "--city", os.environ["MCTL_CITY"]]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MCTL_BIN = REPO_ROOT / "bin" / "mctl"
+
+
+CMD = [str(MCTL_BIN), "mcp", "serve", "--city", os.environ["MCTL_CITY"]]
 if os.environ.get("MCTL_RIG"):
     CMD += ["--rig", os.environ["MCTL_RIG"]]
 

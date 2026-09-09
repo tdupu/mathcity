@@ -7,11 +7,16 @@ Runs against the live server exactly as an agent would reach it.
 """
 import json
 import subprocess
+from pathlib import Path
 import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MCTL_BIN = REPO_ROOT / "bin" / "mctl"
+
 
 import os
 
-CMD = ["./bin/mctl", "mcp", "serve"]
+CMD = [str(MCTL_BIN), "mcp", "serve"]
 if os.environ.get("MCTL_CITY"):
     CMD += ["--city", os.environ["MCTL_CITY"]]
 if os.environ.get("MCTL_RIG"):
