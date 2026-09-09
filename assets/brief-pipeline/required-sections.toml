@@ -46,3 +46,81 @@ name = "action_block"
 profile = "decision"
 match = '^action_block:[[:space:]]*$'
 reason = "the decision profile rejects a pile entry without it, at shuffle time, after creation reported success"
+
+# THE FULL FORM, §1-§7 (#219). ADR 0001 (2026-08-24): "every brief is full-form
+# §1-§7; the compact form is retired."
+#
+# WHY THESE MATCH ONLY THE MARKER, not the title. The composer emits
+# "## §4 — Alternatives named" in one path and "## §4 — Options" in another
+# (decisions.py, when options are authored), and briefs.py's own parser accepts
+# `§N`, `section N` and `sec. N` at any heading depth (_EXPLICIT_SECTION). A
+# rule keyed on the title would refuse a brief that is correctly formed and
+# merely worded differently -- so these key on the SECTION MARKER alone.
+#
+# WHY create_only, and what closes it. Adding these to brief-check.sh at the
+# same time would switch on retroactive drain enforcement: 3 of 12 brief files
+# on the kolchin testrig are compact form, and section-discipline.toml records
+# 59 of 178 on the wider corpus. Every one would be auto-rejected -- the exact
+# #96 harm this file exists to prevent. A gate rejection is also not a revise
+# verdict, so revise-return (#209) does not catch them either.
+#
+# So: NEW briefs are full-form from now; EXISTING ones are left alone. The flag
+# comes off when the pile is drained of compact-form entries, or when a gate
+# rejection can be routed to revise-return instead of the reject pile. That is
+# the second half of #219 and is a deliberate step, not a cleanup.
+
+[[section]]
+name = "§1 — What is being decided"
+profile = "decision"
+create_only = true
+migration_note = "#219: drain-side enforcement would auto-reject the compact-form briefs already in the pile; flag comes off once they are drained or routable to revise-return."
+match = '^#{1,6}[[:space:]]*(§|[Ss]ection[[:space:]]+|[Ss]ec\.[[:space:]]*)1\b'
+reason = "ADR 0001 retires the compact form; a decision brief that omits it cannot be read by the §-scan the structure exists to support"
+
+[[section]]
+name = "§2 — Recommended answer"
+profile = "decision"
+create_only = true
+migration_note = "#219: drain-side enforcement would auto-reject the compact-form briefs already in the pile; flag comes off once they are drained or routable to revise-return."
+match = '^#{1,6}[[:space:]]*(§|[Ss]ection[[:space:]]+|[Ss]ec\.[[:space:]]*)2\b'
+reason = "ADR 0001 retires the compact form; a decision brief that omits it cannot be read by the §-scan the structure exists to support"
+
+[[section]]
+name = "§3 — Assumptions surfaced"
+profile = "decision"
+create_only = true
+migration_note = "#219: drain-side enforcement would auto-reject the compact-form briefs already in the pile; flag comes off once they are drained or routable to revise-return."
+match = '^#{1,6}[[:space:]]*(§|[Ss]ection[[:space:]]+|[Ss]ec\.[[:space:]]*)3\b'
+reason = "ADR 0001 retires the compact form; a decision brief that omits it cannot be read by the §-scan the structure exists to support"
+
+[[section]]
+name = "§4 — Alternatives named / Options"
+profile = "decision"
+create_only = true
+migration_note = "#219: drain-side enforcement would auto-reject the compact-form briefs already in the pile; flag comes off once they are drained or routable to revise-return."
+match = '^#{1,6}[[:space:]]*(§|[Ss]ection[[:space:]]+|[Ss]ec\.[[:space:]]*)4\b'
+reason = "ADR 0001 retires the compact form; a decision brief that omits it cannot be read by the §-scan the structure exists to support"
+
+[[section]]
+name = "§5 — Risks foregrounded"
+profile = "decision"
+create_only = true
+migration_note = "#219: drain-side enforcement would auto-reject the compact-form briefs already in the pile; flag comes off once they are drained or routable to revise-return."
+match = '^#{1,6}[[:space:]]*(§|[Ss]ection[[:space:]]+|[Ss]ec\.[[:space:]]*)5\b'
+reason = "ADR 0001 retires the compact form; a decision brief that omits it cannot be read by the §-scan the structure exists to support"
+
+[[section]]
+name = "§6 — Supporting evidence"
+profile = "decision"
+create_only = true
+migration_note = "#219: drain-side enforcement would auto-reject the compact-form briefs already in the pile; flag comes off once they are drained or routable to revise-return."
+match = '^#{1,6}[[:space:]]*(§|[Ss]ection[[:space:]]+|[Ss]ec\.[[:space:]]*)6\b'
+reason = "ADR 0001 retires the compact form; a decision brief that omits it cannot be read by the §-scan the structure exists to support"
+
+[[section]]
+name = "§7 — Plan membership, blocking, and required gates"
+profile = "decision"
+create_only = true
+migration_note = "#219: drain-side enforcement would auto-reject the compact-form briefs already in the pile; flag comes off once they are drained or routable to revise-return."
+match = '^#{1,6}[[:space:]]*(§|[Ss]ection[[:space:]]+|[Ss]ec\.[[:space:]]*)7\b'
+reason = "ADR 0001 retires the compact form; a decision brief that omits it cannot be read by the §-scan the structure exists to support"

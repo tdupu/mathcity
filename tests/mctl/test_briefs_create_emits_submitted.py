@@ -33,6 +33,13 @@ from test_mcp_server import call, server, work_fixture  # noqa: E402
 #: A brief body with the `## Gate Evidence` section MBRF036 requires.
 BODY = (
     "## What is being decided\n\nShip it?\n\n"
+    "## \u00a71 \u2014 What is being decided\n\nn/a for this fixture.\n\n"
+    "## \u00a72 \u2014 Recommended answer\n\nn/a for this fixture.\n\n"
+    "## \u00a73 \u2014 Assumptions surfaced\n\nn/a for this fixture.\n\n"
+    "## \u00a74 \u2014 Alternatives named\n\nn/a for this fixture.\n\n"
+    "## \u00a75 \u2014 Risks foregrounded\n\nn/a for this fixture.\n\n"
+    "## \u00a76 \u2014 Supporting evidence\n\nn/a for this fixture.\n\n"
+    "## \u00a77 \u2014 Plan membership, blocking, and required gates\n\nn/a for this fixture.\n\n"
     "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
     "\naction_block:\n"
     "  on_approve: proceed\n"

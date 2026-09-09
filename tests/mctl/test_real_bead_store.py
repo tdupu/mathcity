@@ -271,6 +271,13 @@ def brief_body(tmp_path: Path) -> Path:
         # drives a REAL bd store, so without one it mints a real decision brief
         # that the drain destroys while creation reports success.
         "## What is being decided\n\nShip the dispatch policy?\n\n"
+        "## \u00a71 \u2014 What is being decided\n\nn/a for this fixture.\n\n"
+        "## \u00a72 \u2014 Recommended answer\n\nn/a for this fixture.\n\n"
+        "## \u00a73 \u2014 Assumptions surfaced\n\nn/a for this fixture.\n\n"
+        "## \u00a74 \u2014 Alternatives named\n\nn/a for this fixture.\n\n"
+        "## \u00a75 \u2014 Risks foregrounded\n\nn/a for this fixture.\n\n"
+        "## \u00a76 \u2014 Supporting evidence\n\nn/a for this fixture.\n\n"
+        "## \u00a77 \u2014 Plan membership, blocking, and required gates\n\nn/a for this fixture.\n\n"
         "## Gate Evidence\n\nG5: n/a -- no server surface touched.\n"
         "\naction_block:\n"
         "  on_approve: proceed\n"

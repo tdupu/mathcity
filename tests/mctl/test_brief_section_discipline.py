@@ -163,10 +163,18 @@ GATE_EVIDENCE = (
     "  on_defer: revisit\n"
 )
 
+# #219: the full form is §1-§7. This body carried §1, §2 and §6 only — enough
+# for the G17 content-discipline rules under test here, but not a complete
+# brief. It is the POSITIVE CONTROL for those rules, so it has to satisfy every
+# structural rule, not only the ones it was written to exercise.
 CLEAN_BODY = (
     "## §1 — What is being decided\n\nWhether to take the terminal-root interlock.\n\n"
     "## §2 — Recommended answer\n\nAdopt the interlock.\n\n"
-    "## §6 — Supporting evidence\n\nruntime.go:297 fires on status==closed.\n"
+    "## §3 — Assumptions surfaced\n\nNone surfaced.\n\n"
+    "## §4 — Alternatives named\n\nNone enumerated.\n\n"
+    "## §5 — Risks foregrounded\n\nNone surfaced.\n\n"
+    "## §6 — Supporting evidence\n\nruntime.go:297 fires on status==closed.\n\n"
+    "## §7 — Plan membership, blocking, and required gates\n\nNone.\n"
 ) + GATE_EVIDENCE
 
 

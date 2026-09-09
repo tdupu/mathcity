@@ -39,9 +39,33 @@ from test_briefs_create_validate_cli import (  # noqa: E402
 #: carries an `action_block` because the decision profile requires one and every
 #: brief `briefs_create` mints is stamped `gate_profile: decision`. If this body
 #: stops passing, the control is dead and the negative test above proves nothing.
-BODY_WITH_EVIDENCE = """## What is being decided
+BODY_WITH_EVIDENCE = """## §1 — What is being decided
 
-Whether to adopt X.
+n/a for this fixture.
+
+## §2 — Recommended answer
+
+n/a for this fixture.
+
+## §3 — Assumptions surfaced
+
+n/a for this fixture.
+
+## §4 — Alternatives named
+
+n/a for this fixture.
+
+## §5 — Risks foregrounded
+
+n/a for this fixture.
+
+## §6 — Supporting evidence
+
+n/a for this fixture.
+
+## §7 — Plan membership, blocking, and required gates
+
+n/a for this fixture.
 
 ## Gate Evidence
 
@@ -135,6 +159,28 @@ def test_the_python_rule_and_the_shell_rule_agree(tmp_path: Path):
 
     shell = (REPO_ROOT / "assets" / "scripts" / "checks" / "brief-check.sh").read_text()
     for section in structure.required_sections():
+        # `create_only` rules are exempt BY DECLARATION, and the exemption is
+        # narrow: it means "the drain does not enforce this YET", which is a
+        # migration state, not a permanent asymmetry.
+        #
+        # Why it has to exist (#219): adding a rule to BOTH gates at once turns
+        # on retroactive drain enforcement against briefs already in the pile.
+        # Measured on the kolchin testrig: 12 brief files, 9 full-form, 3
+        # compact — and the corpus figure in section-discipline.toml is 59 of
+        # 178. Those would be auto-rejected, which is precisely the #96 harm.
+        # A gate rejection is also NOT a revise verdict, so revise-return does
+        # not catch them; there is no soft landing to route them to yet.
+        #
+        # So a create_only rule makes NEW briefs conform while leaving existing
+        # ones alone. Dropping the flag is the second half of the migration and
+        # must be done deliberately, with the pile drained or a route for the
+        # rejects — not as a side effect of adding a rule.
+        if section.get("create_only"):
+            assert section.get("migration_note"), (
+                f"{section['name']!r} is create_only but states no migration_note; "
+                "a one-sided gate must say why and what closes it"
+            )
+            continue
         assert section["match"] in shell, (
             f"brief-check.sh no longer contains the pattern for {section['name']!r}; "
             "the creation gate and the drain gate have drifted"

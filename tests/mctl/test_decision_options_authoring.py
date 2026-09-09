@@ -35,6 +35,14 @@ UNKNOWN_CODE = "MBRF_RECOMMENDATION_UNKNOWN_OPTION"
 GATE_BODY = (
     "# Brief\n\n"
     "## §1 — What is being decided\n\nWhether to do the thing.\n\n"
+    "## §2 — Recommended answer\n\nn/a for this fixture.\n\n"
+    "## §3 — Assumptions surfaced\n\nn/a for this fixture.\n\n"
+    # NO §4 here: the authored options block IS §4 and is appended by
+    # `_decision_options_section`. B1.9 forbids a repeated section number, so
+    # supplying one statically would collide with the one under test (MBRF038).
+    "## §5 — Risks foregrounded\n\nn/a for this fixture.\n\n"
+    "## §6 — Supporting evidence\n\nn/a for this fixture.\n\n"
+    "## §7 — Plan membership, blocking, and required gates\n\nn/a for this fixture.\n\n"
     "## Gate Evidence\n\nChecked before writing.\n"
     "\naction_block:\n"
     "  on_approve: proceed\n"

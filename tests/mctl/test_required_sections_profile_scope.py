@@ -39,6 +39,34 @@ gate_profile: decision
 brief_kind: decision
 ---
 
+## §1 — What is being decided
+
+n/a for this fixture.
+
+## §2 — Recommended answer
+
+n/a for this fixture.
+
+## §3 — Assumptions surfaced
+
+n/a for this fixture.
+
+## §4 — Alternatives named
+
+n/a for this fixture.
+
+## §5 — Risks foregrounded
+
+n/a for this fixture.
+
+## §6 — Supporting evidence
+
+n/a for this fixture.
+
+## §7 — Plan membership, blocking, and required gates
+
+n/a for this fixture.
+
 ## Gate Evidence
 
 G8 brief-record: filed before deposit.
