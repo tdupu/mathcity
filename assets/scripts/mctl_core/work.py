@@ -428,6 +428,39 @@ def work_provenance(ctx: MctlContext, brief_id: str) -> DispatchProvenance:
     try:
         return read_dispatch_provenance(ctx, item.bead_id, required=True)
     except ProvenanceError as error:
+        # #178: absent provenance has TWO causes and they are not the same fact.
+        #
+        #   (1) the source was never dispatched      -> nothing to report
+        #   (2) it was dispatched by PATH B (a raw `gc sling`, e.g. from a
+        #       formula) whose provenance write is non-atomic and may never
+        #       have landed -> a run EXISTS and this is the only surface that
+        #       could say so
+        #
+        # Reporting both as "no provenance" is the failure this issue names:
+        # "an absent record and an absent event are indistinguishable to every
+        # reader." They are distinguishable HERE, because an open child
+        # workflow is observable independently of any provenance record --
+        # which is why a path-B run is already un-redispatchable
+        # (`_source_dispatchable`). This turns that same observation into a
+        # positive statement instead of an absence.
+        run = _open_child_workflow(_beads(ctx), item.bead_id)
+        if run is not None:
+            raise WorkError(
+                _diagnostic(
+                    ctx,
+                    Severity.ERROR,
+                    "MWRK_PROVENANCE_ABSENT_RUN_EXISTS",
+                    (
+                        f"No dispatch provenance for {item.bead_id}, but run {run.id} "
+                        "is open against it -- this was dispatched OUTSIDE mctl "
+                        "(a raw `gc sling`), whose provenance write is non-atomic."
+                    ),
+                    brief_id=brief_id,
+                    bead_id=item.bead_id,
+                    detail=f"open run: {run.id}",
+                    suggested_next_command=f"mctl work status {brief_id} --json",
+                )
+            ) from error
         raise WorkError(error.diagnostic) from error
 
 

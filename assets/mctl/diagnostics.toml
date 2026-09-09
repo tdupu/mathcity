@@ -650,6 +650,11 @@ severity = "ERROR"
 meaning = "An open child workflow already exists for the same source bead."
 module = "work.py"
 
+[MWRK_PROVENANCE_ABSENT_RUN_EXISTS]
+severity = "ERROR"
+meaning = "A run is open against this source but carries no dispatch provenance: dispatched outside mctl (path B)."
+module = "work.py"
+
 [MWRK003]
 severity = "WARN"
 meaning = "The dispatch succeeded but the claim has not been observed yet; recheck with work_status rather than retrying (a blind retry can dispatch a second time)."
