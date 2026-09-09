@@ -50,7 +50,19 @@ from pathlib import Path
 
 #: Real bead ids carry a digit in the suffix. See the module docstring for the
 #: concrete overcount a looser pattern produced.
-BEAD_ID = re.compile(r'^[a-z]{2,4}-(?=[a-z0-9]*\d)[a-z0-9]{4,9}$')
+#:
+#: ANCHORED -- for validating a whole candidate string with .match(). Using it
+#: with .findall() over a blob silently returns [] for every input, because the
+#: anchors can never hold mid-string. That bug made the inventory scan below
+#: match nothing at all while reporting success; BEAD_SCAN exists so the two
+#: uses cannot be confused again.
+BEAD_ID = re.compile(r'^[a-z]{2,4}-(?=[a-z0-9]*\d)[a-z0-9]{3,9}$')
+
+#: UNANCHORED -- for pulling candidates OUT of a slug or path, then validated
+#: with BEAD_ID. The suffix floor is 3, not 4: gsp-eu2 (#72's headline case) has
+#: a three-character suffix, and a floor of 4 excluded the one bead the
+#: inventory scan was added to find.
+BEAD_SCAN = re.compile(r'\b([a-z]{2,4}-(?=[a-z0-9]*\d)[a-z0-9]{3,9})\b')
 
 ADJUDICATED_STATUSES = {"adjudicated", "decided", "approved"}
 OPEN_STATUSES = {"open", "in_progress"}
@@ -89,6 +101,10 @@ def main() -> int:
     ap.add_argument("--brief-root", required=True)
     ap.add_argument("--store", action="append", default=[], metavar="PREFIX=PATH",
                     help="bead-prefix to store root, repeatable (e.g. gt=$HOME/gt)")
+    ap.add_argument("--inventory", action="append", default=[], metavar="PATH",
+                    help="migration inventory JSONL to scan in addition to brief "
+                         "lanes; repeatable. Rows carry no bead id -- it is "
+                         "recovered from legacy_slug/legacy_file.")
     ap.add_argument("--lane", action="append",
                     default=None, metavar="NAME",
                     help="brief lane under --brief-root to scan; repeatable "
@@ -125,15 +141,21 @@ def main() -> int:
     # directory per brief, so a non-recursive glob silently contributed zero
     # files while reporting the lane as scanned.
     #
-    # KNOWN LIMIT, stated because the alternative is a false claim of coverage:
-    # this reads BRIEF FILES, so a decision whose brief no longer exists as a
-    # file is invisible to it. #72's own headline case is one -- gsp-eu2,
-    # adjudicated, still OPEN, created 2026-07-09 (62 days as of 2026-09-09, up
-    # from the 41 the issue measured). Its brief survives only as
-    # `.pile/*.bak` and rows in `migrations/2026-08-15-decisions-track-
-    # inventory.jsonl`, having been migrated out of the decisions-track lane
-    # #72 measured. Auditing that inventory is a separate pass over a different
-    # data shape; this tool does not silently pretend to cover it.
+    # ALSO READS MIGRATION INVENTORIES (--inventory), because brief FILES are
+    # not the only place an adjudication is recorded. #72's headline case
+    # proved it: gsp-eu2 is adjudicated and still OPEN (created 2026-07-09), and
+    # a brief-file-only scan reported OK for exactly the bead the issue was
+    # filed about -- its brief was migrated out of the decisions-track lane and
+    # survives only as `.pile/*.bak` plus a row in
+    # `migrations/2026-08-15-decisions-track-inventory.jsonl`:
+    #
+    #     legacy_slug      specialist-agents-gsp-eu2
+    #     file_status      adjudicated
+    #     migration_action preserve_terminal
+    #
+    # Those rows carry NO bead id field; the id is recoverable from
+    # `legacy_slug`/`legacy_file`, which is why they are parsed rather than
+    # read for a key that does not exist.
     lanes = [name for name in args.lane if (root / name).is_dir()]
     if not lanes:
         print(f"ADJ_AUDIT: UNREADABLE -- none of {args.lane} exist under {root}",
@@ -152,6 +174,41 @@ def main() -> int:
         if not status or status.group(1).strip().lower() not in ADJUDICATED_STATUSES:
             continue
         adjudicated.append((path, status.group(1).strip(), brief_bead_id(path, text)))
+
+    # Inventory rows join the same population as brief files, so one bead named
+    # by both is deduplicated -- reporting it twice would inflate the count.
+    seen_beads = {bid for _, _, bid in adjudicated if bid}
+    for inv_path in args.inventory:
+        path = Path(os.path.expanduser(inv_path))
+        if not path.is_file():
+            print(f"ADJ_AUDIT: inventory not found, NOT scanned: {path}", file=sys.stderr)
+            continue
+        for line in path.read_text(errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            status = str(row.get("file_status") or row.get("manifest_status") or "")
+            # Statuses here are free-text and highly decorated -- e.g.
+            # "adjudicated:approve-b(push=false)". Prefix-matching is what makes
+            # those count; an equality test against "adjudicated" would score
+            # 122 rows as adjudicated and silently drop ~30 decorated ones.
+            low = status.lower()
+            if not (low.startswith("adjudicated") or low.startswith("approved")):
+                continue
+            blob = f"{row.get('legacy_slug') or ''} {row.get('legacy_file') or ''}"
+            found = None
+            for cand in BEAD_SCAN.findall(blob):
+                if BEAD_ID.match(cand):
+                    found = cand
+            if not found or found in seen_beads:
+                continue
+            seen_beads.add(found)
+            adjudicated.append((Path(f"{path.name}:{row.get('legacy_slug') or '?'}"),
+                                status, found))
 
     loaded: dict[str, dict[str, str]] = {}
     unreadable: dict[str, str] = {}

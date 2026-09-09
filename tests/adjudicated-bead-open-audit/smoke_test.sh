@@ -75,5 +75,43 @@ run "nested archive brief is scanned"            1 --brief-root "$TMP/r5" --stor
 mkdir -p "$TMP/r6"
 run "missing lanes exit 2, not 0"                2 --brief-root "$TMP/r6" --store "gt=$TMP/s5"
 
+# 7. MIGRATION INVENTORY: an adjudication whose brief no longer exists as a file
+#    Rows carry NO bead id field -- it is recovered from legacy_slug/legacy_file.
+#    This lane exists because #72's headline case (gsp-eu2) lives only here, and
+#    a brief-file-only scan reported OK for exactly the bead the issue was about.
+mkdir -p "$TMP/s7"; echo '[{"id":"gsp-eu2","status":"open"}]' > "$TMP/s7/_beads.json"
+mkdir -p "$TMP/r7/stack"
+printf '%s\n' '{"file_status":"adjudicated","legacy_slug":"specialist-agents-gsp-eu2","legacy_file":"/x/146-specialist-agents-gsp-eu2-brief.md"}' > "$TMP/inv7.jsonl"
+run "inventory row with an OPEN bead is caught" 1 \
+    --brief-root "$TMP/r7" --store "gsp=$TMP/s7" --inventory "$TMP/inv7.jsonl"
+
+# 8. A THREE-CHARACTER SUFFIX MUST MATCH.
+#    gsp-eu2's suffix is 3 chars. The first version of the scan pattern floored
+#    at 4 and excluded the one bead this lane was added to find.
+if PATH="$TMP/bin:$PATH" python3 "$SCRIPT" --brief-root "$TMP/r7" \
+     --store "gsp=$TMP/s7" --inventory "$TMP/inv7.jsonl" 2>&1 | grep -q 'gsp-eu2'; then
+  pass=$((pass + 1)); echo "  ok   three-character bead suffix is matched"
+else
+  fail=$((fail + 1)); echo "  FAIL gsp-eu2 (3-char suffix) not matched"
+fi
+
+# 9. DECORATED statuses count. The live inventory holds
+#    "adjudicated:approve-b(push=false)" and ~30 others; an equality test
+#    against "adjudicated" would silently drop every one of them.
+mkdir -p "$TMP/s9"; echo '[{"id":"he-pb7b","status":"open"}]' > "$TMP/s9/_beads.json"
+mkdir -p "$TMP/r9/stack"
+printf '%s\n' '{"file_status":"adjudicated:approve-b(move-cliff-part2;rehome-filed)","legacy_slug":"x-he-pb7b"}' > "$TMP/inv9.jsonl"
+run "decorated adjudicated:... status still counts" 1 \
+    --brief-root "$TMP/r9" --store "he=$TMP/s9" --inventory "$TMP/inv9.jsonl"
+
+# 10. a missing inventory is REPORTED, and does not silently pass
+mkdir -p "$TMP/s10"; echo '[]' > "$TMP/s10/_beads.json"; mkdir -p "$TMP/r10/stack"
+if PATH="$TMP/bin:$PATH" python3 "$SCRIPT" --brief-root "$TMP/r10" \
+     --store "gt=$TMP/s10" --inventory "$TMP/nope.jsonl" 2>&1 | grep -q "inventory not found"; then
+  pass=$((pass + 1)); echo "  ok   missing inventory is reported, not ignored"
+else
+  fail=$((fail + 1)); echo "  FAIL missing inventory passed silently"
+fi
+
 echo "adjudicated-bead-open-audit: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
