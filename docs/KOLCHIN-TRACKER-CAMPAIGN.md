@@ -443,3 +443,105 @@ rather than by reasoning further.
 - **#219's second half needs #220 first.** The §1-§7 rules are `create_only`
   because drain-side enforcement would auto-reject the compact-form briefs
   already in the pile. Four producers still compose partial forms.
+
+---
+
+# Session 2 — 2026-09-09
+
+117 → 52 open. 70 closed. Five follow-ups filed (#267 #268 #269 and two
+upstream), so nothing was dropped rather than closed.
+
+## What closed, and what it took
+
+| # | Finding |
+|---|---|
+| 90 | `stack/.index.jsonl` was the only registered artifact still on derived matching — the mechanism behind the `manifest.jsonl` collision |
+| 102 | `manifest-current` passed on a stale index; the deferred design question **dissolved** once framed as divergence |
+| 163 | `blast_radius` absent from every `EffectPlan`; enforcement still blocked at **3 of 13** operations classified |
+| 233 | B3.1 audit: **0 of 640** closed beads carried acceptance |
+| 72 | 13 adjudicated briefs whose beads never closed, incl. two P0s |
+| 238 | 20 reaping violations with no open survivor, across three stores |
+| 197 | `pools_status`: **16 of 18 rigs have no session ceiling** |
+| 22 | Fixed upstream; the recommended fix would now be a **regression** |
+| 80 | Re-homed: reaper CTE joins on `JSON_EXTRACT` — unindexable |
+| 148 | Untrust condition had gone stale after `mc-crc4o` fixed the lookup it guarded |
+| 67 | `PASS|N/A` cannot match `PASSED` — the gate rejected what POLICY mandates |
+
+## The pattern in the tracker
+
+Six issues framed as **decisions** or **NEVER-BUILT** had mechanical answers:
+
+    #148  untrust guarding a failure the resolver had already fixed
+    #67   a word-boundary bug, not a policy question
+    #16   the delete-cascade EXISTS, is installed, holds a live store at 0
+    #99   ready-depth IS read — clamped to 1, and no agent configures scale_check
+    #105  unlock_count IS consumed — by the skills, not by mctl/gc
+    #5    68% "uncovered" is 57 plain backlog beads + 8 non-work beads
+
+In five of six the original measurement was **correct** and only the inference
+from it was wrong. #105 checked mctl and gc, found nothing, and generalised to
+"the city". **A negative result is scoped to where you looked.**
+
+## The pattern in my own tools — four false positives, all on unfamiliar data
+
+Every audit written this session was green on its fixtures and wrong on the
+first real store it had not been developed against:
+
+    1. eight phantom "bead not in its store"  — one prefix, several stores
+                                                 (~/repos/X vs its ~/gt twin)
+    2. BP4.4(d) flagged two human adjudications as automated reaping
+                                                 — matched intent from prose
+    3. one bead counted three times            — deduped rows, not beads
+    4. a `verdict: revise` scored as a stall   — never read the verdict field
+
+(4) is the costly one: it would have inflated **the exact population #209 needs
+measured**, in the same measurement someone would use to size #209.
+
+Structural checks ("was there an open survivor AT CLOSE TIME") produced zero
+false positives on the same data. Intent-matching ones produced all four.
+
+**Fixtures prove a check runs. Only unfamiliar data proves it measures the
+right property.** This is the strongest argument for the goal's "test on a live
+city" clause, and it was learned the hard way four times.
+
+## A contradiction that nearly shipped a policy inversion
+
+`brief-record-decision.toml` asserted both:
+
+    step record-decision:  ".toml is a redundancy channel (B2.8: files are
+                            cache), NOT the canonical record"
+    step archive:          "Keep the decision record in decisions/ as the
+                            indexable CANONICAL record"
+    description:           "Write a canonical decision record..."
+
+Two of three said the cache was canonical. Reading those, "teach MBRF005 to
+follow the pointer" is the *correct-looking* fix — and it would have made the
+gate for the whole MCP conversion set read the cache to excuse a missing
+canonical record. Caught only by reading the other step. Fixed in `b273b8c`.
+
+## Live-city facts worth carrying forward
+
+- **kolchin's brief tree is nearly empty.** HQ has 0 decision beads of 1,738
+  (1,631 are sessions). The `mathcity` rig has **193 decision beads and no
+  `.beads/briefs/` directory at all**. Only `mathcity-testrig` has briefs, and
+  it has one pile file and one stack file. Anything brief-pipeline-shaped
+  cannot be exercised against real data on kolchin today.
+- **The mctl suite leaks a dolt sql-server per run** (#269). Three generations
+  found alive, oldest 2d 9h. `multi_rig.build` has 11 caller files and zero
+  teardown.
+- **kolchin had no pytest at all** until this session; the 2,297-test suite had
+  never run there. Now at `~/.venvs/mathcity-tests`.
+
+## Still blocked on one decision each
+
+**One interface decision unblocks #82, #83 and #86**: do formulas call mctl
+per-artifact, or does one adjudication call own all five representations? Every
+author who reached it declined to choose; #86 says so verbatim.
+
+    #16   one-time backfill delete?           (cascade already holds kolchin at 0)
+    #99   scale_check: N ready -> how many?   (needs a ceiling first — 16/18 have none)
+    #105  keep stored unlock_count?           (traversal returns ~0 either way)
+    #148  should one bad file untrust a rig?  (false triggers now removed)
+    #5    surface orphaned spec beads?        (drain-reservation class is empty)
+    #268  should adjust_worker_pool exist?    (gate it needs classifies 3 of 13)
+    #267  reopen 20 over-closures, or comment?
