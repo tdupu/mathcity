@@ -174,3 +174,60 @@ not routed through it. The index file was removed afterwards.
 **Lesson worth keeping: a fix cited in a comment is not a fix observed.** Every
 close in this campaign that rested on source reading alone should be treated as
 weaker than one with a live payload behind it.
+
+## Fourth tranche — two real fixes, not just verification
+
+| # | How it was settled |
+|---|---|
+| 181 | The 120s kill became a warn threshold; `MEASURED_SLING_WORST_SECONDS = 243.51`, UNKNOWN codes replace the verdict |
+| 194 | `decisions_to_briefs` live: plans `pile_markdown` + `decision_toml` + event + trace + bead, `applied: false` |
+| 124 | `mayor_conservation` live: 113 molecules, roots_dangling 0, categories reported separately, `readable` distinct from `clean` |
+| 123 | kolchin hq census: 1676 beads, 26 root pointers, **0 dangling**; 147 molecules across three rigs, 0 dangling |
+| 94 | `disarm_no_brainer` withholds only the RIG token when the rig root is unresolved, keeps the city token, and says which half is pinned |
+| 265 | **Fixed** — see below |
+| 85 | **Fixed** — see below |
+
+### #265, found by hitting it
+
+`mayor_conservation --rig hq` died with
+
+    MCTL_CONTEXT_MISSING_PATHS_TOML
+    path: <city>/https:/github.com/tdupu/mathcity/tree/main/assets/brief-pipeline/paths.toml
+
+`Path("https://...")` is not absolute, so the non-absolute branch joined the URL
+onto the city root. The harm is second-order: it surfaced as a MISSING-FILE
+error naming a path nobody configured, telling the reader to restore a file,
+when the rig's real problem is having no local checkout at all.
+
+`_is_remote_source()` now recognises http(s)/git/ssh/git+ssh/git+https and
+scp-style `git@host:path`, and the resolver raises
+`MCTL_CONTEXT_SOURCE_CHECKOUT_NOT_LOCAL` naming the source and the remedy.
+Live after deploy: `hq` refuses with the remedy; mathcity (113), testrig (33)
+and gascity (1) all still resolve clean.
+
+The first full run FAILED `test_every_emitted_code_is_registered` — I had
+emitted a code without registering it in `assets/mctl/diagnostics.toml`. That
+is #199's guard catching a real omission in the change that cites it.
+
+### #85, and a gate that had been dark
+
+The skill had zero `mctl` mentions. Step 7, TS-3 and TS-4 now route through
+`decisions_to_briefs` / `briefs_relay_adjudication` instead of writing
+`.pile/*.md`, appending `manifest.jsonl`, and `mv`-ing to `.no-brainer/`.
+
+While verifying, `tests/mctl-shim-callsite/smoke_test.sh` turned out to be
+**failing on a clean tree**: step 10e grepped whole files for
+`(if |case |...).*mcp__mctl__`, and a bare `if ` matches English. It was tripping
+on the sentence "if a brief/bead exists for it, `mcp__mctl__briefs_relay_...`".
+Now it extracts fenced code blocks and greps those — verified it still fails on
+a real injected `if grep -q mcp__mctl__...; then`.
+
+## Left open deliberately
+
+- **#96** — the testrig shows `pending 0 / rejected 2`, and `mt-3k7g` is
+  "stranded in .rejected/ on a mechanical gate". That is this issue's shape,
+  not its absence.
+- **#168** — verified still broken (see third tranche).
+- **#99** — needs upstream pool-scaling knowledge; I would be guessing.
+- **#204** — my kolchin evidence is confounded by a local `max=0` patch;
+  retracted the "reproduced" framing on the issue.
