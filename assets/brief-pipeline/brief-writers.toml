@@ -284,6 +284,12 @@ over-approximation. "reader" is the closest of the four roles; none of them mean
 path = "decisions-track/manifest.jsonl"
 literal = "decisions-track"
 sole_writer = "mctl"
+
+  [[artifact.referencer]]
+  file = "assets/scripts/adjudicated-bead-open-audit.py"
+  role = "reader"
+  since = "2026-09-09"
+  note = """Names `decisions-track` only as one of three DEFAULT BRIEF LANES to glob `*.md` under (stack, archive, decisions-track). It never opens manifest.jsonl and holds no write path of any kind -- the whole script is read-only by construction, reporting adjudicated briefs whose bead never closed (#72). Registered as a reader rather than left unaudited so the B2.11 sweep stays green for a real reason, not an unexamined one."""
 # THE FIFTH REPRESENTATION (bob, 2026-08-20). Specs written against four
 # representations are short one, and this is the one `mctl` does not write
 # AT ALL -- adjudicate-brief patches it in place after mctl returns, so it
