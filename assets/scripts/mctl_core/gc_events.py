@@ -45,6 +45,28 @@ EMIT_FAILED = "MEVT_EMIT_FAILED"
 #: Seconds to allow the `gc event emit` subprocess. A slow or hung `gc` is a
 #: failed doorbell, not a failed deposit -- it must not hold the typed
 #: mutation's response open.
+#:
+#: SIZED TO A MEASUREMENT (#217), not to a round number. Measured on the live
+#: kolchin city 2026-09-09, six consecutive `gc event emit` calls against an
+#: event type no order listens for (so the probe rang nothing):
+#:
+#:     0.62  0.72  0.77  0.72  0.61  0.58   seconds, rc=0
+#:     p100 = 0.77s, mean = 0.67s
+#:
+#: So the real cost is sub-second and this budget carries ~13x headroom over the
+#: worst observed call. That margin is deliberate and is NOT slack to be tuned
+#: away:
+#:
+#:   * #216 measured gc startup alone at ~9.5s before the fast path landed
+#:     (fixed in tdupu/gascity#32). A budget tightened to today's sub-second
+#:     numbers would turn any regression of that fast path -- or a loaded city --
+#:     straight back into the dropped-doorbell class this constant exists for.
+#:   * The failure mode is asymmetric. Too generous costs a slow WARN on a
+#:     already-broken path; too tight silently drops the bell that fires
+#:     brief-shuffle-on-submit and brief-decision-dispatch.
+#:
+#: Re-measure with `gc event emit <unlistened-type> --subject probe` before
+#: changing this; the number should follow the measurement, not the reverse.
 EMIT_TIMEOUT_SECONDS = 10
 
 Runner = Callable[[list[str]], Any]
