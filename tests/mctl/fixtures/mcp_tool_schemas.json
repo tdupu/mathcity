@@ -2598,6 +2598,13 @@
             "null"
           ]
         },
+        "labels": {
+          "description": "Labels to include, matched as ANY-of. An escalation is a bead labelled 'human' (escalate.sh), so ['human'] answers 'what is escalated'. Omit for every label.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "rig": {
           "description": "Registered rig identifier; defaults to the server's --rig.",
           "type": [

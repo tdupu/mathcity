@@ -29,6 +29,7 @@ def beads_list_payload(
     status: Sequence[str] | None = None,
     issue_type: str | None = None,
     has_verdict: bool | None = None,
+    labels: Sequence[str] | None = None,
 ) -> Mapping[str, Any]:
     """Enumerate beads, and declare the scope the enumeration applied.
 
@@ -38,7 +39,11 @@ def beads_list_payload(
     otherwise costs a full-store read and a client-side filter, which is exactly
     where the reported mistake got in.
 
-    Omitting all three is a CENSUS -- every bead the store returned -- which is
+    `labels` narrows to beads carrying ANY of the named labels (#131). OR, not
+    AND: an escalation is a bead labelled `human`, and asking "what is escalated"
+    must not require knowing every other label those beads happen to carry.
+
+    Omitting all four is a CENSUS -- every bead the store returned -- which is
     the honest default and the opposite of `bd list`'s.
 
     The `scope` block is not optional and not advisory. It is the reason this
@@ -65,6 +70,21 @@ def beads_list_payload(
     if has_verdict is not None:
         rows = [bead for bead in rows if (_verdict(bead) is not None) is has_verdict]
 
+    # #131: escalations are queryable now. `escalate.sh` files one as
+    # `bd create` + `bd label add human`, so "what is escalated" is a label
+    # query -- and there was no typed reader for it, which is the CT13.2 shape
+    # (#163): the machinery existed and no surface reached it.
+    #
+    # A new tool was deliberately not added. This reader already enumerates
+    # beads and already declares its scope, and registering another tool costs
+    # the five hand-maintained rosters #199 enumerates. One filter is smaller
+    # and keeps a single bead-read surface.
+    label_filter: list[str] | None = None
+    if labels is not None:
+        wanted_labels = {str(label) for label in labels}
+        rows = [bead for bead in rows if wanted_labels & set(bead.labels)]
+        label_filter = [str(label) for label in labels]
+
     # Statuses present in the store that this read did NOT return. Derived from
     # the store rather than from a fixed vocabulary, so a status nobody
     # anticipated still shows up as excluded instead of vanishing silently.
@@ -77,6 +97,7 @@ def beads_list_payload(
         "beads": [_row(bead) for bead in rows],
         "scope": {
             "status_filter": status_filter,
+        "label_filter": label_filter,
             "statuses_excluded": excluded,
             "issue_type_filter": issue_type,
             "has_verdict_filter": has_verdict,

@@ -1848,6 +1848,7 @@ def _handle_beads_list(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[s
         status=tuple(status) if status else None,
         issue_type=arguments.get("issue_type"),
         has_verdict=arguments.get("has_verdict"),
+        labels=tuple(arguments["labels"]) if arguments.get("labels") else None,
     )
     return {"diagnostics": _diagnostics(ctx, ()), **payload}
 
@@ -3839,6 +3840,15 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "has_verdict": {
                     "type": ["boolean", "null"],
                     "description": "True = only ruled beads; False = only unruled. Omit for both.",
+                },
+                "labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Labels to include, matched as ANY-of. An escalation is a bead "
+                        "labelled 'human' (escalate.sh), so ['human'] answers 'what is "
+                        "escalated'. Omit for every label."
+                    ),
                 },
             }
         ),
