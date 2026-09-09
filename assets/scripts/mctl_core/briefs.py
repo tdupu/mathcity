@@ -850,9 +850,19 @@ def validate_brief_input(
         # The rule is read from data both checkers can share rather than
         # rewritten here, because two independently written structural checkers
         # drift -- which is what #35 was about.
-        # #96: scope the rules to the profile the body declares. The
+        # #96: scope the rules to the profile the body DECLARES. The
         # action_block rule is decision-only, mirroring brief-check.sh, where
         # `check_action_block` is called from `check_decision_profile` alone.
+        #
+        # KNOWN GAP, measured rather than assumed (#219 owns closing it): a body
+        # arriving here usually carries NO frontmatter -- `_created_document`
+        # stamps `gate_profile: decision` on the way to the pile -- so this
+        # yields `None` and the profile-scoped rules are skipped for exactly the
+        # population they exist for. Defaulting to "decision" is the obvious fix
+        # and is NOT safe as a one-liner: it makes an action_block mandatory for
+        # every producer, and 44 tests fail on it. Closing that gap means
+        # teaching every producer to compose one, which is #219's full-form pass,
+        # not a default.
         absent = missing_sections(clean_body, profile=declared_profile(clean_body))
         if absent:
             names = ", ".join(str(section.get("name")) for section in absent)
