@@ -157,6 +157,22 @@ class BeadWriteError(RuntimeError):
     """The canonical bead source could not be updated."""
 
 
+class BeadWriteTimeout(BeadWriteError):
+    """The bd command did not answer in time. UNKNOWN, not failed (#252).
+
+    A client-side deadline elapsing tells you WE STOPPED WAITING. It does not
+    tell you the write did not land -- and for `bd link` it frequently HAD
+    landed, leaving a complete bead marked `commission_incomplete=true` while
+    the caller was told "nothing was written". That is the P6.3 shape, and the
+    same lesson #181 records for `gc sling`: a timeout is not a verdict.
+
+    Kept a SUBCLASS of BeadWriteError so every existing `except BeadWriteError`
+    still catches it -- callers that cannot act on the distinction are
+    unaffected, and only those that check for it change behaviour.
+    """
+
+
+
 class BeadRaceLostError(BeadWriteError):
     """Another actor changed the bead first, so the guarded write was skipped.
 
@@ -677,6 +693,16 @@ def _apply_bd_create(rig_root: Path, create: BeadCreate, timeout: int) -> dict[s
     return _apply_bd_create_with_sources(rig_root, create, timeout)
 
 
+def _link_one_source(rig_root, bead_id: str, source: str, create, timeout: int) -> None:
+    """One `bd link`. Split out so the caller can distinguish a TIMEOUT (#252)."""
+    _run_bd_command(
+        rig_root,
+        ["bd", "link", bead_id, source, "--type", create.source_link_type],
+        timeout,
+        f"Could not link bead {bead_id} to source {source}",
+    )
+
+
 def _apply_bd_create_with_sources(
     rig_root: Path, create: BeadCreate, timeout: int
 ) -> dict[str, object]:
@@ -715,12 +741,26 @@ def _apply_bd_create_with_sources(
     for source in create.sources:
         if source in already_linked:
             continue
-        _run_bd_command(
-            rig_root,
-            ["bd", "link", bead_id, source, "--type", create.source_link_type],
-            timeout,
-            f"Could not link bead {bead_id} to source {source}",
-        )
+        try:
+            _link_one_source(rig_root, bead_id, source, create, timeout)
+        except BeadWriteTimeout as error:
+            # #252: the deadline elapsed, and `bd link` may well have SUCCEEDED.
+            # The bead exists and is marked `commission_incomplete=true`; the
+            # marker-clearing update below never runs. Reporting this as
+            # "nothing was written" is false and, worse, unrecoverable-looking:
+            # the caller cannot find what it does not know exists.
+            #
+            # So name the bead. `_find_adoptable_partial` will pick it up on a
+            # retry and relink only what is missing -- the recovery this
+            # function was built for (#192) -- but only if someone knows to retry.
+            raise BeadWriteTimeout(
+                f"bead {bead_id} was created and is marked commission_incomplete; "
+                f"linking source {source} timed out and MAY have landed. "
+                f"Re-run the same create: it adopts {bead_id} and relinks only "
+                f"what is missing. Original: {error}"
+            ) from error
+        continue
+
     # Every link landed: the bead is a complete brief, not a partial. Clearing
     # the marker is the commit that ends the transaction.
     _apply_bd_update(
@@ -818,7 +858,15 @@ def _run_bd_command(rig_root: Path, args: list[str], timeout: int, failure: str)
             check=False,
             timeout=timeout,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except subprocess.TimeoutExpired as error:
+        # #252: distinguish "we stopped waiting" from "it failed". `bd link`
+        # frequently SUCCEEDS after the client deadline elapses, and reporting
+        # that as a failure stranded a complete bead marked incomplete.
+        raise BeadWriteTimeout(
+            f"{failure}: timed out after {timeout}s -- the write may have landed; "
+            "re-run to adopt any partial rather than assuming nothing was written"
+        ) from error
+    except OSError as error:
         raise BeadWriteError(f"{failure}: {error}") from error
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
