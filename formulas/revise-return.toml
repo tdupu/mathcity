@@ -130,11 +130,28 @@ pending_retry_count() {
     | grep -c '"pending_retry"' || true
 }
 
-# Source the shared scan + target-rig library. Resolve the pack root the same
-# way brief-decision-dispatch resolves escalate.sh: the parent of the orders/
-# directory on the `Source:` line of `gc order show revise-return`. ($PACK_DIR is
-# NOT injected into a formula step's agent session -- see brief-decision-dispatch.)
-PACK_ROOT="$(gc order show revise-return 2>/dev/null | sed -n 's/^Source:[[:space:]]*//p' | head -n1 | xargs -I{} dirname {} 2>/dev/null || true)"
+# Source the shared scan + target-rig library. The pack root is the parent of
+# the orders/ directory named on the `Source:` line of `gc order show
+# revise-return`. ($PACK_DIR is NOT injected into a formula step's agent
+# session -- see brief-decision-dispatch.)
+#
+# TWO dirnames, and that is the whole of tdupu/mathcity#209's remaining defect.
+# `Source:` is the ORDER FILE -- <pack-root>/orders/revise-return.toml -- so one
+# dirname yields <pack-root>/orders and LIB resolved to
+# <pack-root>/orders/assets/scripts/revise-return-lib.sh, which does not exist.
+# The guard below then fired and the step exited 1 BEFORE ANY SCAN, so every
+# revise verdict was recorded, the order fired, the wisp was claimed and closed
+# -- and no brief was ever re-deposited. A failure that looks like a clean run
+# from every angle except the one that matters.
+#
+# Diagnosed on the live kolchin testrig 2026-09-09 by the run-operator that
+# executed this formula (bead mt-t71o), which verified both paths on disk.
+#
+# The comment previously claimed this mirrors "how brief-decision-dispatch
+# resolves escalate.sh". It does not: that formula and every other in this pack
+# use a literal <mathcity-pack-root>/assets/scripts/... placeholder. This is the
+# only dirname-chain in the pack, so it had no sibling to be checked against.
+PACK_ROOT="$(gc order show revise-return 2>/dev/null | sed -n 's/^Source:[[:space:]]*//p' | head -n1 | xargs -I{} dirname {} 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)"
 LIB="$PACK_ROOT/assets/scripts/revise-return-lib.sh"
 if [ ! -f "$LIB" ]; then
   echo "I'm sorry, I can't do that -- revise-return-lib.sh not found at $LIB." >&2
