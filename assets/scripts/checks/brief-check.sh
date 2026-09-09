@@ -361,6 +361,62 @@ check_shuffle_result() {
   check_jsonl "$ROOT/stack/.index.jsonl"
 }
 
+check_stack_is_pending_only() {
+  # #95: the stack misreports its own contents. `manifest-current` (#102) now
+  # catches index-vs-disk divergence -- the first of the four ways -- and this
+  # catches the other two mechanical ones:
+  #
+  #   (a) a brief with a TERMINAL status (adjudicated/approved/rejected/
+  #       deferred) still sitting on the PENDING stack. It is decided; it is
+  #       not queue.
+  #   (b) the same slug present in BOTH stack/ and .adjudicated-archive/, so
+  #       two authoritative locations disagree about where the brief lives.
+  #
+  # Re-measured on ~/gt/.beads/briefs 2026-09-09, and both are WORSE than when
+  # #95 was filed:
+  #     terminal-status on the pending stack     8  ->  28
+  #     slug in stack AND .adjudicated-archive   3  ->   3
+  #
+  # REPORTS, does not move files. Relocating a decided brief is a B2.10 write
+  # to the stack, and brief-shuffle is the single writer of that lane -- a
+  # check that repaired it would be the exact violation #82/#168 are about.
+  [ -d "$ROOT/stack" ] || return 0
+
+  sipo_terminal=""
+  sipo_terminal_count=0
+  for sipo_f in "$ROOT"/stack/*.md; do
+    [ -e "$sipo_f" ] || continue
+    if head -30 "$sipo_f" 2>/dev/null |
+         grep -qiE "^status:[[:space:]]*(adjudicated|approved|rejected|deferred)"; then
+      sipo_terminal_count=$((sipo_terminal_count + 1))
+      sipo_terminal="$sipo_terminal
+    $(basename "$sipo_f")"
+    fi
+  done
+
+  sipo_dup=""
+  sipo_dup_count=0
+  if [ -d "$ROOT/.adjudicated-archive" ]; then
+    for sipo_f in "$ROOT"/stack/*.md; do
+      [ -e "$sipo_f" ] || continue
+      sipo_b="$(basename "$sipo_f")"
+      if [ -e "$ROOT/.adjudicated-archive/$sipo_b" ]; then
+        sipo_dup_count=$((sipo_dup_count + 1))
+        sipo_dup="$sipo_dup
+    $sipo_b"
+      fi
+    done
+  fi
+
+  if [ "$sipo_terminal_count" -gt 0 ] || [ "$sipo_dup_count" -gt 0 ]; then
+    # One fail() carrying BOTH counts: they are two symptoms of one broken
+    # archive step, and reporting only the first would send someone to fix half
+    # of it and re-run into the other half.
+    fail "stack is not pending-only: ${sipo_terminal_count} brief(s) carry a TERMINAL status while still on the pending stack, and ${sipo_dup_count} slug(s) exist in BOTH stack/ and .adjudicated-archive/ (#95).${sipo_terminal}${sipo_dup}
+Both are archive-step failures. brief-shuffle is the single writer of this lane (B2.10) -- do not move these by hand."
+  fi
+}
+
 check_manifest() {
   mkdir -p "$ROOT/stack"
   check_jsonl "$ROOT/stack/.index.jsonl"
@@ -1088,6 +1144,7 @@ case "$COMMAND" in
   pile-nonempty) check_pile_nonempty ;;
   shuffle-result) check_shuffle_result ;;
   manifest-current) check_manifest ;;
+  stack-pending-only) check_stack_is_pending_only ;;
   staging-clear) check_staging_clear ;;
   stack-index-path) check_stack_index_path ;;
   no-direct-stack-producers) check_no_direct_stack_producers ;;
