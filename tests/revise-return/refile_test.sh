@@ -76,3 +76,44 @@ check "already re-deposited -> 0 pending" "" \
 
 rm -rf "$EMPTY" "$POP"
 [ "$fail" -eq 0 ] && echo "PASS revise-return refile" || { echo "FAILURES"; exit 1; }
+
+# --- per-rig scan roots (#58/#209) -------------------------------------------
+#
+# The formula scans ONE global artifact_root, but mctl writes decision records
+# PER RIG. Measured on the live kolchin testrig 2026-09-09:
+#
+#   ~/.gc/mathcity/aggregated-briefs/decisions/       -> 1 file
+#   ~/repos/mathcity-testrig/.beads/briefs/decisions/ -> 3 files, including the
+#                                                        revise verdict itself
+#
+# So `revise_scan_pending` reported processed=0 truthfully: there were no
+# pending revises AT THE ROOT IT WAS GIVEN. #58 (Q5, resolved 2026-08-19) rules
+# that per-rig storage is CORRECT and the aggregated root is the drift, so the
+# consumer must read per-rig rather than the writer being taught to duplicate.
+#
+# `revise_scan_roots` yields every root to scan from the SAME rig registry JSON
+# the formula already fetches for target resolution, so one city-scope wisp
+# still consumes one event -- the fan-out this formula's design deliberately
+# avoids is per-rig ORDERS, not per-rig directories.
+echo "scan_roots:"
+
+RIGS_PATHS='{"rigs":[{"name":"mathcity","prefix":"mc","path":"/tmp/rr-mc"},{"name":"hecke","prefix":"he","path":"/tmp/rr-he"}]}'
+
+# NOTE: `grep -q` is deliberately NOT used here. It exits on first match, which
+# SIGPIPEs the producer, and this file runs under `set -o pipefail` -- so the
+# pipeline reports failure even though the line was found. Count instead; it
+# consumes the whole stream. (This bit me writing these checks.)
+ROOTS="$(revise_scan_roots "/tmp/rr-global" "$RIGS_PATHS")"
+check "global root is always scanned" "1" \
+  "$(printf '%s\n' "$ROOTS" | grep -cx '/tmp/rr-global' | tr -d ' ')"
+check "each rig's brief root is scanned" "1" \
+  "$(printf '%s\n' "$ROOTS" | grep -cx '/tmp/rr-mc/.beads/briefs' | tr -d ' ')"
+check "second rig too" "1" \
+  "$(printf '%s\n' "$ROOTS" | grep -cx '/tmp/rr-he/.beads/briefs' | tr -d ' ')"
+check "no duplicates" "3" \
+  "$(revise_scan_roots "/tmp/rr-global" "$RIGS_PATHS" | sort -u | wc -l | tr -d ' ')"
+
+# A registry with no paths must still yield the global root, never nothing:
+# degrading to zero roots would turn a config gap into a silent no-op.
+check "registry without paths still yields the global root" "1" \
+  "$(revise_scan_roots "/tmp/rr-global" '{"rigs":[{"name":"x","prefix":"x"}]}' | wc -l | tr -d ' ')"

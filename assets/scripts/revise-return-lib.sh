@@ -41,6 +41,48 @@ revise_scan_pending() {
   done
 }
 
+# revise_scan_roots <global_root> <rig_registry_json>
+#
+#       Print every artifact root to scan, one per line: the global root first,
+#       then each rig's own `<rig_path>/.beads/briefs`.
+#
+# WHY BOTH -- and read this before assuming the global root is broken.
+#
+# Adjudication writes the decision record to BOTH the global artifact root and
+# the owning rig's tree. Verified on the live kolchin testrig 2026-09-09, two
+# copies of the same verdict written in the same second:
+#
+#   ~/.gc/mathcity/aggregated-briefs/decisions/mt-3ezn.toml   (carries rig=...)
+#   ~/repos/mathcity-testrig/.beads/briefs/decisions/mt-3ezn.toml
+#
+# So scanning the global root ALONE is sufficient today, and it is emitted
+# first. This function exists for durability, not to repair a present-day gap:
+#
+#   * #58 (Q5, resolved 2026-08-19) rules that per-rig storage is CORRECT and
+#     the aggregated tree is the drift. When that migration lands, the global
+#     root stops being fed and a single-root scanner goes silently blind --
+#     the exact failure this consumer already suffered once (#209).
+#   * Producers other than the typed surface need not write the aggregated copy.
+#
+# A registry carrying no `path` yields the global root alone rather than
+# nothing: degrading to zero roots would turn a config gap into a silent no-op,
+# which is the failure mode #209 is about.
+#
+# This does NOT reintroduce the per-rig event fan-out the formula's design
+# avoids: that is about per-rig ORDERS firing once each per city event. One
+# city-scope wisp still consumes one event and walks the directories itself.
+revise_scan_roots() {
+  global_root="$1"
+  registry="$2"
+  printf '%s\n' "$global_root"
+  printf '%s' "$registry" \
+    | jq -r '.rigs[]? | select(.path != null and .path != "") | .path' 2>/dev/null \
+    | while IFS= read -r rig_path; do
+        [ -n "$rig_path" ] || continue
+        printf '%s/.beads/briefs\n' "${rig_path%/}"
+      done
+}
+
 revise_resolve_target_rig() {
   reason="$1"
   source_bead="$2"

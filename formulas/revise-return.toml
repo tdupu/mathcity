@@ -270,18 +270,32 @@ redeposit_slug() {
   fi
 }
 
-# Main scan — the single global scan point (city dog). revise_scan_pending
-# yields exactly the pending revise slugs (decision=revise, not yet re-deposited);
-# an empty/dead root yields none, which is why populating the aggregated root is
-# the fix (gt-5yxup1) rather than any change to the scan itself.
+# Main scan (city dog). ONE wisp, MANY roots.
+#
+# The scan was NOT what broke #209 -- the lib guard above was, exiting 1 before
+# this ran. Adjudication writes the decision record to the global root AND the
+# owning rig's tree (verified live 2026-09-09: two copies of verdict mt-3ezn in
+# the same second), so the single global root was in fact sufficient.
+#
+# `revise_scan_roots` adds the per-rig trees for DURABILITY, not repair: #58
+# (Q5, resolved 2026-08-19) rules per-rig storage correct and the aggregated
+# tree the drift, and when that migration lands a single-root scanner goes
+# silently blind -- which is exactly the failure this consumer already had once.
+#
+# It does not reintroduce the per-rig fan-out this formula's design avoids:
+# that concerns per-rig ORDERS firing once each per city event. One city-scope
+# wisp still consumes one event and walks the directories itself.
 redeposited=0
-while IFS= read -r slug; do
-  [ -n "$slug" ] || continue
-  redeposit_slug "$slug"
-  redeposited=$((redeposited + 1))
-done <<REVISE_PENDING_EOF
-$(revise_scan_pending "$ROOT")
+for scan_root in $(revise_scan_roots "$ROOT" "$RIG_REGISTRY_JSON"); do
+  [ -d "$scan_root/decisions" ] || continue
+  while IFS= read -r slug; do
+    [ -n "$slug" ] || continue
+    redeposit_slug "$slug"
+    redeposited=$((redeposited + 1))
+  done <<REVISE_PENDING_EOF
+$(revise_scan_pending "$scan_root")
 REVISE_PENDING_EOF
+done
 
 echo "scan-and-redeposit complete: processed=$redeposited"
 
