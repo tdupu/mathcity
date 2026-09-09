@@ -298,13 +298,35 @@ by what adjudication unlocks, not by arrival time.*
   beads with no active defer window. There are no side-piles, per-agent
   piles, or "urgent" bypass piles; urgency is expressed through ordering
   (B2.5), not location.
-- **B2.5 Ordering = unlock count.** Briefs are ordered for presentation by
-  `priority(brief) = unlock_count` — the number of downstream beads that
-  adjudicating this brief unblocks (transitively, via the dependency graph).
-  Largest-unblock first. Ties break by bead priority
-  field, then age (oldest first). Mechanical check: the presenter computes
-  unlock_count from live dependency data at presentation time and records the
-  computed ordering in the docket.
+- **B2.5 Ordering = unlock count, read from the stored field.** Briefs are
+  ordered for presentation by `priority(brief) = unlock_count` — the number of
+  downstream beads that adjudicating this brief unblocks. Largest-unblock
+  first. Ties break by bead priority field, then age (oldest first).
+  Mechanical check: the presenter orders by the `unlock_count` recorded on the
+  brief and records the resulting ordering in the docket.
+
+  **The live-computation clause was removed 2026-09-09** (owner decision,
+  tdupu/mathcity#105). It previously required "the presenter computes
+  unlock_count from live dependency data at presentation time", which was never
+  implemented anywhere — and measurement says implementing it would not have
+  changed the ordering:
+
+  > only 60/264 decision beads have any dependency edge at all … **1 of 264
+  > beads has a blocking edge and 508 of 528 edges are `related`**
+  > — POLICY-DRIFT-AUDIT-2026-08-19
+
+  A transitive traversal over that graph returns ~0 for nearly everything, so
+  the rule was demanding an expensive computation whose answer is a constant.
+  The stored field is better than that: on the live stack **35 of 97 rows carry
+  a non-zero value (1–8)**, so it discriminates where a traversal would not.
+
+  The rule is now satisfiable, which matters more than it sounds — an
+  unsatisfiable mechanical clause makes every check that references it either
+  permanently red or quietly ignored, and this one was ignored.
+
+  **Revisit when the graph is dense enough to matter.** If blocking edges ever
+  become common, live computation is the better answer and this clause should
+  come back; the measurement to re-run is the edge-type distribution above.
 - **B2.6 Clump like a court docket.** Similar briefs (same source repo, same
   rule family, same decision shape) are presented as ONE docket/cohort
   artifact rather than dripped one at a time indefinitely. Threshold: when ≥3
@@ -1107,6 +1129,7 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
+| 2026-09-09 | B2.5 drops the live-computation clause; ordering reads the stored `unlock_count`. B2.11 gains ONE carve-out: brief-shuffle APPENDS `stack/.index.jsonl` during promotion | measurement, not preference. B2.5's clause was never implemented and the graph cannot support it -- 1 of 264 beads has a blocking edge, 508 of 528 edges are `related`, so a traversal returns ~0 while the stored field discriminates (35 of 97 rows carry 1-8). B2.11's carve-out matches `_stack_index_lock`, which names the SHUFFLER as the original appender and mctl as the newcomer; mctl has no append path, so the rule demanded a call that does not exist. Owner decisions, tdupu/mathcity#105 and #82 |
 | 2026-08-20 | Add B2.14: brief frontmatter is governed by B2.11 but enforced as a JUDGEMENT rule. The mechanical version was built and probed, not assumed unworkable: keying the register's reference scan on `status:`/`verdict:` hit 41 and 20 referencers and flagged all four probe cases, including the two known-clean (`create-brief`, `present-briefs`). Path literals are invented for one purpose and carry signal; field names are ubiquitous vocabulary and do not | reviewer trans set the bar at 3/3 probe cases and accepted the measurement at 2/3: "a green check that misclassifies create-brief is worse than not having the check at all" |
 | 2026-08-20 | Add B2.15: "drained" means de-indexed AND archived; de-indexing alone is not draining. Recorded as a DECISION rather than a clarification — gascity defines `drain` twice and neither sense implies archiving, so the term settled nothing and the choice made during the 35-row drain had never been recorded | the human adjudicator: "Let's ratify then" (decision bead `mc-g4k`). Archiving won because de-indexing is the path that had already produced a lying write (`remove-archived-row` asserting an archive it never checked); the 35 drained rows were measured 35/35 archived, so the rule codifies observed practice rather than requiring repair |
 | 2026-08-20 | Amend B2.11 to carry BOTH halves of the architecture: `mctl` is the API, and an AGENT reaches it through the MCP. The first draft encoded only "repeated work behind mctl" and was incomplete — it did not say that a skill walking an agent through bash is the DEPRECATED PATTERN rather than merely an unregistered writer. Owner's canonical text is quoted verbatim rather than paraphrased, including the rationale, because three successive restatements drifted | the human adjudicator, verbatim: "AGENTS acting on mathcity should always go through an MCP for the API" and "If an mctl call fails then we know where it is... we don't need to deal with 100 different ways to try and do the same thing" |
