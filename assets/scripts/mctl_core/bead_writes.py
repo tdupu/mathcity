@@ -135,7 +135,33 @@ def plan_bead_close(ctx: MctlContext, request: BeadCloseInput) -> EffectPlan:
         if_status=bead.status,
         force=request.force,
     )
-    return _bead_close_plan(ctx, bead_id, tuple(preconditions), (update,))
+    # #238 / BP4.3 "Sweeps never run silently". An unreasoned close is
+    # unattributable after the fact, which is what made the 27-closure audit
+    # behind #238 necessary and expensive -- 16 of 27 were over-closed and the
+    # reasons had to be reconstructed by hand.
+    #
+    # ADVISORY, NOT A REFUSAL, deliberately. BP4.1 scopes the requirement to
+    # REAPING an old-useless bead ("a `bd close` with an explicit reason naming
+    # the BP4.2 criterion met"), and nothing in this path marks a close as a
+    # reap. Blocking every reasonless close would enforce a narrow rule
+    # universally and start failing closes that legitimately need no criterion.
+    # Surfacing it costs nothing and makes a silent sweep visible.
+    advisories: tuple[Diagnostic, ...] = ()
+    if not reason_text:
+        advisories = (
+            Diagnostic(
+                Severity.WARN,
+                "MBCL_REASON_ABSENT",
+                f"Closing {bead_id} with no reason; the closure will not be attributable.",
+                hint=(
+                    "Pass reason= naming why. A reap must cite its BP4.2 criterion "
+                    "(POLICY-beads.md BP4.1); doubt defers rather than closes (BP4.5)."
+                ),
+                policy_ref="BP4.3",
+                trace_id=ctx.trace_id,
+            ),
+        )
+    return _bead_close_plan(ctx, bead_id, tuple(preconditions), (update,), advisories)
 
 
 @dataclass(frozen=True)
@@ -276,6 +302,7 @@ def _bead_close_plan(
     bead_id: str,
     preconditions: tuple[Diagnostic, ...],
     updates: tuple[BeadUpdate, ...],
+    advisories: tuple[Diagnostic, ...] = (),
 ) -> EffectPlan:
     planned_effects = [update.to_dict() for update in updates]
     event_row = {
@@ -298,6 +325,7 @@ def _bead_close_plan(
         operation="bead.close",
         target_brief_id=bead_id,
         preconditions=preconditions,
+        advisories=advisories,
         bead_updates=updates,
         cache_updates=(),
         event_writes=(
