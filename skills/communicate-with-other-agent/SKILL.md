@@ -174,6 +174,35 @@ arg is **optional** — omit it and the script resolves the inbox base via
 `Read` the newest file in your canonical folder, or filter the flat path:
 `grep -A30 "^to:.*<YOUR_UUID>" <city-root>/.claude/inbox/<YOUR_UUID>.md`.
 
+## Rotation — the reader's job, not the sender's
+
+`agent-inbox-rotate.sh` archives a per-recipient file on a hybrid trigger:
+**4 hours elapsed**, OR **≥30 entries**, OR the file's entries are from a prior
+calendar day.
+
+**It is invoked by `agent-monitor.sh`, on the RECIPIENT's side.** `agent-send.sh`
+never rotates, and should not — a sender must not reach into someone else's
+inbox to reorganise it. If nobody is monitoring an inbox, nothing rotates it,
+and that is the expected behaviour rather than a defect.
+
+    agent-inbox-rotate.sh INBOX_DIR [RECIPIENT_UUID]    # one file, or sweep all
+
+This was undocumented, and the gap had a cost: `test_inbox.sh` asserted that
+"the next send rotates", which is not how it works, and that wrong expectation
+read as a rotation bug (#266) once the suite stopped failing silently.
+
+## Unresolved recipients
+
+`agent-send.sh` resolves a recipient UUID to a name via
+`<inbox>/.agent-names.map`, falling back to the UUID's 8-char prefix. Routing
+never fails — but **delivery to an unmapped recipient goes to a directory the
+recipient is probably not watching**, so the fallback now announces itself:
+
+    UNRESOLVED_RECIPIENT: <uuid> is not in <inbox>/.agent-names.map
+
+It still delivers (refusing would trade a silent misdelivery for a silent drop).
+Fix it by adding the mapping: `echo '<uuid> <name>' >> <inbox>/.agent-names.map`.
+
 ## Conventions (file inbox)
 
 - Subject ≤80 chars (it becomes the filename slug). Sign the last line

@@ -56,9 +56,19 @@ for i in $(seq 1 30); do
     printf 'bulk msg %d\n' "$i" > "$BODY"
     bash "$SCRIPTS/agent-send.sh" "$ALICE" "$BOB" "bulk/$i" "$BODY" >/dev/null
 done
-# After 30 entries (we already had 1, so this should trigger), the next send rotates.
+# #266: the ORIGINAL expectation here was "the next send rotates". It does not,
+# and that is correct design rather than a defect: `agent-send.sh` contains no
+# rotation logic at all, and `agent-monitor.sh:34` is what invokes
+# `agent-inbox-rotate.sh`. Rotation belongs to the RECIPIENT reading their own
+# inbox, not to a sender reaching into someone else's.
+#
+# The test asserted the sender's behaviour and then failed silently for it (see
+# the ARCHIVE_COUNT note below), so this looked like broken rotation for as long
+# as the suite was dying before the assertion could print.
 printf 'trigger\n' > "$BODY"
 bash "$SCRIPTS/agent-send.sh" "$ALICE" "$BOB" "rotate-trigger" "$BODY" > /tmp/rotate-out 2>&1
+# Rotate the way the monitor does, which is the only path that ever rotates.
+bash "$SCRIPTS/agent-inbox-rotate.sh" "$SANDBOX/proj/.claude/inbox" "$BOB" >/dev/null 2>&1 || true
 # `|| true`: this file runs under `set -euo pipefail`, and when the archive dir
 # does not exist `ls` fails, pipefail propagates it, and `set -e` kills the
 # script AT THE ASSIGNMENT -- before the `|| fail` below can run. The suite then
@@ -71,7 +81,7 @@ ARCHIVE_COUNT="${ARCHIVE_COUNT:-0}"
 # assertion -- which is worse than exiting, because the summary and the body
 # disagree.
 if [[ "$ARCHIVE_COUNT" -ge 1 ]]; then
-  pass "entry-count rotation trigger fires"
+  pass "entry-count rotation fires when the monitor rotates (#266)"
 else
   fail "expected at least one archive file after 30+ entries (got $ARCHIVE_COUNT)"
 fi
