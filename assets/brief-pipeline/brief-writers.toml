@@ -23,8 +23,20 @@
 # the category the founding violation (adjudicate-brief) belongs to.
 #
 # role: authorized (inside mctl) | violation (writes from outside, dated,
-#       may only shrink) | reader | unaudited (references it; NOT yet
+#       may only shrink) | reader | mention | unaudited (references it; NOT yet
 #       classified -- an honest placeholder, also a burn-down)
+#
+# `mention` added for #219-era triage (2026-09-09): the detector matches the
+# literal anywhere in an executable file, so a COMMENT or a docstring that
+# merely names a governed artifact is reported identically to code that writes
+# it. That over-matching is deliberate and stays -- the header above records two
+# narrower detectors that MISSED real writers, which is the worse failure.
+#
+# What was missing was a way to record the audit's ANSWER. `reader` overstates a
+# file that never opens the artifact; `unaudited` understates one that has been
+# looked at. `mention` says: examined, references the path in prose or a comment,
+# performs no read and no write. It is a terminal classification, not a
+# burn-down -- there is nothing to fix in a comment that names a file.
 
 [[artifact]]
 path = "stack/.index.jsonl"
@@ -117,6 +129,10 @@ sole_writer = "mctl"
   file = "skills/prime-clerk/SKILL.md"
   role = "unaudited"
 
+  # Prose telling the reader NEVER to read this file; names it to forbid it.
+  [[artifact.referencer]]
+  file = "skills/check-briefs/SKILL.md"
+  role = "mention"
 
 [[artifact]]
 path = ".pile/manifest.jsonl"
@@ -247,6 +263,10 @@ over-approximation. "reader" is the closest of the four roles; none of them mean
   file = "subdomains/brief-system/skills/decisions-to-briefs/SKILL.md"
   role = "unaudited"
 
+  # revise_scan_pending globs <root>/decisions/*.toml to find pending revises.
+  [[artifact.referencer]]
+  file = "assets/scripts/revise-return-lib.sh"
+  role = "reader"
 
 [[artifact]]
 path = "decisions-track/manifest.jsonl"
@@ -399,4 +419,14 @@ entry in 989bd8e, which has not merged."""
   [[artifact.referencer]]
   file = "subdomains/brief-system/skills/decisions-to-briefs/SKILL.md"
   role = "unaudited"
+
+  # A comment naming the track; the script writes the STACK index, not this.
+  [[artifact.referencer]]
+  file = "assets/scripts/brief-stack-index.py"
+  role = "mention"
+
+  # Prose quoting what brief-decisions-track-inventory.py writes here.
+  [[artifact.referencer]]
+  file = "skills/check-briefs/SKILL.md"
+  role = "mention"
 
