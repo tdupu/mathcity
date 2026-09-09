@@ -176,3 +176,39 @@ def test_context_reads_rig_root_from_site_toml(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["rig_root"] == str(rig_root.resolve())
+
+
+def test_context_refuses_a_url_source_instead_of_joining_it_onto_the_city(tmp_path: Path):
+    """#265: a URL source must refuse, not resolve to a bogus filesystem path.
+
+    `imports.mathcity.source` holds a URL on any city that pins the pack by
+    tree URL rather than a local path. `Path("https://github.com/...")` is not
+    absolute, so the non-absolute branch joins it onto the city root and
+    produces
+
+        <city-root>/https:/github.com/tdupu/mathcity/tree/main/assets/...
+
+    which then fails as MCTL_CONTEXT_MISSING_PATHS_TOML -- a missing-file error
+    naming a path nobody configured, for a rig whose real problem is that it has
+    no source checkout at all. Resolving to garbage is worse than resolving to
+    nothing: the diagnostic sends the reader looking for a file instead of at
+    the configuration.
+    """
+    city_root = tmp_path / "city_root"
+    shutil.copytree(CITY_ROOT, city_root)
+    (city_root / "city.toml").write_text(
+        "[[rigs]]\n"
+        'name = "mathcity"\n\n'
+        "[rigs.imports.mathcity]\n"
+        'source = "https://github.com/tdupu/mathcity/tree/main"\n'
+    )
+
+    result = run_mctl(
+        "--city", str(city_root), "--rig", "mathcity", "--json", cwd=tmp_path
+    )
+
+    assert result.returncode != 0
+    assert "MCTL_CONTEXT_SOURCE_CHECKOUT_NOT_LOCAL" in result.stderr
+    # the refusal must name the remedy, not a path that was never configured
+    assert "source_checkout" in result.stderr
+    assert "https:/github.com" not in result.stderr.replace("https://github.com", "")

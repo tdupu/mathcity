@@ -374,6 +374,11 @@ severity = "FATAL"
 meaning = "The selected rig has no MathCity source checkout configured."
 module = "context.py"
 
+[MCTL_CONTEXT_SOURCE_CHECKOUT_NOT_LOCAL]
+severity = "FATAL"
+meaning = "The selected rig's MathCity source is a remote URL, not a checkout on this machine."
+module = "context.py"
+
 [MCTL_CONTEXT_UNKNOWN_RIG]
 severity = "FATAL"
 meaning = "Pass a store shown in the city roster: city.toml's rigs plus the reserved `hq` city-root store."

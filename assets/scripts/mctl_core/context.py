@@ -451,10 +451,44 @@ def _resolve_source_checkout(
             city_root=str(city_root),
             rig_id=str(rig["name"]),
         )
+    if _is_remote_source(source):
+        raise _error(
+            trace_id,
+            "MCTL_CONTEXT_SOURCE_CHECKOUT_NOT_LOCAL",
+            "The selected rig's MathCity source is a remote URL, not a checkout on this machine.",
+            "Set source_checkout on this rig in city.toml to the local mathcity checkout.",
+            city_root=str(city_root),
+            rig_id=str(rig["name"]),
+            source=source,
+        )
     source_path = Path(source).expanduser()
     if not source_path.is_absolute():
         source_path = city_root / source_path
     return source_path.resolve()
+
+
+#: Schemes that mean "not a path on this machine". A city that pins the pack by
+#: tree URL puts one of these in `imports.mathcity.source`, and `Path()` does
+#: NOT treat it as absolute -- so the non-absolute branch below would join it
+#: onto the city root and yield
+#:
+#:     <city-root>/https:/github.com/<owner>/mathcity/tree/main/assets/...
+#:
+#: which surfaces later as MCTL_CONTEXT_MISSING_PATHS_TOML: a missing-file
+#: error naming a path nobody configured (tdupu/mathcity#265). Refusing here
+#: costs the same call and points at the configuration instead of at a file.
+_REMOTE_SOURCE_PREFIXES = (
+    "http://", "https://", "git://", "ssh://", "git+ssh://", "git+https://",
+)
+
+
+def _is_remote_source(source: str) -> bool:
+    lowered = source.strip().lower()
+    if lowered.startswith(_REMOTE_SOURCE_PREFIXES):
+        return True
+    # scp-style git remotes (`git@host:owner/repo`) carry no scheme but are
+    # equally not a local path; a bare Windows drive letter is not in play here.
+    return lowered.startswith("git@")
 
 
 def _import_source(imports: object) -> str | None:
