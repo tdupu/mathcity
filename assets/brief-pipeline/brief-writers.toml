@@ -111,9 +111,15 @@ sole_writer = "mctl"
 
   [[artifact.referencer]]
   file = "formulas/brief-shuffle.toml"
-  role = "violation"
-  since = "2026-08-20"
-  note = "Inline `printf >> {{artifact_root}}/stack/.index.jsonl` under flock. Found by trans's sweep 2026-08-20."
+  role = "authorized"
+  since = "2026-09-09"
+  note = """AUTHORIZED for APPEND-during-promotion only, under B2.11's single carve-out (adopted 2026-09-09, tdupu/mathcity#82). Reclassified from `violation` (2026-08-20) after the citation behind that classification turned out to be reversed.
+
+brief-shuffle is the single `.pile -> stack` promoter under B2.10, and appending the index row is part of that promotion. `mctl_core/effects.py`'s `_stack_index_lock` names THE SHUFFLER as "the single writer that promotes stack entries and appends .index.jsonl" and records that "mctl now writes it too" -- the shuffler is the original appender, mctl the newcomer, and the lock exists to make the two-writer boundary safe.
+
+There is also nothing to route to: `_update_stack_index` SPLICES an existing row and its docstring states "the stack index has TWO PRODUCERS" as design. mctl has no append path, so "call mctl instead" had no callee.
+
+Scope is exactly append-during-promotion. Every other write to this file -- splice, remove, reorder, repair -- remains mctl's alone, and the flock is mandatory for both writers. This entry reverts to `violation` the day mctl grows an append operation."""
 
   [[artifact.referencer]]
   file = "formulas/brief-watchdog-refill.toml"

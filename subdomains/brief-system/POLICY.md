@@ -428,6 +428,41 @@ by what adjudication unlocks, not by arrival time.*
   `tests/brief-writer-authority` compares the set of source files referencing
   each artifact against the register and fails on any that is unregistered.
 
+  **One carve-out, and only one: the shuffler APPENDS `stack/.index.jsonl`.**
+  `brief-shuffle` is the single `.pile -> stack` promoter under B2.10, and
+  appending the index row is part of that promotion. This is not a tolerated
+  violation; it is the authorized writer for that one operation, and the rule
+  text said otherwise for as long as the code said this:
+
+  > `formulas/brief-prep.toml` and the fast-drain plan both name **the
+  > shuffler** as the single writer that promotes stack entries and appends
+  > `.index.jsonl`. **mctl now writes it too**, so the boundary needs an
+  > explicit lock rather than two documents that quietly contradict the code.
+  > -- `mctl_core/effects.py`, `_stack_index_lock`
+
+  Three facts settle it. (1) The shuffler is the ORIGINAL appender and mctl is
+  the newcomer, not the reverse. (2) `mctl` has no append path at all --
+  `_update_stack_index` splices an existing row and its docstring states "the
+  stack index has TWO PRODUCERS" as a design fact, so "route the append through
+  mctl" has nothing to call. (3) `_stack_index_lock` exists precisely to make
+  the two-writer boundary safe, and was added for that reason.
+
+  The carve-out is exactly this wide:
+
+  - **APPEND during promotion, by `brief-shuffle` only.** Every other write to
+    `stack/.index.jsonl` -- splice, remove, reorder, repair -- remains `mctl`'s
+    alone, and every other governed artifact is unaffected.
+  - **The lock is mandatory**, not advisory: both writers take
+    `_stack_index_lock` before touching the file.
+  - **It closes when mctl grows an append operation.** At that point this
+    paragraph is deleted and `brief-shuffle` routes through it. Until then,
+    recording the shuffler as a violation described the code inaccurately and
+    invited a "fix" that could not be written.
+
+  Adopted 2026-09-09 (tdupu/mathcity#82), which reported the shuffler as an
+  unregistered second writer citing this rule -- while the code it cited names
+  the shuffler as the first.
+
 - **B2.12 Known violations are a dated register that may only shrink.** A
   violation that exists today is recorded in `brief-writers.toml` with
   `role = "violation"` and a `since` date, not silently tolerated and not
