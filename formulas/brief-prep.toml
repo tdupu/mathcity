@@ -77,13 +77,24 @@ Brief type: `{{brief_type}}`
 the artifact header MUST be "What is being decided" — before origin, math,
 timeline, or gates. The skill auto-rejects and rewrites on violation.
 
-**Output shape selection.** The skill consults `mathcity.catch-no-brainer`
-output to choose between full-form (7-section grill-ordered: §1 decision →
-§2 recommend → §3 assumptions → §4 alternatives → §5 risks → §6 evidence →
-§7 gates) and compact form (DECISION / CONTEXT / RECOMMEND / CONFIRM).
-Compact is used ONLY when `catch-no-brainer` emits `compact_eligible: true`
-AND both safety overrides (`server_touching`, `user_skill_touching_override`)
-are false AND the shape is not `capability-blocker`.
+**Output shape: ALWAYS full form.** Seven sections, grill-ordered:
+§1 decision → §2 recommend → §3 assumptions → §4 alternatives → §5 risks →
+§6 evidence → §7 gates.
+
+There is no shape selection. ADR 0001 (2026-08-24) retired the compact form:
+"every brief is full-form §1-§7; the compact form is retired." This step
+previously consulted `mathcity.catch-no-brainer` for a `compact_eligible`
+flag and emitted DECISION / CONTEXT / RECOMMEND / CONFIRM when it was set --
+a branch that outlived the decision that authorised it (#220).
+
+Leaving that branch in place was not harmless. `required-sections.toml` now
+carries the §1-§7 rules, so a compact brief is refused at creation
+(MBRF036); a producer still offering compact would have led an author to
+compose a body the create gate then rejects, which is the CT13.4 shape the
+gate exists to prevent.
+
+`catch-no-brainer` is still consulted -- its classification drives no-brainer
+handling, which is unaffected. Only the SHAPE branch is gone.
 """
 
 [[steps]]
