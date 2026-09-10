@@ -1,0 +1,448 @@
+### LOCAL-ONLY COMMENTS (11 beads)
+=====BEAD mc-3yh
+
+Comments on mc-3yh:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(c) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as a DUPLICATE, and at the time of closure every bead  
+    its                                                                         
+    close reason named as the surviving copy was ALREADY CLOSED (or named none  
+    at                                                                          
+    all). Under POLICY-beads.md BP4.2(c) a duplicate closure must name a        
+    surviving                                                                   
+    OPEN bead; with no open survivor the work left the board with nothing       
+    carrying                                                                    
+    it forward.                                                                 
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened. The audit        
+    reports;                                                                    
+    a human decides per bead, because some of these may be genuinely finished   
+    work                                                                        
+    whose close reason was merely written badly.                                
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+                                                                                
+    If the work is genuinely unfinished: reopen and say so here.                
+    If it is finished elsewhere: record WHERE here, and the audit has its       
+    evidence.                                                                   
+
+=====BEAD mc-4al9
+
+Comments on mc-4al9:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(b) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as SUPERSEDED / ABSORBED, and the close reason NAMES NO
+    BEAD. Under POLICY-beads.md BP4.2(b) a supersede closure must name the      
+    absorbing                                                                   
+    bead, so that anyone can check the work actually went somewhere. As written 
+    this                                                                        
+    closure cannot be verified by anyone — which is the state BP4.5 ("doubt     
+    defers")                                                                    
+    exists to prevent.                                                          
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened.                  
+                                                                                
+    The repair is usually one line: add the absorbing bead id to this thread. If
+    the                                                                         
+    work was genuinely dropped rather than absorbed, say that instead —         
+    "dropped, and                                                               
+    here is why" is a verifiable record; "superseded" with no referent is not.  
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+
+=====BEAD mc-82t2
+
+Comments on mc-82t2:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(b) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as SUPERSEDED / ABSORBED, and the close reason NAMES NO
+    BEAD. Under POLICY-beads.md BP4.2(b) a supersede closure must name the      
+    absorbing                                                                   
+    bead, so that anyone can check the work actually went somewhere. As written 
+    this                                                                        
+    closure cannot be verified by anyone — which is the state BP4.5 ("doubt     
+    defers")                                                                    
+    exists to prevent.                                                          
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened.                  
+                                                                                
+    The repair is usually one line: add the absorbing bead id to this thread. If
+    the                                                                         
+    work was genuinely dropped rather than absorbed, say that instead —         
+    "dropped, and                                                               
+    here is why" is a verifiable record; "superseded" with no referent is not.  
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+
+=====BEAD mc-9vq
+
+Comments on mc-9vq:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(c) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as a DUPLICATE, and at the time of closure every bead  
+    its                                                                         
+    close reason named as the surviving copy was ALREADY CLOSED (or named none  
+    at                                                                          
+    all). Under POLICY-beads.md BP4.2(c) a duplicate closure must name a        
+    surviving                                                                   
+    OPEN bead; with no open survivor the work left the board with nothing       
+    carrying                                                                    
+    it forward.                                                                 
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened. The audit        
+    reports;                                                                    
+    a human decides per bead, because some of these may be genuinely finished   
+    work                                                                        
+    whose close reason was merely written badly.                                
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+                                                                                
+    If the work is genuinely unfinished: reopen and say so here.                
+    If it is finished elsewhere: record WHERE here, and the audit has its       
+    evidence.                                                                   
+
+=====BEAD mc-ji9m
+
+Comments on mc-ji9m:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(c) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as a DUPLICATE, and at the time of closure every bead  
+    its                                                                         
+    close reason named as the surviving copy was ALREADY CLOSED (or named none  
+    at                                                                          
+    all). Under POLICY-beads.md BP4.2(c) a duplicate closure must name a        
+    surviving                                                                   
+    OPEN bead; with no open survivor the work left the board with nothing       
+    carrying                                                                    
+    it forward.                                                                 
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened. The audit        
+    reports;                                                                    
+    a human decides per bead, because some of these may be genuinely finished   
+    work                                                                        
+    whose close reason was merely written badly.                                
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+                                                                                
+    If the work is genuinely unfinished: reopen and say so here.                
+    If it is finished elsewhere: record WHERE here, and the audit has its       
+    evidence.                                                                   
+
+=====BEAD mc-ju7c
+
+Comments on mc-ju7c:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(c) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as a DUPLICATE, and at the time of closure every bead  
+    its                                                                         
+    close reason named as the surviving copy was ALREADY CLOSED (or named none  
+    at                                                                          
+    all). Under POLICY-beads.md BP4.2(c) a duplicate closure must name a        
+    surviving                                                                   
+    OPEN bead; with no open survivor the work left the board with nothing       
+    carrying                                                                    
+    it forward.                                                                 
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened. The audit        
+    reports;                                                                    
+    a human decides per bead, because some of these may be genuinely finished   
+    work                                                                        
+    whose close reason was merely written badly.                                
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+                                                                                
+    If the work is genuinely unfinished: reopen and say so here.                
+    If it is finished elsewhere: record WHERE here, and the audit has its       
+    evidence.                                                                   
+
+=====BEAD mc-kfhx
+
+Comments on mc-kfhx:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(b) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as SUPERSEDED / ABSORBED, and the close reason NAMES NO
+    BEAD. Under POLICY-beads.md BP4.2(b) a supersede closure must name the      
+    absorbing                                                                   
+    bead, so that anyone can check the work actually went somewhere. As written 
+    this                                                                        
+    closure cannot be verified by anyone — which is the state BP4.5 ("doubt     
+    defers")                                                                    
+    exists to prevent.                                                          
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened.                  
+                                                                                
+    The repair is usually one line: add the absorbing bead id to this thread. If
+    the                                                                         
+    work was genuinely dropped rather than absorbed, say that instead —         
+    "dropped, and                                                               
+    here is why" is a verifiable record; "superseded" with no referent is not.  
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+
+=====BEAD mc-mn8o
+
+Comments on mc-mn8o:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(c) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as a DUPLICATE, and at the time of closure every bead  
+    its                                                                         
+    close reason named as the surviving copy was ALREADY CLOSED (or named none  
+    at                                                                          
+    all). Under POLICY-beads.md BP4.2(c) a duplicate closure must name a        
+    surviving                                                                   
+    OPEN bead; with no open survivor the work left the board with nothing       
+    carrying                                                                    
+    it forward.                                                                 
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened. The audit        
+    reports;                                                                    
+    a human decides per bead, because some of these may be genuinely finished   
+    work                                                                        
+    whose close reason was merely written badly.                                
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+                                                                                
+    If the work is genuinely unfinished: reopen and say so here.                
+    If it is finished elsewhere: record WHERE here, and the audit has its       
+    evidence.                                                                   
+
+=====BEAD mc-quq
+
+Comments on mc-quq:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(c) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as a DUPLICATE, and at the time of closure every bead  
+    its                                                                         
+    close reason named as the surviving copy was ALREADY CLOSED (or named none  
+    at                                                                          
+    all). Under POLICY-beads.md BP4.2(c) a duplicate closure must name a        
+    surviving                                                                   
+    OPEN bead; with no open survivor the work left the board with nothing       
+    carrying                                                                    
+    it forward.                                                                 
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened. The audit        
+    reports;                                                                    
+    a human decides per bead, because some of these may be genuinely finished   
+    work                                                                        
+    whose close reason was merely written badly.                                
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+                                                                                
+    If the work is genuinely unfinished: reopen and say so here.                
+    If it is finished elsewhere: record WHERE here, and the audit has its       
+    evidence.                                                                   
+
+=====BEAD mc-rjd
+
+Comments on mc-rjd:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(c) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as a DUPLICATE, and at the time of closure every bead  
+    its                                                                         
+    close reason named as the surviving copy was ALREADY CLOSED (or named none  
+    at                                                                          
+    all). Under POLICY-beads.md BP4.2(c) a duplicate closure must name a        
+    surviving                                                                   
+    OPEN bead; with no open survivor the work left the board with nothing       
+    carrying                                                                    
+    it forward.                                                                 
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened. The audit        
+    reports;                                                                    
+    a human decides per bead, because some of these may be genuinely finished   
+    work                                                                        
+    whose close reason was merely written badly.                                
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+                                                                                
+    If the work is genuinely unfinished: reopen and say so here.                
+    If it is finished elsewhere: record WHERE here, and the audit has its       
+    evidence.                                                                   
+
+=====BEAD mc-w15d
+
+Comments on mc-w15d:
+
+[kolchin-bot] at 2026-09-09 12:34
+  
+    [BP4.2(b) audit — tdupu/mathcity#267, 2026-09-09]                           
+                                                                                
+    This bead was closed as SUPERSEDED / ABSORBED, and the close reason NAMES NO
+    BEAD. Under POLICY-beads.md BP4.2(b) a supersede closure must name the      
+    absorbing                                                                   
+    bead, so that anyone can check the work actually went somewhere. As written 
+    this                                                                        
+    closure cannot be verified by anyone — which is the state BP4.5 ("doubt     
+    defers")                                                                    
+    exists to prevent.                                                          
+                                                                                
+    This is a NON-DESTRUCTIVE note. Nothing has been reopened.                  
+                                                                                
+    The repair is usually one line: add the absorbing bead id to this thread. If
+    the                                                                         
+    work was genuinely dropped rather than absorbed, say that instead —         
+    "dropped, and                                                               
+    here is why" is a verifiable record; "superseded" with no referent is not.  
+                                                                                
+    To re-check this rig:                                                       
+    python3 assets/scripts/bp4-reaping-audit.py --rig-root <path> --json        
+
+### LOCAL-ONLY BEAD RECORDS (9)
+=====BEAD ma-20u
+○ ma-20u · Step spec for Apply gates and write disposition for the claimed item   [P2 · OPEN]
+Type: spec
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  {"id":"process-item","title":"Apply gates and write disposition for the     
+  claimed item","description":"This replaces the old apply-gates + write-     
+  disposition steps.\n\nFind the claim-item step bead for THIS workflow run — 
+  gascity does not\npass sibling step-bead ids automatically, so resolve it   
+  via the same\nroot-bead-id + step-ref lookup other multi-step gascity       
+  formulas use\n(see e.g. gascity/assets/scripts/checks/design-review-        
+=====BEAD ma-7uq
+○ ma-7uq · Claim one pile item (atomic mv)   [P2 · OPEN]
+Type: task
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  Claim exactly one pile item via an atomic filesystem mv — this replaces     
+  the old lock-file acquire step. No lock file is used or checked.            
+                                                                              
+  1. Ensure .beads/briefs/.staging/ exists (mkdir -p).                        
+  2. RESCUE SWEEP (do this before claiming your own item): list every         
+  .beads/briefs/.staging/<slug>/brief.md entry. For each one, check           
+=====BEAD ma-7xw
+○ ma-7xw · Confirm staging cleared, no lock to release   [P2 · OPEN]
+Type: task
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  This replaces release-lock. There is no lock to release in the atomic-mv    
+  design. Find the claim-item step bead for THIS workflow run using the       
+  exact same lookup as process-item (own claimed bead id -> $GC_BEAD_ID       
+  fallback -> gc bd show ... --json -> metadata["gc.root_bead_id"] ->         
+  gc bd list --all --metadata-field "gc.root_bead_id=$ROOT_ID" --json         
+  --limit=0 filtered to the entry whose metadata["gc.step_ref"] equals        
+=====BEAD ma-9be
+○ ma-9be · Finalize workflow   [P2 · OPEN]
+Type: task
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+  (none)
+
+METADATA
+  gc.execution_rig_context: mathcity
+  gc.execution_routed_to: mathcity/mathcity.brief-operator
+  gc.kind: workflow-finalize
+  gc.native_step_dependencies.v1: ["finalize"]
+=====BEAD ma-b68
+○ ma-b68 · Apply gates and write disposition for the claimed item   [P2 · OPEN]
+Type: task
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  This replaces the old apply-gates + write-disposition steps.                
+                                                                              
+  Find the claim-item step bead for THIS workflow run — gascity does not      
+  pass sibling step-bead ids automatically, so resolve it via the same        
+  root-bead-id + step-ref lookup other multi-step gascity formulas use        
+  (see e.g. gascity/assets/scripts/checks/design-review-approved.sh and       
+=====BEAD ma-kqi
+○ ma-kqi · Confirm staging cleared, no lock to release   [P2 · OPEN]
+Type: task
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  This replaces release-lock. There is no lock to release in the atomic-mv    
+  design. Find the claim-item step bead for THIS workflow run using the       
+  exact same lookup as process-item (own claimed bead id -> $GC_BEAD_ID       
+  fallback -> gc bd show ... --json -> metadata["gc.root_bead_id"] ->         
+  gc bd list --all --metadata-field "gc.root_bead_id=$ROOT_ID" --json         
+  --limit=0 filtered to the entry whose metadata["gc.step_ref"] equals        
+=====BEAD ma-v7h
+○ ma-v7h · brief-shuffle   [P2 · OPEN]
+Type: task
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  Single-writer shuffler for brief pile to stack promotion.                   
+                                                                              
+  This formula is intended for the brief-shuffle-pile order. It processes at  
+  most one pile item per run, applies gate-keep rules, and either promotes it 
+  to                                                                          
+  the stack with a manifest append or rejects it into .pile/.rejected.        
+=====BEAD ma-vcu
+○ ma-vcu · Step spec for Confirm staging cleared, no lock to release   [P2 · OPEN]
+Type: spec
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  {"id":"finalize","title":"Confirm staging cleared, no lock to               
+  release","description":"This replaces release-lock. There is no lock to     
+  release in the atomic-mv\ndesign. Find the claim-item step bead for THIS    
+  workflow run using the\nexact same lookup as process-item (own claimed bead 
+  id -\u003e $GC_BEAD_ID\nfallback -\u003e gc bd show ... --json -\u003e      
+  metadata[\"gc.root_bead_id\"] -\u003e\ngc bd list --all --metadata-field    
+=====BEAD ma-yk7
+○ ma-yk7 · Apply gates and write disposition for the claimed item   [P2 · OPEN]
+Type: task
+Created: 2026-09-09 · Updated: 2026-09-09
+
+DESCRIPTION
+
+  This replaces the old apply-gates + write-disposition steps.                
+                                                                              
+  Find the claim-item step bead for THIS workflow run — gascity does not      
+  pass sibling step-bead ids automatically, so resolve it via the same        
+  root-bead-id + step-ref lookup other multi-step gascity formulas use        
+  (see e.g. gascity/assets/scripts/checks/design-review-approved.sh and       
