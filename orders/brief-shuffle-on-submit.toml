@@ -1,15 +1,40 @@
-# Event-trigger order — start the pile shuffle immediately when a brief lands.
+# Promote or reject a newly submitted pile brief without waiting for the next
+# supervisor tick.
 #
-# `brief.submitted` is emitted by brief-prep's submit-to-pile step as soon as
-# the brief is written to .pile. Catching it here starts the shuffle within
-# seconds instead of waiting for the next supervisor tick.
+# THE DEFECT (fixed 2026-09-10, measured on kolchin). This order was
+# scope="rig". A rig-scoped EVENT order fires in EVERY registered rig, not
+# only the rig where the event originated -- gc has no way for a rig-scoped
+# order to ask "did this event happen HERE". Registered for three rigs, one
+# `brief.submitted` in the testrig poured `brief-shuffle` into all three.
 #
-# The condition-based brief-shuffle-pile order remains in place as the
-# backstop for lost events (events are best-effort, not durable).
+# kolchin's .gc/events.jsonl, at the moment of the fix:
+#
+#     74   brief-shuffle-on-submit:rig:mathcity
+#     74   brief-shuffle-on-submit:rig:gascity
+#
+# Exactly 74 and 74. Neither rig has a .beads/briefs/ tree, so neither could
+# have ORIGINATED a brief.submitted event -- yet both fired 74 times, in
+# lockstep. 14 brief-shuffle roots accumulated in `ma` since 2026-08-24; 13
+# were still open two weeks later (ga-333 / ma-v7h, poured one second apart).
+#
+# WHY IT WAS SILENT, which is the more general lesson. brief-shuffle handles
+# a missing/empty pile CORRECTLY -- the gsp-3al3 EMPTY-PILE ROUTE records
+# claim_result=empty and exits clean. A pour into a pile-less rig should have
+# been a harmless no-op. It was not, because mathcity.brief-operator sits at
+# max=0: nothing ever claimed the work, so the clean-exit path was never
+# reached and the workflow stayed open forever. A workflow dispatched to a
+# pool that cannot staff it produces NO diagnostic at any layer -- not an
+# order failure, not a stuck-bead hit, nothing. See
+# docs/policy/post-incident-cleanup.md.
+#
+# THE FIX IS scope="city", matching all eight sibling event orders in this
+# catalog. They fire once per event and resolve the target from the event
+# subject rather than from the firing rig. The invariant is pinned by
+# tests/mctl/test_event_orders_do_not_fan_out.py.
 
 [order]
 description = "Promote or reject a newly submitted pile brief without waiting for the next supervisor tick"
-scope = "rig"
+scope = "city"
 formula = "brief-shuffle"
 trigger = "event"
 on = "brief.submitted"
