@@ -90,6 +90,7 @@ DECLARED_TOOLS = (
     "molecules_show",
     "orders_status",
     "pools_status",
+    "provider_set",
     "queue_status",
     "standardize_github_issue",
     "trace_replay_preview",

@@ -36,6 +36,15 @@ from mctl_dashboard.client import ALLOWED_TOOLS  # noqa: E402
 #: Server tools the dashboard deliberately may not call, with the reason.
 #: An entry here is a decision; absence from both lists is an oversight.
 DELIBERATELY_UNREACHABLE: dict[str, str] = {
+    "provider_set": (
+        "a fleet-wide account switch. It retargets EVERY new agent session in the "
+        "city at a different Claude account, and the failure it guards against -- "
+        "pointing the fleet at an account that cannot log in -- is silent until "
+        "every agent starts failing at once. That is not a thing to put one click "
+        "away on a web page: it belongs to an operator who has read why the current "
+        "provider is current. The dashboard renders provider state through "
+        "city_health; changing it is deliberately a typed-surface call, not a button."
+    ),
     "artifact_locate": (
         "an agent-facing diagnostic (mc-8q0g4): it answers 'is this bead's artifact "
         "there, and could I even tell?' for a caller deciding whether to trust an "

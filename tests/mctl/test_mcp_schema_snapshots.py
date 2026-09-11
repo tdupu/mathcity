@@ -131,6 +131,7 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "decisions_to_briefs",
         "formula_dispatch",
         "molecule_cancel",
+        "provider_set",
         "standardize_github_issue",
         "work_dispatch",
         # mc-vtru8: it SETS the bound a dispatch runs under, so it is a write,

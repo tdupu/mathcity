@@ -38,6 +38,10 @@ import argparse
 from dataclasses import dataclass, field
 import json
 import os
+import re
+import shutil
+import time
+import tomllib
 from pathlib import Path
 import sys
 from typing import Any, Callable, Mapping, Sequence
@@ -112,7 +116,6 @@ from .molecules import build_molecule, build_molecules
 from .health import build_city_health
 from .liveness import city_not_active_diagnostic
 from .provenance import ProvenanceError
-import re
 
 from .redundant_state import _frontmatter_claimants, artifact_layout, locate_artifact
 from .schemas import (
@@ -928,6 +931,149 @@ def _handle_pools_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict
             str(p["name"]) for p in unique if p["max_active_sessions"] is None
         ),
     }
+
+
+def _provider_account(cfg_dir: Path) -> tuple[str, str | None]:
+    """(status, email) for a CLAUDE_CONFIG_DIR. status: ok | no-dir | no-auth."""
+    if not cfg_dir.is_dir():
+        return "no-dir", None
+    j = cfg_dir / ".claude.json"
+    if not j.is_file():
+        return "no-auth", None
+    try:
+        acct = (json.loads(j.read_text()).get("oauthAccount") or {})
+    except (OSError, ValueError):
+        return "no-auth", None
+    email = acct.get("emailAddress")
+    return ("ok", email) if email else ("no-auth", None)
+
+
+def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Switch the city's Claude provider. The WRITE half of #197.
+
+    `pools_status` closed #197's visibility half and said the write half was "a
+    separate decision with a separate blast radius". This is that decision,
+    taken for the provider setting only -- pool caps remain unexposed.
+
+    WHY IT IS A TOOL AND NOT A SCRIPT. On 2026-09-10 this operation was
+    performed by a standalone `city_provider.py`, which is a P7.3 violation:
+    "An interface gap is filed, never routed around." P7.4 was already
+    triggered -- config adjustment recurred three times in 24 hours. The script
+    is retired into this surface, which projects to MCP for free.
+
+    FAILS CLOSED on an unauthenticated target. The prevented failure is
+    pointing an entire fleet at an account that cannot log in: silent,
+    fleet-wide, and discovered only when every agent starts failing at once.
+
+    FORMAT-PRESERVING, and this is not fastidiousness. It rewrites exactly one
+    `provider =` line under [workspace] and never round-trips the document
+    through a TOML dumper: kolchin's city.toml carries comments recording the
+    standing justification for every pool cap, and a dumper discards all of
+    them.
+
+    DRY RUN BY DEFAULT (`_dry_run`), like every other mutating tool.
+    """
+    target = str(arguments.get("provider") or "").strip()
+    path = scope.city_root / "city.toml"
+    notes: list[dict[str, object]] = []
+    payload: dict[str, object] = {"applied": False, "provider": target}
+
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        payload["diagnostics"] = [
+            {"code": "MPRV_CONFIG_UNREADABLE", "severity": "error",
+             "message": f"{path} could not be read: {exc}"}]
+        return payload
+
+    provs = (data.get("providers") or {})
+    current = str(((data.get("workspace") or {}).get("provider") or "")).strip()
+    payload["previous"] = current
+
+    if target not in provs:
+        payload["diagnostics"] = [
+            {"code": "MPRV_NO_SUCH_PROVIDER", "severity": "error",
+             "message": (f"no [providers.{target}] in {path}; declared: "
+                         + (", ".join(sorted(provs)) or "(none)"))}]
+        return payload
+
+    if current == target:
+        payload["already_current"] = True
+        payload["diagnostics"] = [
+            {"code": "MPRV_ALREADY_CURRENT", "severity": "info",
+             "message": f"city is already on {target}; nothing to do"}]
+        return payload
+
+    cfg_dir = ((provs[target].get("env") or {}).get("CLAUDE_CONFIG_DIR"))
+    if not cfg_dir:
+        payload["diagnostics"] = [
+            {"code": "MPRV_TARGET_NOT_AUTHENTICATED", "severity": "error",
+             "message": (f"[providers.{target}] declares no CLAUDE_CONFIG_DIR, so its "
+                         "account cannot be verified; refusing to point the fleet at it")}]
+        return payload
+
+    status, email = _provider_account(Path(cfg_dir).expanduser())
+    if status != "ok":
+        reason = ("does not exist" if status == "no-dir"
+                  else "has no authenticated account")
+        payload["diagnostics"] = [
+            {"code": "MPRV_TARGET_NOT_AUTHENTICATED", "severity": "error",
+             "message": (f"{cfg_dir} {reason}; refusing to point the fleet at an "
+                         "account that cannot log in")}]
+        return payload
+
+    payload["email"] = email
+    text = path.read_text()
+    ws = re.search(r"(?ms)^\[workspace\]\s*$(.*?)(?=^\[|\Z)", text)
+    if not ws:
+        payload["diagnostics"] = [
+            {"code": "MPRV_NO_WORKSPACE_SECTION", "severity": "error",
+             "message": f"no [workspace] section in {path}"}]
+        return payload
+
+    block = ws.group(1)
+    new_block, n = re.subn(r'(?m)^(\s*provider\s*=\s*)"[^"]*"',
+                           lambda m: m.group(1) + '"' + target + '"', block, count=1)
+    if n != 1:
+        payload["diagnostics"] = [
+            {"code": "MPRV_AMBIGUOUS_PROVIDER_LINE", "severity": "error",
+             "message": (f"expected exactly one provider assignment under [workspace], "
+                         f"found {n}")}]
+        return payload
+
+    if _dry_run(arguments):
+        notes.append({"code": "MPRV_DRY_RUN", "severity": "info",
+                      "message": (f"would switch {current or '(none)'} -> {target} "
+                                  f"[{email}]; pass dry_run=false to apply")})
+        payload["diagnostics"] = notes
+        return payload
+
+    backup = path.with_name(
+        "city.toml.bak-provider-" + time.strftime("%Y%m%d-%H%M%S"))
+    shutil.copy2(path, backup)
+    path.write_text(text[: ws.start(1)] + new_block + text[ws.end(1):])
+
+    # Verify by re-reading. A write that reports success without confirming it
+    # is the failure mode this whole campaign kept finding.
+    try:
+        after = tomllib.loads(path.read_text())
+        landed = str(((after.get("workspace") or {}).get("provider") or "")).strip()
+    except (OSError, tomllib.TOMLDecodeError):
+        landed = ""
+    if landed != target:
+        shutil.copy2(backup, path)
+        payload["diagnostics"] = [
+            {"code": "MPRV_VERIFY_FAILED", "severity": "error",
+             "message": "post-write verification failed; restored from backup"}]
+        return payload
+
+    payload["applied"] = True
+    payload["backup"] = backup.name
+    payload["diagnostics"] = [
+        {"code": "MPRV_SWITCHED", "severity": "info",
+         "message": (f"provider {current or '(none)'} -> {target} [{email}]; "
+                     "running sessions keep the old provider, new sessions pick this up")}]
+    return payload
 
 
 def _handle_gates_status(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -3005,6 +3151,55 @@ TOOLS: tuple[ToolSpec, ...] = (
             ["config_readable", "pools", "pool_count", "unlimited_pools"],
         ),
         handler=_handle_pools_status,
+        scope=CITY_SCOPE,
+    ),
+    ToolSpec(
+        name="provider_set",
+        title="Switch the city's Claude provider",
+        description=(
+            "Switch `[workspace] provider` in city.toml -- the WRITE half of #197, "
+            "whose visibility half `pools_status` closed. Replaces the standalone "
+            "city_provider.py script, which was a P7.3 violation (an interface gap is "
+            "filed, never routed around). FAILS CLOSED on a target whose "
+            "CLAUDE_CONFIG_DIR is missing or unauthenticated: the prevented failure is "
+            "pointing a whole fleet at an account that cannot log in, which is silent, "
+            "fleet-wide, and discovered only when every agent starts failing. "
+            "Format-preserving -- rewrites exactly one line and never round-trips "
+            "through a TOML dumper, because city.toml carries the standing "
+            "justification comments for every pool cap. Backs up and re-reads to "
+            "verify, restoring on mismatch. Dry run by default. Pool caps are NOT "
+            "exposed here; that is a separate blast radius."
+        ),
+        input_schema=request_schema(
+            {
+                "provider": {
+                    "type": "string",
+                    "description": (
+                        "Name of a declared [providers.<name>] block to switch to. "
+                        "Must have a CLAUDE_CONFIG_DIR with an authenticated account."
+                    ),
+                },
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["provider"],
+        ),
+        output_schema=response_schema(
+            {
+                "applied": {"type": "boolean"},
+                "provider": {"type": "string"},
+                "previous": {"type": "string"},
+                "email": {"type": "string"},
+                "backup": {"type": "string"},
+                "already_current": {"type": "boolean"},
+            },
+            ["applied", "provider"],
+        ),
+        handler=_handle_provider_set,
+        mutating=True,
+        # Every mutating tool on this surface is external_ready=False, and this
+        # one especially: it retargets every new agent session in the city at a
+        # different account.
+        external_ready=False,
         scope=CITY_SCOPE,
     ),
     ToolSpec(
