@@ -42,6 +42,52 @@ Order of operations, without exception:
 The temptation runs the other way, because the strand is what shows up in a
 status view and the pour does not. Resist it.
 
+### Rule 1a — "Stopped" means stopped IN THE RUNTIME, not in source
+
+Learned 2026-09-10, the same day the rule above was written, by nearly
+violating it.
+
+The `brief-shuffle-on-submit` fix was committed, pushed, and pulled onto
+kolchin's source checkout. The order file on disk read `scope = "city"` and
+the invariant test passed against it. It was reported as verified live.
+
+It was not live. kolchin imports that pack **from GitHub at a pinned SHA**
+(`pack.toml` → `[imports.mathcity] version = "sha:…"`), and the runtime reads
+materialized copies under `~/.gc/cache/repos/<sha>/orders/`. **Six cached
+copies still read `scope = "rig"`.** Pulling the checkout moved nothing the
+city executes.
+
+Verify the pour has stopped by reading **what the runtime resolves**, not what
+the repository contains:
+
+```
+find ~ -name '<order>.toml' -exec grep -H '^scope' {} \;
+```
+
+If the copies disagree, the fix is not deployed. The deployment path is the
+one P1.2 names — `gc import add --version sha:<commit>` then
+`gc import install` — not a `git pull`.
+
+### Rule 1b — Check whether the strand is what is suppressing the pour
+
+Before closing stranded work, ask what currently holds the pour shut.
+
+On kolchin the answer was: the strand itself. The controller reported
+
+```
+order.suppressed | open-work gate has suppressed this order for
+4151 consecutive dispatch checks since 2026-09-09T04:02:09Z
+```
+
+The open workflow roots held the open-work gate closed, which is the only
+reason the still-cached `scope = "rig"` order was not pouring. **Closing the
+beads would have released the gate and restarted the incident** — the precise
+failure Rule 1 exists to prevent, reached by following Rule 1's letter while
+its premise was false.
+
+A strand that suppresses its own cause is load-bearing. Disposing of it is the
+LAST step, after the runtime fix is confirmed live by Rule 1a.
+
 ## Rule 2 — Diagnose before disposing, and record the diagnosis
 
 Stranded roots are **evidence**. Before closing any of them, establish and
@@ -111,7 +157,10 @@ not fail must not render as passed.
 [ ] pour identified (order + trigger + pool)
 [ ] pour fixed or disabled
 [ ] fix pinned by a catalog-wide invariant test, sweep proven non-empty
-[ ] pour verified stopped (new-root count AFTER the fix)
+[ ] pour verified stopped IN THE RUNTIME (every materialized copy, not the
+    repo; see Rule 1a) -- and note that an idempotent order suppresses new
+    roots regardless, so a flat root count is NOT evidence the fix works
+[ ] checked whether the strand itself suppresses the pour (Rule 1b)
 [ ] strand window bounded (first + last)
 [ ] partial work identified and unwound, or explicitly confirmed to be none
 [ ] detector shipped for the silent-failure mode
