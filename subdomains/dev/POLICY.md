@@ -5,7 +5,7 @@ Parent: [README.md](./README.md)
 | Field | Value |
 | --- | --- |
 | Status | Adopted |
-| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency; amended 2026-08-10: standalone mathcity source checkout; amended 2026-08-11: documentation workflow; amended 2026-08-27: P6.3 a deadline is not a verdict) |
+| Date | 2026-07-10 (amended 2026-07-12: P5.1 vocabulary/terminology; P5.2 workspace context files; P1.18 city root named-session fleet; P5.3 real bd types only; amended 2026-07-14: P5.4 truth-is-in-the-code; amended 2026-07-15: P1.19 append-don't-edit beads; amended 2026-07-20: P3.2 upstream issue template required before pr-pipeline; amended 2026-07-22: P1.20 check-wheel before design/skill dispatch; P5.5 Claude not a co-author; amended 2026-07-23: P1.21 dispatch idempotency; amended 2026-08-10: standalone mathcity source checkout; amended 2026-08-11: documentation workflow; amended 2026-08-27: P6.3 a deadline is not a verdict; amended 2026-09-11: P1.23 a rule is evaluated against the city it governs) |
 | Decided | the pack owner, via grilling session (three open questions resolved; record at bottom) |
 | Applies to | All packs the human adjudicator owns in this repo — the **owned pack set** (§ Scope) |
 | Consumers | `check-hygiene` skill (to be built via skill-creator); mayor priming (`mayor-math`); any agent planning work in this repo |
@@ -314,6 +314,27 @@ recreate what you're running; upstream must remain pullable.*
   about how things could evolve in the future." Resolves the artifact-path
   default cluster (mc-897zw / mc-9cr72 — a completed plan for mc-fhv3 one
   instruction from destruction) and the commission-slug collisions, 9 of 9.)
+
+- **P1.23 A rule is evaluated against the city it governs.** A fleet may run
+  more than one city, and two cities may differ in every declared choice —
+  import shape, pin strategy, rig layout, provider, pool ceilings — without
+  either being in violation. Each city is judged against **its own**
+  declarations; divergence between cities is not, by itself, evidence of drift
+  in either. This is the multi-city statement of what P1.1 already scopes
+  ("replay *its* declared imports") and P1.22 already allows ("the choice among
+  adequate layouts is free"): the declaration and the adherence bind, the
+  choice does not. **Rule kind: judgement** — an agent decides whether a
+  difference is a divergent-but-valid choice or genuine drift, reasoning from
+  each city's declarations and citing them. It is deliberately not greppable:
+  a checker that diffs two cities reports every intentional difference as a
+  finding, which is the Pillar 7 "proxy that passes confidently on the cases it
+  cannot see" failure pointed at configuration instead of call sites. Pass: a
+  cross-city finding names which city's own declaration is violated. Fail: a
+  finding whose whole evidence is that city A differs from city B → **fail**.
+  (Measured 2026-09-11: kolchin pins `mathcity` to a remote SHA and resolves
+  rigs to external checkouts under `~/repos`; ritt imports the same pack as a
+  bare local path with no `version` key and keeps rigs under the city root.
+  Both function; neither violates a rule.)
 
 ## Pillar 2 — Ownership boundary
 
@@ -948,3 +969,14 @@ Mayor then propagated as an unknown that blocked an active diagnosis — while t
 `city_health` Dolt probe passed at 29.05s against the same 30s boundary.
 Exceptions: hard safety deadlines (must still report `deadline_exceeded`, never
 `failed`); bounded interactive budgets returning an explicitly-labelled partial.
+
+### 2026-09-11 — P1.23 added: A rule is evaluated against the city it governs
+Two cities in one fleet may differ in every declared choice without either
+being in violation; each is judged against its own declarations, and divergence
+between cities is not by itself evidence of drift. Marked **judgement-kind**,
+generalizing the factual/judgement distinction Pillar 7 introduced for
+P7.1-P7.4. Triggered by: the pack owner asking whether the hygiene policies are
+compatible with running two instances with different settings — they are, but
+nothing said so, and the first cross-city checker would have reported kolchin
+as drifted for not matching ritt. Exceptions: none; a cross-city finding is
+still valid when it names which city's own declaration is violated.
