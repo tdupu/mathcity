@@ -997,6 +997,77 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
                          + (", ".join(sorted(provs)) or "(none)"))}]
         return payload
 
+    from_provider = str(arguments.get("from_provider") or "").strip()
+    if from_provider:
+        # FLEET MIGRATION. Three config shapes carry a provider choice --
+        # [workspace] provider, a derived [providers.X] base, and
+        # provider= under [defaults.agent] / [[patches.agent]] -- and an
+        # operator moving off a dead account means all of them. kolchin had 1
+        # workspace line, 1 derived base and 24 agent pins; switching only the
+        # first left the fleet on an exhausted account for five days while the
+        # config read as switched.
+        if from_provider not in provs:
+            payload["diagnostics"] = [
+                {"code": "MPRV_NO_SUCH_PROVIDER", "severity": "error",
+                 "message": (f"no [providers.{from_provider}] in {path}; declared: "
+                             + (", ".join(sorted(provs)) or "(none)"))}]
+            return payload
+        payload["from_provider"] = from_provider
+        text = path.read_text()
+        pin = re.compile(r'(?m)^(\s*provider\s*=\s*)"' + re.escape(from_provider) + r'"')
+        based = re.compile(r'(?m)^(\s*base\s*=\s*)"provider:' + re.escape(from_provider) + r'"')
+        new_text, n1 = pin.subn(lambda m: m.group(1) + '"' + target + '"', text)
+        new_text, n2 = based.subn(
+            lambda m: m.group(1) + '"provider:' + target + '"', new_text)
+        payload["rewritten"] = n1 + n2
+        if n1 + n2 == 0:
+            payload["already_current"] = True
+            payload["diagnostics"] = [
+                {"code": "MPRV_ALREADY_CURRENT", "severity": "info",
+                 "message": f"no references to {from_provider} remain; nothing to do"}]
+            return payload
+        cfg_dir0 = ((provs[target].get("env") or {}).get("CLAUDE_CONFIG_DIR"))
+        st0, em0 = (_provider_account(Path(cfg_dir0).expanduser())
+                    if cfg_dir0 else ("no-dir", None))
+        if st0 != "ok":
+            payload["diagnostics"] = [
+                {"code": "MPRV_TARGET_NOT_AUTHENTICATED", "severity": "error",
+                 "message": (f"{cfg_dir0 or '(no CLAUDE_CONFIG_DIR)'} is not an "
+                             "authenticated account; refusing to migrate the fleet onto it")}]
+            return payload
+        payload["email"] = em0
+        if _dry_run(arguments):
+            payload["diagnostics"] = [
+                {"code": "MPRV_DRY_RUN", "severity": "info",
+                 "message": (f"would rewrite {n1 + n2} reference(s) "
+                             f"{from_provider} -> {target} [{em0}]; "
+                             "pass dry_run=false to apply")}]
+            return payload
+        backup = path.with_name(
+            "city.toml.bak-provider-" + time.strftime("%Y%m%d-%H%M%S"))
+        shutil.copy2(path, backup)
+        path.write_text(new_text)
+        try:
+            tomllib.loads(path.read_text())
+            left = len(pin.findall(path.read_text())) + len(based.findall(path.read_text()))
+            ok = left == 0
+        except (OSError, tomllib.TOMLDecodeError):
+            ok = False
+        if not ok:
+            shutil.copy2(backup, path)
+            payload["diagnostics"] = [
+                {"code": "MPRV_VERIFY_FAILED", "severity": "error",
+                 "message": "post-write verification failed; restored from backup"}]
+            return payload
+        payload["applied"] = True
+        payload["backup"] = backup.name
+        payload["diagnostics"] = [
+            {"code": "MPRV_SWITCHED", "severity": "info",
+             "message": (f"rewrote {n1 + n2} reference(s) {from_provider} -> {target} "
+                         f"[{em0}]; running sessions keep the old provider, new "
+                         "sessions pick this up")}]
+        return payload
+
     for_provider = str(arguments.get("for_provider") or "").strip()
     if for_provider:
         if for_provider not in provs:
@@ -2591,6 +2662,18 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "target": nullable_string(
                     "Agent to route to; defaults to `<rig>/gc.run-operator`."
                 ),
+                "from_provider": {
+                    "type": "string",
+                    "description": (
+                        "Optional. FLEET MIGRATION: rewrite EVERY reference to this "
+                        "provider -- [workspace] provider, any derived [providers.X] "
+                        "base, and provider= under [defaults.agent] and "
+                        "[[patches.agent]] -- to `provider`. The [providers.<from>] "
+                        "declaration itself is left intact so the account stays "
+                        "available. Use when moving the fleet off a rate-limited or "
+                        "retired account."
+                    ),
+                },
                 "dry_run": DRY_RUN_PROPERTY,
             },
             ["formula"],
@@ -3256,6 +3339,8 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "backup": {"type": "string"},
                 "already_current": {"type": "boolean"},
                 "for_provider": {"type": "string"},
+                "from_provider": {"type": "string"},
+                "rewritten": {"type": "integer"},
             },
             ["applied", "provider"],
         ),

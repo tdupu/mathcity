@@ -210,3 +210,75 @@ def test_for_provider_still_validates_the_account(tmp_path):
     assert out["applied"] is False
     assert "MPRV_TARGET_NOT_AUTHENTICATED" in [
         d.get("code") for d in out.get("diagnostics", [])]
+
+
+def _fleet_city(tmp_path: Path) -> Path:
+    """A city shaped like kolchin: a workspace default, a derived provider, a
+    fleet default, and per-agent patches -- all pinned to one account."""
+    city = _city(tmp_path)
+    t = (city / "city.toml").read_text()
+    t += (
+        "\n[providers.mayor-model]\n"
+        'base = "provider:alpha"\n'
+        "\n[defaults.agent]\n"
+        'provider = "alpha"\n'
+        "# a comment between blocks that must survive\n"
+        "\n[[patches.agent]]\n"
+        'name = "one"\n'
+        'provider = "alpha"\n'
+        "\n[[patches.agent]]\n"
+        'name = "two"\n'
+        'provider = "alpha"\n'
+    )
+    (city / "city.toml").write_text(t)
+    return city
+
+
+def test_from_provider_migrates_every_reference(tmp_path):
+    """THE OPERATION AN OPERATOR ACTUALLY WANTS (kolchin, 2026-09-15).
+
+    Switching `[workspace] provider` moved nothing: the Mayor followed
+    `[providers.mayor-model].base`, and 24 further pins lived in
+    `[defaults.agent]` and 23 `[[patches.agent]]` blocks. Three config shapes,
+    one intent -- "get the fleet off the exhausted account".
+    """
+    from mctl_core import mcp_server
+
+    city = _fleet_city(tmp_path)
+    out = mcp_server._handle_provider_set(
+        _scope(city),
+        {"provider": "beta", "from_provider": "alpha", "dry_run": False},
+    )
+    assert out["applied"] is True, out.get("diagnostics")
+    text = (city / "city.toml").read_text()
+    assert 'provider = "alpha"' not in text, "a pin was left behind"
+    assert 'base = "provider:alpha"' not in text
+    assert text.count('provider = "beta"') == 4      # workspace + defaults + 2 patches
+    assert 'base = "provider:beta"' in text
+    assert out["rewritten"] == 5                      # the 4 above + the base line
+    assert "a comment between blocks that must survive" in text
+    # the provider DECLARATION block must survive untouched
+    assert "[providers.alpha]" in text
+
+
+def test_from_provider_is_idempotent(tmp_path):
+    from mctl_core import mcp_server
+
+    city = _fleet_city(tmp_path)
+    args = {"provider": "beta", "from_provider": "alpha", "dry_run": False}
+    mcp_server._handle_provider_set(_scope(city), args)
+    out = mcp_server._handle_provider_set(_scope(city), dict(args))
+    assert out["applied"] is False
+    assert out.get("already_current") is True
+
+
+def test_from_provider_dry_run_counts_without_writing(tmp_path):
+    from mctl_core import mcp_server
+
+    city = _fleet_city(tmp_path)
+    before = (city / "city.toml").read_text()
+    out = mcp_server._handle_provider_set(
+        _scope(city), {"provider": "beta", "from_provider": "alpha"})
+    assert out["applied"] is False
+    assert out["rewritten"] == 5, "dry run must still report the true count"
+    assert (city / "city.toml").read_text() == before

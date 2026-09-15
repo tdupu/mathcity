@@ -15677,6 +15677,10 @@
           "description": "Formula name, as listed by `formulas_catalog`.",
           "type": "string"
         },
+        "from_provider": {
+          "description": "Optional. FLEET MIGRATION: rewrite EVERY reference to this provider -- [workspace] provider, any derived [providers.X] base, and provider= under [defaults.agent] and [[patches.agent]] -- to `provider`. The [providers.<from>] declaration itself is left intact so the account stays available. Use when moving the fleet off a rate-limited or retired account.",
+          "type": "string"
+        },
         "rig": {
           "description": "Registered rig identifier; defaults to the server's --rig.",
           "type": [
@@ -18380,11 +18384,17 @@
         "for_provider": {
           "type": "string"
         },
+        "from_provider": {
+          "type": "string"
+        },
         "previous": {
           "type": "string"
         },
         "provider": {
           "type": "string"
+        },
+        "rewritten": {
+          "type": "integer"
         },
         "trace_id": {
           "description": "Trace id for this tool call.",
