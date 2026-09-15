@@ -143,3 +143,70 @@ def test_already_on_target_is_idempotent_not_an_error(tmp_path):
         _scope(city), {"provider": "alpha", "dry_run": False})
     assert out["applied"] is False
     assert out.get("already_current") is True
+
+
+def _city_with_derived(tmp_path: Path) -> Path:
+    """A city where one provider DERIVES from another, as mayor-model does."""
+    city = _city(tmp_path)
+    t = (city / "city.toml").read_text()
+    t += (
+        "\n[providers.mayor-model]\n"
+        'base = "provider:alpha"\n'
+        'display_name = "Opus (mayor)"\n'
+    )
+    (city / "city.toml").write_text(t)
+    return city
+
+
+def test_for_provider_rewrites_a_derived_providers_base(tmp_path):
+    """THE BUG THIS EXISTS FOR (kolchin, 2026-09-15).
+
+    `[workspace] provider` was switched to claude-primary on 09-10, and the
+    Mayor kept running on claude-agexplained for five days -- because
+    `[providers.mayor-model]` declares `base = "provider:claude-agexplained"`,
+    which overrides the workspace setting for every session that uses it.
+    Switching the workspace provider cannot reach a derived provider's base,
+    so the fleet silently stayed on an exhausted account.
+    """
+    from mctl_core import mcp_server
+
+    city = _city_with_derived(tmp_path)
+    out = mcp_server._handle_provider_set(
+        _scope(city),
+        {"provider": "beta", "for_provider": "mayor-model", "dry_run": False},
+    )
+    assert out["applied"] is True, out.get("diagnostics")
+    text = (city / "city.toml").read_text()
+    assert 'base = "provider:beta"' in text
+    # the workspace setting must NOT have moved
+    assert 'provider = "alpha"' in text, "for_provider must not touch [workspace]"
+    assert "standing justification comment that MUST survive" in text
+
+
+def test_for_provider_refuses_an_undeclared_target(tmp_path):
+    from mctl_core import mcp_server
+
+    city = _city_with_derived(tmp_path)
+    out = mcp_server._handle_provider_set(
+        _scope(city),
+        {"provider": "beta", "for_provider": "nosuch", "dry_run": False},
+    )
+    assert out["applied"] is False
+    assert "MPRV_NO_SUCH_PROVIDER" in [d.get("code") for d in out.get("diagnostics", [])]
+
+
+def test_for_provider_still_validates_the_account(tmp_path):
+    """Fail-closed applies to a base rewrite too: it retargets whole sessions."""
+    from mctl_core import mcp_server
+
+    city = _city_with_derived(tmp_path, ) if False else _city(tmp_path, auth=False)
+    t = (city / "city.toml").read_text() + (
+        '\n[providers.mayor-model]\nbase = "provider:alpha"\n')
+    (city / "city.toml").write_text(t)
+    out = mcp_server._handle_provider_set(
+        _scope(city),
+        {"provider": "beta", "for_provider": "mayor-model", "dry_run": False},
+    )
+    assert out["applied"] is False
+    assert "MPRV_TARGET_NOT_AUTHENTICATED" in [
+        d.get("code") for d in out.get("diagnostics", [])]

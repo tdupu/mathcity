@@ -997,6 +997,19 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
                          + (", ".join(sorted(provs)) or "(none)"))}]
         return payload
 
+    for_provider = str(arguments.get("for_provider") or "").strip()
+    if for_provider:
+        if for_provider not in provs:
+            payload["diagnostics"] = [
+                {"code": "MPRV_NO_SUCH_PROVIDER", "severity": "error",
+                 "message": (f"no [providers.{for_provider}] in {path}; declared: "
+                             + (", ".join(sorted(provs)) or "(none)"))}]
+            return payload
+        payload["for_provider"] = for_provider
+        current = str(provs[for_provider].get("base") or "").strip()
+        current = current[len("provider:"):] if current.startswith("provider:") else current
+        payload["previous"] = current
+
     if current == target:
         payload["already_current"] = True
         payload["diagnostics"] = [
@@ -1024,6 +1037,36 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
 
     payload["email"] = email
     text = path.read_text()
+    if for_provider:
+        # A DERIVED provider's base, not the workspace default. kolchin ran the
+        # Mayor on an exhausted account for five days after [workspace] provider
+        # was switched, because [providers.mayor-model] declares its own base and
+        # that base wins for every session using it. Switching the workspace
+        # setting cannot reach it.
+        section = "[providers." + for_provider + "]"
+        ws = re.search(r"(?ms)^" + re.escape(section) + r"\s*$(.*?)(?=^\[|\Z)", text)
+        if not ws:
+            payload["diagnostics"] = [
+                {"code": "MPRV_NO_WORKSPACE_SECTION", "severity": "error",
+                 "message": f"no {section} section in {path}"}]
+            return payload
+        block = ws.group(1)
+        new_block, n = re.subn(
+            r'(?m)^(\s*base\s*=\s*)"[^"]*"',
+            lambda m: m.group(1) + '"provider:' + target + '"', block, count=1)
+        if n != 1:
+            payload["diagnostics"] = [
+                {"code": "MPRV_AMBIGUOUS_PROVIDER_LINE", "severity": "error",
+                 "message": (f"expected exactly one base assignment under {section}, "
+                             f"found {n}")}]
+            return payload
+        return _provider_set_commit(
+            path, text, ws, new_block, arguments, payload, target, current, email,
+            verify=lambda after: str(
+                (((after.get("providers") or {}).get(for_provider) or {}).get("base") or "")
+            ).strip() == "provider:" + target,
+            what=f"[providers.{for_provider}] base")
+
     ws = re.search(r"(?ms)^\[workspace\]\s*$(.*?)(?=^\[|\Z)", text)
     if not ws:
         payload["diagnostics"] = [
@@ -1041,10 +1084,21 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
                          f"found {n}")}]
         return payload
 
+    return _provider_set_commit(
+        path, text, ws, new_block, arguments, payload, target, current, email,
+        verify=lambda after: str(
+            ((after.get("workspace") or {}).get("provider") or "")).strip() == target,
+        what="[workspace] provider")
+
+
+def _provider_set_commit(path, text, ws, new_block, arguments, payload,
+                         target, current, email, *, verify, what):
+    """Shared dry-run / backup / write / re-read-verify / restore tail."""
+    notes: list[dict[str, object]] = []
     if _dry_run(arguments):
         notes.append({"code": "MPRV_DRY_RUN", "severity": "info",
-                      "message": (f"would switch {current or '(none)'} -> {target} "
-                                  f"[{email}]; pass dry_run=false to apply")})
+                      "message": (f"would switch {what} {current or '(none)'} -> "
+                                  f"{target} [{email}]; pass dry_run=false to apply")})
         payload["diagnostics"] = notes
         return payload
 
@@ -1056,11 +1110,10 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
     # Verify by re-reading. A write that reports success without confirming it
     # is the failure mode this whole campaign kept finding.
     try:
-        after = tomllib.loads(path.read_text())
-        landed = str(((after.get("workspace") or {}).get("provider") or "")).strip()
+        ok = verify(tomllib.loads(path.read_text()))
     except (OSError, tomllib.TOMLDecodeError):
-        landed = ""
-    if landed != target:
+        ok = False
+    if not ok:
         shutil.copy2(backup, path)
         payload["diagnostics"] = [
             {"code": "MPRV_VERIFY_FAILED", "severity": "error",
@@ -1071,7 +1124,7 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
     payload["backup"] = backup.name
     payload["diagnostics"] = [
         {"code": "MPRV_SWITCHED", "severity": "info",
-         "message": (f"provider {current or '(none)'} -> {target} [{email}]; "
+         "message": (f"{what} {current or '(none)'} -> {target} [{email}]; "
                      "running sessions keep the old provider, new sessions pick this up")}]
     return payload
 
@@ -3179,6 +3232,17 @@ TOOLS: tuple[ToolSpec, ...] = (
                         "Must have a CLAUDE_CONFIG_DIR with an authenticated account."
                     ),
                 },
+                "for_provider": {
+                    "type": "string",
+                    "description": (
+                        "Optional. When given, rewrite THAT provider's `base` to "
+                        "`provider:<provider>` instead of `[workspace] provider`. A "
+                        "derived provider's base overrides the workspace default for "
+                        "every session using it, so switching the workspace setting "
+                        "alone cannot move it -- kolchin ran its Mayor on an exhausted "
+                        "account for five days that way."
+                    ),
+                },
                 "dry_run": DRY_RUN_PROPERTY,
             },
             ["provider"],
@@ -3191,6 +3255,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "email": {"type": "string"},
                 "backup": {"type": "string"},
                 "already_current": {"type": "boolean"},
+                "for_provider": {"type": "string"},
             },
             ["applied", "provider"],
         ),

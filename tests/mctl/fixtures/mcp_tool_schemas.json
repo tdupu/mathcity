@@ -18215,6 +18215,10 @@
           "description": "Preview the effect plan without applying it. Defaults to true.",
           "type": "boolean"
         },
+        "for_provider": {
+          "description": "Optional. When given, rewrite THAT provider's `base` to `provider:<provider>` instead of `[workspace] provider`. A derived provider's base overrides the workspace default for every session using it, so switching the workspace setting alone cannot move it -- kolchin ran its Mayor on an exhausted account for five days that way.",
+          "type": "string"
+        },
         "provider": {
           "description": "Name of a declared [providers.<name>] block to switch to. Must have a CLAUDE_CONFIG_DIR with an authenticated account.",
           "type": "string"
@@ -18371,6 +18375,9 @@
           "type": "array"
         },
         "email": {
+          "type": "string"
+        },
+        "for_provider": {
           "type": "string"
         },
         "previous": {
