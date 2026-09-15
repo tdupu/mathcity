@@ -30,6 +30,7 @@ DRY RUN BY DEFAULT, matching bead_close and every other mutating tool.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -384,3 +385,59 @@ def test_verification_is_semantic_not_a_replay_of_the_write_regex(tmp_path, monk
         base = str(blk.get("base") or "")
         assert base.removeprefix("provider:") != "alpha", (
             f"[providers.{name}] still resolves to alpha; verify was not semantic")
+
+
+def test_a_concurrent_write_is_refused_not_clobbered(tmp_path):
+    """LOST UPDATE (found by adversarial review, 2026-09-15).
+
+    The handler read city.toml, built new text, then wrote it. Anything another
+    writer landed in between was destroyed, and the tool reported MPRV_SWITCHED
+    over the loss. The supervisor writes city.toml and this tool was run three
+    times against a live city, so the window is real.
+
+    SCOPE, STATED HONESTLY: this is a compare-and-swap, not a lock. It closes
+    the read->commit window, which is the wide one (schema checks, account
+    verification and regex work all happen inside it). The commit->write window
+    remains open and cannot be closed without real locking; a first version of
+    this test landed its racing write *inside* write_text and so was testing
+    the unprotectable window, not the protected one.
+    """
+    from mctl_core import mcp_server
+
+    city = _city(tmp_path)
+    path = city / "city.toml"
+    stale = path.read_text()
+
+    # Another writer lands a block after we read, before we commit.
+    path.write_text(stale + '\n[[rigs]]\nname = "landed-concurrently"\n')
+
+    payload: dict = {"applied": False}
+    ws = re.search(r"(?ms)^\[workspace\]\s*$(.*?)(?=^\[|\Z)", stale)
+    out = mcp_server._provider_set_commit(
+        path, stale, ws, ws.group(1).replace('"alpha"', '"beta"'),
+        {"dry_run": False}, payload, "beta", "alpha", "beta@example.com",
+        verify=lambda after: True, what="[workspace] provider")
+
+    assert out["applied"] is False, "reported success over a lost update"
+    assert "MPRV_CONCURRENT_WRITE" in [
+        d.get("code") for d in out.get("diagnostics", [])], out.get("diagnostics")
+    assert "landed-concurrently" in path.read_text(), (
+        "the concurrent writer's block was destroyed -- lost update")
+
+
+def test_two_applies_in_one_second_do_not_share_a_backup(tmp_path):
+    """time.strftime is second-resolution, so two applies inside one second
+    collided on one filename and copy2 silently overwrote. After a
+    switch-and-revert the original was unrecoverable.
+    """
+    from mctl_core import mcp_server
+
+    city = _city(tmp_path)
+    mcp_server._handle_provider_set(
+        _scope(city), {"provider": "beta", "dry_run": False})
+    mcp_server._handle_provider_set(
+        _scope(city), {"provider": "alpha", "dry_run": False})
+    backups = sorted(city.glob("city.toml.bak-provider-*"))
+    assert len(backups) == 2, f"backups collided: {[b.name for b in backups]}"
+    # the FIRST backup must still hold the pre-migration original
+    assert 'provider = "alpha"' in backups[0].read_text()

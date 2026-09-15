@@ -948,6 +948,43 @@ def _provider_account(cfg_dir: Path) -> tuple[str, str | None]:
     return ("ok", email) if email else ("no-auth", None)
 
 
+def _provider_backup_path(path: Path) -> Path:
+    """A backup name no concurrent apply can collide with.
+
+    time.strftime is second-resolution, so two applies inside one second shared
+    one filename and shutil.copy2 silently overwrote -- after a
+    switch-and-revert the pre-migration original was unrecoverable.
+    """
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for n in range(1000):
+        cand = path.with_name(
+            f"city.toml.bak-provider-{stamp}" + (f".{n}" if n else ""))
+        if not cand.exists():
+            return cand
+    raise OSError("could not allocate a backup filename")
+
+
+def _provider_cas_guard(path: Path, expected: str) -> dict[str, object] | None:
+    """Refuse the write if the file changed since we read it.
+
+    LOST UPDATE: the handler read city.toml, built new text, then wrote --
+    destroying anything another writer landed in between and reporting
+    MPRV_SWITCHED over the loss. The supervisor writes city.toml, so the window
+    is real. This is a compare-and-swap, not a lock: it cannot prevent the race,
+    but it converts silent destruction into a loud refusal the caller can retry.
+    """
+    try:
+        if path.read_text() != expected:
+            return {"code": "MPRV_CONCURRENT_WRITE", "severity": "error",
+                    "message": (f"{path} changed after it was read and before the "
+                                "write; refusing rather than overwriting another "
+                                "writer's change. Re-run to pick up the new content.")}
+    except OSError as exc:
+        return {"code": "MPRV_CONFIG_UNREADABLE", "severity": "error",
+                "message": f"{path} became unreadable before the write: {exc}"}
+    return None
+
+
 def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict[str, object]:
     """Switch the city's Claude provider. The WRITE half of #197.
 
@@ -1051,8 +1088,11 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
                              f"{from_provider} -> {target} [{em0}]; "
                              "pass dry_run=false to apply")}]
             return payload
-        backup = path.with_name(
-            "city.toml.bak-provider-" + time.strftime("%Y%m%d-%H%M%S"))
+        race = _provider_cas_guard(path, text)
+        if race is not None:
+            payload["diagnostics"] = [race]
+            return payload
+        backup = _provider_backup_path(path)
         shutil.copy2(path, backup)
         path.write_text(new_text)
         # SEMANTIC verification, not a replay of the write patterns. Counting
@@ -1208,8 +1248,11 @@ def _provider_set_commit(path, text, ws, new_block, arguments, payload,
         payload["diagnostics"] = notes
         return payload
 
-    backup = path.with_name(
-        "city.toml.bak-provider-" + time.strftime("%Y%m%d-%H%M%S"))
+    race = _provider_cas_guard(path, text)
+    if race is not None:
+        payload["diagnostics"] = [race]
+        return payload
+    backup = _provider_backup_path(path)
     shutil.copy2(path, backup)
     path.write_text(text[: ws.start(1)] + new_block + text[ws.end(1):])
 
