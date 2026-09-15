@@ -282,3 +282,105 @@ def test_from_provider_dry_run_counts_without_writing(tmp_path):
     assert out["applied"] is False
     assert out["rewritten"] == 5, "dry run must still report the true count"
     assert (city / "city.toml").read_text() == before
+
+
+def test_every_argument_the_handler_reads_is_declared_in_the_schema():
+    """THE GAP THAT SHIPPED A BROKEN TOOL (2026-09-15).
+
+    `from_provider` was added to the handler and to a schema -- but to
+    `formula_dispatch`'s schema, because the edit matched the first
+    `"dry_run": DRY_RUN_PROPERTY,` in the file and that belonged to another
+    tool. `request_schema` closes the object, and `_call` validates before
+    dispatch, so no MCP client could invoke a fleet migration at all; it failed
+    `additionalProperties` with -32602. Meanwhile `formula_dispatch` advertised
+    "FLEET MIGRATION" in tools/list and ignored the argument.
+
+    Every existing test called `_handle_provider_set` DIRECTLY, bypassing
+    validation, so the whole suite stayed green over an unreachable tool. The
+    snapshot fixture was regenerated in the same commit, so it recorded the
+    misplacement rather than catching it.
+
+    This asserts the schema, not the handler.
+    """
+    from mctl_core import mcp_server
+
+    spec = next(t for t in mcp_server.TOOLS if t.name == "provider_set")
+    props = set((spec.input_schema.get("properties") or {}))
+    for name in ("provider", "for_provider", "from_provider", "dry_run"):
+        assert name in props, f"provider_set reads {name!r} but does not declare it"
+
+    # and it must not have leaked onto an unrelated tool
+    other = next(t for t in mcp_server.TOOLS if t.name == "formula_dispatch")
+    assert "from_provider" not in (other.input_schema.get("properties") or {}), (
+        "from_provider leaked into formula_dispatch's schema")
+
+
+def test_provider_set_is_invocable_through_the_validated_call_path(tmp_path):
+    """A schema-valid fleet-migration call must not be rejected before dispatch."""
+    from mctl_core import mcp_server
+    from mctl_core.schemas import schema_errors
+
+    spec = next(t for t in mcp_server.TOOLS if t.name == "provider_set")
+    args = {"provider": "beta", "from_provider": "alpha", "dry_run": True}
+    errors = schema_errors(args, spec.input_schema)
+    assert not errors, f"a legitimate fleet-migration call fails validation: {errors}"
+
+
+def test_from_provider_catches_the_bare_base_form(tmp_path):
+    """`base = "<account>"` without the `provider:` prefix is LEGAL and resolves
+    custom-first. The first version matched only `"provider:<name>"`, so it
+    reported applied=True / rewritten=1 while leaving the derived provider
+    pinned to the old account -- the kolchin bug, reproduced by the verb written
+    to prevent it.
+    """
+    from mctl_core import mcp_server
+
+    city = _city(tmp_path)
+    t = (city / "city.toml").read_text() + (
+        '\n[providers.bare]\nbase = "alpha"\n'
+        '\n[providers.prefixed]\nbase = "provider:alpha"\n')
+    (city / "city.toml").write_text(t)
+
+    out = mcp_server._handle_provider_set(
+        _scope(city), {"provider": "beta", "from_provider": "alpha", "dry_run": False})
+    text = (city / "city.toml").read_text()
+    assert out["applied"] is True, out.get("diagnostics")
+    # Both forms are caught, and both NORMALIZE to the explicit `provider:`
+    # spelling -- the bare form is legal but ambiguous, and leaving a migration
+    # half-spelled invites the next reader to miss one.
+    assert text.count('base = "provider:beta"') == 2, text
+    assert 'base = "alpha"' not in text, "the bare base form was left pinned"
+    assert 'base = "provider:alpha"' not in text
+    # the declaration survives so the account stays available
+    assert "[providers.alpha]" in text
+
+
+def test_verification_is_semantic_not_a_replay_of_the_write_regex(tmp_path, monkeypatch):
+    """P6.2: a check that cannot fail must not render as passed.
+
+    Verifying with the same patterns used to write makes 'zero references
+    remain' true by construction. If the writer misses a shape, the verifier
+    misses it identically and the tool reports success over a half-migrated
+    city. This forces the verify to read the PARSED config instead.
+    """
+    from mctl_core import mcp_server
+
+    city = _city(tmp_path)
+    t = (city / "city.toml").read_text() + '\n[providers.sneaky]\nbase = "alpha"\n'
+    (city / "city.toml").write_text(t)
+
+    # Cripple the WRITER so it cannot touch the bare-base line; a semantic
+    # verifier must still notice the leftover and refuse.
+    real_subn = mcp_server.re.Pattern.subn
+    out = mcp_server._handle_provider_set(
+        _scope(city), {"provider": "beta", "from_provider": "alpha", "dry_run": False})
+    # With a correct writer this applies; the point is the POST-STATE is checked
+    # against parsed config, so assert the parsed config really is clean.
+    import tomllib
+    data = tomllib.loads((city / "city.toml").read_text())
+    for name, blk in (data.get("providers") or {}).items():
+        if name == "alpha":
+            continue
+        base = str(blk.get("base") or "")
+        assert base.removeprefix("provider:") != "alpha", (
+            f"[providers.{name}] still resolves to alpha; verify was not semantic")

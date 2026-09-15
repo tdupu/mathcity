@@ -1014,8 +1014,16 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
             return payload
         payload["from_provider"] = from_provider
         text = path.read_text()
-        pin = re.compile(r'(?m)^(\s*provider\s*=\s*)"' + re.escape(from_provider) + r'"')
-        based = re.compile(r'(?m)^(\s*base\s*=\s*)"provider:' + re.escape(from_provider) + r'"')
+        # BOTH quote styles, and BOTH base forms. `base = "<account>"` without
+        # the `provider:` prefix is legal and resolves custom-first; a first
+        # version matched only the prefixed form and reported applied=True
+        # while leaving a derived provider pinned to the old account -- the
+        # exact bug this verb exists to prevent, reproduced by the verb.
+        q = r'["\']'
+        esc = re.escape(from_provider)
+        pin = re.compile(r'(?m)^(\s*provider\s*=\s*)' + q + esc + q)
+        based = re.compile(
+            r'(?m)^(\s*base\s*=\s*)' + q + r'(?:provider:)?' + esc + q)
         new_text, n1 = pin.subn(lambda m: m.group(1) + '"' + target + '"', text)
         new_text, n2 = based.subn(
             lambda m: m.group(1) + '"provider:' + target + '"', new_text)
@@ -1047,10 +1055,37 @@ def _handle_provider_set(scope: CityScope, arguments: Mapping[str, Any]) -> dict
             "city.toml.bak-provider-" + time.strftime("%Y%m%d-%H%M%S"))
         shutil.copy2(path, backup)
         path.write_text(new_text)
+        # SEMANTIC verification, not a replay of the write patterns. Counting
+        # remaining regex matches with the SAME patterns that wrote makes "zero
+        # references remain" true by construction: a shape the writer misses,
+        # the verifier misses identically, and a half-migrated city reports
+        # success. That is P6.2's prohibited shape. This reads the PARSED
+        # config instead, so a missed shape fails the check.
+        def _still_references(node) -> bool:
+            if isinstance(node, dict):
+                prov = node.get("provider")
+                if isinstance(prov, str) and prov.strip() == from_provider:
+                    return True
+                base = node.get("base")
+                if isinstance(base, str) and base.strip().removeprefix(
+                        "provider:") == from_provider and node is not provs.get(from_provider):
+                    return True
+                return any(_still_references(v) for k, v in node.items()
+                           if not (k == "providers"))
+            if isinstance(node, list):
+                return any(_still_references(v) for v in node)
+            return False
+
         try:
-            tomllib.loads(path.read_text())
-            left = len(pin.findall(path.read_text())) + len(based.findall(path.read_text()))
-            ok = left == 0
+            after_cfg = tomllib.loads(path.read_text())
+            # the [providers.<from>] declaration itself is exempt -- it must
+            # survive so the account stays available to switch back to.
+            decls = (after_cfg.get("providers") or {})
+            leftover = any(
+                _still_references(v) for k, v in decls.items() if k != from_provider)
+            leftover = leftover or _still_references(
+                {k: v for k, v in after_cfg.items() if k != "providers"})
+            ok = not leftover
         except (OSError, tomllib.TOMLDecodeError):
             ok = False
         if not ok:
@@ -2662,18 +2697,6 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "target": nullable_string(
                     "Agent to route to; defaults to `<rig>/gc.run-operator`."
                 ),
-                "from_provider": {
-                    "type": "string",
-                    "description": (
-                        "Optional. FLEET MIGRATION: rewrite EVERY reference to this "
-                        "provider -- [workspace] provider, any derived [providers.X] "
-                        "base, and provider= under [defaults.agent] and "
-                        "[[patches.agent]] -- to `provider`. The [providers.<from>] "
-                        "declaration itself is left intact so the account stays "
-                        "available. Use when moving the fleet off a rate-limited or "
-                        "retired account."
-                    ),
-                },
                 "dry_run": DRY_RUN_PROPERTY,
             },
             ["formula"],
@@ -3324,6 +3347,18 @@ TOOLS: tuple[ToolSpec, ...] = (
                         "every session using it, so switching the workspace setting "
                         "alone cannot move it -- kolchin ran its Mayor on an exhausted "
                         "account for five days that way."
+                    ),
+                },
+                "from_provider": {
+                    "type": "string",
+                    "description": (
+                        "Optional. FLEET MIGRATION: rewrite EVERY reference to this "
+                        "provider -- [workspace] provider, any derived [providers.X] "
+                        "base, and provider= under [defaults.agent] and "
+                        "[[patches.agent]] -- to `provider`. The [providers.<from>] "
+                        "declaration itself is left intact so the account stays "
+                        "available. Use when moving the fleet off a rate-limited or "
+                        "retired account."
                     ),
                 },
                 "dry_run": DRY_RUN_PROPERTY,
