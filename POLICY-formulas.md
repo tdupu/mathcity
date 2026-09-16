@@ -4,9 +4,9 @@ Parent: [README.md](./README.md)
 
 | Field | Value |
 |---|---|
-| Version | 1.6 |
-| Status | Draft |
-| Date | 2026-08-11 |
+| Version | 1.7 |
+| Status | **Adopted** 2026-09-15 (Draft→Adopted on Taylor's explicit in-session sign-off). check-zero run and passed the same day, after remediating four findings. **Scope of adoption:** every F-rule in this document is Adopted; there are no individually PROPOSED rules here. |
+| Date | 2026-09-15 |
 | Prefix | F |
 | Subordinate to | `mathcity/subdomains/dev/POLICY.md` |
 | Applies to | All formula TOMLs in every mathcity pack (mathcity/ and all subdomains) |
@@ -24,15 +24,39 @@ pass all F-rules before human adjudication.
 *Planning belongs to high-tier agents. Execution belongs to low-tier agents.
 Neither substitutes for the other.*
 
-**F1.1 — Planning steps must route to high-tier named sessions.**
-Any formula step whose purpose is planning, design, requirements gathering,
-or architectural judgment must set `gc.run_target` to a high-tier fleet
-address (`gc.design-author`, `gc.review-synthesizer`,
-`gc.requirements-planner`, or equivalent Opus-class session).
+**This pillar states an AIM, not an enforced property.** The F-rules below
+enforce that steps name the fleet address of the correct ROLE. Binding a role's
+address to a model tier is configuration, and as of 2026-09-15 the city does it
+in exactly one place. Read F1.1 and F1.2 as role-routing rules; see F1.1's SCOPE
+paragraph.
 
-Pass: all planning-role steps have `metadata = { "gc.run_target" = "<high-tier-address>" }`.
+**F1.1 — Planning steps must route to the planning-role fleet address.**
+Any formula step whose purpose is planning, design, requirements gathering,
+or architectural judgment must set `gc.run_target` to a planning-role fleet
+address (`gc.design-author`, `gc.review-synthesizer`,
+`gc.requirements-planner`, or equivalent).
+
+Pass: all planning-role steps have `metadata = { "gc.run_target" = "<planning-role-address>" }`.
 Fail: a planning step routes to `gc.run-operator`, `gc.implementation-worker`,
-or any execution-tier address.
+or any execution-role address.
+
+**SCOPE — what this rule does NOT establish.** F1.1 verifies *address hygiene*:
+that the step names the fleet address of the right role. It does **not**
+establish that a high-tier MODEL serves that address. Model tier is configured
+elsewhere (per-agent `provider` in city config or the roles pack) and is not
+enforced by any F-rule.
+
+Measured 2026-09-15: there are **zero** `provider`/`model` declarations in the
+entire roles pack, and exactly **one** model binding in city config —
+`provider = "fable"` on `gc.design-author`, scoped to a single rig. So outside
+that one rig/agent pair, a passing F1.1 implies nothing about which model runs
+the step. Do not read an F1.1 PASS as evidence that Pillar 1's tier property
+holds; making it hold is separate, tracked configuration work.
+
+*(Re-scoped 2026-09-15 on Taylor's approval. The prior text required a
+"high-tier fleet address … or equivalent Opus-class session" and its pass
+condition claimed a tier guarantee the city does not implement — a check
+satisfiable without its purpose being served.)*
 
 **F1.2 — Execution steps must route to execution-tier named sessions.**
 Steps that run shell commands, write files, execute deterministic operations,
@@ -145,19 +169,29 @@ Fail: enum or default contains `"fable"`, `"opus"`, `"sonnet"`, or `"haiku"`.
 correctness gates before the human adjudicator sees it. Reinventions and zero-state failures
 must not reach the brief stack.*
 
-**F4.1 — `/check-zero` and `/check-wheel` required before terminal brief.**
+**F4.1 — `/check-wheel` required before terminal brief.**
 Before filing the terminal brief (`file-brief`, `brief-finalize`, or
-`workflow-finalize`), every formula must include a step that runs `/check-zero`
-(resource survey across all layers) and `/check-wheel` (wheel-reinvention
-gate) against the formula's deliverable. The terminal brief step is
-conditioned on both returning `NO REINVENTION`, or on a documented exception
-recorded in the brief body.
+`workflow-finalize`), every formula must include a step that runs `/check-wheel`
+against the formula's deliverable. The terminal brief step is conditioned on it
+returning `NO REINVENTION`, or on a documented exception recorded in the brief
+body.
+
+`/check-wheel` **chains `/check-zero`** — it runs the resource survey as its
+detection phase and adds the reinvention judgement plus the hygienic import
+recommendation. Invoking both runs the survey twice; require only
+`/check-wheel`, and read its verdict as carrying check-zero's.
 
 Pass: the validate step or a dedicated pre-brief step explicitly invokes
-`/check-zero` and `/check-wheel` against the deliverable; the brief artifact
-includes their verdicts.
-Fail: the terminal brief step fires without a prior `/check-zero` +
-`/check-wheel` run, or their verdicts do not appear in the brief.
+`/check-wheel` against the deliverable; the brief artifact includes its verdict
+(which names the underlying survey).
+Fail: the terminal brief step fires without a prior `/check-wheel` run, or its
+verdict does not appear in the brief.
+
+*(Amended 2026-09-15 on Taylor's approval. The prior text required BOTH
+`/check-zero` AND `/check-wheel`; check-wheel's own definition states it "chains
+check-zero (detection) with check-plan-hygiene (hygiene recommendation) into one
+focused verdict", so the pair was redundant and doubled the cost of every
+terminal brief.)*
 
 Rationale: prevents work that reinvents an existing resource from reaching
 the human adjudicator's review queue. The human adjudicator should adjudicate genuinely new work, not
@@ -172,18 +206,32 @@ duplicates of what already exists. `check-zero` + `check-wheel` is the single
 A formula whose plan or design has not passed critical review must not
 be slung to the fleet.*
 
-**F5.1 — Coordinated review and critical review required before dispatch.**
-Before a formula is dispatched (`gc sling` or equivalent), it must pass
-a coordinated review via `/fp-finder` (or `/coordinate-review`) AND
-`/critical-review`. Both gates must return a passing verdict. A formula
-that has not cleared both gates, or that received a FAIL verdict, must not
-be slung.
+**F5.1 — Coordinated review required before dispatch; its critical-review
+verdicts must be evidenced.**
+Before a formula is dispatched (`gc sling` or equivalent), it must pass a
+coordinated review via `/coordinate-review` (or `/fp-finder-skill`). The review
+must return a passing verdict, and the critical-review verdicts produced inside
+that loop must appear in the dispatch decision brief. A formula that has not
+cleared the review, or that received a FAIL verdict, must not be slung.
 
-Pass: the dispatch decision brief includes passing verdicts from
-`/fp-finder` (or `/coordinate-review`) and `/critical-review`.
-Fail: formula is slung without documented passing verdicts from both gates,
-or a FAIL verdict was overridden without a human APPROVE exception recorded
-in the brief.
+Both review loops already run critical-review internally — `/coordinate-review`
+spawns a `critical-review` subagent each iteration, and `/fp-finder-skill` gates
+acceptance on remaining APPROVING per critical-review. A separately invoked
+`/critical-review` is therefore **not** required; what is required is that the
+loop's critical-review verdicts are surfaced rather than left implicit.
+
+Pass: the dispatch decision brief includes a passing verdict from
+`/coordinate-review` (or `/fp-finder-skill`) together with the critical-review
+verdicts from its iterations.
+Fail: formula is slung without a documented passing review verdict; or the
+review's critical-review verdicts are not evidenced in the brief; or a FAIL
+verdict was overridden without a human APPROVE exception recorded in the brief.
+
+*(Amended 2026-09-15 on Taylor's approval, fixing two defects. (1) The prior text
+required "`/fp-finder` (or `/coordinate-review`) AND `/critical-review`" — the
+second conjunct is already inside both branches of the first, so it added no
+work on any path. (2) The handle `/fp-finder` does not resolve; the skill is
+`fp-finder-skill`.)*
 
 Rationale: coordination and adversarial review before dispatch catch
 false-positive designs, integration conflicts, and critical flaws before
@@ -359,4 +407,6 @@ briefed graph satisfying F8.1 and F8.2.
 | 1.3 | 2026-07-23 | Add F6.1 — Pillar 6 testing discipline: new formulas require a basic smoke test before dispatch. The human adjudicator directive (Mayor session Q27). |
 | 1.4 | 2026-07-23 | Add F7.1 + F7.2 — Pillar 7 dispatch idempotency: pre-sling assignee check required; bead-creating steps must prevent logical duplicates. The human adjudicator directive (Mayor session Q27). |
 | 1.5 | 2026-07-24 | Add F8.1 — Pillar 8 briefed terminal discipline: every `-briefed` formula must terminate in the brief cycle (allowed terminals: file-brief, brief-finalize, workflow-finalize, publish, route). Reconciles the stale formula-creator-math allowed-set (adds publish + route). The human adjudicator directive. |
+| 1.7 | 2026-09-15 | check-zero remediation ahead of adoption (QUIMBY 70; Taylor approved the recommendations). **F1.1 re-scoped** from a tier guarantee to address hygiene, with an explicit SCOPE paragraph recording that zero `provider`/`model` declarations exist in the roles pack and exactly one model binding exists in city config — so a PASS never implied a high-tier model outside that one rig/agent pair. **F4.1** now requires `/check-wheel` alone, which chains `/check-zero`; requiring both ran the survey twice. **F5.1** dropped the `AND /critical-review` conjunct (already inside both branches of its first conjunct) and now requires the loop's critical-review verdicts be evidenced instead; the dangling handle `/fp-finder` corrected to `/fp-finder-skill`. |
 | 1.6 | 2026-08-11 | Amend Pillar 8 around the `mathcity.work` boundary: imported formulas are capabilities, while work accepted through `mathcity.work` must end in a commission/result brief or a route to a briefed graph. Add F8.2 and F8.3 for commissioning and imported Superpowers composition. |
+| 1.7-adopt | 2026-09-15 | **Status Draft → Adopted.** Taylor's explicit in-session sign-off, immediately after reviewing the check-zero verdict and approving its remediation. check-zero was run on the rule set and passed following the fixes recorded in the 1.7 row above, satisfying the adoption prerequisite. All 18 F-rules are Adopted; none is individually PROPOSED. | Taylor, verbatim, on the recommendation to adopt both POLICY-formulas and POLICY-beads: "yes". Rationale carried from the check-zero report: together the two documents unlock up to 98 pending briefs for derivation rather than escalation. |

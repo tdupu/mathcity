@@ -4,11 +4,11 @@ Parent: [README.md](./README.md)
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
-| Date | 2026-07-12 |
+| Status | **Adopted** 2026-09-15 (Draft→Adopted on Taylor's explicit in-session sign-off). check-zero run and passed the same day, after remediating three findings (a fourth was withdrawn as a false positive). **Scope of adoption:** every BP-rule in this document is Adopted; there are no individually PROPOSED rules here. |
+| Date | 2026-09-15 |
 | Decided | the pack owner |
 | Applies to | All bead creation, typing, labeling, memory use, and bead removal in the mathcity ecosystem (all rigs, all agents) |
-| Consumers | `record-decision`, `gc-recycle-bead`, `remember-this`, `brief-prep`, `create-convoy`, `fan-out`, `catch-no-brainer`, `check-math-bead-hygiene`, `new-math-bead-policy`, `new-beads-policy`, any sweeper/reaper skill, Mayor dispatch |
+| Consumers | `adjudicate-brief`, `gc-recycle-bead`, `remember-this`, `brief-prep`, `create-convoy`, `fan-out`, `catch-no-brainer`, `check-math-bead-hygiene`, `new-math-bead-policy`, `mathcity.new-beads-policy`, any sweeper/reaper skill, Mayor dispatch |
 
 Governs how beads are typed, how research beads are protected, when knowledge goes into `bd remember` versus a bead, and when an old bead may be removed. Companion reference (non-normative): [README-beads.md](README-beads.md). On conflict with POLICY-POLICY.md, POLICY-POLICY.md wins.
 
@@ -58,7 +58,9 @@ Governs what must happen BEFORE a new bead is created and dispatched via `mathci
 - **BP1.2 task/feature/bug are the standard work types.** `task` is the default for concrete implementation work with acceptance criteria; `feature` for new user-visible capability (implies a PR/merge outcome); `bug` for defects and regressions (implies root-cause + fix, test evidence before close).
 - **BP1.3 spike = technical investigation ONLY.** A `spike` bead investigates a technical question about code, infrastructure, or system state. It is time-boxed, produces a finding (in bead notes or a follow-up bead), and leads to further work. Examples: "investigate why decisions/ is empty", "research what bd types are available", "check if Option Z propagates retroactively".
 - **BP1.4 Mathematical research is NEVER a spike.** Original mathematical work (theorem exploration, formula derivation, proof work, example computation) is `type: task` or `type: feature` carrying the `[MATH_RESEARCH]` label while ongoing. Mathematical research is not time-boxed and its output is new mathematics, not system knowledge. Typing math research as `spike` is a BP1.4 violation. See Pillar 2 for the completed-research lifecycle.
-- **BP1.5 decision = briefs and adjudications.** Briefs are `type: decision` labeled `brief-open` (pending) or `brief-closed` (adjudicated). Recorded adjudications, policy locks, and verdicts are `type: decision` created via `record-decision`. Decision beads are never reopened; follow-up is a new bead (cross-ref: brief-system B2.2, B3.8).
+- **BP1.5 decision = briefs and adjudications.** Briefs are `type: decision`. Pending-vs-adjudicated is carried by the bead's own **status and recorded verdict** — the representation the brief tooling already reads — not by a lifecycle label. Recorded adjudications, policy locks, and verdicts are `type: decision` created via `adjudicate-brief`. Decision beads are never reopened; follow-up is a new bead (cross-ref: brief-system B2.2, B3.8).
+
+  *(Amended 2026-09-15 on Taylor's approval, two defects. (1) The prior text required briefs be labeled `brief-open` / `brief-closed`. Measured across all rigs that day: of 180 bead-backed briefs, **zero** carried either label and **166 carried no labels at all** — the scheme was never implemented, so adopting it would have made the entire live corpus non-conformant at once and any enforcing check would fail every brief in the city. State already lives on the bead; the labels would have been a second representation of it, which the brief-system's artifact-root rule argues against. (2) `record-decision` does not exist at user or pack scope; its successor is `adjudicate-brief`, which carries the same `bd create -t decision` primitive and encodes the one-bead correction.)*
 - **BP1.6 epic = grouped work; decompose via convoy.** A large effort spanning multiple tasks/features is an `epic`, decomposed with `create-convoy` + `fan-out`. An epic closes only when all members are terminal (cross-ref: B3.5).
 - **BP1.7 chore = maintenance.** Housekeeping with no user-visible change (renames, dep bumps, dead-code pruning). Low-ceremony; usually no brief needed.
 - **BP1.8 milestone = release/date markers.** Time-bound goals aggregating epics and features: release markers, conference-deadline targets (e.g., the July 15 public-release target).
@@ -81,7 +83,9 @@ Governs what must happen BEFORE a new bead is created and dispatched via `mathci
 - **BP3.1 Memories are for persistent knowledge, not task state.** Use `bd remember --key <slug> "<content>"` for: persistent facts, design insights, hard-won debugging discoveries, agent identity info. Do NOT use memories for: ephemeral task state, TODO lists, or anything that belongs in a bead's description/notes. Task tracking lives in beads; knowledge that must survive session death lives in memories.
 - **BP3.2 The retrieval contract.** Memories are injected at `bd prime` time and retrieved via `bd recall <key>` (exact key) or `bd memories <keyword>` (search). Adjudications are NOT memories — they are decision beads, retrieved via `bd list -t decision`. A fact stored only in a session transcript or a scratch file has not been remembered.
 - **BP3.3 Keys are stable slugs.** Memories use explicit `--key` slugs (kebab-case) so `bd recall` is deterministic. Updating a memory reuses its key (in-place update) rather than creating a near-duplicate under a new key.
-- **BP3.4 Bead-vs-memory routing.** If the content is actionable (someone should DO something) → bead. If the content is a fact/insight future sessions need (someone should KNOW something) → memory. If it is an adjudication (someone DECIDED something) → decision bead via `record-decision`. The `remember-this` skill implements this routing and is the preferred entry point.
+- **BP3.4 Bead-vs-memory routing.** If the content is actionable (someone should DO something) → bead. If the content is a fact/insight future sessions need (someone should KNOW something) → memory. If it is an adjudication (someone DECIDED something) → decision bead via `adjudicate-brief`. The `remember-this` skill implements this routing and is the preferred entry point.
+
+  *(Handle corrected 2026-09-15: `record-decision` does not exist at user or pack scope. Note the one-bead exception `adjudicate-brief` carries — when the adjudication is a verdict on a BRIEF, the verdict is recorded on the brief bead itself and no second decision bead is minted.)*
 
 ---
 
@@ -293,15 +297,31 @@ brief).
 - **BP9.1 Math-content dispositions are never no-brainers.** Any brief whose
   disposition would change mathematical content — the body/notes of a
   `[MATH_RESEARCH]`, `[MATH_CLAIM]`, or `[LIT_REVIEW]` bead, a claim status,
-  or any covered `.tex` file — is not compact-eligible and never routes
-  through the catch-no-brainer bypass. `catch-no-brainer` must treat these
-  as a safety override (same mechanism as its server-touching and
-  user-skill-touching overrides): emit `no_brainer:false`,
-  `compact_eligible:false`, and route to the full brief pipeline.
+  or any covered `.tex` file — never routes through the catch-no-brainer
+  bypass, in ANY classifier category. `catch-no-brainer` must treat these
+  as a **safety override**, the same mechanism as its server-touching and
+  user-skill-touching overrides: emit `no_brainer:false` and route to the
+  full brief pipeline.
+
+  This override binds every category, including any future category that
+  resolves a brief by derivation from policy rather than by obviousness. No
+  classifier verdict of any kind disposes of mathematical content.
+
+  *(Amended 2026-09-15: the prior text also required emitting
+  `compact_eligible:false`. Every brief is full-form per ADR 0001 and that
+  field is deprecated and inert, so the instruction commanded a field nothing
+  reads. The rule's intent — math content never bypasses the human — is
+  unchanged and is carried entirely by the safety override.)*
 - **BP9.2 Covered-`.tex` adjudication is a human hard gate.** Route:
   full-form brief with the `check-latex` evidence block attached (BP7.2).
-  Never direct dispatch to merge, never compact form, regardless of how
-  small the diff looks (he-jwmy: approval is of the specific diff).
+  Never direct dispatch to merge, and never resolved by any classifier
+  verdict, regardless of how small the diff looks (he-jwmy: approval is of
+  the specific diff). **A human approves the specific diff, or it does not
+  land.**
+
+  *(Amended 2026-09-15: "never compact form" replaced — compact form no
+  longer exists as a branch. The gate is unchanged and is now stated in terms
+  of what must happen rather than a retired body shape.)*
 - **BP9.3 Mechanical math-adjacent chores may go catch-no-brainer.**
   Bibliography formatting, label renames carrying a `check-labels-and-refs`
   PASS report, research-ledger file moves, and similar record-keeping are
@@ -366,7 +386,9 @@ A future `check-bead-policy` skill never emits **reject** (reject applies only t
 
 | Date | Change | Rationale |
 | --- | --- | --- |
+| 2026-09-15 | check-zero remediation ahead of adoption (QUIMBY 70; Taylor approved the recommendations). **BP1.5**: dropped the `brief-open` / `brief-closed` label requirement — pending-vs-adjudicated is carried by the bead's status and recorded verdict; and corrected the dead `record-decision` handle to `adjudicate-brief`. **BP9.1 / BP9.2**: re-expressed in terms of the live safety-override mechanism and dropped the deprecated `compact_eligible` / "compact form" language; BP9.1 now states explicitly that the math-content override binds EVERY classifier category, including any future category that resolves a brief by derivation from policy. | BP1.5's label scheme was measured as entirely unimplemented — of 180 bead-backed briefs city-wide, zero carried either label and 166 carried no labels at all — so adopting it would have invalidated the whole corpus at once and made any enforcing check fail every brief. Pillar 9's instructions commanded `compact_eligible`, which is deprecated and inert under ADR 0001, so the rules directed a field nothing reads; their intent (mathematical content never bypasses the human) is unchanged and now rests on the override that is live. The BP9.1 "every category" clause was added because a policy-derived classifier category was under design in the same session, and math content must be outside its reach by construction rather than by a later amendment. |
 | 2026-07-20 | Added Pillar 10 (BP10.1–BP10.9): Dolt Migration Safety for Beads 1.1.0 (303e263fe). Governs multi-clone migration protocol introduced by the Remote-Migrate Gate. PP2.6 hot-fix path; retroactive proposal due within 7 days. | the human adjudicator Q21 directive: migration plan for active gsp/agent_skills fork crisis. Full plan: `<city-root>/.beads/decisions-track/77-gt-y1gwuy-beads-migration-plan.md`. Trinity incomplete: `check-beads-policy` / `new-beads-policy` for BP10 not yet scaffolded. |
 | 2026-07-12 | Initial draft (BP1–BP4) | the human adjudicator decree: distinguish mathematical research from technical investigation; codify memory routing and old-bead reaping. NOTE: `mathcity/docs/rule-prefix-registry.md` does not yet exist, so the BP prefix is provisionally claimed here pending registry creation (PP5.2). BP2.4 flags a needed B3.7 amendment via `new-brief-policy`. Trinity incomplete: `check-bead-policy` / `new-bead-policy` skills not yet scaffolded (PP1.1). |
 | 2026-07-19 | Added Pillar 0 (BP0.1–BP0.6): Pre-creation redundancy gate for dispatch beads. Introduces `new-beads-policy` skill (mathcity.new-beads-policy) as mandatory pre-hook before `mathcity.work` dispatch-bead creation. xkcd-927 is the test; three-verdict system (PROCEED/MERGE/DROP). | the human adjudicator Q19 directive: "pre-hook that checks for redundancy in the set of all beads currently written for dispatch." Filed as gt-hpga8f. |
 | 2026-07-12 | Added Pillars 5–9 (BP5–BP9): Mathematical Items Lifecycle System — research-bead anti-spike rules and interim ARCHIVED protocol (BP5, codifying the he-66vr field precedent), literature-review beads (BP6), LaTeX beads and the atomize/bundle rule (BP7), mathematical claim beads with `claim_status` metadata (BP8), classifier routing across catch-no-brainer / brief pipeline / direct dispatch (BP9). Registry note resolved: BP prefix now reserved in `mathcity/docs/rule-prefix-registry.md`. | Outside-agent initial pass at the math-items lifecycle, per the human adjudicator's request: ensure research never gets spiked (mistyped as `spike` OR silently dying with no progress / no CLOSED / no ARCHIVED — the state-gap identified via he-66vr). Companion tools drafted: `check-math-bead-hygiene` (read-only BP5–BP9 auditor) and `new-math-bead-policy` (well-formed math-bead creator) in `<repos-root>/agent-skills/skills/`; these partially satisfy the PP1.1 trinity for the math-item subset — full `check-bead-policy` / `new-bead-policy` still pending. Still Draft; governs nothing until the human adjudicator adopts (PP2.1/PP2.2). BP9.1 flags a needed `catch-no-brainer` safety-override extension. |
+| 2026-09-15 | **Status Draft → Adopted.** Taylor's explicit in-session sign-off, immediately after reviewing the check-zero verdict and approving its remediation. check-zero was run and passed following the fixes recorded in the row above, satisfying the adoption prerequisite. All 54 BP-rules are Adopted; none is individually PROPOSED. | Taylor, verbatim, on the recommendation to adopt both POLICY-formulas and POLICY-beads: "yes". Sequencing rationale carried from the check-zero report: this document is adopted BEFORE any derived-adjudication drain runs, because BP9.1's math-content safety override is what keeps derived verdicts away from mathematical content. |

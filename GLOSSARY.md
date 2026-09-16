@@ -7,7 +7,12 @@ policy document; binding rules live in the `POLICY*.md` files.
 
 | Term | Meaning |
 | --- | --- |
-| Adjudication | A human verdict on a brief: approve, reject, revise, or defer. The verdict is recorded by `adjudicate-brief`. |
+| Adjudication | A human verdict on a brief: approve, reject, revise, or defer. The verdict is recorded by `adjudicate-brief`. Only a human adjudicates — see **Derivation** and **Relay** for the two other acts that also end in a recorded verdict, and are not this one. |
+| Derivation | Computing a brief's verdict from an adopted rule and recording it with that rule quoted. The agent is the *authorizer*; the rule is the *authority*. Mandated rather than optional: the policy-policy makes surfacing a policy-derivable question a violation. A derivation must be **written out and name which rule eliminates which option, so a reader can falsify it** — pointing at a rule is not a derivation. |
+| Derived verdict | The record a Derivation produces. Names the governing document and quotes the rule text **verbatim**; it does not cite a rule ID, because IDs are not stable enough to survive as an audit trail. The cited rule must be **individually** adopted — adoption is per rule, and an Adopted document may still contain individually PROPOSED rules that govern nothing. |
+| Relay | Recording a verdict *someone else* reached. Calling the relay tool does not make the caller the adjudicator. Distinct from both Adjudication (deciding) and Derivation (computing). |
+| Attestation | The recorded identity of whoever rendered a verdict. A verdict without it is **undeterminable** — not trusted-by-default — and fails closed at dispatch. No migration can supply it after the fact; the only remedy is a fresh approve. |
+| Self-adjudication | The same agent session BOTH authored and approved a brief. Blocked at write time and again at dispatch. Note what it is *not*: an agent adjudicating another author's brief is independent and permitted — the refusal text asks for "an independent adjudicator", not for a human. |
 | Agent | A Codex, Claude Code, or Gas City managed worker session that performs a bounded role. |
 | Artifact | A file, branch, test result, plan, issue body, PR body, or other durable output that a brief asks a human to judge. |
 | Bead | A durable work record in `bd`. Beads carry task state, dependencies, ownership, and links to larger artifacts. |
@@ -22,7 +27,7 @@ policy document; binding rules live in the `POLICY*.md` files.
 | Legacy tree | A copy of the mathcity pack living inside `gascity-packs/` (`~/gt/gascity-packs/mathcity`, `~/repos/gascity-packs/mathcity`), retired in favour of `tdupu/mathcity`. Not a fork and not a checkout — a vendored copy in a different repository. |
 | Local example | A documented example that runs from a clean checkout with ordinary local dependencies. |
 | Mayor | The city coordination role. The Mayor supervises city progress and coordination, but should not be confused with the clerk's brief-reading duty. |
-| No-brainer | A brief classified as mechanically safe enough for compact handling under the no-brainer gates and kill-switch rules. |
+| No-brainer | A brief resolvable **without spending a human decision** — by obviousness (a skilled reviewer would approve without hesitation) or by Derivation from an adopted rule. The two are different and cross-cutting: a brief can be obvious with no rule covering it, or forced by composed rules nobody would guess from a summary. Auto-execution is **ON by default**; the kill switches are brakes, not gates. Stop gates always block regardless of category — server-touching, user-skill-touching, LaTeX, and mathematical content. *(Corrected 2026-09-15: the prior entry said "compact handling", a body shape retired by ADR 0001, and scoped the term to "mechanically safe", which excludes derivation.)* |
 | Order | A scheduled or event-triggered Gas City automation that runs a formula. Orders wire formulas to runtime events or cooldowns. |
 | Pack | A composable Gas City bundle containing skills, formulas, orders, agents, policies, and configuration. |
 | Parent link | A documentation link near the top of an important doc that points back to its immediate parent doc or the root README. |

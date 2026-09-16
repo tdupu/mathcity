@@ -74,7 +74,20 @@ down.**
 
 ## Git / lane (outside agents)
 
-Repo work happens in `~/repos/mathcity`; commits reach the running city and the
-`~/gt` twin through `origin` (`tdupu/mathcity`). Irreversible git operations (push,
-merge, PR) gate through the human via `authorize-git-operation` — commit locally,
-present the gate, never push unprompted.
+**"Outside agent" covers two lanes, and this section means only one of them.**
+Where the operator keeps two checkouts — a repo-side one and a city-side rig — the
+repo-side checkout is the **exclusive lane of the repo-side agent**. A city-side
+agent does not run `git commit` / `add` / `push` / `rebase` there, ever; it edits
+in its own checkout and hands the content to the repo-side agent to land. Check the
+operator's local addendum for which lane you are in before running any git command.
+
+For the **repo-side agent**: commits reach the running city and the city-side twin
+through `origin` (`tdupu/mathcity`). Irreversible git operations (push, merge, PR)
+gate through the human via `authorize-git-operation` — commit locally, present the
+gate, never push unprompted.
+
+*(Clarified 2026-09-15. The prior text said flatly "Repo work happens in
+`~/repos/mathcity`", which is correct for the repo-side agent and forbidden for a
+city-side one — the two read the same sentence and only one of them may act on it.
+This file also describes the city-side checkout as the development side elsewhere
+in the pack, so the unqualified sentence read as a contradiction.)*
