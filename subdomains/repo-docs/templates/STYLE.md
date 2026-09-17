@@ -91,10 +91,12 @@ attention in the source; agent bookkeeping lives in agent-side markdown
 AI-assisted disclosure line when applicable and never a `Co-Authored-By`
 trailer. Pass/Fail: `git log` scan.
 
-**ST9 — Introductions last.** No introduction or abstract is drafted
-for a document whose results sections still carry unresolved `\taylor{}`
-markers or undischarged proofs; introductions are manuscript-tier and
-human-initiated (design D6).
+**ST9 — Introductions and titles last.** No introduction or abstract is
+drafted for a document whose results sections still carry unresolved
+`\taylor{}` markers or undischarged proofs; introductions are
+manuscript-tier and human-initiated (design D6). Titles are likewise
+written last and kept short; until then documents go by their
+lowercase-hyphen working slugs (LAYOUT.md LY7).
 
 ## Change Log
 

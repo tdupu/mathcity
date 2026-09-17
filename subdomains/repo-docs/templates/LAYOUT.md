@@ -16,7 +16,9 @@
 
 One document per repository, at the root. It answers: what goes where,
 what is canonical, what is kept-but-ignored, and what must never appear.
-Model: the hecke root layout tree.
+Model: the hecke root layout tree. The tree is the TARGET state: in a
+brownfield repo, current deviations go in the Brownfield register —
+registered with a disposition, never blessed as contract.
 
 ## Tree
 
@@ -33,6 +35,15 @@ finding (LY2).
     <pattern>       ← <why it exists and why it is not tracked>
 ```
 
+## Brownfield register (pending cleanup — NOT part of the contract)
+
+| Current state | Target disposition |
+| --- | --- |
+
+Register entries surface in check-layout as KNOWN-DIRTY findings (not
+new violations, not passes). A row is removed only after its cleanup
+actually happened. Delete this section only in a genuinely clean repo.
+
 ## Rules
 
 **LY1 — Clean-tree test [C].** A collaborator opening the repo finds
@@ -41,9 +52,10 @@ No agent or orchestration scaffolding outside `scratch/`.
 Pass: every tracked path matches a tree row. Fail: any tracked path
 with no row.
 
-**LY2 — The tree is total [C].** Every top-level directory and tracked
-root file has a tree row; every "gitignored but keep" pattern is listed.
-Pass/Fail: mechanical diff of `git ls-files` + root listing vs the tree.
+**LY2 — Tree + register are total [C].** Every top-level directory and
+tracked root file has a tree row or a register row; every "gitignored
+but keep" pattern is listed. Pass/Fail: mechanical diff of
+`git ls-files` + root listing vs tree ∪ register.
 
 **LY3 — Transient output goes to scratch/ [C].** Anything a tool or
 agent writes that is not the artifact goes under
@@ -60,6 +72,14 @@ concern (see it; check-layout enforces both together).
 **LY5 — Repo docs present [C].** `LAYOUT.md`, `LATEX.md`, `STYLE.md`,
 `ADR.md`, `AGENTS.md` exist at the root and `AGENTS.md` points at the
 other four. Pass/Fail: existence + pointer check.
+
+**LY6 — Bloat guard [C].** Each of the five repo docs stays ≤ 120
+content (non-blank) lines. Over = finding; trim or factor before
+adding.
+
+**LY7 — Naming [C].** New file and folder names: lowercase,
+hyphen-separated, no spaces. Existing violators go in the Brownfield
+register.
 
 ## Change Log
 
