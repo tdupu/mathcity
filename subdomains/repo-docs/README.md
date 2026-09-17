@@ -22,6 +22,7 @@ invariant), 0004 (tex purity / agent-side ledger). RED baselines:
 | --- | --- |
 | [RESOLUTION.md](./RESOLUTION.md) | Shared check-skill preamble: repo-local-first, import-and-interrupt, floor and Status semantics, instruments-must-fail |
 | [AMENDMENT.md](./AMENDMENT.md) | Shared amendment procedure: proposal → human gate → apply + Change Log → verify → conservative commit |
+| [LEDGER.md](./LEDGER.md) | Agent-side claim-ledger convention (ADR 0004): five-way status taxonomy, dependencies, doubt records; never authoritative, reconciled by tex rescan |
 | [templates/LAYOUT.md](./templates/LAYOUT.md) | Default layout contract (LY rules) |
 | [templates/LATEX.md](./templates/LATEX.md) | Default canonical-tex declaration (LT rules) |
 | [templates/STYLE.md](./templates/STYLE.md) | Default writing contract (ST rules; style variables; machine-tag format) |
