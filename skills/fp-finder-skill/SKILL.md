@@ -22,7 +22,7 @@ You — the agent invoked as `fp-finder-skill` — execute Steps 1–4 below, sp
 ## State
 
 - `current[path] = (text, wc_c)` — latest accepted state per path. Initialize from inputs with `wc_c = wc -c <path>`.
-- `best[path]` — shortest version of `path` that has ever achieved APPROVING; absent if none.
+- `best[path]` — shortest version of `path` that has ever achieved APPROVING **as part of a tuple-level APPROVING round** (Loop Step 3 is the only promotion point; a per-path APPROVING inside a round whose tuple verdict failed never promotes — this keeps `best` tuple-coherent); absent if none.
 - `iteration N`, starts at 1.
 
 All char-counts are computed by you via `wc -c <path>`. The revisor's self-report is reference only.
@@ -62,7 +62,7 @@ Spawn subagents via the Task tool (`general-purpose` on Claude Code; equivalent 
 | Sibling-budget | every parent that produced sibling(s) this iteration | `sum(wc_c(sibling_body)) <= chars_removed_from_parent` |
 | Parent-shrunk on factor | every iteration with one or more new siblings | every named parent satisfies the Strict-decrease check above |
 
-If all pass, spawn `critical-review` on the new tuple. If APPROVING: promote each changed/new path into `current`; update `best[path]` whenever shorter or absent. Increment `N`. If `N > N_max`, go to Wrap-up. Otherwise return to Step 1. If NEEDS-REVISION: revision **fails the floor** — discard and terminate (return `best`).
+If all pass, spawn `critical-review` on the new tuple. If APPROVING: promote each changed/new path into `current`; update `best[path]` whenever shorter or absent; clear `initial_input_approved` (the input is no longer the fixed point). Increment `N`. If `N > N_max`, go to Wrap-up. Otherwise return to Step 1. If NEEDS-REVISION: revision **fails the floor** — discard and terminate (return `best`).
 
 **Step 4 — Mutual-approval termination.** The critic has approved. Spawn the revisor exactly once with this prompt template (no variant phrasings):
 
