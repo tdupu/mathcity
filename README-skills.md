@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-154 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+168 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -136,10 +136,21 @@ _Regenerate/verify with `/update-README`._
 | `testing-work` | `mathcity-dev.testing-work` | Dispatch a bead to the smoke-test-briefed formula for lightweight test execution with a brief at the end |
 | `update-README` | `mathcity-dev.update-README` | Keep the mathcity pack family's READMEs and skill exposure in sync after ANY owned-pack change — the pack-dev sibling of improve-package-README (which serves Magma/Sage packages) |
 
-### LaTeX — `subdomains/latex/skills/`  (7)
+### LaTeX — `subdomains/latex/skills/`  (18)
 
 | Skill | Alias | What it does |
 |---|---|---|
+| `explain-experiment` | `mathcity-latex.explain-experiment` | Scratch dump report -> notes-tier exposition a hostile reader can follow; re-runnable pointers |
+| `garbage-collect` | `mathcity-latex.garbage-collect` | HUMAN-GATED pre-submission strip of retained editorial machinery; enumerate -> approve -> strip -> verify |
+| `rapid-prototype` | `mathcity-latex.rapid-prototype` | Skeleton a discussion into conjecture/definition stubs in the canonical notes file; statuses agent-side |
+| `referee-report` | `mathcity-latex.referee-report` | Adversarial referee-grade review of OUR draft at prover level, to scratch; never edits tex (mechanism-5 rule) |
+| `resolve-dependencies` | `mathcity-latex.resolve-dependencies` | Include-what-you-use walk of a proof: present/imported/missing per item; ledger depends-on; placement is the human's |
+| `revise` | `mathcity-latex.revise` | Apply an ACCEPTED review report item-by-item as tagged edits with an item-to-region map; bulk rewrites refused |
+| `write-definition` | `mathcity-latex.write-definition` | Draft one definition, notation-collision-checked against the repo's standing conventions |
+| `write-introduction` | `mathcity-latex.write-introduction` | Introduction/abstract LAST behind a hard refusal gate (markers, VERIFY, LX4, contradictions, ledger-proved only) |
+| `write-materials-and-methods` | `mathcity-latex.write-materials-and-methods` | Software/Acknowledgements/AI-disclosure section from the ai-usage/tokens trail; trail-facts only |
+| `write-proposition` | `mathcity-latex.write-proposition` | Draft one proposition (statement + LX4/ST6 proof) from an evidenced claim into the canonical file |
+| `write-remark` | `mathcity-latex.write-remark` | Draft one remark; claim-shaped content is routed to write-proposition |
 | `check-labels-and-refs` | `mathcity-latex.check-labels-and-refs` | Scan LaTeX files for label/reference consistency, orphan labels/refs, and non-pinpoint cross-references |
 | `check-latex-hygiene` | `mathcity-latex.check-latex-hygiene` | Audit LaTeX beads, branches, or .tex diffs against the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
 | `check-latex` | `mathcity-latex.check-latex` | Produce the evidence block a human reviewer needs to approve or reject a notes.tex (or any notes-tier .tex) change before push/merge |
@@ -202,10 +213,13 @@ _Regenerate/verify with `/update-README`._
 | `new-repo-style-policy` | `mathcity-repo-docs.new-repo-style-policy` | Sole write path for a repo's STYLE.md — writing rules and style variables; human-gated |
 | `triage-variants` | `mathcity-repo-docs.triage-variants` | Disposition each undeclared sibling .tex — merge/demote/declare/delete — one human approval per file; brownfield fork-not-merge repair |
 
-### Proof assistants — `subdomains/proof-assist/skills/`  (6)
+### Proof assistants — `subdomains/proof-assist/skills/`  (9)
 
 | Skill | Alias | What it does |
 |---|---|---|
+| `create-exposition` | `mathcity-proof-assist.create-exposition` | Gather a topic's definitions/theorems into a linked .md spec (verified sources) staging the writers |
+| `fill-in-prototype` | `mathcity-proof-assist.fill-in-prototype` | Attack a prototype's conjectural items (prove/refute per PROVERS.md) -> harvest to scratch + ledger |
+| `find-proposition` | `mathcity-proof-assist.find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
 | `contradiction-check` | `mathcity-proof-assist.contradiction-check` | Loud detection + refusal on claims contradicting earlier ones; structured contradiction report; silent supersession prohibited |
 | `install-loogle` | `mathcity-proof-assist.install-loogle` | Install and configure a Loogle / Mathlib4 search MCP server (canonical: mathlas) so Lean 4 lemma lookup works through a connected MCP tool instead of only the raw web API |
 | `search-arxiv` | `mathcity-proof-assist.search-arxiv` | Search arXiv by paper ID or keyword and return title, abstract, authors, and BibTeX |

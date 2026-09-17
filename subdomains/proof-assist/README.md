@@ -19,6 +19,9 @@ Lean build is the strongest possible G4 (critical-review) evidence. Formulas:
 | `search-stacks` | Stacks Project (algebraic geometry / commutative algebra) — tag lookup and keyword search via the `mcp__stacks__*` MCP tools. |
 | `search-scholar` | Semantic Scholar — paper search by keyword or title via the `mcp__scholar__*` MCP tools. |
 | `contradiction-check` | Loud detection + refusal on claims contradicting earlier ones (tex/scratch/ledger); structured contradiction report; silent supersession prohibited |
+| `create-exposition` | Gather a topic's definitions/theorems into a linked .md spec (verified sources) staging the writers |
+| `fill-in-prototype` | Attack a prototype's conjectural items (prove/refute per PROVERS.md) -> harvest to scratch + ledger |
+| `find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
 
 ## Loogle
 
@@ -39,3 +42,5 @@ https://loogle.lean-lang.org/json?q=<URL-encoded query>
 | By conclusion | `\|- ?a + ?b = ?b + ?a` | Lemmas whose conclusion matches the pattern |
 
 The API returns `{count, hits: [{name, module, type, doc}]}` on success or `{error, suggestions}` on no match. The skill fails soft (P1.14) on API downtime or format drift.
+
+Shared reference: [PROVERS.md](./PROVERS.md) — harness-conditional prover backend (ADR 0005).
