@@ -1,11 +1,12 @@
 ---
 name: fp-finder-skill
-description: Fixed-point convergence engine for SKILL.md files. Every accepted revision must be strictly shorter (per-file) AND still APPROVING per critical-review, with a factoring escape valve (new sibling whose baseline is bounded by chars moved from a parent that must itself strictly shrink) and a mutual-approval termination capped at N_max iterations. Designed to be dispatched from coordinate-review when the artifact is a SKILL.md, after generic FP loops on SKILL.md files grew unboundedly without converging. Use when you have one or more SKILL.md files and want to iterate them to a converged, brief, approved fixed point.
+description: Fixed-point convergence engine for skill files — SKILL.md and their references/*.md. Every accepted revision must be strictly shorter (per-file) AND still APPROVING per critical-review, with a factoring escape valve (new sibling whose baseline is bounded by chars moved from a parent that must itself strictly shrink) and a mutual-approval termination capped at N_max iterations. Designed to be dispatched from coordinate-review when the artifact is a SKILL.md, after generic FP loops on SKILL.md files grew unboundedly without converging. Use when you have one or more skill files and want to iterate them to a converged, brief, approved fixed point.
 ---
 
 # fp-finder-skill
 
-A SKILL.md-specialized fixed-point engine. Every accepted revision must be **strictly shorter per-file** AND **still APPROVING** per `critical-review`. Termination is forced by per-file char-count decrease (Rule a), a parent-shrink + sibling-bound rule on factoring (Rule b), mutual approval, or an `N_max = 8` cap. `N_max = 8` is a guard against runaway iteration; longer-than-8 runs indicate a structural problem the loop alone won't fix and should escalate.
+A skill-file-specialized fixed-point engine (SKILL.md files and the
+`references/*.md` beside them). Every accepted revision must be **strictly shorter per-file** AND **still APPROVING** per `critical-review`. Termination is forced by per-file char-count decrease (Rule a), a parent-shrink + sibling-bound rule on factoring (Rule b), mutual approval, or an `N_max = 8` cap. `N_max = 8` is a guard against runaway iteration; longer-than-8 runs indicate a structural problem the loop alone won't fix and should escalate.
 
 **Char-count is a complexity proxy; APPROVING is the quality floor.** A revision that is shorter but loses APPROVING does not count, so `rm`-style gaming fails: strip the body, the critic rejects, the loop returns the previous best. Per-file (not total-tuple) is the rule everywhere; factoring may grow the tuple, but each file individually still shrinks.
 
@@ -15,7 +16,7 @@ You — the agent invoked as `fp-finder-skill` — execute Steps 1–4 below, sp
 
 ## Inputs
 
-- **artifact** (required): a JSON array of one or more SKILL.md paths, or a single path string.
+- **artifact** (required): a JSON array of one or more skill-file paths — SKILL.md files and/or `references/*.md` files under a skill directory — or a single path string. A file with no YAML frontmatter counts its whole content as body (for Rule (b) budgets and critic input alike).
 - **reviewer_persona** (optional): critic lens. Default: "Skeptical first-time reader of skill files."
 
 ## State
