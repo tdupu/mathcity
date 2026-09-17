@@ -36,7 +36,7 @@ counterpart is POLICY-beads.md BP7.
 | `explain-experiment` | Scratch dump report -> notes-tier exposition a hostile reader can follow; re-runnable pointers |
 | `garbage-collect` | HUMAN-GATED pre-submission strip of retained editorial machinery; enumerate -> approve -> strip -> verify |
 | `rapid-prototype` | Skeleton a discussion into conjecture/definition stubs in the canonical notes file; statuses agent-side |
-| `referee-report` | Adversarial referee-grade review of OUR draft at prover level, to scratch; never edits tex (mechanism-5 rule) |
+| `referee-report` | Adversarial referee-grade review of OUR draft at prover level, to scratch; never edits tex; a green build resolves nothing mathematical (mechanism 5) |
 | `resolve-dependencies` | Include-what-you-use walk of a proof: present/imported/missing per item; ledger depends-on; placement is the human's |
 | `revise` | Apply an ACCEPTED review report item-by-item as tagged edits with an item-to-region map; bulk rewrites refused |
 | `write-definition` | Draft one definition, notation-collision-checked against the repo's standing conventions |

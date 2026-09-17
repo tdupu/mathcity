@@ -32,6 +32,17 @@ these three axes are the contract.)
 | terseness | `<stacks>` | serre-terse / stacks / harris-expansive |
 | audience | `<expert>` | expert / graduate / mixed |
 
+## Repo-specific standing conventions
+
+Optional pointer table a repo fills in: where its notation contract
+lives (a plan document, a conventions section, a glossary). Writers
+scan it — plus the document's own preamble and existing definitions —
+before introducing notation (write-definition's collision gate). May
+be empty in a fresh repo.
+
+| Concern | Where it lives |
+| --- | --- |
+
 ## Rules
 
 **ST1 — Proposition-only [C].** New numbered statements use
