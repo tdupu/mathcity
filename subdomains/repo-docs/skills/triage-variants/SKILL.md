@@ -1,15 +1,15 @@
 ---
 name: triage-variants
-description: Disposition each undeclared sibling .tex in a repository — merge into the canonical file, demote to a scratch report, declare as legitimate, or delete — with ONE human approval per file. Use when the user says "triage variants", "triage-variants", "which tex file is real", "this trash ai-paper.tex situation", "clean up the tex situation", when check-layout reports UNDECLARED-SIBLING, or per LATEX.md's Brownfield note. Brownfield repair only: NOT for declared files (new-repo-latex-policy), referee revision copies (triage-referee-report), in-file section merging (merge-latex-sections, HOLD), or document quality (LX floor). Never adjudicates mathematics.
+description: Disposition each undeclared sibling .tex in a repository — merge into the canonical file, demote to a scratch report, declare as legitimate, or delete — with ONE human approval per file. Use when the user says "triage variants", "triage-variants", "which tex file is real", when check-layout reports UNDECLARED-SIBLING, or per LATEX.md's Brownfield note. Brownfield repair only: NOT for declared files (new-repo-latex-policy), referee revision copies (triage-referee-report), in-file section merging (merge-latex-sections, HOLD), or document quality (LX floor). Never adjudicates mathematics.
 ---
 
 # triage-variants
 
 The fork-not-merge repair (design ADR 0003 rule 4). RED baseline:
-`baselines-phase1.md` scenarios A+D (design record) — unguided agents
-relocate, rename, repair, or normalize variant files on their own
-authority. Here, every disposition is a human act; this skill prepares
-evidence and executes exactly what was approved.
+`baselines-phase1.md` scenarios A+D — unguided agents relocate, rename,
+repair, or normalize variant files on their own authority. Every
+disposition is a human act; this skill prepares evidence and executes
+exactly what was approved.
 
 ## Step 0 — Resolve
 
@@ -30,17 +30,18 @@ diff-vs-canonical summary at statement level (which
 propositions/definitions exist only here, which CONTRADICT the
 canonical file — quote both sides, adjudicate nothing); marker census
 (`\taylor{}`, `\todo{}`, tags); compile-independence; size/overlap
-estimate. A contradiction found here also emits a contradiction report
-to the leaf's scratch dir (silent supersession is prohibited).
+estimate. On a contradiction, invoke contradiction-check; a hit blocks
+the merge/declare disposition per its Step 3 (silent supersession is
+prohibited).
 
 ## Step 3 — ONE approval PER FILE (mandatory gate)
 
-Present each dossier with a recommendation and these options: **merge**
+Present each dossier with a recommendation and options: **merge**
 (named content into the canonical file) / **demote** (to a dated
 scratch dump, content preserved) / **declare** (genuinely legitimate →
 route to `new-repo-latex-policy` to add its row) / **delete** /
-**defer**. One file, one decision; approval of one file never covers
-another; batch approval only if the human explicitly says "all".
+**defer**. One file, one decision; approval never transfers between
+files; batch approval only if the human says "all".
 Unattended: write dossiers + recommendations to
 `scratch/<date>-triage-variants/` and STOP.
 
@@ -49,7 +50,7 @@ Unattended: write dossiers + recommendations to
 - **merge**: insert the approved material into the canonical file as
   ST5-tagged blocks (`agent-<harness>` tags), superseded canonical text
   commented out, never deleting human markers or comments; then
-  `git rm` the variant in the same commit (history keeps it).
+  `git rm` the variant in the same commit.
 - **demote**: move the file into `scratch/<date>-triage-variants/`
   with a report.md noting provenance and why.
 - **declare**: hand off to `new-repo-latex-policy` (its own gate).
@@ -60,8 +61,9 @@ Unattended: write dossiers + recommendations to
 
 Update LATEX.md (Real-files / Change Log) via `new-repo-latex-policy`
 for the surviving state; run `check-layout` — expected:
-`0 UNDECLARED-SIBLING` except deferred rows. One pathspec-scoped commit
-per repo's ST8.
+`0 UNDECLARED-SIBLING` except deferred rows. Merge dispositions
+additionally run `check-latex` + `check-style` scoped to the touched
+canonical file. One pathspec-scoped commit per repo's ST8.
 
 ## Red flags
 

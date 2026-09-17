@@ -10,11 +10,11 @@ Read-only toward the tex. This leaf's procedure:
 ## Produce the report
 
 1. Resolve the repo docs (`subdomains/repo-docs/RESOLUTION.md`); scope
-   = the named section(s) of the canonical file.
+   = the named section(s) of the canonical file (WRITERS.md's Target
+   clause defines it).
 2. Dispatch the review at prover level per
-   [../../../proof-assist/PROVERS.md](../../../proof-assist/PROVERS.md)
-   (fable pipeline on Claude harnesses; astra-dump otherwise), with the
-   mandate: line-by-line; verify every proof step; attack every
+   [../../../proof-assist/PROVERS.md](../../../proof-assist/PROVERS.md),
+   with the mandate: line-by-line; verify every proof step; attack every
    statement (counterexample hunting per mechanism 6); check every
    citation's plausibility (route suspicious ones to
    track-down-reference); hypothesis/notation drift; the mechanism-5

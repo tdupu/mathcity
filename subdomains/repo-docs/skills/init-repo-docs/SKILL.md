@@ -5,9 +5,8 @@ description: Initialize a research repository onto the repo-doc contracts AND ma
 
 # init-repo-docs
 
-A LAYOUT.md nobody adheres to is decoration. This skill instantiates
-the contracts AND brings the tree into line with them, in one gated
-pass. RED baseline: `baselines-phase1.md` scenario A (design record) —
+A LAYOUT.md nobody adheres to is decoration: this skill instantiates
+the contracts AND brings the tree into line, in one gated pass. RED baseline: `baselines-phase1.md` scenario A (design record) —
 unguided "cleanup" invents rules and moves files without approval.
 
 ## Step 1 — Instantiate
@@ -15,22 +14,22 @@ unguided "cleanup" invents rules and moves files without approval.
 Copy the five [../../templates/](../../templates/) into the repo root,
 fill headers and the LAYOUT target tree from repo reality (Status:
 Draft). Prefer the EXISTING structure where it is sane — few folders
-(LY8); do not design a new layout, transcribe the intended one.
+(LY8); transcribe the intended layout, don't design a new one.
 
 ## Step 2 — Build the Brownfield register
 
-Enumerate reality (`git ls-files`, root listing, per RESOLUTION.md §5 —
-report counts). Everything that doesn't fit the target tree gets a
+Enumerate reality (`git ls-files` + root listing; report counts per
+RESOLUTION.md §5). Everything that doesn't fit the target tree gets a
 register row with a disposition from LAYOUT.md's disposition
 vocabulary. Defaults: no declared home → `demote to scratch/` (never a
-new folder); keep-but-untrack → gitignore entry + tree row; genuinely
-ambiguous (could be artifact, could be junk) → `TBD (human)`. Tex
+new folder); keep-untracked → gitignore entry + tree row; genuinely
+ambiguous (artifact or junk?) → `TBD (human)`. Tex
 sibling variants → register as `triage-variants` rows — this skill
 NEVER moves, merges, or deletes a `.tex`.
 
 ## Step 3 — ONE approval batch (mandatory gate)
 
-Present the instantiated docs summary + the full register as one batch:
+Present the instantiated docs + the full register as one batch:
 each row `path → disposition`. The human may approve all, strike rows,
 or change dispositions. No file moves before this approval. Unattended
 → write the batch to `scratch/<date>-init-proposal/` and STOP.
@@ -51,7 +50,7 @@ or change dispositions. No file moves before this approval. Unattended
 Run `check-layout` (its report is the evidence). Remaining findings
 must be exactly the surviving register rows + any DEFER items. Then one
 pathspec-scoped commit: the five docs + moved paths + `.gitignore`,
-message per the repo's ST8. Push stays gated elsewhere.
+message per repo commit hygiene (ST8 if tex moved). Push stays gated elsewhere.
 
 ## Hard rules
 

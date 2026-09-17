@@ -26,9 +26,9 @@ with explicit authority.
 - New entries append per AR1 shape at the next number; supersession
   is a new entry plus a Status tombstone on the old one (AR2).
 - Migrations: when check-adr flags decision text scattered elsewhere,
-  the proposal lists each quote, its proposed ADR entry, and the
-  deletion of the stray copy — one human approval covers the batch,
-  but the deletions still land only in the files the human approved.
-- ADR entries record decisions; a decision that creates a standing
-  checkable rule ALSO goes to the owning doc via its own amendment
-  skill, citing the ADR entry as rationale.
+  this skill records the ADR entries ONLY; stray-copy deletions are
+  routed to each owned doc's own amendment skill or the human, listed
+  under Downstream — never edited from here.
+- A decision that creates a standing checkable rule ALSO goes to the
+  owning doc via its own amendment skill — see the note in
+  [../../templates/ADR.md](../../templates/ADR.md).

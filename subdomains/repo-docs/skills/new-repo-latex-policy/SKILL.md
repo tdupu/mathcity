@@ -5,11 +5,9 @@ description: Sole write path for a repository's LATEX.md (LT rules) — canonica
 
 # new-repo-latex-policy
 
-Owns exactly one document: the repo's **`LATEX.md`**. Editing it any other
-way — "just fixing a typo", writing conventions into other files —
-is the RED-baseline failure this skill exists to prevent
-(`baselines-phase1.md`, scenario D; design D3: acceptance is a human
-act).
+Owns exactly one document: the repo's **`LATEX.md`**. Editing it any
+other way is the RED-baseline failure this skill exists to prevent
+(`baselines-phase1.md` scenario D; D3: acceptance is a human act).
 
 ## Procedure
 
@@ -25,7 +23,8 @@ with explicit authority.
 
 - Declaring an aspirational file (the ONLY way a new sibling .tex may
   come to exist — design ADR 0003) is a normal proposal here: planned
-  path, purpose, tier; approval recorded in the Change Log.
+  path and purpose — tier folds into the Purpose cell (no tier
+  column); approval recorded in the Change Log.
 - Moving the canonical flag between files is architecture-class:
   present full-form, never compact.
 - Brownfield: undeclared siblings are never retro-declared; they go

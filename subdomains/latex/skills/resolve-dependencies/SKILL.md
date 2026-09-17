@@ -5,23 +5,24 @@ description: Recursive include-what-you-use for a statement's proof: enumerate e
 
 # resolve-dependencies
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble (read-only leaf: the postamble's write steps
-apply only when composition inserts something). This leaf's middle:
+Runs [../../WRITERS.md](../../WRITERS.md) preamble step 1 (resolution + style variables) only;
+write gates apply via the composed writers. This leaf's middle:
 
 ## The walk
 
 1. Parse the proof of the target statement: every term, symbol, and
    invoked result. Recurse: dependencies of dependencies, to closure.
-2. For each: PRESENT (defined/stated earlier in the document — record
-   label), IMPORTED (cited per LX2; at notes tier ST6 wants the proof
-   included — flag if bare), or MISSING (a gap).
-3. Report counts (RESOLUTION.md §5 in `subdomains/repo-docs/`): "walked
-   N nodes, P present, I imported (J bare at notes tier), M missing".
+2. For each: PRESENT (defined/stated earlier — record label), IMPORTED
+   (cited per LX2; at notes tier ST6 wants the proof included — flag
+   if bare), or MISSING.
+3. Report counts — the instruments-must-fail principle (RESOLUTION.md
+   §5), applied to the walk counts: "walked N nodes, P present, I
+   imported (J bare at notes tier), M missing".
 4. Ledger: write/refresh depends-on edges for every walked claim
-   (LEDGER.md format; ledger is cache, tex is truth).
-5. Gaps: for each missing item, recommend WHAT is needed; WHERE it goes
-   is presented to the human (D5) — on approval, compose
-   write-definition / track-down-reference per item.
+   (LEDGER.md format; ledger cache, tex truth).
+5. Gaps: recommend WHAT each missing item needs; WHERE it goes is the
+   human's call (D5) — on approval, compose write-definition /
+   track-down-reference per item.
 
 ## Red flags
 

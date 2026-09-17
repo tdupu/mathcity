@@ -1,21 +1,21 @@
 # Amendment procedure — shared by all new-repo-*-policy skills
 
-Parent: [README.md](./README.md). The five amendment skills
-(`new-repo-layout-policy`, `new-repo-latex-policy`,
-`new-repo-style-policy`, `new-repo-adr-policy`,
-`new-repo-agents-policy`) each own exactly one repo doc and all follow
-this procedure. Written once here; the skills cite it (pointer-not-copy).
-Model: the LX trinity's `new-latex-policy`.
+Parent: [README.md](./README.md). The five `new-repo-*-policy`
+amendment skills (layout, latex, style, adr, agents) each own exactly
+one repo doc and all follow this procedure. Written once here; the
+skills cite it (pointer-not-copy). Model: the LX trinity's
+`new-latex-policy`.
 
-RED baseline for this whole class: `baselines-phase1.md` scenario D —
-unguided agents amend the convention doc in place with no proposal, no
-approval, no change log (D3: acceptance is a human act).
+RED baseline: `baselines-phase1.md` scenario D — unguided agents amend
+the convention doc in place with no proposal, no approval, no change
+log (D3: acceptance is a human act).
 
 ## Step 0 — Resolve the target doc
 
 Repo-local-first per [RESOLUTION.md](./RESOLUTION.md). On miss, this IS
-the instantiation path: copy the template, fill the header, and treat
-the instantiation itself as the proposal (Step 2).
+the instantiation path: copy the template, fill the header — and Step
+1's structured proposal IS still drafted, as a short proposal header
+presenting the instantiated doc; the instantiation is the Change.
 
 ## Step 1 — Draft the proposal
 

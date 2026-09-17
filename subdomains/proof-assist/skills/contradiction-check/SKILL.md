@@ -7,8 +7,8 @@ description: Detect and LOUDLY report any later mathematical claim that contradi
 
 Mechanism 2's fix (design record, survey 2026-09-18): the observed
 wild failure is "the manuscript supersedes the conflicting claims in
-the earlier sections of this report" — a contradiction resolved by
-silently overwriting history. Here a contradiction is a loud, recorded
+the earlier sections of this report" — history silently overwritten.
+Here a contradiction is a loud, recorded
 event, and the operation that surfaced it stops.
 
 ## Step 0 — Scope
@@ -16,7 +16,7 @@ event, and the operation that surfaced it stops.
 Claim sources, in authority order: the repo's canonical `.tex`
 (LATEX.md's declared files — ground truth), scratch reports'
 claim sections, the agent-side ledger if present (never authoritative;
-reconcile by rescanning the tex, not the reverse — design ADR 0004).
+reconcile by rescanning the tex — design ADR 0004).
 
 ## Step 1 — Collect
 
@@ -38,12 +38,13 @@ yours.
 
 ## Step 3 — On any contradiction: loud refusal
 
-1. STOP the triggering operation (promotion, write, harvest — whatever
-   invoked this check does not proceed).
+1. STOP the triggering operation (promotion, write, harvest) — it
+   does not proceed (sweep mode: no operation to halt — 3.2 and 3.3
+   still fire).
 2. Write the contradiction report to
    `scratch/<date>-contradictions/report.md`: both quotes, provenance,
-   which downstream claims depend on each side, and what operation was
-   refused. Never edit either side; never mark a winner.
+   which downstream claims depend on each side, and the refused
+   operation. Never edit either side; never mark a winner.
 3. Surface to the human: the report path plus a one-line statement per
    contradiction. Resolution (supersede via tagged revision, retract,
    or rule the claims compatible) is a human act; a doubt run may be

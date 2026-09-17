@@ -9,23 +9,24 @@ Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This l
 
 ## Skeleton discipline
 
-- Claim-shaped items → `conjecture` environments, explicitly marked as
-  new (that is LX4's own let-out for conjectures); no proof faked, no
-  `proposition` used for anything unproved.
+- Claim-shaped items → `conjecture` environments, marked new (LX4's
+  conjecture let-out); no proof faked, no `proposition` for anything
+  unproved.
 - Definition-shaped items → write-definition composition (its gates).
-- One ST5-tagged region per skeleton pass; ledger rows created per item
-  with status `conjectural` and the discussion/spec as provenance
+- One ST5-tagged region per pass for directly-authored stubs (composed
+  write-definition calls tag independently); ledger rows per item:
+  status `conjectural`, evidence = the discussion/spec pointer
   (statuses NEVER in the tex — D4).
-- Ordering mirrors the discussion's logical flow; placement ambiguity →
-  ask (D5).
-- On the method's provenance: cite Tao's rapid-prototyping post only if
-  track-down-reference actually finds it; otherwise state plainly that
-  no source is cited — never fabricate a reference (the build order's
-  own instruction).
+- Ordering mirrors the discussion's flow; placement ambiguity → ask
+  (D5).
+- Method provenance: cite Tao's rapid-prototyping post only if
+  track-down-reference finds it; otherwise note "no source cited" in
+  the ledger row's evidence cell and the human-facing report — never
+  fabricate.
 
 ## Red flags
 
 | Thought | Reality |
 |---|---|
-| "State it as a proposition, we'll prove it later" | Unproved = conjecture env or nothing. Mechanism 3/6. |
+| "State it as a proposition, we'll prove it later" | Unproved = conjecture env or nothing. Mechanism 6. |
 | "The discussion implied it — close enough to state" | Skeleton what was SAID; sharpening is the human's. |

@@ -1,30 +1,31 @@
-# PROVERS.md — harness-conditional prover/finder backend
+# PROVERS.md — harness-conditional prover backend
 
-Parent: [README.md](./README.md). Design ADR 0005: no leaf
-hard-requires fable; astra is the degradation path everywhere. Every
-leaf that dispatches heavy proving/finding work cites this file
-instead of naming a backend inline.
+Parent: [README.md](./README.md). ADR 0005: no leaf hard-requires
+fable; astra is the degradation path. Heavy proving/finding dispatch
+cites this file, never a backend inline.
 
 ## The branch
 
 | Harness | Backend | Contract |
 | --- | --- | --- |
-| Claude Code (fable/opus/sonnet available) | `fable-prompt` → `execute-fable-package` → `harvest-fable-package` | the fable package's own artifact contract |
-| Codex or any harness without fable access | `astra-dump` (primary model `gpt-6-astra`) | dated scratch dump: `report.md` + `ai-usage.md` + `tokens.md` |
+| Claude (fable available) | `fable-prompt` → `execute-fable-package` → `harvest-fable-package` | the fable package's own contract |
+| No fable access | `astra-dump` (primary model `gpt-6-astra`) | dump triple: `report.md` + `ai-usage.md` + `tokens.md` |
 
-Detection is observable, not guessed: a Claude harness lists the three
-fable skills in its available-skills set; if they are absent or their
-invocation errors, use the astra path. Record WHICH backend ran (exact
-model strings) in the dump's `ai-usage.md` — never label a run "fable"
-or "astra" without runtime confirmation (astra-dump's own provenance
-rule).
+Detect observably: fable skills listed → fable; absent or erroring →
+astra. `ai-usage.md` records WHICH backend ran (exact model strings);
+never label a run without runtime confirmation.
 
-## Output discipline (both paths)
+## Output discipline
 
-- Everything lands in `scratch/` (dated dump dir); never a `.tex`.
-- Claims in `report.md` carry the five-way status taxonomy
-  (proved / conditional / computational / conjectural / imported) and
-  become ledger rows (`subdomains/repo-docs/LEDGER.md`).
-- A produced proof is NOT promotable until its recorded `doubt` run
-  exists (ledger `doubt` column) and `contradiction-check` passes —
-  the consuming writer enforces both (WRITERS.md preamble).
+- Astra lands the dated scratch dump triple natively; the fable
+  pipeline writes its own package per its contract, and the CONSUMING
+  LEAF normalizes it into the triple (proved→proved,
+  sketched→conditional, cited→imported, conjectural→conjectural,
+  refutations→refuted). The dump is the uniform ledger-facing contract
+  on every path; no dispatch, no triple owed.
+- Never a `.tex`. `report.md` claims carry astra-dump's five-way
+  taxonomy; ledger rows are six-way (`refuted` enters at harvest —
+  `subdomains/repo-docs/LEDGER.md`).
+- A proof is NOT promotable until its recorded `doubt` run exists
+  (ledger `doubt` column) and `contradiction-check` passes — the
+  consuming writer enforces both (WRITERS.md preamble).
