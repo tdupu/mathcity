@@ -18,6 +18,11 @@ All rule ID prefixes for mathcity policies are reserved here. Rule IDs are globa
 | F | Formula policy (agent-tier separation, clean-up discipline, policy conformance for formula TOMLs) | `POLICY-formulas.md` (pack root) | **Adopted** (2026-09-15 — Taylor in-session sign-off after check-zero remediation) | F1.1, F2.1, F3.1 |
 | CT | City Operations (runtime dispatch/scheduling/molecules/cleanup) | `subdomains/dev/POLICY-city.md` | Adopted (2026-09-07) | CT1.1, CT3.2, CT9.1 |
 | DOC | Documentation (source-aligned docs, examples, setup, navigation, indexes, documentation workflow) | `subdomains/dev/POLICY-documentation.md` | Adopted (2026-09-07 — registry corrected to match the document, which has been Adopted; was stale-labelled Draft) | DOC1.1, DOC3.2 |
+| LY | Repo-doc: layout contract (per-repo instances of `subdomains/repo-docs/templates/LAYOUT.md`) | template (pack default); instances at `<repo>/LAYOUT.md` | Draft (2026-09-17) | LY1, LY5 |
+| LT | Repo-doc: canonical-tex declaration (`templates/LATEX.md`) | template; instances at `<repo>/LATEX.md` | Draft (2026-09-17) | LT (Real files) |
+| ST | Repo-doc: writing contract (`templates/STYLE.md`) | template; instances at `<repo>/STYLE.md` | Draft (2026-09-17) | ST1, ST5 |
+| AR | Repo-doc: decision record (`templates/ADR.md`) | template; instances at `<repo>/ADR.md` | Draft (2026-09-17) | AR1, AR3 |
+| AG | Repo-doc: agent entry point (`templates/AGENTS.md`) | template; instances at `<repo>/AGENTS.md` | Draft (2026-09-17) | AG1, AG2 |
 
 ## Rules
 

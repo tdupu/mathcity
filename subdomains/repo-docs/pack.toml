@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-repo-docs"
+version = "0.1.0"
+schema = 2
+description = "Default repo-doc templates (LAYOUT, LATEX, STYLE, ADR, AGENTS) and their trinities: repo-local-first check skills and gated amendment skills for research-repository contracts."
