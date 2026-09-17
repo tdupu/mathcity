@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-152 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+154 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -136,13 +136,14 @@ _Regenerate/verify with `/update-README`._
 | `testing-work` | `mathcity-dev.testing-work` | Dispatch a bead to the smoke-test-briefed formula for lightweight test execution with a brief at the end |
 | `update-README` | `mathcity-dev.update-README` | Keep the mathcity pack family's READMEs and skill exposure in sync after ANY owned-pack change — the pack-dev sibling of improve-package-README (which serves Magma/Sage packages) |
 
-### LaTeX — `subdomains/latex/skills/`  (6)
+### LaTeX — `subdomains/latex/skills/`  (7)
 
 | Skill | Alias | What it does |
 |---|---|---|
 | `check-labels-and-refs` | `mathcity-latex.check-labels-and-refs` | Scan LaTeX files for label/reference consistency, orphan labels/refs, and non-pinpoint cross-references |
 | `check-latex-hygiene` | `mathcity-latex.check-latex-hygiene` | Audit LaTeX beads, branches, or .tex diffs against the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
 | `check-latex` | `mathcity-latex.check-latex` | Produce the evidence block a human reviewer needs to approve or reject a notes.tex (or any notes-tier .tex) change before push/merge |
+| `track-down-reference` | `mathcity-latex.track-down-reference` | Find and OPEN the actual source for a claim — pinpoint cite, quote, hypothesis match; no opened source, no citation |
 | `merge-latex-sections` | `mathcity-latex.merge-latex-sections` | STATUS: PLACEHOLDER — full F2 implementation deferred until F1 (latex-hurdle five-hurdle formula) is complete |
 | `new-latex-bead` | `mathcity-latex.new-latex-bead` | Create a new LaTeX work bead that is well-formed under the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) and POLICY-beads.md BP7 from birth - real bd type (never an invented type, P5.3), [LATEX] label plus exactly… |
 | `new-latex-policy` | `mathcity-latex.new-latex-policy` | Propose and apply an amendment to the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
@@ -201,10 +202,11 @@ _Regenerate/verify with `/update-README`._
 | `new-repo-style-policy` | `mathcity-repo-docs.new-repo-style-policy` | Sole write path for a repo's STYLE.md — writing rules and style variables; human-gated |
 | `triage-variants` | `mathcity-repo-docs.triage-variants` | Disposition each undeclared sibling .tex — merge/demote/declare/delete — one human approval per file; brownfield fork-not-merge repair |
 
-### Proof assistants — `subdomains/proof-assist/skills/`  (5)
+### Proof assistants — `subdomains/proof-assist/skills/`  (6)
 
 | Skill | Alias | What it does |
 |---|---|---|
+| `contradiction-check` | `mathcity-proof-assist.contradiction-check` | Loud detection + refusal on claims contradicting earlier ones; structured contradiction report; silent supersession prohibited |
 | `install-loogle` | `mathcity-proof-assist.install-loogle` | Install and configure a Loogle / Mathlib4 search MCP server (canonical: mathlas) so Lean 4 lemma lookup works through a connected MCP tool instead of only the raw web API |
 | `search-arxiv` | `mathcity-proof-assist.search-arxiv` | Search arXiv by paper ID or keyword and return title, abstract, authors, and BibTeX |
 | `search-mathlib` | `mathcity-proof-assist.search-mathlib` | Search Lean 4 / Mathlib4 declarations via the Loogle search engine — by name, type signature, subexpression, or conclusion pattern |

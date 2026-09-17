@@ -18,6 +18,7 @@ Lean build is the strongest possible G4 (critical-review) evidence. Formulas:
 | `search-mathlib` | Lean 4 / Mathlib4 declaration search via the hosted Loogle engine. Query by name, type signature, subexpression, or conclusion pattern. Direct JSON API path (no MCP required); fail-soft on downtime. See §Loogle below. |
 | `search-stacks` | Stacks Project (algebraic geometry / commutative algebra) — tag lookup and keyword search via the `mcp__stacks__*` MCP tools. |
 | `search-scholar` | Semantic Scholar — paper search by keyword or title via the `mcp__scholar__*` MCP tools. |
+| `contradiction-check` | Loud detection + refusal on claims contradicting earlier ones (tex/scratch/ledger); structured contradiction report; silent supersession prohibited |
 
 ## Loogle
 

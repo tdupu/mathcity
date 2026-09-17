@@ -26,6 +26,7 @@ counterpart is POLICY-beads.md BP7.
 | `check-latex-hygiene` | Read-only LX-rule auditor: bead linkage, stage labels, atomization, LMFDB coupling, merge discipline, MREs, computation deps, anti-patterns; consumes `check-latex` reports |
 | `new-latex-bead` | Create a LaTeX work bead well-formed under LX/BP7 from birth (root target, coverage declaration, stage label, dep edges, gate-evidence acceptance criteria); also performs stage-label advances |
 | `merge-latex-sections` | PLACEHOLDER — merge/reorder sections preserving label/ref integrity; F2 implementation deferred until F1 completes (gsp-fby HOLD) |
+| `track-down-reference` | Find the actual source for a claim and verify by opening it — pinpoint cite, verbatim quote, hypothesis-match note; no opened source, no citation (mechanism-7 fix) |
 | `new-latex-policy` | Propose and apply an amendment to the LaTeX Subdomain Policy (LX-rules) — sole write path for LX-rule changes; every proposal is approved by a human in conversation and recorded in the policy Change Log; companion to `check-latex-hygiene` |
 
 ## Concerns
