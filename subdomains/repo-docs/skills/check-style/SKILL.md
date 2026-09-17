@@ -12,10 +12,10 @@ canonical file untagged (mechanism 12; D5).
 
 ## Step 0 — Resolve
 
-Run the shared preamble: [../../RESOLUTION.md](../../RESOLUTION.md).
+Run the shared preamble: `subdomains/repo-docs/RESOLUTION.md`.
 Resolve the repo's `STYLE.md` (and `LATEX.md` for scope — canonical
 files and declared siblings only). On miss: instantiate
-[../../templates/STYLE.md](../../templates/STYLE.md) and interrupt. No
+`subdomains/repo-docs/templates/STYLE.md` and interrupt. No
 approved resolution → DEFER, stop. Read the style variables first;
 they parameterize every judgment.
 

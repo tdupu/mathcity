@@ -5,7 +5,7 @@ description: Draft the introduction/abstract LAST — manuscript tier, behind a 
 
 # write-introduction
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This leaf's middle:
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's middle:
 
 ## The gate (checked ALL five; any failure = one loud refusal naming every failing item)
 

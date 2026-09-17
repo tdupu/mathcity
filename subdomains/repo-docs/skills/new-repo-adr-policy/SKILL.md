@@ -13,9 +13,9 @@ act).
 
 ## Procedure
 
-Follow [../../AMENDMENT.md](../../AMENDMENT.md) end to end: resolve the
+Follow `subdomains/repo-docs/AMENDMENT.md` end to end: resolve the
 repo's `ADR.md` (on miss, instantiate
-[../../templates/ADR.md](../../templates/ADR.md) — the instantiation is
+`subdomains/repo-docs/templates/ADR.md` — the instantiation is
 itself the proposal) → draft the structured proposal → **human gate,
 mandatory** → apply to `ADR.md` only, with a Change Log row → verify
 with the companion checker → conservative, pathspec-scoped commit only
@@ -31,4 +31,4 @@ with explicit authority.
   under Downstream — never edited from here.
 - A decision that creates a standing checkable rule ALSO goes to the
   owning doc via its own amendment skill — see the note in
-  [../../templates/ADR.md](../../templates/ADR.md).
+  `subdomains/repo-docs/templates/ADR.md`.

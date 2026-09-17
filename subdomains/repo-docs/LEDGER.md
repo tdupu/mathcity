@@ -2,12 +2,12 @@
 
 Parent: [README.md](./README.md). Design ADR 0004 binds: the ledger is
 agent-side markdown, NEVER authoritative — humans edit tex freely and
-will not update it; skills treat tex as ground truth and reconcile by
-re-reading it, never the reverse. Nothing here appears in any PDF.
+will not update it; tex is ground truth, reconciled by
+rescan, never the reverse. Nothing here appears in any PDF.
 
 ## Location
 
-`scratch/LEDGER.md` (gitignored where the repo ignores scratch/). One
+`scratch/LEDGER.md` (gitignored with scratch/ where ignored). One
 per repo; rebuilt by rescan when stale — human deletion must never
 break a workflow.
 
@@ -27,14 +27,15 @@ prose.
   the identity; the row is cache.
 - **status**: proved / conditional / computational / conjectural /
   imported / refuted — this six-way set lives ONLY here; scratch
-  reports keep astra-dump's five-way claim separation (refuted enters
+  reports keep astra-dump's own claim separation (refuted enters
   at harvest, counterexample path in evidence). The tex stays binary
   (LX4).
 - **evidence**: paths — proof package, computation, opened-source
   verification (track-down-reference).
 - **depends-on**: ids the proof uses (resolve-dependencies maintains).
-- **doubt**: doubt-run path + verdict, or empty. Promotion into
-  notes.tex REQUIRES a recorded doubt run (router gate).
+- **doubt**: doubt-run path + verdict (the doubt skill emits SOUND /
+  WEAK / SUSPECT), or empty. Promotion into notes.tex REQUIRES verdict
+  SOUND.
 
 ## Reconciliation rule
 

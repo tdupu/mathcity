@@ -5,7 +5,7 @@ description: Recursive include-what-you-use for a statement's proof: enumerate e
 
 # resolve-dependencies
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble step 1 (resolution + style variables) only;
+Runs `subdomains/latex/WRITERS.md` preamble step 1 (resolution + style variables) only;
 write gates apply via the composed writers. This leaf's middle:
 
 ## The walk

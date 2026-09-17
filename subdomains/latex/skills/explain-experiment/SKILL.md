@@ -1,11 +1,11 @@
 ---
 name: explain-experiment
-description: Turn a scratch dump report into notes-tier exposition a hostile reader can FOLLOW — what was computed, why, how, with a re-runnable pointer and provenance. Use when the user says "write up the experiment", "move this report into the notes", "explain the computation in notes.tex". Only proved claims — or computational claims whose ledger row carries a passing doubt run — become statements; conjectural claims stay agent-side or enter as marked conjectures. NOT for literature background (create-exposition).
+description: Turn a scratch dump report into notes-tier exposition a hostile reader can FOLLOW — what was computed, why, how, with a re-runnable pointer and provenance. Use when the user says "write up the experiment", "move this report into the notes", "explain the computation in notes.tex". Only proved claims — or computational claims whose ledger row carries a SOUND doubt run — become statements; conjectural claims stay agent-side or enter as marked conjectures. NOT for literature background (create-exposition).
 ---
 
 # explain-experiment
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This leaf's middle:
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's middle:
 
 ## From report to exposition
 
@@ -20,7 +20,7 @@ Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This l
   inputs in a tex comment (ephemeral cache, deletable — D4) and in the
   ledger row (durable).
 - Statements: `proved` claims — and computational claims whose ledger
-  row carries a passing doubt run — enter per write-proposition
+  row carries a SOUND doubt run — enter per write-proposition
   (composed, its gates); `conjectural` → conjecture env or omitted.
   Observation prose ("for all computed cases…") states the computed
   range exactly.

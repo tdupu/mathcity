@@ -5,7 +5,7 @@ description: HUMAN-GATED pre-submission strip of retained editorial machinery fr
 
 # garbage-collect
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble (resolution + target); the strip itself is
+Runs `subdomains/latex/WRITERS.md` preamble (resolution + target); the strip itself is
 this leaf's gated middle:
 
 ## Enumerate → gate → strip

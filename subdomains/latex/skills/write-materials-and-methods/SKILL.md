@@ -5,7 +5,7 @@ description: Draft the Software / Acknowledgements / AI-disclosure section of a 
 
 # write-materials-and-methods
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full (manuscript-tier
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full (manuscript-tier
 target). This leaf's middle:
 
 ## Sources and structure

@@ -10,7 +10,7 @@ description: Work a prototype's gaps: for each conjectural item in a skeleton or
 1. Enumerate the prototype's open items (conjecture envs in the
    canonical file's tagged skeleton regions, or spec entries), each
    with its ledger row; report the count.
-2. Per item, dispatch per [../../PROVERS.md](../../PROVERS.md): mandate BOTH directions — prove
+2. Per item, dispatch per `subdomains/proof-assist/PROVERS.md`: mandate BOTH directions — prove
    it and hunt a counterexample; partials (special cases, reductions)
    are results, labeled as such.
 3. Harvest per backend contract into

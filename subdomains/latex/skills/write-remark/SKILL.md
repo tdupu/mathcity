@@ -5,7 +5,7 @@ description: Draft ONE remark — expository connective tissue — into the repo
 
 # write-remark
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This leaf's middle:
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's middle:
 
 ## Drafting
 

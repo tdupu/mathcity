@@ -14,7 +14,7 @@ description: Gather a topic's definitions and theorems into a LINKED markdown sp
    source — verified via track-down-reference for every import
    (opened source, pinpoint) — and [[wiki-style]] dependency links
    between entries (mechanism 10's antidote).
-3. Heavy gathering may dispatch per [../../PROVERS.md](../../PROVERS.md); output lands in the
+3. Heavy gathering may dispatch per `subdomains/proof-assist/PROVERS.md`; output lands in the
    spec whatever the backend.
 4. Deliver `scratch/<date>-exposition-<slug>/spec.md` always; the
    dump triple only when a Step-3 dispatch happened;

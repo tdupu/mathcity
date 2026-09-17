@@ -11,9 +11,9 @@ other way is the RED-baseline failure this skill exists to prevent
 
 ## Procedure
 
-Follow [../../AMENDMENT.md](../../AMENDMENT.md) end to end: resolve the
+Follow `subdomains/repo-docs/AMENDMENT.md` end to end: resolve the
 repo's `LATEX.md` (on miss, instantiate
-[../../templates/LATEX.md](../../templates/LATEX.md) — the instantiation is
+`subdomains/repo-docs/templates/LATEX.md` — the instantiation is
 itself the proposal) → draft the structured proposal → **human gate,
 mandatory** → apply to `LATEX.md` only, with a Change Log row → verify
 with the companion checker → conservative, pathspec-scoped commit only

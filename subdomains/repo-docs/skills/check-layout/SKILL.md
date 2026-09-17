@@ -12,7 +12,7 @@ reorganize without approval (mechanisms 12, 1; D1/D3).
 
 ## Step 0 — Resolve
 
-Run the shared preamble: [../../RESOLUTION.md](../../RESOLUTION.md)
+Run the shared preamble: `subdomains/repo-docs/RESOLUTION.md`
 (repo-local-first; on miss instantiate from templates/ and interrupt;
 Status semantics; instruments-must-fail). No approved resolution →
 verdict DEFER, stop.

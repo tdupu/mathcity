@@ -5,7 +5,7 @@ description: Skeleton a discussion or spec into statement stubs in the canonical
 
 # rapid-prototype
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This leaf's middle:
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's middle:
 
 ## Skeleton discipline
 

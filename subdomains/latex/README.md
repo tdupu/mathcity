@@ -27,6 +27,7 @@ counterpart is POLICY-beads.md BP7.
 
 | Skill | Purpose |
 | --- | --- |
+| `using-latexpowers` | ROUTER: dispatches all writing/tex/repo-contract work to the owning leaf before any direct edit |
 | `check-latex` | The runnable latex-gate (G6/F1b) evidence engine: compile check, semantic diff summary, approve/reject evidence block (`check-latex-report.{json,md}`) |
 | `check-labels-and-refs` | Scan LaTeX files for label/reference consistency, orphan labels/refs, and non-pinpoint cross-references (hurdle H2); composed by `check-latex` |
 | `check-latex-hygiene` | Read-only LX-rule auditor: bead linkage, stage labels, atomization, LMFDB coupling, merge discipline, MREs, computation deps, anti-patterns; consumes `check-latex` reports |

@@ -13,7 +13,7 @@ Read-only toward the tex. This leaf's procedure:
    = the named section(s) of the canonical file (WRITERS.md's Target
    clause defines it).
 2. Dispatch the review at prover level per
-   [../../../proof-assist/PROVERS.md](../../../proof-assist/PROVERS.md),
+   `subdomains/proof-assist/PROVERS.md`,
    with the mandate: line-by-line; verify every proof step; attack every
    statement (counterexample hunting per mechanism 6); check every
    citation's plausibility (route suspicious ones to

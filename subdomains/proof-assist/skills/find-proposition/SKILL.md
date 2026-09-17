@@ -9,7 +9,7 @@ description: Hunt plausible propositions on a topic at prover level: candidate s
 
 1. Scope from the human: topic, ambient objects, what counts as
    interesting (or inherit from the repo's notes context).
-2. Dispatch the hunt per [../../PROVERS.md](../../PROVERS.md): each
+2. Dispatch the hunt per `subdomains/proof-assist/PROVERS.md`: each
    candidate carries the statement (explicit hypotheses),
    why-plausible (evidence class: analogy, computed cases, special
    case of a known result), a first attack line, and a falsification

@@ -13,9 +13,9 @@ act).
 
 ## Procedure
 
-Follow [../../AMENDMENT.md](../../AMENDMENT.md) end to end: resolve the
+Follow `subdomains/repo-docs/AMENDMENT.md` end to end: resolve the
 repo's `AGENTS.md` (on miss, instantiate
-[../../templates/AGENTS.md](../../templates/AGENTS.md) — the instantiation is
+`subdomains/repo-docs/templates/AGENTS.md` — the instantiation is
 itself the proposal) → draft the structured proposal → **human gate,
 mandatory** → apply to `AGENTS.md` only, with a Change Log row → verify
 with the companion checker → conservative, pathspec-scoped commit only

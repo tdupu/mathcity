@@ -11,7 +11,7 @@ unguided "cleanup" invents rules and moves files without approval.
 
 ## Step 1 — Instantiate
 
-Copy the five [../../templates/](../../templates/) into the repo root,
+Copy the five `subdomains/repo-docs/templates/` into the repo root,
 fill headers and the LAYOUT target tree from repo reality (Status:
 Draft). Prefer the EXISTING structure where it is sane — few folders
 (LY8); transcribe the intended layout, don't design a new one.

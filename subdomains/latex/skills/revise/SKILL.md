@@ -5,7 +5,7 @@ description: Apply an ACCEPTED review report to the canonical file item-by-item 
 
 # revise
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This leaf's middle:
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's middle:
 
 ## Item-by-item
 

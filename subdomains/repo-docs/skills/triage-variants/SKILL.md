@@ -13,7 +13,7 @@ exactly what was approved.
 
 ## Step 0 — Resolve
 
-[../../RESOLUTION.md](../../RESOLUTION.md). Requires the repo's
+`subdomains/repo-docs/RESOLUTION.md`. Requires the repo's
 LATEX.md (no docs → run `init-repo-docs` first, which registers
 variants and routes back here).
 

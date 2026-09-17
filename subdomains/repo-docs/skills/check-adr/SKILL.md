@@ -13,8 +13,8 @@ that.
 
 ## Step 0 — Resolve
 
-Run the shared preamble: [../../RESOLUTION.md](../../RESOLUTION.md).
-On miss: instantiate [../../templates/ADR.md](../../templates/ADR.md)
+Run the shared preamble: `subdomains/repo-docs/RESOLUTION.md`.
+On miss: instantiate `subdomains/repo-docs/templates/ADR.md`
 and interrupt. No approved resolution → DEFER, stop.
 
 ## Step 1 — Enumerate

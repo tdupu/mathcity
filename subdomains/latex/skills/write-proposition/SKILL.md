@@ -5,7 +5,7 @@ description: Draft ONE proposition — statement plus proof per LX4/ST6 — into
 
 # write-proposition
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full — resolution,
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full — resolution,
 canonical target, contradiction and doubt gates, ST5 tagging, ledger
 update, check-latex/check-style verification, human acceptance. This
 leaf's middle:

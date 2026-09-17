@@ -14,16 +14,16 @@ ledger).
    variables and repo-specific conventions. No docs → `init-repo-docs`
    first.
 2. **Target**: the canonical file LATEX.md names for the tier being
-   written (or a declared aspirational file being opened). Any other
+   written (or a declared aspirational file). Any other
    `.tex` target is a refusal: "in place or nowhere." Markdown output
    goes to `scratch/`, never a second `.tex`.
 3. **Contradiction gate**: run `contradiction-check` targeted at the
    claims about to be written/changed. A hit = the write is refused
    (that skill's Step 3 owns the report).
 4. **Doubt gate** (claim promotions into notes.tex only): the ledger
-   row must carry a recorded doubt run
-   (`subdomains/repo-docs/LEDGER.md`); absent → refuse and name the
-   gap.
+   row's doubt verdict must be SOUND
+   (`subdomains/repo-docs/LEDGER.md`); anything else → refuse, naming
+   the gap.
 
 ## Writing rules
 

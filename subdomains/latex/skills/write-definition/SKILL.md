@@ -5,7 +5,7 @@ description: Draft ONE definition into the repo's canonical tex file, consistent
 
 # write-definition
 
-Runs [../../WRITERS.md](../../WRITERS.md) preamble and postamble in full. This leaf's middle:
+Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's middle:
 
 ## Drafting
 
