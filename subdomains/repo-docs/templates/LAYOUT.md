@@ -43,6 +43,11 @@ finding (LY2).
 Register entries surface in check-layout as KNOWN-DIRTY findings (not
 new violations, not passes). A row is removed only after its cleanup
 actually happened. Delete this section only in a genuinely clean repo.
+Disposition vocabulary: move to <declared dir> | merge into <path> |
+demote to scratch/ | keep-untracked (= add a `.gitignore` entry AND a
+gitignored-but-keep tree row) | delete (human-approved) | TBD (human).
+When no declared home fits, the disposition is scratch/ — never a new
+folder. `init-repo-docs` executes dispositions at instantiation.
 
 ## Rules
 
@@ -80,6 +85,10 @@ adding.
 **LY7 — Naming [C].** New file and folder names: lowercase,
 hyphen-separated, no spaces. Existing violators go in the Brownfield
 register.
+
+**LY8 — Few folders; scratch is the default [C].** Creating a top-level
+directory requires a LAYOUT amendment first. Anything with no declared
+home goes to `scratch/` — never a new folder, never loose at root.
 
 ## Change Log
 

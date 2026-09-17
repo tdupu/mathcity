@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-150 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+151 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -186,13 +186,14 @@ _Regenerate/verify with `/update-README`._
 | `check-magma-hygiene` | `mathcity-magma.check-magma-hygiene` | Audit a Magma package, a diff, or a whole Magma project against the Magma Packages Policy (mathcity/subdomains/magma/POLICY.md) |
 | `new-magma-package` | `mathcity-magma.new-magma-package` | Scaffold a new Magma package compliant with the Magma Packages Policy (mathcity/subdomains/magma/POLICY.md) — the package-<topic>.mag file with header block, the spec entry in dependency order, a README section stub (Purpose/Functions/De… |
 
-### Repo-docs — `subdomains/repo-docs/skills/`  (8)
+### Repo-docs — `subdomains/repo-docs/skills/`  (9)
 
 | Skill | Alias | What it does |
 |---|---|---|
 | `check-adr` | `mathcity-repo-docs.check-adr` | Read-only audit of a repo's ADR.md decision record (shape, append-only numbering, decisions-live-here-once) |
 | `check-layout` | `mathcity-repo-docs.check-layout` | Read-only audit of a repo against its own LAYOUT.md + LATEX.md + AGENTS.md pointers, incl. undeclared sibling-.tex detection |
 | `check-style` | `mathcity-repo-docs.check-style` | Read-only audit of .tex sources against the repo's own STYLE.md (statement discipline, markers, agent tags, commit discipline) |
+| `init-repo-docs` | `mathcity-repo-docs.init-repo-docs` | Instantiate the five repo-doc contracts AND make the repo hygienic — register brownfield, one human-approved disposition batch, execute moves, verify with check-layout |
 | `new-repo-adr-policy` | `mathcity-repo-docs.new-repo-adr-policy` | Sole write path for a repo's ADR.md — entries, supersessions, migrations; human-gated |
 | `new-repo-agents-policy` | `mathcity-repo-docs.new-repo-agents-policy` | Sole write path for a repo's AGENTS.md — pointers, task-tracking contract, mirror discipline; human-gated |
 | `new-repo-latex-policy` | `mathcity-repo-docs.new-repo-latex-policy` | Sole write path for a repo's LATEX.md — real/canonical/aspirational tex declarations; human-gated |
