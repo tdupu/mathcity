@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-151 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+152 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -186,7 +186,7 @@ _Regenerate/verify with `/update-README`._
 | `check-magma-hygiene` | `mathcity-magma.check-magma-hygiene` | Audit a Magma package, a diff, or a whole Magma project against the Magma Packages Policy (mathcity/subdomains/magma/POLICY.md) |
 | `new-magma-package` | `mathcity-magma.new-magma-package` | Scaffold a new Magma package compliant with the Magma Packages Policy (mathcity/subdomains/magma/POLICY.md) — the package-<topic>.mag file with header block, the spec entry in dependency order, a README section stub (Purpose/Functions/De… |
 
-### Repo-docs — `subdomains/repo-docs/skills/`  (9)
+### Repo-docs — `subdomains/repo-docs/skills/`  (10)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -199,6 +199,7 @@ _Regenerate/verify with `/update-README`._
 | `new-repo-latex-policy` | `mathcity-repo-docs.new-repo-latex-policy` | Sole write path for a repo's LATEX.md — real/canonical/aspirational tex declarations; human-gated |
 | `new-repo-layout-policy` | `mathcity-repo-docs.new-repo-layout-policy` | Sole write path for a repo's LAYOUT.md — tree, placement, clean-tree rules; human-gated |
 | `new-repo-style-policy` | `mathcity-repo-docs.new-repo-style-policy` | Sole write path for a repo's STYLE.md — writing rules and style variables; human-gated |
+| `triage-variants` | `mathcity-repo-docs.triage-variants` | Disposition each undeclared sibling .tex — merge/demote/declare/delete — one human approval per file; brownfield fork-not-merge repair |
 
 ### Proof assistants — `subdomains/proof-assist/skills/`  (5)
 

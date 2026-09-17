@@ -38,6 +38,7 @@ below. Templates ship Status: Draft; adoption is a human act.
 | --- | --- |
 | `check-layout` | Audit vs LAYOUT.md + LATEX.md + AGENTS.md pointers; undeclared-sibling-.tex detection (routes to triage-variants) |
 | `init-repo-docs` | Instantiate the five contracts AND make the repo hygienic: register brownfield, one human-approved disposition batch, execute (git mv / scratch / gitignore), verify with check-layout |
+| `triage-variants` | Disposition each undeclared sibling .tex (merge / demote / declare / delete), one human approval per file; emits contradiction reports; never adjudicates math |
 | `check-style` | Audit .tex vs STYLE.md (statement discipline, markers, agent tags, commit discipline) |
 | `check-adr` | Audit ADR.md shape/numbering; detect decision text scattered outside it |
 | `new-repo-layout-policy` | Sole write path for a repo's LAYOUT.md |
