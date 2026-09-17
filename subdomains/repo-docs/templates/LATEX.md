@@ -24,7 +24,9 @@ governs document quality; this file only declares which files exist.
 
 ## Real files [C]
 
-Every `.tex` under version control, one row each. Canonicity is per
+Every `.tex` under version control **outside `scratch/`**, one row
+each (scratch tex is transient, governed by LAYOUT.md LY3, never
+canonical). Canonicity is per
 tier: at most one canonical `notes`-tier file and one canonical
 `manuscript`-tier file per directory (a directory holding both tiers —
 `main.tex` beside `notes.tex` — is normal).
@@ -39,7 +41,8 @@ design ADR 0004) or `manuscript`. Promotion is one-way:
 `scratch/report.md → notes.tex → manuscript`; manuscript-tier promotion
 is human-initiated.
 
-Pass: `git ls-files '*.tex'` equals the table's Path column; per
+Pass: `git ls-files '*.tex'` minus `scratch/` paths equals the table's
+Path column; per
 directory, at most one canonical row per tier. Fail: any tracked `.tex`
 with no row (**undeclared sibling variant** — the fork-not-merge
 mechanism), or two canonical files of the same tier in one directory.
