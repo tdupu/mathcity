@@ -1,51 +1,33 @@
 ---
 name: using-mathpowers
-description: Use when any mathematical claim is asserted, relied on, questioned, or produced in a research session — "what is known about X", "is this proved?", "prove it", "find something to prove", "attack the skeleton", "I doubt that", "does this contradict what we have", "gather the background" — BEFORE answering or proving anything directly. Routes to the owning leaf, pipeline, or the ledger. NOT for writing into .tex (using-latexpowers), formalization (non-goal), or generic process work (superpowers:using-superpowers).
+description: Use when proving, refuting, researching, checking, or developing mathematical claims; when asking what is known, finding something to prove, attacking a skeleton, questioning an argument, or gathering background. Also accepts using-math.
 ---
 
 <SUBAGENT-STOP>
-If you were dispatched as a subagent to execute a specific task, ignore this skill.
+Assigned a bounded leaf task? Follow that brief and its evidence gates; do not restart the top-level workflow.
 </SUBAGENT-STOP>
 
-<EXTREMELY-IMPORTANT>
-If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+**First invoke `using-superpowers`, then `math-workflow` in math mode.** Reuse an active workflow; process precedes dispatch, including quick status answers. Announce the route. If this is not mathematical work, return to the appropriate domain skill.
 
-IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
-
-This is not negotiable. You cannot rationalize your way out of this.
-</EXTREMELY-IMPORTANT>
-
-## The Rule
-
-**Before asserting, relying on, or producing any mathematical claim: read the repo's ledger (`scratch/LEDGER.md`, convention in `subdomains/repo-docs/LEDGER.md`) — or state that none exists — then dispatch via the table.** The claim's home is the REPO, not the web or your memory. Unclear intent (target manuscripts? target theorems?) → request a grill-with-docs session.
+The coordinator carries the request through planning, execution, validation, and cleanup. Math mode produces proof/research artifacts; requested `.tex` work delegates to `using-latexpowers` within the same plan.
 
 ## Dispatch
 
 | Situation | Route |
 |---|---|
-| "is X proved?" — read the ledger row; `proved` counts ONLY with its evidence path and a doubt run with verdict SOUND; no row → not proved, say so | ledger + `doubt` record |
-| "what is known / open about X" | `references/research-soh.md` (the research-SOH recipe) |
-| "are we reinventing the wheel" / before building | `check-zero` |
-| "what could we prove here" | `find-proposition` |
-| "prove it" (a specific claim) | PROVERS.md dispatch (`subdomains/proof-assist/PROVERS.md`) |
-| skeleton/spec with conjectural items — "attack the skeleton" | `fill-in-prototype` |
-| "I doubt that" / "are you sure" — any in-session claim | `doubt` |
-| new result vs recorded claims — "does this contradict" | `contradiction-check` (refusal semantics) |
-| "gather the background on X" into a spec | `create-exposition` |
-| skeleton lands in tex / any write-up | `using-latexpowers` → its writers |
-| two rows fire | `doubt` outranks a bare status answer on any expressed skepticism; `contradiction-check` runs before any promotion or harvest lands; PROMOTION requires a ledger row + SOUND doubt verdict (writers enforce; no shortcuts) |
+| “Is X proved?” | Reconcile live source and ledger per `math-workflow`; report evidence and review status. Missing row means unrecorded, not false. |
+| “What is known/open?” / deep research | `math-workflow` research phase |
+| “Are we reinventing the wheel?” / before new construction | `check-zero` |
+| “What could we prove?” | `find-proposition`; consume its candidates and continue if proving is requested |
+| “Prove X” / “refute X” | Pack `subdomains/proof-assist/PROVERS.md`; return evidence to the coordinator for review |
+| “Attack the skeleton” / gaps in a prototype | `fill-in-prototype`; continue selected obligations within the plan |
+| “I doubt that” / “are you sure?” | `doubt`; skepticism outranks a bare status answer |
+| Conflicting claims / before harvest or promotion | `contradiction-check`; resolve the conflict before dependent work |
+| “Gather background” / expository spec | `create-exposition` |
+| Proof technique or analogy | `find-the-technique`; source leads return through verification |
+| arXiv / scholarly papers / Stacks / Mathlib / mathematical data | `search-arxiv` / `search-scholar` / `search-stacks` / `search-mathlib` / `search-lmfdb` |
+| A load-bearing citation or suspect source | `track-down-reference` |
+| “Write it up” / any `.tex` output | `using-latexpowers` with the existing plan and evidence; no second intake |
+| Formalization requested | State that this prose-research workflow does not supply formalization; identify an installed formalization workflow before promising execution |
 
-## Red flags
-
-| Thought | Reality |
-|---|---|
-| "Searched the web for the exact claim" (first action) | The claim lives in the repo. Ledger first, web second. |
-| "The report says proved" | Reports are drafts. Ledger + doubt decide. |
-| "The manuscript supersedes the conflicting claims" | Silent supersession is prohibited. contradiction-check. |
-| "It's obviously true / the g=1 case generalizes" | Plausible-but-false is mechanism 6. doubt or prove. |
-
-## Precedence
-
-User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
-
-The repo's own instantiated docs outrank this router; `superpowers:using-superpowers` owns generic process dispatch; anything entering a `.tex` belongs to `using-latexpowers`.
+User instructions and repository contracts take precedence over skills. Mathematical and LaTeX policy floors still apply. Missing dependencies or unresolved gates are reported explicitly; neither a plan nor a dispatched agent counts as task completion.

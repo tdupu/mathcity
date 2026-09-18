@@ -109,8 +109,17 @@ manuscript-tier and human-initiated (design D6). Titles are likewise
 written last and kept short; until then documents go by their
 lowercase-hyphen working slugs (LAYOUT.md LY7).
 
+**ST10 — Definitions outside statements.** Apply the global LX10 rule
+and its review procedure (`subdomains/latex/definition-separation.md`):
+new terms, objects, constructions, and notation precede theorem-class
+statements. Quantified hypotheses and mathematical conclusions stay in
+statements. Pass: report all statement bodies checked and zero embedded
+definitions; fail: quote each violation and extract it without changing
+the claim. This floor also binds repos whose STYLE.md predates ST10.
+
 ## Change Log
 
 | Date | Change | Approved by |
 | --- | --- | --- |
+| `2026-09-17` | Add ST10 pointer to global LX10 definition-separation floor | `Taylor, explicit conversation request` |
 | `<YYYY-MM-DD>` | Instantiated from mathcity-repo-docs template | `<name>` |

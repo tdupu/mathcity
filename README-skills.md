@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-170 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the `## Skills` table in `README.md` and the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+174 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -13,7 +13,23 @@ Parent: [README.md](./README.md)
 
 _Regenerate/verify with `/update-README`._
 
-### Parent pack — `mathcity/skills/`  (60)
+Start research with `using-mathpowers prove X` or manuscript work with
+`using-latexpowers prove X and put a stub in notes.tex`. Both load the shared
+[math-workflow](skills/math-workflow/SKILL.md); the shorter `using-math`
+and `using-latex` names remain aliases. The
+[design and validation record](docs/superpowers/plans/2026-09-18-math-latex-workflow.md)
+and [behavioral scenarios](tests/math-workflow/scenarios.md) describe coverage
+and limits. These are installed-skill prompts, not shell commands. They need
+this pack's leaves and Superpowers; proof/search/build phases additionally
+need their declared backend, source access, and TeX toolchain.
+
+| Example | Runner | Prerequisites | Command | Test path | Status | Issue |
+|---|---|---|---|---|---|---|
+| Proof and project bookkeeping | Agent | Installed package; project contracts; callable prover for heavy proving | `using-mathpowers prove X` | `tests/math-workflow/scenarios.md`, A | Behavioral validation recorded in linked design; provider execution not certified | N/A — current refactor |
+| Proof with manuscript stub | Agent | Same, plus declared notes file and local TeX build | `using-latexpowers prove X and put a stub in notes.tex` | `tests/math-workflow/scenarios.md`, B | Behavioral validation recorded in linked design; live manuscript run not certified | N/A — current refactor |
+| Alias status check | Agent | Existing project source and optional ledger | `using-math: is X proved?` | `tests/math-workflow/scenarios.md`, C | Behavioral validation recorded in linked design | N/A — compatibility |
+
+### Parent pack — `mathcity/skills/`  (62)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -33,6 +49,7 @@ _Regenerate/verify with `/update-README`._
 | `create-bead-manifest` | `mathcity.create-bead-manifest` | Snapshot all genuine open beads (noise-filtered) into a dated hierarchical triage table under the configured city-side bead-manifests directory with 11 action categories and epic/convoy grouping |
 | `coordinate-review` | `mathcity.coordinate-review` | Run an artifact through an iterative create/review loop until it converges to an approved state |
 | `create-artifact` | `mathcity.create-artifact` | Dispatched by coordinate-review (payload contains a spec field and an optional artifact_type field, no action_items field) to produce a new artifact from a spec, or triggered directly by user phrases like "draft a skill for X", "draft a… |
+| `math-workflow` | `mathcity.math-workflow` | Shared mathematical framing, research, planning, agent coordination, evidence review, and completion process |
 | `mathathon-problem-intake` | `mathcity.mathathon-problem-intake` | Pull an open problem from MathDB (mathdb.com) into mathcity as a source bead with its canonical statement and provenance, so a Mathathon attempt runs on the brief pipeline; read-only and on MathDB's stated crawler terms |
 | `create-brief` | `mathcity.create-brief` | Produce the durable, gated `.md` brief artifact for the brief stack from a code artifact (branch, bead-id, PR, diff, GH-issue-N) |
 | `create-convoy` | `mathcity.create-convoy` | Create a properly configured OWNED convoy for an epic bead — the fan-out container for one WIP-dispatcher slot |
@@ -136,11 +153,12 @@ _Regenerate/verify with `/update-README`._
 | `testing-work` | `mathcity-dev.testing-work` | Dispatch a bead to the smoke-test-briefed formula for lightweight test execution with a brief at the end |
 | `update-README` | `mathcity-dev.update-README` | Keep the mathcity pack family's READMEs and skill exposure in sync after ANY owned-pack change — the pack-dev sibling of improve-package-README (which serves Magma/Sage packages) |
 
-### LaTeX — `subdomains/latex/skills/`  (19)
+### LaTeX — `subdomains/latex/skills/`  (20)
 
 | Skill | Alias | What it does |
 |---|---|---|
-| `using-latexpowers` | `mathcity-latex.using-latexpowers` | ROUTER: front door for all writing/tex/repo-contract work — dispatches to the owning leaf before any direct edit |
+| `using-latexpowers` | `mathcity-latex.using-latexpowers` | Manuscript entry point with research/proof handoffs, section-and-claim plans, writer gates, validation, and cleanup |
+| `using-latex` | `mathcity-latex.using-latex` | Compatibility alias for using-latexpowers |
 | `explain-experiment` | `mathcity-latex.explain-experiment` | Scratch dump report -> notes-tier exposition a hostile reader can follow; re-runnable pointers |
 | `garbage-collect` | `mathcity-latex.garbage-collect` | HUMAN-GATED pre-submission strip of retained editorial machinery; enumerate -> approve -> strip -> verify |
 | `rapid-prototype` | `mathcity-latex.rapid-prototype` | Skeleton a discussion into conjecture/definition stubs in the canonical notes file; statuses agent-side |
@@ -214,11 +232,12 @@ _Regenerate/verify with `/update-README`._
 | `new-repo-style-policy` | `mathcity-repo-docs.new-repo-style-policy` | Sole write path for a repo's STYLE.md — writing rules and style variables; human-gated |
 | `triage-variants` | `mathcity-repo-docs.triage-variants` | Disposition each undeclared sibling .tex — merge/demote/declare/delete — one human approval per file; brownfield fork-not-merge repair |
 
-### Proof assistants — `subdomains/proof-assist/skills/`  (10)
+### Proof assistants — `subdomains/proof-assist/skills/`  (11)
 
 | Skill | Alias | What it does |
 |---|---|---|
-| `using-mathpowers` | `mathcity-proof-assist.using-mathpowers` | ROUTER: front door for proving/research — ledger-first status answers, prover dispatch, doubt/contradiction gates |
+| `using-mathpowers` | `mathcity-proof-assist.using-mathpowers` | Mathematical research and proof entry point with shared framing, planning, execution, review, and cleanup |
+| `using-math` | `mathcity-proof-assist.using-math` | Compatibility alias for using-mathpowers |
 | `create-exposition` | `mathcity-proof-assist.create-exposition` | Gather a topic's definitions/theorems into a linked .md spec (verified sources) staging the writers |
 | `fill-in-prototype` | `mathcity-proof-assist.fill-in-prototype` | Attack a prototype's conjectural items (prove/refute per PROVERS.md) -> harvest to scratch + ledger |
 | `find-proposition` | `mathcity-proof-assist.find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |

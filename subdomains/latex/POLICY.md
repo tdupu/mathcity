@@ -5,7 +5,7 @@ Parent: [README.md](./README.md)
 | Field  | Value      |
 | ------ | ---------- |
 | Status | Draft      |
-| Date   | 2026-07-12 |
+| Date   | 2026-09-17 |
 | Prefix | LX         |
 
 What makes a LaTeX document in this project correct and well-formed.
@@ -56,6 +56,36 @@ Every entry in the `.bib` file is cited at least once in the document.
 - Pass: every bib key appears in some `\cite` (or the file is a declared shared bibliography noted in the preamble).
 - Fail: uncited entries in a document-local `.bib` with no such declaration.
 
+**LX10 — Definitions precede theorem-class statements.**
+Across every repository and document tier, introduce mathematical terms,
+objects, constructions, and notation in a separate definition, construction,
+or notation paragraph before the result that uses them. A theorem,
+proposition, lemma, corollary, claim, conjecture, or equivalent custom
+statement environment states hypotheses and conclusions; it must not also
+serve as a definition. This includes inline or parenthetical definitions,
+"where ... means", "put", "write ... for", and defining assignments such as
+`:=`, not just nested `definition` environments.
+
+Ordinary quantification and hypotheses ("Let $G$ be a finite group") remain
+in the statement. Recalling already defined notation and asserting an
+identity, characterization, existence, uniqueness, or well-definedness is
+allowed; these are not definitions. If a construction requires such a
+result, give its recipe with the needed conditions before the statement,
+then prove that it works; do not silently assume the conclusion. A purely
+local abbreviation inside a proof may stay there, but terminology used
+outside that proof belongs before its first use.
+
+- Pass: enumerate every theorem-class environment (including custom aliases
+  and starred forms), review each body in context, and report the number
+  checked and zero embedded definitions. A keyword scan alone cannot pass.
+- Fail -> **revise**: quote each embedded definition with file and line;
+  move it before the result, retain all hypotheses and mathematical claims,
+  and check notation collisions, labels, references, and compilation.
+- This is a binding default quality floor for existing and new repositories,
+  even when their local STYLE.md predates ST10. Local policies may tighten
+  it, never omit or weaken it. See `definition-separation.md` for examples
+  and the review procedure.
+
 new: 
 
 Check for labels and references for both theorems and subsections. No "by the previous theorem".
@@ -84,5 +114,6 @@ Check-labels-and-refs
 
 | Date       | Change                                                                                                                                   |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-17 | Add LX10: definitions precede theorem-class statements in every repository and tier; explicitly requested by Taylor in conversation (he-oj8ve). LX7–LX9 belonged to the superseded draft and are not reused. |
 | 2026-07-12 | Full rewrite: policy is now self-contained document-quality rules only (LX1–LX6); bead workflow content moved to `latex-bead-guide.md`; aspirational ideas archived to `../../docs/beads-and-latex-scratch.md`. |
 | 2026-07-12 | Initial draft (LX1–LX9, 36 workflow rules) — superseded by the rewrite above.                                                          |

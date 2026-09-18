@@ -23,11 +23,21 @@ counterpart is POLICY-beads.md BP7.
 | --- | --- |
 | [WRITERS.md](./WRITERS.md) | Shared mechanics for every tex-writing skill: resolution, canonical target, contradiction/doubt gates, ST5 tagging, ledger postamble, loud refusal |
 
+## Using the workflow
+
+Start with `using-latexpowers prove X and put a stub in notes.tex`, or name an
+existing declared manuscript destination. Proof obligations route through
+`using-mathpowers`; unresolved claims remain conjectural stubs.
+Both entry points use [math-workflow](../../skills/math-workflow/SKILL.md).
+See the [examples and coverage](../../README-skills.md) for prerequisites and
+behavioral validation; shorter aliases also resolve.
+
 ## Skills
 
 | Skill | Purpose |
 | --- | --- |
-| `using-latexpowers` | ROUTER: dispatches all writing/tex/repo-contract work to the owning leaf before any direct edit |
+| `using-latexpowers` | Entry point with shared planning, research, execution, review, and cleanup; see `math-workflow` |
+| `using-latex` | Compatibility alias for `using-latexpowers` |
 | `check-latex` | The runnable latex-gate (G6/F1b) evidence engine: compile check, semantic diff summary, approve/reject evidence block (`check-latex-report.{json,md}`) |
 | `check-labels-and-refs` | Scan LaTeX files for label/reference consistency, orphan labels/refs, and non-pinpoint cross-references (hurdle H2); composed by `check-latex` |
 | `check-latex-hygiene` | Read-only LX-rule auditor: bead linkage, stage labels, atomization, LMFDB coupling, merge discipline, MREs, computation deps, anti-patterns; consumes `check-latex` reports |

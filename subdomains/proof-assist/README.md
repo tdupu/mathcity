@@ -9,6 +9,14 @@ prose-math correctness that embeddings and reviewers cannot settle. A passing
 Lean build is the strongest possible G4 (critical-review) evidence. Formulas:
 `proof-check` (mechanical hurdle) + `formalize-claim` (agent → build gate).
 
+## Using the workflow
+
+Start with `using-mathpowers prove X` or `using-mathpowers research what is known about X`.
+Requested LaTeX output routes through `using-latexpowers` within the same plan.
+Both entry points use [math-workflow](../../skills/math-workflow/SKILL.md).
+See the [examples and coverage](../../README-skills.md) for prerequisites and
+behavioral validation; shorter aliases also resolve.
+
 ## Skills
 
 | Skill | Purpose |
@@ -18,7 +26,8 @@ Lean build is the strongest possible G4 (critical-review) evidence. Formulas:
 | `search-mathlib` | Lean 4 / Mathlib4 declaration search via the hosted Loogle engine. Query by name, type signature, subexpression, or conclusion pattern. Direct JSON API path (no MCP required); fail-soft on downtime. See §Loogle below. |
 | `search-stacks` | Stacks Project (algebraic geometry / commutative algebra) — tag lookup and keyword search via the `mcp__stacks__*` MCP tools. |
 | `search-scholar` | Semantic Scholar — paper search by keyword or title via the `mcp__scholar__*` MCP tools. |
-| `using-mathpowers` | ROUTER: proving/research front door — ledger-first, PROVERS dispatch, doubt/contradiction gates (reference: skills/using-mathpowers/references/research-soh.md) |
+| `using-mathpowers` | Entry point with shared planning, research, execution, review, and cleanup; see `math-workflow` |
+| `using-math` | Compatibility alias for `using-mathpowers` |
 | `contradiction-check` | Loud detection + refusal on claims contradicting earlier ones (tex/scratch/ledger); structured contradiction report; silent supersession prohibited |
 | `create-exposition` | Gather a topic's definitions/theorems into a linked .md spec (verified sources) staging the writers |
 | `fill-in-prototype` | Attack a prototype's conjectural items (prove/refute per PROVERS.md) -> harvest to scratch + ledger |

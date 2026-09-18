@@ -1,59 +1,41 @@
 ---
 name: using-latexpowers
-description: Use when working in a mathematics research repository on ANYTHING that touches .tex files or the repo contracts — "clean up the tex situation", "which file is real", "write this up as a proposition", "referee my section N", "we got the referee report", "prep for arXiv", "is this citation right", "set this repo up properly", "record this decision", or any edit about to land in a .tex — BEFORE any direct edit, cleanup, or advice. Routes to the owning leaf; gates live there. NOT for proving/research (using-mathpowers) or generic process (superpowers:using-superpowers).
+description: Use when working on mathematical manuscripts, notes, .tex files, citations, referee reports, submission cleanup, or repository writing contracts; when proving a claim for notes, planning sections, writing statements, or resolving competing manuscript files. Also accepts using-latex and using-latexpower.
 ---
 
 <SUBAGENT-STOP>
-If you were dispatched as a subagent to execute a specific task, ignore this skill.
+Assigned a bounded leaf task? Follow that brief and its writer/evidence gates; do not restart the top-level workflow.
 </SUBAGENT-STOP>
 
-<EXTREMELY-IMPORTANT>
-If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+**First invoke `using-superpowers`, then `math-workflow` in latex mode.** Reuse an active workflow; resolve contracts and dispatch before any edit. Announce the route; non-manuscript work returns to its domain skill.
 
-IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
-
-This is not negotiable. You cannot rationalize your way out of this.
-</EXTREMELY-IMPORTANT>
-
-## The Rule
-
-**Resolve the repo's five docs (`subdomains/repo-docs/RESOLUTION.md`) and dispatch via the table BEFORE any file edit, cleanup, or advice** — "quick" fixes, tidying, and placeholder-filling included. No leaf fits, or intent unclear (target manuscripts? target theorems?) → request a grill-with-docs session; never improvise.
+Latex mode uses `using-mathpowers` for proofs/research and executes the requested declared-target artifact: `rapid-prototype` for unresolved claims, even with a blocked backend; writers for established results. Writer gates apply. Both routers share one coordinator and plan.
 
 ## Dispatch
 
-| Situation | Leaf |
+| Situation | Route |
 |---|---|
-| repo lacks any of the five docs | `init-repo-docs` (batch-gated) |
-| "is the tex situation healthy" / post-skill verification | `check-layout` |
-| undeclared sibling .tex — "this trash ai-paper.tex situation"; NOT ad-hoc moves/repairs | `triage-variants` (per-file gate) |
-| style/quality question on declared files | `check-style` · `check-latex` · `check-latex-hygiene` · `check-labels-and-refs` · `check-citations` |
-| claim needs a source / suspect cite / %VERIFY | `track-down-reference` |
-| evidenced content into canonical tex — "write this up as a proposition" | `write-proposition` / `write-definition` / `write-remark` |
-| discussion → skeleton stubs | `rapid-prototype` |
-| scratch dump → notes exposition | `explain-experiment` |
-| "what does this proof use" | `resolve-dependencies` |
-| ACCEPTED report to apply | `revise` |
-| "referee my section 3" (OUR draft; NOT triage-referee-report) | `referee-report` |
-| received referee report | `triage-referee-report` (its own full flow) or a manual astra/fable session — human's pick (ADR 0005); never auto-drafted |
-| "is this decision recorded" / audit the decision record | `check-adr` |
-| "prep for arXiv" | `garbage-collect` (strip gate) |
-| software/AI-disclosure section | `write-materials-and-methods` |
-| "write the introduction now" — EXPLICIT ask only; never volunteer | `write-introduction` (refusal gate) |
-| any repo-doc change, even placeholder-filling | `new-repo-{layout,latex,style,adr,agents}-policy` (human gate) |
-| LX-rule change | `new-latex-policy` |
-| two rows fire | checks before writers; `triage-variants` before everything while a sibling exists; section-merge work is HOLD (`merge-latex-sections`) |
+| Missing contracts | `init-repo-docs` via `math-workflow`'s preserve-existing adapter; adoption gate |
+| Layout health / “which file is real?” | `check-layout` |
+| Undeclared sibling `.tex` | `triage-variants` — authorized per-file disposition before affected writing |
+| Style / build / LaTeX hygiene / references / citations | `check-style` / `check-latex` / `check-latex-hygiene` / `check-labels-and-refs` / `check-citations` |
+| “Prove X” / research gap / suspect mathematics | `using-mathpowers` for that obligation, then return here for the requested artifact |
+| Claim needs a source / suspect cite / verification marker | `track-down-reference`; `clean-citations` for citation-repair proposals |
+| Evidenced statement / definition / connecting explanation | `write-proposition` / `write-definition` / `write-remark` |
+| Requested stub / discussion-to-skeleton / unresolved X | `rapid-prototype` — conjecture or definition, never a fake proof |
+| Scratch computation → notes | `explain-experiment` |
+| “What does this proof use?” | `resolve-dependencies` |
+| ACCEPTED report to apply | `revise` — item-to-edit map |
+| “Referee our section” | `referee-report` — read-only review |
+| Received referee report | `triage-referee-report` or manual astra/fable route — preserve the human's choice and authorized revision destination |
+| Decision-record audit | `check-adr` |
+| “Prep for arXiv” / editorial stripping | `garbage-collect` — approval of the concrete strip set |
+| Methods / software / AI disclosure | `write-materials-and-methods` |
+| Explicit introduction/abstract request | `write-introduction` — readiness/refusal gates; never volunteer it |
+| Amend layout / LaTeX / style / decisions / agent contracts | `new-repo-layout-policy` / `new-repo-latex-policy` / `new-repo-style-policy` / `new-repo-adr-policy` / `new-repo-agents-policy` — human-authorized amendments |
+| Amend LX rules | `new-latex-policy` — human-authorized policy change |
+| Merge/reorder sections | `merge-latex-sections` is HOLD; report the unsupported operation |
 
-## Red flags
+Checks precede affected writes. Definitions, constructions, and new notation precede theorem-class statements (LX10), even without a local ST10. Review statement bodies; compilation alone does not verify this.
 
-| Thought | Reality |
-|---|---|
-| "I left the mathematical wording untouched" | Moving dead text live IS a promotion. Writer gates apply. |
-| "…rather than silently rewriting — I tagged it" | Tags are mechanics, not approval. The write path is the leaf. |
-| "Already backed by ST1, so I can record it" | A rule existing is not approval. Amendment skills gate docs. |
-| "Fix anything you're confident about" | Confidence is not approval (per-file/per-doc gates). |
-
-## Precedence
-
-User instructions (CLAUDE.md, AGENTS.md, GEMINI.md, etc, direct requests) take precedence over skills, which in turn override default behavior. Only skip skill workflows or instructions when your human partner has explicitly told you to.
-
-The repo's instantiated docs outrank this router; using-superpowers owns generic process dispatch; proving routes to `using-mathpowers`.
+User instructions and repository contracts take precedence over skills, subject to LaTeX policy floors. Preserve leaf gates and report unresolved conflicts explicitly.

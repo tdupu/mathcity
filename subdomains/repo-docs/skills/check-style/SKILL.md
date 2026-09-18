@@ -51,8 +51,15 @@ Mechanical clauses ([C]) get commands; judgment clauses get quotes:
   carry unresolved markers or undischarged proofs, or without human
   initiation → finding; new-file names use LY7 slugs.
 
+- **ST10 / LX10** — always run the statement-body review in
+  `subdomains/latex/definition-separation.md`, including custom aliases
+  and starred forms. Quote embedded definitions, report the number of
+  bodies reviewed, and record the verdict for every candidate. This
+  binding floor applies even if the resolved STYLE.md lacks ST10; a
+  missing local rule is not an exemption. Keywords are triage only.
+
 Floor breaches (LX territory: unresolved refs, bare cites, unproved
-statements) → `FLOOR-BREACH`, pointed at `check-latex-hygiene`.
+statements, embedded definitions) → `FLOOR-BREACH`, pointed at `check-latex-hygiene`.
 
 ## Step 3 — Report
 
@@ -70,5 +77,6 @@ Remediation: <finding → new-repo-style-policy | revise | human>
 
 Read-only — never edits a `.tex`, never "fixes while here", never
 resolves a `\taylor{}` question, never commits. Style judgments not
-derivable from STYLE.md + Tag 02BZ are DEFER items for the human, not
+derivable from STYLE.md + Tag 02BZ and the mandatory LX quality floor
+are DEFER items for the human, not
 opinions.

@@ -10,6 +10,14 @@ canonical target, contradiction and doubt gates, ST5 tagging, ledger
 update, check-latex/check-style verification, human acceptance. This
 leaf's middle:
 
+## Definition separation
+
+Before the statement, extract each new term, construction, or notation
+into a preceding definition or notation paragraph (LX10). Keep the
+hypotheses in the result, referring to the definition as needed. The
+statement may assert that a previously specified construction is
+well-defined; it must not introduce that construction while asserting it.
+
 ## Inputs
 
 The claim, verbatim, and its EVIDENCE: a ledger row with proof-package
