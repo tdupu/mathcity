@@ -25,6 +25,11 @@ Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's m
   Observation prose ("for all computed cases…") states the computed
   range exactly.
 
+- Concrete cases use `write-example`; figures use `generate-graphics` and
+  `add-figure` when they explain the result. Carry graph/axis semantics and
+  exact versus numerical scope through the caption; link the example and
+  figure instead of repeating the derivation.
+
 ## Red flags
 
 | Thought | Reality |

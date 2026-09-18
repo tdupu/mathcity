@@ -1,0 +1,92 @@
+[
+  {
+    "repository": "mathcity",
+    "path": "README-skills.md",
+    "sha256": "9e7aec794aa38abd4f5bac8d36347358814198285e7feb37940c6e480d9f05aa",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/README.md",
+    "sha256": "7e3fce5b8549be4f3fc5687173a50b1093ecb52ee273d6719335d86f48efa695",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/WRITERS.md",
+    "sha256": "48083195cf025a0eb4d2e57fd89221c4ddfda6af1489af18db9332a554e301f0",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/skills/using-latexpowers/SKILL.md",
+    "sha256": "e20bf21f31c443e4451f0494cbe31884457044cfabb22e1300839168ae879769",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/skills/explain-experiment/SKILL.md",
+    "sha256": "21dc90c27f8824f9835cd1b15966ed9f7524c2760b6656d4330967b1c90957f3",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/skills/add-figure/SKILL.md",
+    "sha256": "b98612c6c22362b0eee6830e2505ec5dab72a47e38af9858fcb98718dc6fcd02",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/skills/generate-graphics/SKILL.md",
+    "sha256": "ac2b5fc3349ed36072826680f4b3dd725fd51709662dd08fbef2a8c1447a5c67",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/skills/generate-graphics/assets/cycle_graph.py",
+    "sha256": "69ab797b36d6af8e33b56813d196e0a56f7a9544c3a73f7139dbcdd374a7ef8a",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/skills/generate-graphics/references/provenance.md",
+    "sha256": "b4bd46b61ce011e7351a74e5fbc75ff73db06956691015ce2f2a3849eec5ef58",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "subdomains/latex/skills/write-example/SKILL.md",
+    "sha256": "c0b5f85dbc2c1e4978c34b300dbd89212229c8f746ac4f6597e0ce9d56a30a07",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "tests/latex-graphics/scenarios.md",
+    "sha256": "221bcbfb6d288034d1daf84b72d2405d33ef38d6b3fdc3ff00d155e03793cead",
+    "symlink": false
+  },
+  {
+    "repository": "mathcity",
+    "path": "tests/latex-graphics/smoke_test.sh",
+    "sha256": "3a41945f33278dd8a62a524bafe54669828c44699786e7c82d8e84ade4eb72fd",
+    "symlink": false
+  },
+  {
+    "repository": "agent-skills",
+    "path": "skills/generate-graphics",
+    "sha256": "75a170b48f2a9dff28e90a57e8533c134add66d59d17605e3e9d1d677cd6f6a0",
+    "symlink": true
+  },
+  {
+    "repository": "agent-skills",
+    "path": "skills/add-figure",
+    "sha256": "cccb8917933ba64da672fc4a564c505d1a047ff72821b942563a64e7fe4ef36b",
+    "symlink": true
+  },
+  {
+    "repository": "agent-skills",
+    "path": "skills/write-example",
+    "sha256": "be2da3cc142313945c09edd4d6d1a308f0439082bf7f98e9bb575a976892e8fb",
+    "symlink": true
+  }
+]

@@ -24,6 +24,9 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | Evidenced statement / definition / connecting explanation | `write-proposition` / `write-definition` / `write-remark` |
 | Requested stub / discussion-to-skeleton / unresolved X | `rapid-prototype` — conjecture or definition, never a fake proof |
 | Scratch computation → notes | `explain-experiment` |
+| Computed graph / spectrum / mathematical plot | `generate-graphics` — Sage source, checked data, provenance, rendered preview |
+| Existing graphic → explanatory manuscript figure | `add-figure` — verify meaning, caption and reference at the relevant passage |
+| Worked case / finite example / counterexample | `write-example`; compose `add-figure` when a graphic explains it |
 | “What does this proof use?” | `resolve-dependencies` |
 | ACCEPTED report to apply | `revise` — item-to-edit map |
 | “Referee our section” | `referee-report` — read-only review |

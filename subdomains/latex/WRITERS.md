@@ -1,7 +1,8 @@
 # WRITERS.md — shared mechanics for every tex-writing skill
 
 Parent: [README.md](./README.md). Every writing leaf (write-proposition,
-write-definition, write-remark, rapid-prototype, explain-experiment,
+write-definition, write-remark, write-example, add-figure,
+rapid-prototype, explain-experiment,
 revise, write-materials-and-methods, write-introduction) runs this
 preamble and postamble; leaves state only their own middle. Binding:
 design ADRs 0003 (in place or nowhere), 0004 (tex purity, agent-side

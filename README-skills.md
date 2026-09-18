@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-174 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+177 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -153,30 +153,33 @@ need their declared backend, source access, and TeX toolchain.
 | `testing-work` | `mathcity-dev.testing-work` | Dispatch a bead to the smoke-test-briefed formula for lightweight test execution with a brief at the end |
 | `update-README` | `mathcity-dev.update-README` | Keep the mathcity pack family's READMEs and skill exposure in sync after ANY owned-pack change — the pack-dev sibling of improve-package-README (which serves Magma/Sage packages) |
 
-### LaTeX — `subdomains/latex/skills/`  (20)
+### LaTeX — `subdomains/latex/skills/`  (23)
 
 | Skill | Alias | What it does |
 |---|---|---|
-| `using-latexpowers` | `mathcity-latex.using-latexpowers` | Manuscript entry point with research/proof handoffs, section-and-claim plans, writer gates, validation, and cleanup |
-| `using-latex` | `mathcity-latex.using-latex` | Compatibility alias for using-latexpowers |
+| `add-figure` | `mathcity-latex.add-figure` | Insert a verified figure where it explains the mathematics, with caption, provenance, references, and optional linked example |
+| `check-labels-and-refs` | `mathcity-latex.check-labels-and-refs` | Scan LaTeX files for label/reference consistency, orphan labels/refs, and non-pinpoint cross-references |
+| `check-latex` | `mathcity-latex.check-latex` | Produce the evidence block a human reviewer needs to approve or reject a notes.tex (or any notes-tier .tex) change before push/merge |
+| `check-latex-hygiene` | `mathcity-latex.check-latex-hygiene` | Audit LaTeX beads, branches, or .tex diffs against the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
 | `explain-experiment` | `mathcity-latex.explain-experiment` | Scratch dump report -> notes-tier exposition a hostile reader can follow; re-runnable pointers |
 | `garbage-collect` | `mathcity-latex.garbage-collect` | HUMAN-GATED pre-submission strip of retained editorial machinery; enumerate -> approve -> strip -> verify |
+| `generate-graphics` | `mathcity-latex.generate-graphics` | Generate reproducible Sage mathematical graphics with checked data, source, manifest, and preview |
+| `merge-latex-sections` | `mathcity-latex.merge-latex-sections` | STATUS: PLACEHOLDER — full F2 implementation deferred until F1 (latex-hurdle five-hurdle formula) is complete |
+| `new-latex-bead` | `mathcity-latex.new-latex-bead` | Create a new LaTeX work bead that is well-formed under the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) and POLICY-beads.md BP7 from birth - real bd type (never an invented type, P5.3), [LATEX] label plus exactly… |
+| `new-latex-policy` | `mathcity-latex.new-latex-policy` | Propose and apply an amendment to the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
 | `rapid-prototype` | `mathcity-latex.rapid-prototype` | Skeleton a discussion into conjecture/definition stubs in the canonical notes file; statuses agent-side |
 | `referee-report` | `mathcity-latex.referee-report` | Adversarial referee-grade review of OUR draft at prover level, to scratch; never edits tex (mechanism-5 rule) |
 | `resolve-dependencies` | `mathcity-latex.resolve-dependencies` | Include-what-you-use walk of a proof: present/imported/missing per item; ledger depends-on; placement is the human's |
 | `revise` | `mathcity-latex.revise` | Apply an ACCEPTED review report item-by-item as tagged edits with an item-to-region map; bulk rewrites refused |
+| `track-down-reference` | `mathcity-latex.track-down-reference` | Find and OPEN the actual source for a claim — pinpoint cite, quote, hypothesis match; no opened source, no citation |
+| `using-latex` | `mathcity-latex.using-latex` | Compatibility alias for using-latexpowers |
+| `using-latexpowers` | `mathcity-latex.using-latexpowers` | Manuscript entry point with research/proof handoffs, section-and-claim plans, writer gates, validation, and cleanup |
 | `write-definition` | `mathcity-latex.write-definition` | Draft one definition, notation-collision-checked against the repo's standing conventions |
+| `write-example` | `mathcity-latex.write-example` | Write one evidenced, self-contained example or counterexample, preserving finite computation versus general proof |
 | `write-introduction` | `mathcity-latex.write-introduction` | Introduction/abstract LAST behind a hard refusal gate (markers, VERIFY, LX4, contradictions, ledger-proved only) |
 | `write-materials-and-methods` | `mathcity-latex.write-materials-and-methods` | Software/Acknowledgements/AI-disclosure section from the ai-usage/tokens trail; trail-facts only |
 | `write-proposition` | `mathcity-latex.write-proposition` | Draft one proposition (statement + LX4/ST6 proof) from an evidenced claim into the canonical file |
 | `write-remark` | `mathcity-latex.write-remark` | Draft one remark; claim-shaped content is routed to write-proposition |
-| `check-labels-and-refs` | `mathcity-latex.check-labels-and-refs` | Scan LaTeX files for label/reference consistency, orphan labels/refs, and non-pinpoint cross-references |
-| `check-latex-hygiene` | `mathcity-latex.check-latex-hygiene` | Audit LaTeX beads, branches, or .tex diffs against the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
-| `check-latex` | `mathcity-latex.check-latex` | Produce the evidence block a human reviewer needs to approve or reject a notes.tex (or any notes-tier .tex) change before push/merge |
-| `track-down-reference` | `mathcity-latex.track-down-reference` | Find and OPEN the actual source for a claim — pinpoint cite, quote, hypothesis match; no opened source, no citation |
-| `merge-latex-sections` | `mathcity-latex.merge-latex-sections` | STATUS: PLACEHOLDER — full F2 implementation deferred until F1 (latex-hurdle five-hurdle formula) is complete |
-| `new-latex-bead` | `mathcity-latex.new-latex-bead` | Create a new LaTeX work bead that is well-formed under the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) and POLICY-beads.md BP7 from birth - real bd type (never an invented type, P5.3), [LATEX] label plus exactly… |
-| `new-latex-policy` | `mathcity-latex.new-latex-policy` | Propose and apply an amendment to the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
 
 ### LMFDB — `subdomains/lmfdb/skills/`  (27)
 
