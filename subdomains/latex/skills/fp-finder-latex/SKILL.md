@@ -157,8 +157,11 @@ Do not improve apparent acceptance by hiding a difficult claim elsewhere.
    `ai-usage.md` and `tokens.md`; root summaries reference those records.
    Their contract — never invent totals or costs, never treat unavailable as
    zero, label every estimate — is `AI-POLICY.md` (AI15, AI16) and is not
-   restated here. Round-local duties that remain this skill's: do not
-   double-count mirrors and do not add overlapping intervals.
+   restated here. The per-round `usage.md` index stays this skill's own
+   artifact: it links the round's `ai-usage.md` and `tokens.md` rather than
+   duplicating them, and neither delegate writes or consolidates it.
+   Round-local duties that remain this skill's: do not double-count mirrors
+   and do not add overlapping intervals.
 
    Accept only when all in-scope papers and affected package interfaces meet
    the fixed criterion and required coverage on the exact current tuple, with
