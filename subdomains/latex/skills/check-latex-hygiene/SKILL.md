@@ -159,7 +159,7 @@ bead/file and a one-line remediation.
   no in-bead repro recipe? MRE header block complete (ERROR/TOOL/AUTHOR/
   LAST RUN/STATUS/BEAD)?
 - LX7.2 Any MRE inside gate scope (reachable label, notes-tier `\input`, or
-  outside `scratch/`)?
+  outside the non-canonical trees `scratch/` and `ai/`)?
 - LX7.3 Fixed bugs whose MRE STATUS still says FAILS?
 
 **Pillar 8 — computation deps:**

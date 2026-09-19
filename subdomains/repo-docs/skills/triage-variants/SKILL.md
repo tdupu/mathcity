@@ -19,7 +19,7 @@ variants and routes back here).
 
 ## Step 1 — Enumerate
 
-Variants = tracked `.tex` outside `scratch/` minus LATEX.md's
+Variants = tracked `.tex` outside the non-canonical trees (`scratch/`, `ai/`) minus LATEX.md's
 Real-files and Aspirational rows. Report counts (RESOLUTION.md §5);
 zero variants → report "0 variants in N tex files" and stop.
 

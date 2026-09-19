@@ -34,7 +34,8 @@ floor beneath it. This file only declares which files exist.
 
 ## Real files [C]
 
-Every `.tex` under version control **outside `scratch/`**, one row
+Every `.tex` under version control **outside the non-canonical trees**
+(`scratch/`, `ai/`), one row
 each (scratch tex is transient, governed by LAYOUT.md LY3, never
 canonical). Canonicity is per
 tier: at most one canonical `notes`-tier file and one canonical
@@ -51,7 +52,7 @@ design ADR 0004) or `manuscript`. Promotion is one-way:
 `scratch/report.md → notes.tex → manuscript`; manuscript-tier promotion
 is human-initiated.
 
-Pass: `git ls-files '*.tex'` minus `scratch/` paths equals the table's
+Pass: `git ls-files '*.tex'` minus non-canonical paths equals the table's
 Path column; per
 directory, at most one canonical row per tier. Fail: any tracked `.tex`
 with no row (**undeclared sibling variant** — the fork-not-merge
