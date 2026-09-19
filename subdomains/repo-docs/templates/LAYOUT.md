@@ -31,8 +31,29 @@ finding (LY2).
 ├── <dir>/          ← <purpose>
 ├── scratch/        ← ALL transient/agent output (LY3); see below
 ├── LAYOUT.md  LATEX.md  STYLE.md  ADR.md  AGENTS.md
-  AI-POLICY.md  AI-POLICY-SHORT.md  ai-usage.md  tokens.md
+├── AI-POLICY.md  AI-POLICY-SHORT.md
+├── ai-usage.md  tokens.md
 └── ── gitignored but KEEP on disk ──
+```
+
+Every instantiated repo carries this `.gitignore` stanza (LY9); it is type-shaped
+so relocation cannot evade it:
+
+```gitignore
+# LY9 — never tracked, wherever they sit
+*.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.nav
+*.snm
+*.vrb
     <pattern>       ← <why it exists and why it is not tracked>
 ```
 
@@ -94,6 +115,25 @@ register.
 **LY8 — Few folders; scratch is the default [C].** Creating a top-level
 directory requires a LAYOUT amendment first. Anything with no declared
 home goes to `scratch/` — never a new folder, never loose at root.
+
+**LY9 — PDFs and build byproducts are never tracked [C].**
+The rule is on what a file **is**, not where it sits. No `.pdf` is tracked
+anywhere in the repository — not under `refs/`, not under `scratch/`, not
+beside the `.tex` that produced it. A path-shaped ban is evaded by writing the
+same file somewhere else, which is exactly what happened: a `refs/`-shaped rule
+was in place while PDFs accumulated under `scratch/.../evidence/`. LaTeX
+byproducts are untracked on the same principle: `.aux` `.log` `.out` `.toc`
+`.bbl` `.blg` `.fls` `.fdb_latexmk` `.synctex.gz` `.nav` `.snm` `.vrb`.
+- Pass: `git ls-files '*.pdf'` returns nothing, and likewise per byproduct
+  extension. Mechanical, and unevadable by relocation.
+- Fail: any match, wherever it sits.
+- Remediation: `git rm --cached <path>` plus a `.gitignore` entry — the file
+  stays on disk as keep-untracked (LY3's vocabulary), it is not deleted. A
+  PDF that genuinely must be archived (a submitted manuscript of record) is a
+  release artifact attached to a tag, never a tracked file.
+- Deliberately NOT extended to image types: `generate-graphics` and
+  `add-figure` produce legitimately tracked figures, and a blanket image ban
+  would break them. Page renders under `scratch/` are covered by LY3.
 
 ## Change Log
 

@@ -23,6 +23,9 @@ verdict DEFER, stop.
 git ls-files                      # tracked reality
 git status --short -uall          # untracked/dirty reality
 git ls-files '*.tex' ':!scratch'  # tex, scratch/ excluded; also ls <root>
+git ls-files '*.pdf'              # LY9: must be empty, wherever they sit
+git ls-files '*.aux' '*.log' '*.out' '*.toc' '*.bbl' '*.blg' '*.fls' \
+  '*.fdb_latexmk' '*.synctex.gz' '*.nav' '*.snm' '*.vrb'   # LY9 byproducts
 ```
 
 Report every count. Zero `.tex` in a repo whose LATEX.md declares some
