@@ -55,7 +55,8 @@ disposition, never as fresh findings:
 
 ## Step 3 — Report
 
-One block, to stdout and (only if asked) `scratch/`:
+One block, to stdout and (only if asked) `ai/<date>-check-layout/` per
+RESOLUTION.md §6 — a check report is dated, durable audit evidence:
 
 ```
 CHECK-LAYOUT <repo> <date>

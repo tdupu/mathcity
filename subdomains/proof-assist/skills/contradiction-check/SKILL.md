@@ -62,4 +62,4 @@ always; never a bare all-clear.
 |---|---|
 | "The newer result is obviously the corrected one" | Newer is a timestamp, not a verdict. Report both. |
 | "I'll just update the old statement to match" | That is silent supersession — the prohibited move. |
-| "It's only in a scratch report, not the tex" | Scratch claims feed promotions. In scope. |
+| "It's only in an agent report, not the tex" | Report claims feed promotions, wherever the report lives. In scope. |
