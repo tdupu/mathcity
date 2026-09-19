@@ -137,12 +137,21 @@ original `superseded`, exclude it from the total.
 
 ## Consolidating upward
 
+**An index is not a source.** A roll-up index over event records (`usage.md`)
+links to the ledgers it covers; consolidating one prices every task it indexes
+twice. Discover `tokens.md` only, and report any index as an index.
+
 1. Discover working ledgers from the resolved root `$ROOT`:
    `find "$ROOT" -type f -name tokens.md ! -path "$ROOT/tokens.md" \
     -not -path '*/.git/*' -not -path '*/node_modules/*'`.
 2. Skip any bearing `<!-- consolidated: <task-id> -->`.
-3. One master row per task ID; stages and forks stay as sub-rows.
-4. Record source paths in the row's Notes, then stamp the source with the
+3. **Skip mirrors.** A run spanning several repositories leaves the same task
+   IDs in each one's ledgers. A source whose task IDs already appear here is a
+   mirror: report its path and skip it. Summing mirrors multiplies the cost
+   figure by the number of repositories while every individual row stays
+   correct — the error is invisible in the numbers and visible only here.
+4. One master row per task ID; stages and forks stay as sub-rows.
+5. Record source paths in the row's Notes, then stamp the source with the
    marker. Leave its content unedited; never delete it (AI15).
 
 ## Gates

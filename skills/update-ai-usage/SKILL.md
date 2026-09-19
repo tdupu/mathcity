@@ -105,13 +105,25 @@ edit the contract.
 
 ## Consolidating upward
 
+**An index is not a source.** A roll-up index over event records — the
+established name in this estate is `usage.md` — is a link list pointing at the
+records it covers. It is never an event, and consolidating one counts every
+record it indexes a second time. Discover `ai-usage.md` only; where an index
+exists, leave it untouched and report it as an index.
+
 1. Discover working records from the resolved root `$ROOT`:
    `find "$ROOT" -type f -name ai-usage.md ! -path "$ROOT/ai-usage.md" \
     -not -path '*/.git/*' -not -path '*/node_modules/*'`.
 2. Skip any already bearing `<!-- consolidated: <task-id> -->`.
-3. One master entry per task ID, not per file; a record covering several tasks
+3. **Skip mirrors.** One run spanning several repositories leaves the same
+   task IDs in each one's records. Task IDs are globally unique, so a source
+   whose IDs already appear in this ledger is a mirror: report it with its
+   path and skip it. Never sum mirrors — a three-repository run summed three
+   times looks exactly like a correct ledger, and no individual number appears
+   wrong.
+4. One master entry per task ID, not per file; a record covering several tasks
    yields several entries.
-4. Cite every source path in `Consolidated from:`, then stamp the source with
+5. Cite every source path in `Consolidated from:`, then stamp the source with
    the consolidation marker. Leave its substance unedited.
 
 ## Gates
