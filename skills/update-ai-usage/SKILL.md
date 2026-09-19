@@ -111,6 +111,21 @@ records it covers. It is never an event, and consolidating one counts every
 record it indexes a second time. Discover `ai-usage.md` only; where an index
 exists, leave it untouched and report it as an index.
 
+Going forward, **an index declares itself on its first line** — for example
+"This is a root index, not a usage event." Classify every candidate three
+ways, and never guess:
+
+| What you find | Treat as |
+| --- | --- |
+| A first-line index declaration | index — never consolidate |
+| No declaration and no index signal | record — consolidate normally |
+| No declaration but an index signal — an H1 naming it an index, or links to a sibling `ai-usage.md` / `tokens.md` | **ambiguous** — report the path, do not consolidate, ask for a human disposition |
+
+The asymmetry is deliberate. Guessing "record" on an index double-counts
+silently and every individual row still reads as correct; guessing "index" on
+a record under-counts, which surfaces later as a task with no entry under AI4
+and AI5. Where the evidence does not decide, fail toward the visible error.
+
 1. Discover working records from the resolved root `$ROOT`:
    `find "$ROOT" -type f -name ai-usage.md ! -path "$ROOT/ai-usage.md" \
     -not -path '*/.git/*' -not -path '*/node_modules/*'`.

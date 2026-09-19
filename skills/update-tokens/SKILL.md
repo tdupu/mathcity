@@ -141,6 +141,20 @@ original `superseded`, exclude it from the total.
 links to the ledgers it covers; consolidating one prices every task it indexes
 twice. Discover `tokens.md` only, and report any index as an index.
 
+Going forward, **an index declares itself on its first line** — for example
+"This is a root index, not a usage event." Classify every candidate three
+ways, and never guess:
+
+| What you find | Treat as |
+| --- | --- |
+| A first-line index declaration | index — never consolidate |
+| No declaration and no index signal | record — consolidate normally |
+| No declaration but an index signal — an H1 naming it an index, or links to a sibling `ai-usage.md` / `tokens.md` | **ambiguous** — report the path, do not consolidate, ask for a human disposition |
+
+The asymmetry is deliberate. Guessing "record" on an index prices a task twice
+while every individual row still reads as correct; guessing "index" on
+a record under-counts, which surfaces later as a task with no entry at reconciliation against `ai-usage.md`. Where the evidence does not decide, fail toward the visible error.
+
 1. Discover working ledgers from the resolved root `$ROOT`:
    `find "$ROOT" -type f -name tokens.md ! -path "$ROOT/tokens.md" \
     -not -path '*/.git/*' -not -path '*/node_modules/*'`.
