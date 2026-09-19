@@ -29,7 +29,9 @@ finding (LY2).
 ```
 <repo-name>/
 ├── <dir>/          ← <purpose>
-├── scratch/        ← ALL transient/agent output (LY3); see below
+├── ai/             ← durable agent-generated investigations; dated dirs,
+│                    own descriptive LAYOUT.md, holds ai-usage.md + tokens.md
+├── scratch/        ← genuinely transient output (LY3); disposable
 ├── LAYOUT.md  LATEX.md  STYLE.md  ADR.md  AGENTS.md
 ├── AI-POLICY.md  AI-POLICY-SHORT.md
 ├── ai-usage.md  tokens.md
@@ -73,10 +75,17 @@ folder. `init-repo-docs` executes dispositions at instantiation.
 
 ## Rules
 
+**Non-canonical trees.** `scratch/` (transient) and `ai/` (durable agent
+investigations) are both **non-canonical**: their contents are not the
+repository's published artifact. Every audit that scopes itself by excluding
+non-canonical content excludes **both**. Renaming or adding such a tree means
+updating this definition and every predicate that cites it — a predicate naming
+only one of them silently starts auditing the other as canonical.
+
 **LY1 — Clean-tree test [C].** A collaborator opening the repo finds
 only the published artifact, its documentation, the six repo docs (`AI-POLICY.md` carrying its
 `AI-POLICY-SHORT.md` companion), and the two AI records (`ai-usage.md`, `tokens.md`).
-No agent or orchestration scaffolding outside `scratch/`.
+No agent or orchestration scaffolding outside the non-canonical trees.
 Pass: every tracked path matches a tree row. Fail: any tracked path
 with no row.
 
@@ -90,7 +99,7 @@ agent writes that is not the artifact goes under
 `scratch/YYYY-MM-DD-<slug>/`, containing at least `report.md`,
 `ai-usage.md`, and `tokens.md` when the work was agent-performed (the
 frontier-dump contract; see that skill for the file contracts).
-Pass: no transient files outside `scratch/`; dump dirs follow the
+Pass: no transient files outside the non-canonical trees; dump dirs follow the
 naming. Fail: stray `.md`/`.mag`/notes at root or elsewhere.
 
 **LY4 — Tex placement.** `.tex` files live only in the directories the

@@ -28,12 +28,14 @@ rules, and say plainly that no instantiated policy governed the write.
 | Tier | Location | Who writes it |
 | --- | --- | --- |
 | Working record | the artifact folder (dump, correction root, prompt package) | this skill, same schema |
-| Master record | repository root (`git rev-parse --show-toplevel`). Outside a repo — an artifact tree such as a prompt-package directory — the work root is the caller's top-level package directory, and the entry says so; never invent a repo | this skill, by consolidation |
+| Master record | `<repo-root>/ai/ai-usage.md`, where `<repo-root>` is `git rev-parse --show-toplevel`. Outside a repo — an artifact tree such as a prompt-package directory — the work root is the caller's top-level package directory and the record sits in its `ai/`; the entry says which was used, and never invents a repo | this skill, by consolidation |
 
 A caller may name a different root for its working record — `triage-referee-report`
 uses the correction/revision root for a whole review. Honour it; that is a
 working record, not a competing ledger. **Only an unconsolidated second
-ledger at the repository root is a finding**, reported with its path.
+ledger in `<repo-root>/ai/` is a finding**, reported with its path. A
+leftover `ai-usage.md` at the repository root predates the `ai/` move and is
+reported for relocation, not consolidated in place.
 Consolidated sources stay on disk, unedited, as evidence (AI15). A caller
 that asks for the working record to be **deleted** after consolidation is
 refused on the AI15 floor: report the conflict and name the caller. Removing
@@ -46,7 +48,7 @@ Prepend — newest first. One entry, one heading, stable ID:
 ```markdown
 ## 2026-09-19T14:32-10:00 — frontier-dump/jacobi-smoothness
 [id: 2026-09-19T14:32-10:00__frontier-dump__jacobi-smoothness]
-**Consolidated from:** `scratch/2026-09-19-frontier-jacobi/ai-usage.md`
+**Consolidated from:** `ai/2026-09-19-frontier-jacobi/ai-usage.md`
 **Prompt:** <what the human asked, plus mid-task direction>
 **Agents:**
 
@@ -127,7 +129,7 @@ a record under-counts, which surfaces later as a task with no entry under AI4
 and AI5. Where the evidence does not decide, fail toward the visible error.
 
 1. Discover working records from the resolved root `$ROOT`:
-   `find "$ROOT" -type f -name ai-usage.md ! -path "$ROOT/ai-usage.md" \
+   `find "$ROOT" -type f -name ai-usage.md ! -path "$ROOT/ai/ai-usage.md" \
     -not -path '*/.git/*' -not -path '*/node_modules/*'`.
 2. Skip any already bearing `<!-- consolidated: <task-id> -->`.
 3. **Skip mirrors.** One run spanning several repositories leaves the same

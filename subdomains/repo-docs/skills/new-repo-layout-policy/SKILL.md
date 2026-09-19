@@ -5,7 +5,9 @@ description: Sole write path for a repository's LAYOUT.md (LY rules) — tree, p
 
 # new-repo-layout-policy
 
-Owns exactly one document: the repo's **`LAYOUT.md`**. Editing it any
+Owns exactly one document: the repo's **root `LAYOUT.md`**. An `ai/LAYOUT.md`
+is agent-generated description, not a contract, and is outside this skill's
+sole-write-path claim — it is written by whatever produced the folder. Editing it any
 other way is the RED-baseline failure this skill exists to prevent
 (`baselines-phase1.md` scenario D; D3: acceptance is a human act).
 

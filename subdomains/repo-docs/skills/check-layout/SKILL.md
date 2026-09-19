@@ -5,8 +5,11 @@ description: Read-only audit of a repository against its own LAYOUT.md, LATEX.md
 
 # check-layout
 
-Audits a repo against its **own** `LAYOUT.md` (LY rules), `LATEX.md`
-(LT rules), and `AGENTS.md` pointers (AG rules). RED baseline:
+Audits a repo against its **root** `LAYOUT.md` (LY rules) — and only the
+root one. An `ai/LAYOUT.md` is the agent-generated description of what
+that folder holds, not a contract: read it for context, never audit
+against it and never raise findings from it. Also reads `LATEX.md`
+(LT rules) and `AGENTS.md` pointers (AG rules). RED baseline:
 `baselines-phase1.md` scenario A — unguided agents invent standards and
 reorganize without approval (mechanisms 12, 1; D1/D3).
 
@@ -22,7 +25,7 @@ verdict DEFER, stop.
 ```bash
 git ls-files                      # tracked reality
 git status --short -uall          # untracked/dirty reality
-git ls-files '*.tex' ':!scratch'  # tex, scratch/ excluded; also ls <root>
+git ls-files '*.tex' ':!scratch' ':!ai'  # tex, BOTH non-canonical trees excluded
 git ls-files '*.pdf'              # LY9: must be empty, wherever they sit
 git ls-files '*.aux' '*.log' '*.out' '*.toc' '*.bbl' '*.blg' '*.fls' \
   '*.fdb_latexmk' '*.synctex.gz' '*.nav' '*.snm' '*.vrb'   # LY9 byproducts
@@ -38,11 +41,11 @@ Brownfield-register paths report as `KNOWN-DIRTY` with their registered
 disposition, never as fresh findings:
 
 - **LY1/LY2** — tracked reality vs the declared tree, both directions.
-- **LY3** — transient/agent output outside `scratch/`; dump-dir naming.
+- **LY3** — transient/agent output outside the non-canonical trees; dump-dir naming.
 - **LY5/AG1/AG2** — six docs present (LAYOUT, LATEX, STYLE, ADR, AGENTS, AI-POLICY + its SHORT companion) and the two AI records declared; AGENTS.md points, doesn't
   restate; mirrors are real files and byte-match canonical.
 - **LY6/LY7/LY8** — per their [C] criteria in the repo's LAYOUT.md.
-- **LT (Real files)** — tracked `.tex` outside `scratch/` vs the table;
+- **LT (Real files)** — tracked `.tex` outside the non-canonical trees vs the table;
   at most one canonical file per tier per directory. Any tracked `.tex`
   with no row = **`UNDECLARED-SIBLING`** — the fork-not-merge
   mechanism. Report; route to `triage-variants`. Never move, rename,

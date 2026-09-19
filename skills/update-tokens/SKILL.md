@@ -38,11 +38,14 @@ compliant; hiding it is not.
 | by a human | resolve the root, write or create the master `tokens.md` |
 | by a caller holding a working ledger | write the caller's ledger in this schema, then consolidate upward |
 
-Root: `git rev-parse --show-toplevel`. Outside a repo — a prompt-package or
+The master ledger is `<repo-root>/ai/tokens.md`, with `<repo-root>` from
+`git rev-parse --show-toplevel`. Outside a repo — a prompt-package or
 other artifact tree — the work root is the caller's top-level package
 directory, stated in the file; never invent a repo. A caller's working ledger
 is not a competing ledger; only an unconsolidated second ledger at the
-repository root is a finding.
+`ai/` directory is a finding. A leftover `tokens.md` at the
+repository root predates the `ai/` move and is reported for relocation, not
+consolidated in place.
 
 ## Task ID (AI20)
 
@@ -156,7 +159,7 @@ while every individual row still reads as correct; guessing "index" on
 a record under-counts, which surfaces later as a task with no entry at reconciliation against `ai-usage.md`. Where the evidence does not decide, fail toward the visible error.
 
 1. Discover working ledgers from the resolved root `$ROOT`:
-   `find "$ROOT" -type f -name tokens.md ! -path "$ROOT/tokens.md" \
+   `find "$ROOT" -type f -name tokens.md ! -path "$ROOT/ai/tokens.md" \
     -not -path '*/.git/*' -not -path '*/node_modules/*'`.
 2. Skip any bearing `<!-- consolidated: <task-id> -->`.
 3. **Skip mirrors.** A run spanning several repositories leaves the same task
