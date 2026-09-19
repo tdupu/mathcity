@@ -77,7 +77,7 @@ expectations — recorded even when the session produced nothing else
 **Scope limits / withheld:** …
 ```
 
-**The ID is minted here** — `<ISO-8601-datetime-with-offset>__<skill>__<slug>`,
+**The ID is minted here (AI20)** — `<ISO-8601-datetime-with-offset>__<skill>__<slug>`,
 double underscore separating the three fields because `-` occurs inside all
 of them. The offset is required, so agents in different zones cannot mint
 colliding keys. `<skill>` is the full skill name, `<slug>` unique in the repo.
@@ -105,7 +105,7 @@ edit the contract.
 
 ## Consolidating upward
 
-**An index is not a source.** A roll-up index over event records — the
+**An index is not a source (AI20).** A roll-up index over event records — the
 established name in this estate is `usage.md` — is a link list pointing at the
 records it covers. It is never an event, and consolidating one counts every
 record it indexes a second time. Discover `ai-usage.md` only; where an index

@@ -14,6 +14,7 @@
 | Prefix | AI |
 | Checked by | `latex-ai-statement` (manuscript, `[C]`); `update-ai-usage` / `update-tokens` (records, `[R]`) |
 | Amended by | `new-repo-ai-policy` |
+| Rule budget | 24 — wording is scarce; a new rule must displace or earn its slot |
 | Transcript retention | `<default location for session transcripts and telemetry>` |
 
 How this repo discloses AI assistance and cites software.
@@ -244,8 +245,28 @@ unaccepted DEFER.
 Fail: no audit, an audit of a different revision, an unresolved FAIL, or an
 unaccepted DEFER.
 
+**AI20 — Records are self-describing [R][F].**
+A record says which task it belongs to and what kind of file it is.
+*Identity:* every record carries the task identifier
+`<ISO-8601-datetime-with-offset>__<skill>__<slug>` — the offset so agents in
+different zones cannot mint colliding keys, the double underscore because `-`
+occurs inside all three fields. It is minted once, by `update-ai-usage`, and
+joins `ai-usage.md` to `tokens.md`; a caller pricing a task with no provenance
+entry mints a provisional identifier and marks the row as lacking provenance.
+*Type:* a roll-up index over records (the established name is `usage.md`)
+declares itself on its first line and is never consolidated — consolidating one
+counts every record it indexes a second time. An unlabelled file carrying an
+index signal is reported as ambiguous and left unconsolidated, never guessed
+at: guessing "record" double-counts silently while every row still reads as
+correct, whereas guessing "index" under-counts and surfaces later.
+Pass: every record names a well-formed identifier; every index declares itself;
+ambiguous files are reported, not consumed.
+Fail: a missing, malformed, or never-reconciled provisional identifier; an
+undeclared index consolidated as a record; or an ambiguity resolved by guess.
+
 ## Change Log
 
 | Date | Change | Approved by |
 | --- | --- | --- |
+| 2026-09-19 | Add AI20 (records are self-describing: task identifier + index-vs-record). Proposed as two rules, AI20 and AI21, split on when each is checked — written versus consolidated. Merged to one on re-read: the house separates rules by **obligation**, not by check moment (AI12 spans abstract and body, AI15 spans uniqueness, write paths and retention), and "a record says what it is" is one obligation with two facets. Do not re-split without a new argument. Both mechanisms shipped before the rule. | Taylor Dupuy (decision delegated to agents, 2026-09-19) |
 | `<YYYY-MM-DD>` | Instantiated from the mathcity repo-docs template. | `<human name>` |

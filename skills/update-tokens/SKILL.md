@@ -44,7 +44,7 @@ directory, stated in the file; never invent a repo. A caller's working ledger
 is not a competing ledger; only an unconsolidated second ledger at the
 repository root is a finding.
 
-## Task ID
+## Task ID (AI20)
 
 Rows key on the task ID `update-ai-usage` mints
 (`<ISO-date>T<HH:MM>-<skill>-<slug>`). When a caller invokes this skill alone
@@ -137,7 +137,7 @@ original `superseded`, exclude it from the total.
 
 ## Consolidating upward
 
-**An index is not a source.** A roll-up index over event records (`usage.md`)
+**An index is not a source (AI20).** A roll-up index over event records (`usage.md`)
 links to the ledgers it covers; consolidating one prices every task it indexes
 twice. Discover `tokens.md` only, and report any index as an index.
 

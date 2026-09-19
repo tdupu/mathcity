@@ -60,6 +60,16 @@ def main():
     for rule in sorted(f_listed - {r for r, m in rules.items() if "F" in m}):
         problems.append(f"{rule} is in SHORT's floor line but is not marked [F]")
 
+    # Rule budget: wording is scarce, so the cap is checked, not merely stated.
+    bm = re.search(r"\|\s*Rule budget\s*\|\s*(\d+)", text)
+    if bm:
+        cap = int(bm.group(1))
+        print(f"rule budget: {len(rules)}/{cap}")
+        if len(rules) > cap:
+            problems.append(
+                f"rule budget exceeded: {len(rules)} rules against a cap of {cap} "
+                f"-- merge or retire a rule, or raise the cap deliberately")
+
     print(f"parsed {len(rules)} rules: "
           f"{sum('C' in m for m in rules.values())} [C], "
           f"{sum('R' in m for m in rules.values())} [R], "
