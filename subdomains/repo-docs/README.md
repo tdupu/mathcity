@@ -22,6 +22,7 @@ invariant), 0004 (tex purity / agent-side ledger). RED baselines:
 | --- | --- |
 | [RESOLUTION.md](./RESOLUTION.md) | Shared check-skill preamble: repo-local-first, import-and-interrupt, floor and Status semantics, instruments-must-fail |
 | [AMENDMENT.md](./AMENDMENT.md) | Shared amendment procedure: proposal → human gate → apply + Change Log → verify → conservative commit |
+| [proposals/](./proposals/) | Rationale for **applied** pack-template amendments — one file per amendment, durable, pack-internal. Not distributed: a coauthor gets the contract and its Change Log, not this estate's deliberation. Deferred (undecided) proposals go to `scratch/<date>-proposals/` per AMENDMENT.md, not here. |
 | [LEDGER.md](./LEDGER.md) | Agent-side claim-ledger convention (ADR 0004): six-way status taxonomy, dependencies, doubt records; never authoritative, reconciled by tex rescan |
 | [templates/LAYOUT.md](./templates/LAYOUT.md) | Default layout contract (LY rules) |
 | [templates/LATEX.md](./templates/LATEX.md) | Default canonical-tex declaration (LT rules) |

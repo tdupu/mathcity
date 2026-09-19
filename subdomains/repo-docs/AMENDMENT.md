@@ -45,7 +45,10 @@ Present via AskUserQuestion (or present-it compact form):
 No edit before explicit approval in THIS conversation. Silence is not
 approval; approval of a different proposal does not transfer. Defer →
 record the proposal (bead if a store exists, else
-`scratch/<date>-proposals/`) and STOP.
+`scratch/<date>-proposals/`) and STOP. A proposal that is APPLIED, and whose
+reasoning is worth more than the Change Log row compresses it to, is moved to
+`subdomains/repo-docs/proposals/` — pack-internal, not distributed. Those two
+locations are the only homes for a proposal; do not invent a third.
 
 ## Step 3 — Apply
 
