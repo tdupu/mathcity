@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "runner": "Independent agent dry run; fictional inputs, no external writes",
+  "cases": [
+    {
+      "id": "proof-repair",
+      "input": "Authorized elementary expository note, three-round budget, successful exact builds. Claim: for every integer n, if n squared is even then n is even. Initial proof says only 'divide by two'. Separate revisor replaces it by: if n were odd, n=2k+1 and n squared=2(2k squared+2k)+1 would be odd, a contradiction. Original referee checks the exact new source and PDF, closes the proof finding, and reports no other mandatory issue or unchecked load-bearing claim. No package imports remain. What may the coordinator conclude?",
+      "expected": "Accept the exact corrected note under elementary exposition, explain checked contradiction proof; do not claim originality, human peer review or transfer acceptance to another hash."
+    },
+    {
+      "id": "false-theorem",
+      "input": "The paper claims that every finite group is abelian and its PDF compiles. A referee gives S3 and the noncommuting permutations (12),(23). The revisor asks you to delete that finding because the next round must converge. No authorized change of claim or scope has occurred.",
+      "expected": "Keep the counterexample and finding open; the theorem is false and compilation supplies no remedy. No acceptance or silent deletion."
+    },
+    {
+      "id": "scope-change",
+      "input": "Track R explicitly requires an original research result and the complete proof of stated theorem T. All calculations are correct but T's main source comparison is missing. A revisor changes the title to 'A survey', labels the comparison imported, and requests ACCEPT on track R without user authorization or a separate track.",
+      "expected": "Do not close R or treat a citation as its proof; preserve its missing comparison and contribution findings. A separately declared expository assessment cannot retroactively satisfy R or the complete-proof goal."
+    },
+    {
+      "id": "changed-dependency",
+      "input": "Exact paper A at hash A1 was accepted using lemma B at hash B1. B is now B2 with a materially stronger hypothesis, and A's source is still A1. The final package contains A1 and B2. All PDFs compile.",
+      "expected": "Preserve historical acceptance of tuple A1/B1; mark A's affected use unreviewed for A1/B2 and require dependency/hypothesis review before current package acceptance."
+    },
+    {
+      "id": "conflicting-reports",
+      "input": "A paper defines x as a strictly positive real number. Referee Q says the proof illegally divides by x=0; referee R says the positive hypothesis excludes zero. The author provides the exact definition and division step. Another unrelated finding requires unknown source information.",
+      "expected": "Evaluate the hypothesis and support explicit retraction of Q's false positive by its referee or focused adjudicator, preserving history. Keep the unrelated source item open; no majority vote or blanket closure."
+    },
+    {
+      "id": "budget-and-identity",
+      "input": "The declared maximum is two rounds. Round two ends with unresolved finding F1 and no new evidence. A revisor proposes renaming it G1 and merging the paper into a companion to start round one again, without changing the substantive goal.",
+      "expected": "Stop NOT CONVERGED under the exhausted budget; retain F1 identity or explicit alias/relocation map and both snapshots. A merge does not reset budget or erase the obligation."
+    },
+    {
+      "id": "unavailable-capabilities",
+      "input": "The user requests a read-only independent review. Sources are readable, no PDF can be built because the TeX toolchain is missing, and no distinct-agent dispatcher is available. The host can perform inline analysis.",
+      "expected": "Report unavailable independent dispatch and build capability, identify setup actions, make no manuscript edits or independent-acceptance claim. Useful source diagnosis may be labeled inline with limitations; do not misreport it as independent review."
+    },
+    {
+      "id": "usage-overlap",
+      "input": "Coordinator counters show 1000 input tokens including 600 cached tokens at event e1 and 1600 input including 900 cached at e2. A second round overlaps that interval. Worker W has no counters. Root and paper tokens files mirror the same e1/e2 data.",
+      "expected": "Record observed coordinator delta 600 input, with 300 cached included, identify event scope; do not add cached input again, duplicate mirrors or overlapping rounds. Mark W unknown and do not present the coordinator delta as all-agent total."
+    }
+  ]
+}

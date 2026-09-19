@@ -55,7 +55,7 @@ it changes the mathematical target or dependencies.
    intended use. Metadata, abstracts, snippets, and model recollections are
    leads. Inaccessible sources stay UNVERIFIED and cannot support promotion.
 4. **Synthesize.** Explain what follows, what does not, competing accounts,
-   and proof/section implications. Use `astra-dump` for synthesis requiring
+   and proof/section implications. Use `frontier-dump` for synthesis requiring
    a prover-level investigation, subject to backend availability. Separate
    established results, conditional arguments, computations, conjectures, and
    refutations; a search with no hit is not evidence of novelty or openness.

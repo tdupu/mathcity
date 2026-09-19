@@ -27,6 +27,7 @@ doc — is the failure this template exists to prevent (survey mechanism
 | Which `.tex` files exist and which are canonical | [LATEX.md](./LATEX.md) |
 | How mathematics is written here | [STYLE.md](./STYLE.md) |
 | Decisions already made | [ADR.md](./ADR.md) |
+| How AI use is disclosed and software cited | [AI-POLICY.md](./AI-POLICY.md) (index: [AI-POLICY-SHORT.md](./AI-POLICY-SHORT.md)) |
 
 Global floor for `.tex` quality: `mathcity/subdomains/latex/POLICY.md`
 (LX-rules) — repo docs tighten it, never loosen it.
@@ -35,8 +36,8 @@ Global floor for `.tex` quality: `mathcity/subdomains/latex/POLICY.md`
 
 **AG1 — Pointer-only [C].** This file contains pointers, the repo's
 task-tracking contract, and repo-specific run instructions; it restates
-no rule whose home is one of the four docs above.
-Pass: no rule text duplicated from LAYOUT/LATEX/STYLE/ADR.
+no rule whose home is one of the five docs above.
+Pass: no rule text duplicated from LAYOUT/LATEX/STYLE/ADR/AI-POLICY.
 
 **AG2 — Canonical tree and mirrors [C].** `.agents/` is the canonical
 repo-local agent tree (skills at `.agents/skills/`); `.claude/` and

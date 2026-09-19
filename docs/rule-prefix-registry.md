@@ -23,6 +23,7 @@ All rule ID prefixes for mathcity policies are reserved here. Rule IDs are globa
 | ST | Repo-doc: writing contract (`templates/STYLE.md`) | template; instances at `<repo>/STYLE.md` | Draft (2026-09-17) | ST1, ST5 |
 | AR | Repo-doc: decision record (`templates/ADR.md`) | template; instances at `<repo>/ADR.md` | Draft (2026-09-17) | AR1, AR3 |
 | AG | Repo-doc: agent entry point (`templates/AGENTS.md`) | template; instances at `<repo>/AGENTS.md` | Draft (2026-09-17) | AG1, AG2 |
+| AI | Repo-doc: AI-usage and software-citation contract (`templates/AI-POLICY.md`) | template; instances at `<repo>/AI-POLICY.md` | Draft (2026-09-19) | AI1, AI5 |
 
 ## Rules
 

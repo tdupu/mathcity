@@ -1,6 +1,6 @@
 ---
 name: revise
-description: Apply an ACCEPTED review report to the canonical file item-by-item as tagged edits, delivering an item-to-tagged-region map; unclear or unaccepted items are skipped and listed. Use when the user says "apply the accepted report", "work in the review items", "make the approved changes". NOT for producing reviews (referee-report), referee-response sessions (manual astra/fable per ADR 0005), or bulk rewrites — bulk passes are refused.
+description: Apply an ACCEPTED review report to the canonical file item-by-item as tagged edits, delivering an item-to-tagged-region map; unclear or unaccepted items are skipped and listed. Use when the user says "apply the accepted report", "work in the review items", "make the approved changes". NOT for producing reviews (referee-report), referee-response sessions (manual frontier/fable per ADR 0005), or bulk rewrites — bulk passes are refused.
 ---
 
 # revise
@@ -29,3 +29,14 @@ Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's m
 |---|---|
 | "Faster to regenerate the section than patch it" | Regeneration erases markers and tags. Surgical or refuse. |
 | "Item 7 probably means..." | Probably = skip and list. The human clarifies. |
+
+## Negative results travel with the positive ones (LX11, LX12)
+
+This skill renders previous work into a new artifact, so the negative-result
+floor of `../../POLICY.md` applies. Before finishing, enumerate the inputs'
+refutations, counterexamples, ill-posed proposals, and failed expectations, and
+carry each into the output as a numbered statement (or a labelled question when
+unproved), naming the expectation it corrects: "it is natural to expect $X$; in
+fact $Y$". Report the count carried and, for anything deliberately left out,
+the scope reason. Dropping a refuted claim together with its refutation is a
+revise-level violation: the refutation is the surviving result.

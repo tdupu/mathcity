@@ -36,7 +36,7 @@ disposition, never as fresh findings:
 
 - **LY1/LY2** — tracked reality vs the declared tree, both directions.
 - **LY3** — transient/agent output outside `scratch/`; dump-dir naming.
-- **LY5/AG1/AG2** — five docs present; AGENTS.md points, doesn't
+- **LY5/AG1/AG2** — six docs present (LAYOUT, LATEX, STYLE, ADR, AGENTS, AI-POLICY + its SHORT companion) and the two AI records declared; AGENTS.md points, doesn't
   restate; mirrors are real files and byte-match canonical.
 - **LY6/LY7/LY8** — per their [C] criteria in the repo's LAYOUT.md.
 - **LT (Real files)** — tracked `.tex` outside `scratch/` vs the table;

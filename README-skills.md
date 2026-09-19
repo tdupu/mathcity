@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-177 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+178 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -153,7 +153,7 @@ need their declared backend, source access, and TeX toolchain.
 | `testing-work` | `mathcity-dev.testing-work` | Dispatch a bead to the smoke-test-briefed formula for lightweight test execution with a brief at the end |
 | `update-README` | `mathcity-dev.update-README` | Keep the mathcity pack family's READMEs and skill exposure in sync after ANY owned-pack change — the pack-dev sibling of improve-package-README (which serves Magma/Sage packages) |
 
-### LaTeX — `subdomains/latex/skills/`  (23)
+### LaTeX — `subdomains/latex/skills/`  (24)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -162,6 +162,7 @@ need their declared backend, source access, and TeX toolchain.
 | `check-latex` | `mathcity-latex.check-latex` | Produce the evidence block a human reviewer needs to approve or reject a notes.tex (or any notes-tier .tex) change before push/merge |
 | `check-latex-hygiene` | `mathcity-latex.check-latex-hygiene` | Audit LaTeX beads, branches, or .tex diffs against the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
 | `explain-experiment` | `mathcity-latex.explain-experiment` | Scratch dump report -> notes-tier exposition a hostile reader can follow; re-runnable pointers |
+| `fp-finder-latex` | `mathcity-latex.fp-finder-latex` | Simulated mathematical referee/revision rounds with exact versions, independent roles, preserved findings and honest stopping |
 | `garbage-collect` | `mathcity-latex.garbage-collect` | HUMAN-GATED pre-submission strip of retained editorial machinery; enumerate -> approve -> strip -> verify |
 | `generate-graphics` | `mathcity-latex.generate-graphics` | Generate reproducible Sage mathematical graphics with checked data, source, manifest, and preview |
 | `merge-latex-sections` | `mathcity-latex.merge-latex-sections` | STATUS: PLACEHOLDER — full F2 implementation deferred until F1 (latex-hurdle five-hurdle formula) is complete |

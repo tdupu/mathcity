@@ -1,6 +1,6 @@
 ---
 name: init-repo-docs
-description: Initialize a research repository onto the repo-doc contracts AND make it hygienic — instantiate LAYOUT/LATEX/STYLE/ADR/AGENTS from the pack templates, build the Brownfield register from what is actually in the tree, present ONE disposition batch for human approval, execute the approved moves (git mv / demote-to-scratch / gitignore), and verify with check-layout. Use when the user says "init repo docs", "init-repo-docs", "set this repo up properly", "instantiate the repo contracts here", "clean this repo and put it under contract", or when any repo-docs check skill hits the RESOLUTION.md import-and-interrupt path. NOT for repos already under contract (use the check/amendment skills) and NOT for sibling-.tex dispositions (triage-variants owns those).
+description: Initialize a research repository onto the repo-doc contracts AND make it hygienic — instantiate LAYOUT/LATEX/STYLE/ADR/AGENTS/AI-POLICY from the pack templates, build the Brownfield register from what is actually in the tree, present ONE disposition batch for human approval, execute the approved moves (git mv / demote-to-scratch / gitignore), and verify with check-layout. Use when the user says "init repo docs", "init-repo-docs", "set this repo up properly", "instantiate the repo contracts here", "clean this repo and put it under contract", or when any repo-docs check skill hits the RESOLUTION.md import-and-interrupt path. NOT for repos already under contract (use the check/amendment skills) and NOT for sibling-.tex dispositions (triage-variants owns those).
 ---
 
 # init-repo-docs
@@ -11,9 +11,22 @@ unguided "cleanup" invents rules and moves files without approval.
 
 ## Step 1 — Instantiate
 
-Copy the five `subdomains/repo-docs/templates/` into the repo root,
+Copy the six contracts from `subdomains/repo-docs/templates/` into the repo
+root (AI-POLICY.md brings its AI-POLICY-SHORT.md companion),
 fill headers and the LAYOUT target tree from repo reality (Status:
-Draft). Prefer the EXISTING structure where it is sane — few folders
+Draft). AI-POLICY.md's declared-tools table starts empty; `update-ai-usage`
+fills it as tools are actually used. Instantiating AI-POLICY.md means four tracked
+root files in total — itself, its `AI-POLICY-SHORT.md` companion,
+`ai-usage.md`, and `tokens.md`. Carry **all four** into the LAYOUT tree and
+AI-POLICY.md into the AGENTS contracts table in this same pass, or
+`check-layout` fails in Step 5. The two AI records are created empty here so
+they have tree rows; their content is written only by `update-ai-usage` and
+`update-tokens` (AI15). The templates carry
+default rules that ship with the repo and do not depend on a pack being
+installed next to it — in particular ST10 (definitions precede statements)
+and ST11 (negative results are stated as results, and derived artifacts
+carry them forward). Instantiate those as they stand: they are floors, and
+trimming one during instantiation is the quiet way the contract gets lost. Prefer the EXISTING structure where it is sane — few folders
 (LY8); transcribe the intended layout, don't design a new one.
 
 ## Step 2 — Build the Brownfield register
@@ -49,7 +62,8 @@ or change dispositions. No file moves before this approval. Unattended
 
 Run `check-layout` (its report is the evidence). Remaining findings
 must be exactly the surviving register rows + any DEFER items. Then one
-pathspec-scoped commit: the five docs + moved paths + `.gitignore`,
+pathspec-scoped commit: the six docs + `AI-POLICY-SHORT.md` + the two AI
+records + moved paths + `.gitignore`,
 message per repo commit hygiene (ST8 if tex moved). Push stays gated elsewhere.
 
 ## Hard rules

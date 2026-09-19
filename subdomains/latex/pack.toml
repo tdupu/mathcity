@@ -2,4 +2,4 @@
 name = "mathcity-latex"
 version = "0.1.0"
 schema = 2
-description = "Notes-tier .tex screening (check-latex formula / latex-hurdle) and literature search for citation-hygiene hurdle H3."
+description = "Notes-tier .tex screening (check-latex formula / latex-hurdle), literature search for citation-hygiene hurdle H3, and the AI-disclosure audit (latex-ai-statement, alias check-ai-statement) gating manuscript promotion under AI-POLICY.md."

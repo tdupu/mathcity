@@ -4,9 +4,10 @@ description: >-
   Turn a mathematical research issue, project note, or vague problem into one
   evidence-grounded, execution-ready prompt for a high-capability research
   agent. Use when the user says "generate a prompt", "make an Astra prompt",
-  "turn this issue into a research task", or asks for a single prompt pinned
-  to project data, references, computations, and deliverables. Do not use for
-  a Fable stage-zero plus positive/negative fork package.
+  "make a frontier-dump prompt", "turn this issue into a research task", or
+  asks for a single prompt pinned to project data, references, computations,
+  and deliverables. Do not use for a Fable stage-zero plus positive/negative
+  fork package.
 ---
 
 # Generate Prompt
@@ -23,8 +24,11 @@ not, unless the user separately asks for those actions.
 ## Pre-flight
 
 1. Identify the target agent, requested output, repository, and governing
-   instructions. If the user names Astra, write for an autonomous,
-   high-capability research agent.
+   instructions. If the user names a specific product (Astra, GPT, Claude, or
+   otherwise), write for that agent. If the user instead just asks for a
+   frontier-dump prompt or a prompt for "the best available agent", write for
+   an autonomous, high-capability research agent without assuming which
+   concrete model that will resolve to at run time.
 2. Preserve every explicit inclusion, exclusion, priority, and execution
    constraint from the user. Do not silently restore an example the user
    removed or generalize beyond the requested theory.

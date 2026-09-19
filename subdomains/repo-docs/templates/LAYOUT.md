@@ -31,6 +31,7 @@ finding (LY2).
 ├── <dir>/          ← <purpose>
 ├── scratch/        ← ALL transient/agent output (LY3); see below
 ├── LAYOUT.md  LATEX.md  STYLE.md  ADR.md  AGENTS.md
+  AI-POLICY.md  AI-POLICY-SHORT.md  ai-usage.md  tokens.md
 └── ── gitignored but KEEP on disk ──
     <pattern>       ← <why it exists and why it is not tracked>
 ```
@@ -52,7 +53,8 @@ folder. `init-repo-docs` executes dispositions at instantiation.
 ## Rules
 
 **LY1 — Clean-tree test [C].** A collaborator opening the repo finds
-only the published artifact, its documentation, and the five repo docs.
+only the published artifact, its documentation, the six repo docs (`AI-POLICY.md` carrying its
+`AI-POLICY-SHORT.md` companion), and the two AI records (`ai-usage.md`, `tokens.md`).
 No agent or orchestration scaffolding outside `scratch/`.
 Pass: every tracked path matches a tree row. Fail: any tracked path
 with no row.
@@ -66,7 +68,7 @@ but keep" pattern is listed. Pass/Fail: mechanical diff of
 agent writes that is not the artifact goes under
 `scratch/YYYY-MM-DD-<slug>/`, containing at least `report.md`,
 `ai-usage.md`, and `tokens.md` when the work was agent-performed (the
-astra-dump contract; see that skill for the file contracts).
+frontier-dump contract; see that skill for the file contracts).
 Pass: no transient files outside `scratch/`; dump dirs follow the
 naming. Fail: stray `.md`/`.mag`/notes at root or elsewhere.
 
@@ -74,11 +76,14 @@ naming. Fail: stray `.md`/`.mag`/notes at root or elsewhere.
 tree marks for LaTeX; which files are canonical there is `LATEX.md`'s
 concern (see it; check-layout enforces both together).
 
-**LY5 — Repo docs present [C].** `LAYOUT.md`, `LATEX.md`, `STYLE.md`,
+**LY5 — Repo docs present [C].** `AI-POLICY.md` (with its
+`AI-POLICY-SHORT.md` companion), `LAYOUT.md`, `LATEX.md`, `STYLE.md`,
 `ADR.md`, `AGENTS.md` exist at the root and `AGENTS.md` points at the
 other four. Pass/Fail: existence + pointer check.
 
-**LY6 — Bloat guard [C].** Each of the five repo docs stays ≤ 120
+**LY6 — Bloat guard [C].** Each repo doc stays within its cap: `AI-POLICY.md`
+≤ 260 content lines (a rule set carrying a mechanical Pass/Fail criterion per
+rule; factor prose, never the criteria), every other doc ≤ 120
 content (non-blank) lines. Over = finding; trim or factor before
 adding.
 

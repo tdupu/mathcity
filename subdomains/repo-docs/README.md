@@ -28,6 +28,8 @@ invariant), 0004 (tex purity / agent-side ledger). RED baselines:
 | [templates/STYLE.md](./templates/STYLE.md) | Default writing contract (ST rules; style variables; machine-tag format) |
 | [templates/ADR.md](./templates/ADR.md) | Default decision record (AR rules) |
 | [templates/AGENTS.md](./templates/AGENTS.md) | Default agent entry point (AG rules; pointer-only) |
+| [templates/AI-POLICY.md](./templates/AI-POLICY.md) | Default AI-usage and software-citation contract (AI rules; `[C]` manuscript / `[R]` records / `[F]` floors) |
+| [templates/AI-POLICY-SHORT.md](./templates/AI-POLICY-SHORT.md) | Scannable DO/DON'T index of the AI rules; companion, never a second source of truth |
 
 Templates are **instantiated-then-owned**: the pack copy is a seed and
 floor; a repo's copy is the contract, amended only through the skills
@@ -38,7 +40,7 @@ below. Templates ship Status: Draft; adoption is a human act.
 | Skill | Purpose |
 | --- | --- |
 | `check-layout` | Audit vs LAYOUT.md + LATEX.md + AGENTS.md pointers; undeclared-sibling-.tex detection (routes to triage-variants) |
-| `init-repo-docs` | Instantiate the five contracts AND make the repo hygienic: register brownfield, one human-approved disposition batch, execute (git mv / scratch / gitignore), verify with check-layout |
+| `init-repo-docs` | Instantiate the six contracts AND make the repo hygienic: register brownfield, one human-approved disposition batch, execute (git mv / scratch / gitignore), verify with check-layout |
 | `triage-variants` | Disposition each undeclared sibling .tex (merge / demote / declare / delete), one human approval per file; emits contradiction reports; never adjudicates math |
 | `check-style` | Audit .tex vs STYLE.md (statement discipline, markers, agent tags, commit discipline) |
 | `check-adr` | Audit ADR.md shape/numbering; detect decision text scattered outside it |
@@ -47,6 +49,8 @@ below. Templates ship Status: Draft; adoption is a human act.
 | `new-repo-style-policy` | Sole write path for a repo's STYLE.md |
 | `new-repo-adr-policy` | Sole write path for a repo's ADR.md (entries, supersessions, migrations) |
 | `new-repo-agents-policy` | Sole write path for a repo's AGENTS.md |
+| `latex-ai-statement` (alias `check-ai-statement`) | Audit a .tex disclosure vs AI-POLICY.md and the ai-usage.md / tokens.md trail; AI19 submission gate. Lives in the latex subdomain |
+| `new-repo-ai-policy` | Sole write path for a repo's AI-POLICY.md and its SHORT companion |
 
 ## Division of labor
 
@@ -56,4 +60,8 @@ below. Templates ship Status: Draft; adoption is a human act.
 - City-side decisions: bd decision beads; ADR.md is the repo-side
   record.
 - Brownfield sibling-variant disposition: `triage-variants`
+- AI contract vs AI records: `new-repo-ai-policy` owns `AI-POLICY.md` (what
+  must be disclosed); `update-ai-usage` / `update-tokens` own `ai-usage.md`
+  and `tokens.md` (what a task actually used and cost). Contract and record
+  never write each other.
   (mathpowers/latexpowers Phase 2), one human approval per file.

@@ -15,8 +15,10 @@
 | Amended by | `new-repo-style-policy` |
 
 What prose and statements in this repo's `.tex` files must look like.
-Quality floor: `mathcity/subdomains/latex/POLICY.md` (LX-rules) — this
-file tightens it, never loosens it. Style authority for exposition:
+The rules below ship with this template and bind on their own, whether or
+not any pack is installed alongside the repo; where a mathcity pack IS
+present its `subdomains/latex/POLICY.md` (LX-rules) is the shared floor
+and this file tightens it, never loosens it. Style authority for exposition:
 [Stacks Project Tag 02BZ](https://stacks.math.columbia.edu/tag/02BZ).
 
 ## Style variables
@@ -117,9 +119,43 @@ statements. Pass: report all statement bodies checked and zero embedded
 definitions; fail: quote each violation and extract it without changing
 the claim. This floor also binds repos whose STYLE.md predates ST10.
 
+**ST11 — Negative results are stated as results.** When the work behind a
+document refuted a claim, disproved an expectation, showed a proposed
+definition ill-posed, found a counterexample, or closed off an approach, the
+document states that finding as a numbered statement environment — or, when
+it is not proved, as a labelled `question` or `conjecture` — with the
+corrected expectation named in the text: "it is natural to expect $X$; in
+fact $Y$". Deleting a wrong claim together with its refutation is the
+failure this rule exists to prevent: the refutation is the result that
+survives, and in a subject whose working intuition is imported from a
+neighbouring theory it is often the most valuable thing the work produced.
+The rule binds the document's own earlier claims symmetrically: a statement
+this repo once asserted and later disproved is recorded as a refutation, not
+quietly dropped. It also binds derived artifacts — any synthesis, digest,
+exposition, introduction, merge, handoff, or dump produced from this repo's
+documents or its agent-side evidence carries their negative results forward,
+before the positive ones, or records per finding the authorized reason it is
+out of that artifact's scope.
+
+Write the finding at the strength it has. An intuition-correcting result is
+neither softened into an unnumbered aside nor inflated into a general
+theorem, and a refutation of a specific claim says which claim, in the words
+the claim was made in.
+
+Pass: enumerate the refutations, counterexamples, ill-posed proposals, and
+failed expectations recorded in this repo's agent-side evidence (`scratch/`
+reports and ledgers, review packages, superseded drafts) and exhibit, for
+each, the numbered statement, question, or conjecture in the canonical
+document that carries it, with both locators; report the number enumerated
+and the number carried. A keyword scan cannot discharge this check. Fail:
+quote each finding present in the evidence and absent from the document; the
+remediation is to write it, not to delete the evidence. (Pack counterpart
+where a mathcity pack is installed: LX11 and LX12.)
+
 ## Change Log
 
 | Date | Change | Approved by |
 | --- | --- | --- |
+| `2026-09-19` | Add ST11: negative results are stated as results, and derived artifacts carry them forward; written self-contained so an instantiated repo does not depend on a pack being present | `Taylor, explicit conversation request` |
 | `2026-09-17` | Add ST10 pointer to global LX10 definition-separation floor | `Taylor, explicit conversation request` |
 | `<YYYY-MM-DD>` | Instantiated from mathcity-repo-docs template | `<name>` |

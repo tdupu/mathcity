@@ -15,6 +15,29 @@ definition, retain its parameter conditions and keep every hypothesis
 needed by the subsequent result explicit. Do not promote a claim of
 existence or well-definedness into an assumption of the definition.
 
+### One-concept rule
+
+One `definition` environment defines exactly one mathematical object,
+construction, or term. A paired construction (for example, a jet functor and
+a Greenberg functor) must use separate adjacent definitions with separate
+signatures and parameter domains. Comparisons, non-identification warnings,
+representability caveats, and equivalence claims belong in a following
+`remark`, proposition, or theorem, never appended to the preceding
+definition. Do not write a sentence such as “the corresponding ... is” inside
+the first definition when it introduces a second object; start a new
+definition environment instead.
+
+Before writing, make a definition inventory with one row per concept:
+
+| Concept | Domain/test category | Defining formula | Name of representing object |
+|---|---|---|---|
+
+The inventory must have one row for every displayed construction. The writer
+must then check that each row has exactly one definition environment and that
+all comparison prose has been moved to a separate remark. If two rows would
+share an environment, stop and split the draft before editing the canonical
+file.
+
 ## Drafting
 
 - Scan for notation collisions FIRST: the document's own preamble and
@@ -25,6 +48,9 @@ existence or well-definedness into an assumption of the definition.
 - Definition environment; term bold/emphasized per document practice;
   every symbol in the definiens already defined or standard for the
   declared audience.
+- A definition environment may state notation for a representing object only
+  conditionally (“when representable, write ...”); it may not assert the
+  representability theorem or an identification with another construction.
 - Imported definition: provenance per track-down-reference (opened
   source), cited at the definition.
 - Cross-reference: list sites already using the term undefined, for

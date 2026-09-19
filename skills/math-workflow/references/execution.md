@@ -43,7 +43,7 @@ bibliography, and ledger files; parallel workers own separate scratch paths.
 For heavy proving, read pack `subdomains/proof-assist/PROVERS.md` and verify
 actual execution capability: listed Fable skills alone do not establish a
 working Fable backend. Follow its Fable pipeline when callable, otherwise
-its `astra-dump` path. If neither runs, report the missing backend; do not
+its `frontier-dump` path. If neither runs, report the missing backend; do not
 invent a dispatch or label local reasoning as an external prover run.
 Bounded local reasoning may continue if consistent with the owning leaf.
 Record actual usage or “unavailable”; never estimate telemetry as measured.

@@ -28,6 +28,20 @@ The coordinator carries the request through planning, execution, validation, and
 | arXiv / scholarly papers / Stacks / Mathlib / mathematical data | `search-arxiv` / `search-scholar` / `search-stacks` / `search-mathlib` / `search-lmfdb` |
 | A load-bearing citation or suspect source | `track-down-reference` |
 | “Write it up” / any `.tex` output | `using-latexpowers` with the existing plan and evidence; no second intake |
+| AI-result produced (statement, counterexample, strategy, reference) | Literature search is mandatory (AI5) — `search-arxiv` / `search-scholar` / `search-lmfdb` / `track-down-reference`; report hits with pinpoint locators and a method comparison, or that the search came back empty |
+| Record an AI task's provenance / cost | `update-ai-usage` / `update-tokens` — sole write paths for the repo's master `ai-usage.md` and `tokens.md` |
 | Formalization requested | State that this prose-research workflow does not supply formalization; identify an installed formalization workflow before promising execution |
+
+Research output is recorded as it is produced. The repo's `AI-POLICY.md`
+(AI-rules; template at
+`mathcity/subdomains/repo-docs/templates/AI-POLICY.md`) defines an
+**AI-result** as anything from an AI session that would have required
+acknowledgement from a fellow mathematician. Each one is logged through
+`update-ai-usage` with the model, harness, and skill that produced it, its
+derivation account, and its literature-search outcome — including “no hits”
+— before it reaches a manuscript. Agents are search and critique tools:
+they are cited as software, never as authors and never as the source of a
+mathematical claim, and responsibility for correctness stays with the human
+authors.
 
 User instructions and repository contracts take precedence over skills. Mathematical and LaTeX policy floors still apply. Missing dependencies or unresolved gates are reported explicitly; neither a plan nor a dispatched agent counts as task completion.

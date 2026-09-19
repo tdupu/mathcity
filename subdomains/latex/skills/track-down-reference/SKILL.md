@@ -1,6 +1,6 @@
 ---
 name: track-down-reference
-description: Find the actual source for a mathematical claim and VERIFY BY OPENING it — a citation counts only when the source was opened and the claim found at a pinpoint locator. Delivers bibkey (LX3 format), pinpoint cite, verbatim quote, and a hypothesis-match note. Use when the user says "track down this reference", "find a source for X", "is this citation actually right", on a %VERIFY marker, on check-citations findings, or for ST6 notes-tier self-containedness. NOT for broad literature review (the research-SOH recipe: astra-dump + the search-* skills), citation formatting (clean-citations), or inserting the cite into tex (the write-* skills). Unobtainable source = UNVERIFIED report, never cite-anyway.
+description: Find the actual source for a mathematical claim and VERIFY BY OPENING it — a citation counts only when the source was opened and the claim found at a pinpoint locator. Delivers bibkey (LX3 format), pinpoint cite, verbatim quote, and a hypothesis-match note. Use when the user says "track down this reference", "find a source for X", "is this citation actually right", on a %VERIFY marker, on check-citations findings, or for ST6 notes-tier self-containedness. NOT for broad literature review (the research-SOH recipe: frontier-dump + the search-* skills), citation formatting (clean-citations), or inserting the cite into tex (the write-* skills). Unobtainable source = UNVERIFIED report, never cite-anyway.
 ---
 
 # track-down-reference

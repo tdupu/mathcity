@@ -1,6 +1,6 @@
 ---
 name: write-materials-and-methods
-description: Draft the Software / Acknowledgements / AI-disclosure section of a manuscript from the repo's ai-usage.md and tokens.md trail — factual claims ONLY from the trail, structure per the declared house precedents. Use when the user says "write the software section", "add the AI disclosure", "draft acknowledgements scaffolding". Grants, hospitality, and personal thanks are supplied by the human, never invented.
+description: Draft the Software / Acknowledgements / AI-disclosure section of a manuscript from the repo's ai-usage.md and tokens.md trail, to the contract in the repo's AI-POLICY.md (AI-rules) — factual claims ONLY from the trail, structure per the declared house precedents. Use when the user says "write the software section", "add the AI disclosure", "draft acknowledgements scaffolding", or when latex-ai-statement routes a failed rule here for repair. Grants, hospitality, and personal thanks are supplied by the human, never invented. NOT for auditing an existing disclosure (that is latex-ai-statement) and NOT for writing the trail itself (update-ai-usage, update-tokens).
 ---
 
 # write-materials-and-methods
@@ -10,10 +10,20 @@ target). This leaf's middle:
 
 ## Sources and structure
 
-- Sources: the repo's ai-usage.md / tokens.md trail (scratch dumps and
-  root records). Every named tool, model string, and usage claim must
-  appear in the trail — no memory, no inference from vibes; missing
-  telemetry is stated plainly, never estimated (astra-dump's rule).
+- Contract: the repo's `AI-POLICY.md` (AI-rules), resolved repo-local-first
+  per `subdomains/repo-docs/RESOLUTION.md`. On a miss, **stop and route to
+  `new-repo-ai-policy`** — never fall back to the pack template, and never
+  instantiate: RESOLUTION §2's instantiate-and-interrupt is carved out for
+  `check-*` skills, and a drafter creating the contract it will then be
+  judged against defeats the trinity. It governs what the disclosure must
+  contain; this skill governs how it is written. Do not restate or widen it.
+- Sources: the repo's master `ai-usage.md` / `tokens.md` trail and the
+  per-folder working records they consolidate. Those files are written by
+  [[update-ai-usage]] and [[update-tokens]], never by this skill; a gap in
+  the trail is fixed there and the drafting waits. Every named tool, model
+  string, and usage claim must appear in the trail — no memory, no
+  inference from vibes; missing telemetry is stated plainly, never
+  estimated.
 - Reader access: use internal logs as drafting evidence, not as substitutes
   for disclosure. The manuscript must itself state the relevant tools/models,
   concrete contributions, review performed, and any material limits of the
@@ -31,9 +41,17 @@ target). This leaf's middle:
   an unnumbered **Software and AI assistance** subsection at the **end of
   the Introduction**, before the first substantive mathematical section.
   This is the default for both manuscripts and notes; in notes with an
-  unsectioned opening overview, put it after that overview. Do not append
-  it at the end of the paper. Follow an explicit user or journal placement
-  requirement when one is given. Keep Acknowledgements distinct; never
+  unsectioned opening overview, put it after that overview; with neither,
+  make it the first unnumbered subsection before the first numbered section.
+  Do not append it at the end of the paper. **Where the document has an
+  abstract, draft its one-sentence disclosure too** (AI12) — factual, no
+  marketing: what assisted, which model and harness, and that the authors
+  are responsible. Without it the auditor's AI12 abstract finding has no
+  repair path and the audit-repair cycle cannot converge. Follow an explicit user or
+  journal placement requirement **only when it is recorded with the
+  manuscript** — AI12 and the auditor both require the record, so an override
+  given only in conversation drafts a document that FAILs and routes straight
+  back here. Ask for it to be recorded first. Keep Acknowledgements distinct; never
   invent grants, hospitality, or personal thanks.
 - House examples: Jacobi manuscript 1
   (`jacobi/1-generic-smoothness-implies-JBC-paper/arxiv-1/jbc-generically-reduced-arxiv-1.tex`)
@@ -102,6 +120,10 @@ self-contained contribution descriptions, provider citations (OpenAI when
 used), citations for every named software system, actual version evidence,
 public accessibility, and separation of agent review from human verification.
 
+Then hand the file to [[latex-ai-statement]] for the per-rule audit against
+`AI-POLICY.md` and the trail. Drafting is not self-certifying: this skill
+writes the disclosure, that one decides whether it passes.
+
 ## Red flags
 
 | Thought | Reality |
@@ -111,3 +133,14 @@ public accessibility, and separation of agent review from human verification.
 | "Naming OpenAI in the prose is enough" | Add the provider/product bibliography citation. |
 | "The software subsection belongs just before the bibliography" | Default to the end of the Introduction. |
 | "The local skill path is a reproducibility reference" | Readers need the procedures in the paper and an accessible public citation. |
+
+## Negative results travel with the positive ones (LX11, LX12)
+
+This skill renders previous work into a new artifact, so the negative-result
+floor of `mathcity/subdomains/latex/POLICY.md` (LX11, LX12) applies even
+outside the latex subdomain. Before finishing, enumerate the inputs'
+refutations, counterexamples, ill-posed proposals, and failed expectations, and
+carry each into the output, naming the expectation it corrects: "it is natural
+to expect X; in fact Y". Report the count carried and, for anything
+deliberately left out, the scope reason. Dropping a refuted claim together with
+its refutation loses the finding that survived: the refutation is the result.

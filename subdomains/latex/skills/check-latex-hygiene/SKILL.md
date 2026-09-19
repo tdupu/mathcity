@@ -69,6 +69,28 @@ bead/file and a one-line remediation.
   or changing the check. Keep this LX10 result separate from compile status
   and the historical bead-workflow checks below.
 
+**Document-quality floor — negative results (LX11, LX12):**
+
+- Enumerate the document's evidence trail: agent reports, reviews, audits,
+  ledgers, and scratch packages named by the repo's AGENTS.md/LAYOUT.md, plus
+  any superseded draft the change set replaces. From each, list every
+  refutation, counterexample, ill-posed proposal, and failed expectation.
+  Report the number found.
+- For each, locate the numbered statement, question, or conjecture in the
+  canonical document that carries it, and record both locators. A finding
+  present in the trail and absent from the document is an **LX11** violation
+  -> **revise**; a keyword scan alone cannot pass this check.
+- Check the framing of each carried finding: the refuted expectation is named
+  in the text ("it is natural to expect ...; in fact ..."), the correct
+  statement is at the strength actually proved, and a refutation is not
+  demoted to an unnumbered aside.
+- When the change set was produced by a skill that renders prior work into a
+  new document (`frontier-dump`, `revise`, `fp-finder-latex`,
+  `explain-experiment`, `write-introduction`, `merge-latex-sections`,
+  `create-exposition`, referee-response and handoff skills), check **LX12**:
+  every input negative result is either carried forward or listed with an
+  authorized scope reason. Report counts carried and excluded.
+
 **Pillar 1 — bead coverage:**
 
 - LX1.1 Is every covered `.tex` diff headed for push/merge attached to a

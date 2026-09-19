@@ -12,7 +12,7 @@ this order:
 
 1. Paths declared in the repo's `AGENTS.md` (the canonical entry point).
 2. Default root locations: `LAYOUT.md`, `LATEX.md` (or per-directory),
-   `STYLE.md`, `ADR.md`, `AGENTS.md`.
+   `STYLE.md`, `ADR.md`, `AGENTS.md`, `AI-POLICY.md`.
 
 The pack defaults in [templates/](./templates/) are **seeds and floors**,
 never the resolved target: a repo's instantiated copy is the contract.

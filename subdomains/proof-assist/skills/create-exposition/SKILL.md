@@ -1,6 +1,6 @@
 ---
 name: create-exposition
-description: Gather a topic's definitions and theorems into a LINKED markdown spec in scratch — per item: statement, verified source, dependency links — the staging artifact writers move into notes.tex. Use when the user says "create an exposition spec", "gather the background on X", "build the linked spec". NOT for writing the tex (write-* / explain-experiment) or open-question research (the research-SOH recipe: astra-dump + the search-* skills).
+description: Gather a topic's definitions and theorems into a LINKED markdown spec in scratch — per item: statement, verified source, dependency links — the staging artifact writers move into notes.tex. Use when the user says "create an exposition spec", "gather the background on X", "build the linked spec". NOT for writing the tex (write-* / explain-experiment) or open-question research (the research-SOH recipe: frontier-dump + the search-* skills).
 ---
 
 # create-exposition
@@ -29,3 +29,14 @@ description: Gather a topic's definitions and theorems into a LINKED markdown sp
 |---|---|
 | "I know this theorem, no need to open it" | Unopened sources are mechanism 7. Verify each import. |
 | "Write it straight into notes.tex, skip the spec" | The spec IS the review surface. Writers come second. |
+
+## Negative results travel with the positive ones (LX11, LX12)
+
+This skill renders previous work into a new artifact, so the negative-result
+floor of `mathcity/subdomains/latex/POLICY.md` (LX11, LX12) applies even
+outside the latex subdomain. Before finishing, enumerate the inputs'
+refutations, counterexamples, ill-posed proposals, and failed expectations, and
+carry each into the output, naming the expectation it corrects: "it is natural
+to expect X; in fact Y". Report the count carried and, for anything
+deliberately left out, the scope reason. Dropping a refuted claim together with
+its refutation loses the finding that survived: the refutation is the result.

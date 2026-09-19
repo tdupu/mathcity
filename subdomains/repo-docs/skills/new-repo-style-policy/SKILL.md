@@ -31,3 +31,20 @@ with explicit authority.
 - The machine-tag format (ST5) is shared vocabulary across repos —
   changing it locally needs a pack-side discussion first; refuse and
   escalate.
+
+## Floors that may be tightened, never removed
+
+Two rules in the STYLE.md template are floors: a repo's copy may make them
+stricter, may not weaken or delete them, and an amendment that does either is
+refused rather than presented.
+
+- **ST10** — definitions precede theorem-class statements.
+- **ST11** — negative results are stated as results, and derived artifacts
+  carry them forward. A proposal to drop ST11 because "the refuted claim is
+  no longer in the document" has the rule backwards: the refutation is the
+  content the rule protects. If a repo genuinely has no agent-side evidence
+  trail, ST11 is vacuous there and stays in the file.
+
+Both bind repos whose instantiated STYLE.md predates them; a missing local
+rule is not an exemption, and the remedy is an amendment adding it, proposed
+through this skill in the normal way.

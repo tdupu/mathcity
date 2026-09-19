@@ -41,6 +41,7 @@ behavioral validation; shorter aliases also resolve.
 | `check-latex` | The runnable latex-gate (G6/F1b) evidence engine: compile check, semantic diff summary, approve/reject evidence block (`check-latex-report.{json,md}`) |
 | `check-latex-hygiene` | Read-only LX-rule auditor: bead linkage, stage labels, atomization, LMFDB coupling, merge discipline, MREs, computation deps, anti-patterns; consumes `check-latex` reports |
 | `explain-experiment` | Scratch dump report -> notes-tier exposition a hostile reader can follow; re-runnable pointers |
+| `fp-finder-latex` | Simulated independent referee/revision cycles with preserved findings, exact versions and explicit non-success exits |
 | `garbage-collect` | HUMAN-GATED pre-submission strip of retained editorial machinery; enumerate -> approve -> strip -> verify |
 | `generate-graphics` | Reproducible Sage graphics: editable source, exact or numerical checks, provenance manifest, vector output and preview |
 | `merge-latex-sections` | PLACEHOLDER — merge/reorder sections preserving label/ref integrity; F2 implementation deferred until F1 completes (gsp-fby HOLD) |
@@ -57,6 +58,8 @@ behavioral validation; shorter aliases also resolve.
 | `write-example` | One self-contained worked example or counterexample with explicit hypotheses, evidence and optional linked figure |
 | `write-introduction` | Introduction/abstract LAST behind a hard refusal gate (markers, VERIFY, LX4, contradictions, ledger-proved only) |
 | `write-materials-and-methods` | Software/Acknowledgements/AI-disclosure section from the ai-usage/tokens trail; trail-facts only |
+| `latex-ai-statement` | Read-only audit of a .tex AI disclosure vs the repo's AI-POLICY.md and the ai-usage/tokens trail; AI19 submission gate |
+| `check-ai-statement` | Check-family alias for `latex-ai-statement` |
 | `write-proposition` | Draft one proposition (statement + LX4/ST6 proof) from an evidenced claim into the canonical file |
 | `write-remark` | Draft one remark; claim-shaped content is routed to write-proposition |
 
@@ -96,3 +99,22 @@ bash tests/latex-graphics/smoke_test.sh
   `subdomains/latex/skills/check-latex/check-latex.sh`.
 - **lit-search**: arXiv/MathSciNet/citation discovery feeding the
   citation-hygiene hurdle H3.
+
+## Simulated manuscript peer review
+
+Use [fp-finder-latex](skills/fp-finder-latex/SKILL.md) when a manuscript
+needs repeated mathematical review and independently written revisions.
+For example: `fp-finder-latex on the two declared papers as specialist
+exposition; revise autonomously for at most four rounds`. The caller
+provides the canonical paths. Fix the criterion and package objective;
+partial revisions remain working drafts until their exact versions pass.
+Simulated approval is not an actual journal decision or proof certification.
+
+| Example | Runner | Prerequisites | Command | Test path | Status | Issue |
+|---|---|---|---|---|---|---|
+| Referee and revision cycle | Agent | Installed skills, distinct agents, primary sources, project contracts and TeX/PDF tools, complete-finding and evidence-admissibility gates | `fp-finder-latex on the declared papers; revise within the stated criterion and budget` | `skills/fp-finder-latex/assets/scenarios.json` | Protocol repaired and re-stabilized on 2026-09-18: critic NEEDS-REVISION → gate repair → critic APPROVING → mutual revisor candidate → exact-candidate critic APPROVING; final fp-finder-latex SHA-256 `4a9903ee78f8efaf654049740b4f5cc4a7fc175323a30fc230f8ac95408547ea`, referee-report SHA-256 `6306e51a91a29c3a031096afe4ab5d395167638815245ae50161f5f85b1deb51` | N/A — current skill |
+
+The fixtures cover proof repair, false claims, criterion changes, dependency
+invalidation, disputed findings, budget exhaustion, missing capabilities
+and usage accounting. Bounded dry runs test those responses; they cannot
+certify arbitrary mathematical judgment or cross-platform deployment.

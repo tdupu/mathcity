@@ -22,3 +22,14 @@ When implemented, this skill will:
 3. Produce a diff for human approval via the H5 latex-hurdle stop gate before any commit.
 
 Do not invoke this skill until the F2 implementation bead is opened and closed.
+
+## Negative results travel with the positive ones (LX11, LX12)
+
+This skill renders previous work into a new artifact, so the negative-result
+floor of `../../POLICY.md` applies. Before finishing, enumerate the inputs'
+refutations, counterexamples, ill-posed proposals, and failed expectations, and
+carry each into the output as a numbered statement (or a labelled question when
+unproved), naming the expectation it corrects: "it is natural to expect $X$; in
+fact $Y$". Report the count carried and, for anything deliberately left out,
+the scope reason. Dropping a refuted claim together with its refutation is a
+revise-level violation: the refutation is the surviving result.

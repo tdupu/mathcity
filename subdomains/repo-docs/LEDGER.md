@@ -27,7 +27,7 @@ prose.
   the identity; the row is cache.
 - **status**: proved / conditional / computational / conjectural /
   imported / refuted — this six-way set lives ONLY here; scratch
-  reports keep astra-dump's own claim separation (refuted enters
+  reports keep frontier-dump's own claim separation (refuted enters
   at harvest, counterexample path in evidence). The tex stays binary
   (LX4).
 - **evidence**: paths — proof package, computation, opened-source

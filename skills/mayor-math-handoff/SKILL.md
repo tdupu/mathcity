@@ -295,3 +295,14 @@ handoff-bead chain. Two acceptable ways:
 
 Do NOT write to `~/Documents/misc/PROMPT-mayor-restart.txt` — that location
 is retired (a pointer file remains there).
+
+## Negative results travel with the positive ones (LX11, LX12)
+
+This skill renders previous work into a new artifact, so the negative-result
+floor of `mathcity/subdomains/latex/POLICY.md` (LX11, LX12) applies even
+outside the latex subdomain. Before finishing, enumerate the inputs'
+refutations, counterexamples, ill-posed proposals, and failed expectations, and
+carry each into the output, naming the expectation it corrects: "it is natural
+to expect X; in fact Y". Report the count carried and, for anything
+deliberately left out, the scope reason. Dropping a refuted claim together with
+its refutation loses the finding that survived: the refutation is the result.

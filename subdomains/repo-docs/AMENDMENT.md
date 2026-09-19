@@ -1,8 +1,8 @@
 # Amendment procedure — shared by all new-repo-*-policy skills
 
-Parent: [README.md](./README.md). The five `new-repo-*-policy`
-amendment skills (layout, latex, style, adr, agents) each own exactly
-one repo doc and all follow this procedure. Written once here; the
+Parent: [README.md](./README.md). The six `new-repo-*-policy`
+amendment skills (layout, latex, style, adr, agents, ai) each own
+exactly one repo doc and all follow this procedure. Written once here; the
 skills cite it (pointer-not-copy). Model: the LX trinity's
 `new-latex-policy`.
 
@@ -31,6 +31,12 @@ presenting the instantiated doc; the instantiation is the Change.
 
 Rule IDs are permanent: next integer in the prefix, never renumber,
 deprecate with a tombstone (the LX discipline).
+
+**Companion carve-out.** One skill, one doc — except where a doc ships a
+derived index companion (`AI-POLICY.md` → `AI-POLICY-SHORT.md`). The owning
+skill updates the companion in the SAME amendment, because an index that
+lags its source is worse than none. The companion is never a second source
+of truth and never carries a rule the owned doc does not.
 
 ## Step 2 — Human gate (mandatory)
 

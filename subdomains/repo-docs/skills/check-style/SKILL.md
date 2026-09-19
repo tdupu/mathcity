@@ -1,6 +1,6 @@
 ---
 name: check-style
-description: Read-only audit of a repo's .tex sources against the repo's own STYLE.md (ST rules) — statement discipline, 80-char lines, marker/tag discipline, tex purity, commit discipline. Scopeable to named files. Use when the user says "check style", "check-style", or as the style hurdle before any notes/manuscript promotion. Companion: new-repo-style-policy (sole write path). NOT for compile/label/citation quality (LX floor: check-latex, check-labels-and-refs, check-latex-hygiene) and NOT for fixing — it only reports.
+description: Read-only audit of a repo's .tex sources against the repo's own STYLE.md (ST rules) — statement discipline, 80-char lines, marker/tag discipline, tex purity, commit discipline, and whether the negative results in the repo's agent-side evidence are carried into the canonical document (ST11). Scopeable to named files. Use when the user says "check style", "check-style", or as the style hurdle before any notes/manuscript promotion. Companion: new-repo-style-policy (sole write path). NOT for compile/label/citation quality (LX floor: check-latex, check-labels-and-refs, check-latex-hygiene) and NOT for fixing — it only reports.
 ---
 
 # check-style
@@ -58,6 +58,25 @@ Mechanical clauses ([C]) get commands; judgment clauses get quotes:
   binding floor applies even if the resolved STYLE.md lacks ST10; a
   missing local rule is not an exemption. Keywords are triage only.
 
+- **ST11** — negative results. Enumerate the refutations,
+  counterexamples, ill-posed proposals, and failed expectations recorded in
+  the repo's agent-side evidence: `scratch/` reports and ledgers, review
+  packages, and any superseded draft the change set under audit replaces.
+  For each, locate the numbered statement, question, or conjecture in the
+  canonical document that carries it, and report both locators. Report the
+  number enumerated and the number carried; a finding present in the
+  evidence and absent from the document is an ST11 finding, and the
+  remediation is a writer, never deletion of the evidence. A keyword scan
+  is triage only and cannot produce a PASS here. Also check the framing of
+  each carried finding: the refuted expectation is named in the text, the
+  correct statement stands at the strength actually proved, and a
+  refutation has not been demoted to an unnumbered aside. When the change
+  set under audit was produced by a skill that renders prior work into a new
+  document — a dump, digest, synthesis, revision, introduction, exposition,
+  merge, or handoff — apply the same check to that skill's inputs and report
+  the counts carried and excluded with their scope reasons. This floor binds
+  even if the resolved STYLE.md predates ST11.
+
 Floor breaches (LX territory: unresolved refs, bare cites, unproved
 statements, embedded definitions) → `FLOOR-BREACH`, pointed at `check-latex-hygiene`.
 
@@ -67,7 +86,8 @@ statements, embedded definitions) → `FLOOR-BREACH`, pointed at `check-latex-hy
 CHECK-STYLE <repo> <date>
 Resolution: <docs found | instantiated+approved | DEFER>
 Variables: <kind/terseness/audience as declared>
-Checked: <scope; N files, N statements, N agent-attributed commits>
+Checked: <scope; N files, N statements, N agent-attributed commits,
+         N evidence findings enumerated / N carried (ST11)>
 Findings: <rule-ID>: <path:line>: <one line or quote>
 Verdict: PASS | ADVISORY-PASS | FAIL | DEFER
 Remediation: <finding → new-repo-style-policy | revise | human>

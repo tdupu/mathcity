@@ -36,3 +36,14 @@ Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's m
 |---|---|
 | "The report says proved, so it's proved" | Reports are drafts. Ledger + doubt gate decide promotability. |
 | "Skip the boring method paragraph" | The mechanism IS the exposition (mechanism 10). |
+
+## Negative results travel with the positive ones (LX11, LX12)
+
+This skill renders previous work into a new artifact, so the negative-result
+floor of `../../POLICY.md` applies. Before finishing, enumerate the inputs'
+refutations, counterexamples, ill-posed proposals, and failed expectations, and
+carry each into the output as a numbered statement (or a labelled question when
+unproved), naming the expectation it corrects: "it is natural to expect $X$; in
+fact $Y$". Report the count carried and, for anything deliberately left out,
+the scope reason. Dropping a refuted claim together with its refutation is a
+revise-level violation: the refutation is the surviving result.

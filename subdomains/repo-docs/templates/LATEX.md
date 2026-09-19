@@ -19,8 +19,18 @@ directory, and declares any aspirational files. The canonical-text
 invariant (design ADR 0003) binds every writing skill: **in place or
 nowhere** — edits land in the canonical file; an undeclared sibling
 `.tex` is a violation, and markdown output goes to `scratch/`, never a
-second `.tex`. Floor: `mathcity/subdomains/latex/POLICY.md` (LX-rules)
-governs document quality; this file only declares which files exist.
+second `.tex`.
+
+The invariant has a consequence worth stating here, because it is the one
+most often broken in the wrong direction. A result established by the work
+belongs in the canonical file whether it is positive or negative: a
+refutation, a counterexample, or a disproved expectation is content, not
+bookkeeping, and leaving it in a `scratch/` report while the claim it
+refutes is deleted from the canonical file loses the finding that survived.
+Document quality — including that obligation, stated in full as ST11 of the
+STYLE.md template — is governed by this repo's `STYLE.md`; where a mathcity
+pack is installed, `subdomains/latex/POLICY.md` (LX-rules) is the shared
+floor beneath it. This file only declares which files exist.
 
 ## Real files [C]
 
@@ -71,4 +81,5 @@ match the surviving state.
 
 | Date | Change | Approved by |
 | --- | --- | --- |
+| `2026-09-19` | Record that refutations belong in the canonical file (ST11), and state the quality floor without requiring a pack | `Taylor, explicit conversation request` |
 | `<YYYY-MM-DD>` | Instantiated from mathcity-repo-docs template | `<name>` |

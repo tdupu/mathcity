@@ -5,7 +5,7 @@ Parent: [README.md](./README.md)
 | Field  | Value      |
 | ------ | ---------- |
 | Status | Draft      |
-| Date   | 2026-09-17 |
+| Date   | 2026-09-19 |
 | Prefix | LX         |
 
 What makes a LaTeX document in this project correct and well-formed.
@@ -86,6 +86,63 @@ outside that proof belongs before its first use.
   it, never omit or weaken it. See `definition-separation.md` for examples
   and the review procedure.
 
+**LX11 — Negative results are results, and are stated as such.**
+A refutation, counterexample, disproved expectation, or closed-off approach
+that the underlying work established is *content*, not bookkeeping. Whenever
+the evidence trail behind a document (agent reports, reviews, audits,
+ledgers, scratch packages, prior drafts) records that a claim was refuted, an
+expected behaviour failed, a proposed definition was ill-posed, or a natural
+transplant of a known theorem is false, the canonical document states that
+finding as a numbered theorem-class statement, or — when it is not yet proved
+— as an explicitly labelled question or conjecture. Deleting a wrong claim
+together with its refutation is a violation: the refutation is the result
+that survives.
+
+Write the finding as the story it is. Name the expectation, then the fact:
+"it is natural to expect $X$; in fact $Y$", with the hypotheses under which
+$Y$ holds and the proof or counterexample that establishes it. An
+intuition-correcting result is stated at the strength it has — neither
+softened into an aside nor inflated into a general theorem.
+
+- Pass: enumerate every refutation, counterexample, and abandoned expectation
+  in the document's evidence trail; for each, exhibit the numbered statement,
+  question, or conjecture in the document that carries it, with both
+  locators. Report the count checked and zero unrecorded findings. A keyword
+  scan alone cannot pass.
+- Fail -> **revise**: list each refuted expectation present in the evidence
+  trail and absent from the document; add it with the expectation named, the
+  correct statement, and its proof or counterexample; re-check labels,
+  references, and compilation.
+- Scope: this is a binding default quality floor for existing and new
+  repositories and for every document tier. Local policies may tighten it,
+  never omit or weaken it. It applies symmetrically to the document's own
+  earlier claims: a statement this document previously asserted and later
+  disproved is recorded as a refutation, not silently dropped.
+
+**LX12 — Derived outputs carry the negative results forward.**
+Any skill or workflow whose output is produced *from previous work* — a
+synthesis, a dump, a digest, a revision, an introduction, an exposition, a
+merge, a referee response, a handoff, a summary — transfers the negative
+results of that previous work, not only its positive results. Insight gained
+by discovering that something is false is the most easily lost and the most
+expensive to re-derive; it is transferred first, not last.
+
+- Pass: the derived artifact names every refutation, counterexample, and
+  failed-expectation finding of its inputs, or explicitly records, per
+  finding, the authorized reason it was excluded from this artifact's scope.
+  The check enumerates the input findings and reports the count carried and
+  the count excluded with reasons.
+- Fail -> **revise**: name each input finding absent from the derived
+  artifact and from its exclusion list; carry it forward.
+- Applies to (non-exhaustive): `frontier-dump`, `using-latexpowers` and every
+  writer it dispatches, `revise`, `fp-finder-latex`, `explain-experiment`,
+  `write-introduction`, `merge-latex-sections`, `create-exposition`,
+  `referee-report`, `triage-referee-report`, and any handoff or session-end
+  skill that renders prior work into a new document.
+
+
+---
+
 new: 
 
 Check for labels and references for both theorems and subsections. No "by the previous theorem".
@@ -114,6 +171,7 @@ Check-labels-and-refs
 
 | Date       | Change                                                                                                                                   |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-19 | Add LX11 (negative results are stated as results, with the expectation they refute named) and LX12 (derived outputs carry input negative results forward). Requested by Taylor Dupuy in conversation 2026-09-19: refutations are "very important learning moments" and the arithmetic-jet work had produced intuition-correcting results that a synthesis pass had dropped rather than reported. |
 | 2026-09-17 | Add LX10: definitions precede theorem-class statements in every repository and tier; explicitly requested by Taylor in conversation (he-oj8ve). LX7–LX9 belonged to the superseded draft and are not reused. |
 | 2026-07-12 | Full rewrite: policy is now self-contained document-quality rules only (LX1–LX6); bead workflow content moved to `latex-bead-guide.md`; aspirational ideas archived to `../../docs/beads-and-latex-scratch.md`. |
 | 2026-07-12 | Initial draft (LX1–LX9, 36 workflow rules) — superseded by the rewrite above.                                                          |
