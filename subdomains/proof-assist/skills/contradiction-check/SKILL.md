@@ -14,7 +14,8 @@ event, and the operation that surfaced it stops.
 ## Step 0 — Scope
 
 Claim sources, in authority order: the repo's canonical `.tex`
-(LATEX.md's declared files — ground truth), scratch reports'
+(LATEX.md's declared files — ground truth), agent reports' (read BOTH
+`ai/` and `scratch/` — older reports remain under `scratch/`)
 claim sections, the agent-side ledger if present (never authoritative;
 reconcile by rescanning the tex — design ADR 0004).
 
@@ -42,7 +43,7 @@ yours.
    does not proceed (sweep mode: no operation to halt — 3.2 and 3.3
    still fire).
 2. Write the contradiction report to
-   `scratch/<date>-contradictions/report.md`: both quotes, provenance,
+   `ai/<date>-contradictions/report.md`: both quotes, provenance,
    which downstream claims depend on each side, and the refused
    operation. Never edit either side; never mark a winner.
 3. Surface to the human: the report path plus a one-line statement per

@@ -79,7 +79,7 @@ without fabricated complete proof steps or mandatory software commits.
 Use the declared plan location; otherwise save `plan.md` in the run's allowed
 scratch directory with its evidence. Check every plan/evidence path against
 layout rules before creation. Without a declared scratch root, propose
-`scratch/<date>-<topic>/` and obtain required authorization. Use a unique run;
+`ai/<date>-<topic>/` and obtain required authorization. Use a unique run;
 never overwrite earlier work. The plan specifies work; task state belongs
 in the repository tracker, not a second checklist database.
 

@@ -1,6 +1,6 @@
 ---
 name: referee-report
-description: Adversarial line-by-line referee-grade review of OUR OWN manuscript or notes, at prover level, delivered to scratch — never edits the tex. A green build resolves nothing mathematical (mechanism 5). Use when the user says "referee my section N", "referee-report on the draft", "adversarial review of the manuscript". NOT for handling a RECEIVED referee report (triage-referee-report / manual frontier-fable response per ADR 0005) and NOT for applying fixes (revise, after human adjudication).
+description: Adversarial line-by-line referee-grade review of OUR OWN manuscript or notes, at prover level, delivered to ai/ — never edits the tex. A green build resolves nothing mathematical (mechanism 5). Use when the user says "referee my section N", "referee-report on the draft", "adversarial review of the manuscript". NOT for handling a RECEIVED referee report (triage-referee-report / manual frontier-fable response per ADR 0005) and NOT for applying fixes (revise, after human adjudication).
 ---
 
 # referee-report
@@ -19,7 +19,7 @@ Read-only toward the tex. This leaf's procedure:
    citation's plausibility (route suspicious ones to
    track-down-reference); hypothesis/notation drift; the mechanism-5
    rule verbatim — compile success is not mathematical correctness.
-3. Report to `scratch/<date>-referee-<slug>/report.md`: per-finding
+3. Report to `ai/<date>-referee-<slug>/report.md`: per-finding
    severity (BLOCKING / MAJOR / MINOR), location, the objection, and
    what evidence would resolve it. Every finding also has a stable ID,
    an explicit disposition, an exact source/report locator, a closure

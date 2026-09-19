@@ -237,7 +237,8 @@ A manuscript is not submitted, posted, or promoted to a higher tier until
 `latex-ai-statement` has run against **that exact revision** — identified by
 commit hash or version string — and returned no FAIL, with every DEFER either
 resolved or accepted in writing by a named human. The audit report is
-retained with the submission, not only under `scratch/`. An `ADVISORY` verdict
+retained with the submission — `latex-ai-statement` writes it under `ai/`,
+which travels with the repository. An `ADVISORY` verdict
 from a `Status: Draft` policy does **not** clear this gate; adopt the policy
 or record the named human's acceptance.
 Pass: a retained audit names the submitted revision and carries no FAIL and no

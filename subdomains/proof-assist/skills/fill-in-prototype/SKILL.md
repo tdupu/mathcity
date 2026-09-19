@@ -1,6 +1,6 @@
 ---
 name: fill-in-prototype
-description: Work a prototype's gaps: for each conjectural item in a skeleton or spec, dispatch a prover-level attempt at proof or counterexample; harvest results to scratch and the ledger (doubt run before any promotion); successful items become write-proposition candidates. Use when the user says "fill in the prototype", "attack the skeleton", "work the conjectures". NOT for generating new candidates (find-proposition) or writing results into tex (write-proposition, gated).
+description: Work a prototype's gaps: for each conjectural item in a skeleton or spec, dispatch a prover-level attempt at proof or counterexample; harvest results to ai/ and the ledger (doubt run before any promotion); successful items become write-proposition candidates. Use when the user says "fill in the prototype", "attack the skeleton", "work the conjectures". NOT for generating new candidates (find-proposition) or writing results into tex (write-proposition, gated).
 ---
 
 # fill-in-prototype
@@ -14,7 +14,7 @@ description: Work a prototype's gaps: for each conjectural item in a skeleton or
    it and hunt a counterexample; partials (special cases, reductions)
    are results, labeled as such.
 3. Harvest per backend contract into
-   `scratch/<date>-fill-in-<slug>/`; update ledger rows: status
+   `ai/<date>-fill-in-<slug>/`; update ledger rows: status
    transitions (`conjectural` → `proved` / `conditional` /
    `computational` / `refuted`, counterexample path in evidence),
    evidence paths, depends-on edges.

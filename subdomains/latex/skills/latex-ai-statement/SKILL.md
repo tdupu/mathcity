@@ -7,7 +7,7 @@ description: Read-only audit of a specified .tex file's Software and AI assistan
 
 Read-only (AI19 gate). Reports; never fixes, never edits the docs it enforces,
 never creates files except the RESOLUTION.md §2 instantiation and its own
-report under `scratch/`. Also answers to **check-ai-statement** — it is a
+report under `ai/`. Also answers to **check-ai-statement** — it is a
 member of the `check-*` family and runs their shared preamble.
 
 The disclosure is checked against two things at once: the **policy** (what it
@@ -78,7 +78,8 @@ against the records, not against the manuscript.
 **Self-verification (§5).** Every enumeration reports its count. Zero matches
 where the repo plausibly has such objects is `EVIDENCE-ABSENT`, never PASS —
 "checked N, 0 violations", never bare "no violations". On first run in a repo,
-confirm the check can fail against a known-violating synthetic in `scratch/`.
+confirm the check can fail against a known-violating synthetic in `scratch/`
+(throwaway, not evidence — the report itself goes to `ai/`).
 
 **DEFER** applies only to rules whose evidence is absent, and only to the
 face that needs it. Decidable from the `.tex` alone, so never DEFERred for a
@@ -112,7 +113,7 @@ stale or absent trail → `update-ai-usage` / `update-tokens`; a finding no
 AI-rule covers → `new-repo-ai-policy`, never by writing past the policy.
 
 **Termination.** Cycle state lives in the report, not in memory: write each run to
-`scratch/<date>-ai-statement/<target-slug>/report-<n>.md` — keyed on the
+`ai/<date>-ai-statement/<target-slug>/report-<n>.md` — keyed on the
 target, so two manuscripts audited the same day do not share a cycle counter
 — and **read the latest prior report for THIS target before routing**. Stop when a rule FAILs twice with the same
 finding, or at cycle 3. Escalate to the human with both verdicts rather than
@@ -120,12 +121,13 @@ routing a fourth time — a rule that will not clear is a policy or drafter
 defect, not a drafting defect. Absence of a prior report for this target marks
 the first run for §5's can-it-fail check.
 
-**AI19 retention.** This skill may only write under `scratch/`, so it cannot
-itself satisfy AI19's "retained with the submission". It therefore names, in
-the report and in Report back, the exact report path and the revision audited,
-and states that retaining a copy with the submission is a human step the gate
-depends on. Reporting a passing audit without naming that step leaves AI19
-unsatisfiable.
+**AI19 retention.** The report lands in `ai/`, which is durable and travels
+with the repository — so the audit IS retained, and AI19's requirement is met
+by writing it, not by a human remembering to copy it. Name the report path and
+the audited revision in the report and in Report back so the retained artifact
+is findable. (This closed a documented gap: while check reports lived in
+`scratch/`, AI19's "retained with the submission" was unsatisfiable by the only
+skill that could satisfy it.)
 
 Never resolve a FAIL by deleting the disclosure, and never invent a fact to
 satisfy a rule.

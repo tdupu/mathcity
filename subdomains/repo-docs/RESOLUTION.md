@@ -62,7 +62,7 @@ Every run self-verifies its own instruments before reporting:
 - On first use — the first run in a repo with no prior report from this
   checker — confirm it CAN fail: run the decisive clause against a
   known-violating state (a test fixture, or a synthetic one-file
-  violation in scratch) and confirm a finding. A checker that cannot
+  violation in `scratch/`) and confirm a finding. A checker that cannot
   fail is worse than no checker.
 
 ## 6. Read-only
@@ -70,4 +70,7 @@ Every run self-verifies its own instruments before reporting:
 Check skills report; they never fix, never adjudicate, never edit the
 docs they enforce (amendments go through the paired `new-repo-*-policy`
 skill), never creating files except the §2 instantiation and their own
-report under `scratch/`.
+report under `ai/<date>-<check>/` — dated, durable audit evidence, which is
+also what lets a check report satisfy AI19's retained-with-the-submission
+requirement. The §5 known-violating synthetic stays in `scratch/`: it is
+throwaway, not evidence.
