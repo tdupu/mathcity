@@ -17,6 +17,13 @@ Both entry points use [math-workflow](../../skills/math-workflow/SKILL.md).
 See the [examples and coverage](../../README-skills.md) for prerequisites and
 behavioral validation; shorter aliases also resolve.
 
+For an exposition assembled from research files, both routers use the
+[selected-source synthesis sequence](../../skills/math-workflow/references/synthesis.md).
+`create-exposition` gathers the chosen corpus; `rapid-prototype` sets its
+audience and dependency structure; `fill-in-prototype` uses existing evidence
+and investigates gaps. A single-result request may start with the exact target
+and backfill prerequisites. See the [examples and coverage](../../README-skills.md#research-files-to-a-presentation).
+
 ## Skills
 
 | Skill | Purpose |
@@ -29,8 +36,8 @@ behavioral validation; shorter aliases also resolve.
 | `using-mathpowers` | Entry point with shared planning, research, execution, review, and cleanup; see `math-workflow` |
 | `using-math` | Compatibility alias for `using-mathpowers` |
 | `contradiction-check` | Loud detection + refusal on claims contradicting earlier ones (tex/scratch/ledger); structured contradiction report; silent supersession prohibited |
-| `create-exposition` | Gather a topic's definitions/theorems into a linked .md spec (verified sources) staging the writers |
-| `fill-in-prototype` | Attack a prototype's conjectural items (prove/refute per PROVERS.md) -> harvest to scratch + ledger |
+| `create-exposition` | Selected research files to source-linked context, claims, dependencies and preserved negative findings |
+| `fill-in-prototype` | Fill a presentation from evidence; research gaps and compose the proof/review/writing leaves |
 | `find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
 
 ## Loogle

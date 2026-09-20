@@ -32,6 +32,15 @@ Both entry points use [math-workflow](../../skills/math-workflow/SKILL.md).
 See the [examples and coverage](../../README-skills.md) for prerequisites and
 behavioral validation; shorter aliases also resolve.
 
+For research already in frontier dumps, use `using-latexpowers: synthesize
+these files into a self-contained introduction to the topic for this audience`.
+The [shared synthesis sequence](../../skills/math-workflow/references/synthesis.md)
+gathers the selected context, prototypes and reviews the outline, fills and
+reviews the presentation, then integrates into the declared target (`notes.tex`
+by default). `make-outline` is absorbed into `rapid-prototype`; no ChatGPT
+transcript or second ATOM ledger is needed. Examples and coverage are in the
+[skills index](../../README-skills.md#research-files-to-a-presentation).
+
 ## Skills
 
 | Skill | Purpose |
@@ -47,7 +56,7 @@ behavioral validation; shorter aliases also resolve.
 | `merge-latex-sections` | PLACEHOLDER — merge/reorder sections preserving label/ref integrity; F2 implementation deferred until F1 completes (gsp-fby HOLD) |
 | `new-latex-bead` | Create a LaTeX work bead well-formed under LX/BP7 from birth (root target, coverage declaration, stage label, dep edges, gate-evidence acceptance criteria); also performs stage-label advances |
 | `new-latex-policy` | Propose and apply an amendment to the LaTeX Subdomain Policy (LX-rules) — sole write path for LX-rule changes; every proposal is approved by a human in conversation and recorded in the policy Change Log; companion to `check-latex-hygiene` |
-| `rapid-prototype` | Skeleton a discussion into conjecture/definition stubs in the canonical notes file; statuses agent-side |
+| `rapid-prototype` | Combined outline/prototype for the audience: narrative, dependencies, exact targets and theorem-first backfill |
 | `referee-report` | Adversarial referee-grade review of OUR draft at prover level, to scratch; never edits tex; a green build resolves nothing mathematical (mechanism 5) |
 | `resolve-dependencies` | Include-what-you-use walk of a proof: present/imported/missing per item; ledger depends-on; placement is the human's |
 | `revise` | Apply an ACCEPTED review report item-by-item as tagged edits with an item-to-region map; bulk rewrites refused |
@@ -112,7 +121,7 @@ Simulated approval is not an actual journal decision or proof certification.
 
 | Example | Runner | Prerequisites | Command | Test path | Status | Issue |
 |---|---|---|---|---|---|---|
-| Referee and revision cycle | Agent | Installed skills, distinct agents, primary sources, project contracts and TeX/PDF tools, complete-finding and evidence-admissibility gates | `fp-finder-latex on the declared papers; revise within the stated criterion and budget` | `skills/fp-finder-latex/assets/scenarios.json` | Protocol repaired and re-stabilized on 2026-09-18: critic NEEDS-REVISION → gate repair → critic APPROVING → mutual revisor candidate → exact-candidate critic APPROVING; final fp-finder-latex SHA-256 `4a9903ee78f8efaf654049740b4f5cc4a7fc175323a30fc230f8ac95408547ea`, referee-report SHA-256 `6306e51a91a29c3a031096afe4ab5d395167638815245ae50161f5f85b1deb51` | N/A — current skill |
+| Referee and revision cycle | Agent | Installed skills, distinct agents, primary sources, project contracts and TeX/PDF tools, complete-finding and evidence-admissibility gates | `fp-finder-latex on the declared papers; revise within the stated criterion and budget` | `skills/fp-finder-latex/assets/scenarios.json` | Stage adapter updated for research synthesis; current checks and limits in the [validation record](../../docs/superpowers/plans/2026-09-20-frontier-synthesis-validation.md). Prior-version review does not certify this revision. | N/A — current skill |
 
 The fixtures cover proof repair, false claims, criterion changes, dependency
 invalidation, disputed findings, budget exhaustion, missing capabilities

@@ -1,6 +1,6 @@
 ---
 name: fp-finder-latex
-description: Run a bounded simulated journal referee and independent revision cycle for one or more LaTeX manuscripts. Use when asked to repeat brutal mathematical review and revision until referees are satisfied, including a manuscript package. Preserves exact versions, findings, scope and usage; reports unresolved outcomes honestly. Not actual journal review or guaranteed acceptance.
+description: Run bounded independent review and revision for a mathematical prototype, filled presentation or LaTeX manuscript package. Fix the stage criterion, preserve exact versions, findings and usage, and report unresolved outcomes honestly. Simulated review, not guaranteed acceptance.
 ---
 
 # fp-finder-latex
@@ -14,6 +14,33 @@ or formal verification. Keep a scientifically useful **WORKING** revision
 even when further findings remain; only independent review can make an exact
 submission **ACCEPTED** under its declared criterion.
 
+## Stage criterion
+
+When called by the [research-file synthesis workflow](../../../../skills/math-workflow/references/synthesis.md),
+record one of these distinct tracks before dispatch:
+
+- **Outline:** a prototype/spec, including Markdown when the project forbids
+  scratch TeX. Judge audience, exact targets, dependency order, source coverage,
+  negative findings and explicitly mapped gaps. Open proof obligations are
+  allowed only as named research gaps, outside the outline's proof-verification
+  scope. Missing or misleading gap accounting remains a blocking review finding;
+  outline acceptance never certifies the unproved claims.
+- **Presentation:** the filled candidate and its selected source/evidence map.
+  Judge the promised self-containedness, proofs, imports and narrative. A
+  Markdown candidate with LaTeX excerpts may receive source-level approval;
+  build/PDF checks remain NOT RUN until the integrated artifact exists.
+- **Integrated manuscript:** the declared TeX root and input closure after
+  insertion. Check the actual build/PDF and affected mathematical interfaces;
+  source-level approval alone cannot accept this track.
+
+The coordinator passes the existing selection, audience, plan and authorization.
+Do not restart intake or force a prototype to meet a finished-paper criterion.
+Use the same independent referee/revisor loop below, adapted to the recorded
+stage: inventory planned items for outlines and actual claims for presentations.
+Freeze all reviewed inputs, including the selection/spec; altered inputs require
+review of affected dependencies. Label any acceptance with its stage and hash.
+Ordinary manuscript review continues to require final build/PDF checks.
+
 ## Preflight and contract
 
 Read the nearest project instructions and canonical-file contracts. Load
@@ -26,9 +53,10 @@ Keep mathematical claim states in the existing
 [LEDGER contract](../../../repo-docs/LEDGER.md); this skill owns review
 history, not a competing proof-status system.
 
-Before expensive work, verify accessible manuscript inputs and primary
-sources, the project's TeX/PDF tools, distinct-agent dispatch and any
-required proof backend. Record actual capability and model provenance.
+Before expensive work, verify inputs and primary sources, distinct-agent
+dispatch and any proof backend required by this track. Probe TeX/PDF tools
+for TeX targets; Markdown outline/source review does not require them.
+Record actual capability and model provenance.
 If a required dependency is absent, say what is missing, the concrete setup
 action and which work it blocks; continue only independent work. Do not
 invent a backend or call inline self-review independent. An explicitly
@@ -65,8 +93,8 @@ Do not improve apparent acceptance by hiding a difficult claim elsewhere.
 
 1. **Freeze.** Snapshot sources, bibliography/figures/preambles and available
    PDFs, with hashes and build/tool evidence. Never overwrite a reviewed
-   snapshot. An initial failed build or absent PDF is recorded explicitly;
-   useful source review may proceed, but final PDF checking is still owed.
+   snapshot. Record an initial failed build or absent PDF explicitly;
+   source review may proceed, with PDF checking owed for manuscript acceptance.
 
 2. **Referee.** Dispatch a read-only reviewer using referee-report at proof
    level. Read the source before weighing the author response. Inventory
@@ -125,8 +153,8 @@ Do not improve apparent acceptance by hiding a difficult claim elsewhere.
    its precise source, hypotheses, and boundary.
 
 4. **Validate a working candidate.** Check the coherent diff and complete
-   item accounting. Build changed roots with isolated auxiliaries, inspect
-   logs, references/citations and the actual compiled prose/formulas. TeX
+   item accounting. For TeX targets, build changed roots with isolated
+   auxiliaries and inspect logs, references/citations and compiled prose/formulas. TeX
    comments can swallow text without a build error. Keep required AI/software
    statements accurate and at the project's specified introduction location.
    Record regressions; repair/revert them or leave them explicitly unresolved.
@@ -165,8 +193,10 @@ Do not improve apparent acceptance by hiding a difficult claim elsewhere.
 
    Accept only when all in-scope papers and affected package interfaces meet
    the fixed criterion and required coverage on the exact current tuple, with
-   no mandatory unresolved items or unchecked load-bearing proofs, and final
-   build/PDF checks complete. Record permitted imported prerequisites. A larger
+   no mandatory unresolved items or unchecked load-bearing proofs under that
+   track. Outline and source-level acceptance carry their stated limits;
+   integrated manuscript acceptance requires final build/PDF checks. Record
+   permitted imported prerequisites. A larger
    self-containedness goal needs its own dependency closure; article approval
    does not imply it. Further substantive repairs start another round within
    budget, not a repeat of the same report to solicit a nicer verdict.

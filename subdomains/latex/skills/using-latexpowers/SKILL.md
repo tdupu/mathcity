@@ -1,6 +1,6 @@
 ---
 name: using-latexpowers
-description: Use when working on mathematical manuscripts, notes, .tex files, citations, referee reports, submission cleanup, or repository writing contracts; when proving a claim for notes, planning sections, writing statements, or resolving competing manuscript files. Also accepts using-latex and using-latexpower.
+description: Use for mathematical manuscripts, notes, .tex files, citations, referee reports, and research-file synthesis into a coherent presentation. Includes planning sections, writing claims, and resolving manuscript targets. Also accepts using-latex, using-latexskills and using-latexpower.
 ---
 
 <SUBAGENT-STOP>
@@ -15,6 +15,8 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 
 | Situation | Route |
 |---|---|
+| Selected frontier dumps / research files → introduction to a topic or coherent presentation | `math-workflow`'s [synthesis sequence](../../../../skills/math-workflow/references/synthesis.md): gather context, prototype, review, fill, review, integrate |
+| “make-outline” / audience-aware outline / theorem-first backfill | `rapid-prototype` — combined outline and skeleton stage; resume synthesis if already active |
 | Missing contracts | `init-repo-docs` via `math-workflow`'s preserve-existing adapter; adoption gate |
 | Layout health / “which file is real?” | `check-layout` |
 | Undeclared sibling `.tex` | `triage-variants` — authorized per-file disposition before affected writing |
@@ -37,10 +39,10 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | “Is the AI statement right?” / pre-submission disclosure audit | `latex-ai-statement` — per-rule verdict against `AI-POLICY.md` and the trail; routes repairs |
 | Record an AI task's provenance / cost | `update-ai-usage` / `update-tokens` — sole write paths for the repo's master `ai-usage.md` and `tokens.md` |
 | Amend the repo's AI-usage contract | `new-repo-ai-policy` — human-authorized amendment |
-| Explicit introduction/abstract request | `write-introduction` — readiness/refusal gates; never volunteer it |
+| Finished manuscript introduction/abstract request | `write-introduction` — readiness/refusal gates; an introductory topic prototype uses the synthesis route |
 | Amend layout / LaTeX / style / decisions / agent contracts | `new-repo-layout-policy` / `new-repo-latex-policy` / `new-repo-style-policy` / `new-repo-adr-policy` / `new-repo-agents-policy` — human-authorized amendments |
 | Amend LX rules | `new-latex-policy` — human-authorized policy change |
-| Merge/reorder sections | `merge-latex-sections` is HOLD; report the unsupported operation |
+| Reorder within the current synthesis | Coordinator adjusts the plan, preserves item/source links and rechecks dependencies; unrelated section merges remain `merge-latex-sections` HOLD |
 | Refuted claim / counterexample / failed expectation from prior work | State it as a result (LX11) — `write-proposition` or `write-example` for the refutation, `write-remark` for the intuition it corrects; never drop the claim and its refutation together |
 | Rendering prior work into a new document (dump, digest, synthesis, revision, introduction, exposition, merge, handoff) | Carry the input's negative results forward first (LX12); list any excluded finding with its scope reason |
 

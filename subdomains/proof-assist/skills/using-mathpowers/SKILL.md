@@ -1,6 +1,6 @@
 ---
 name: using-mathpowers
-description: Use when proving, refuting, researching, checking, or developing mathematical claims; when asking what is known, finding something to prove, attacking a skeleton, questioning an argument, or gathering background. Also accepts using-math.
+description: Use when proving, refuting, researching or checking mathematical claims, gathering selected research files, or developing a coherent presentation from frontier dumps. Also accepts using-math and using-mathskills.
 ---
 
 <SUBAGENT-STOP>
@@ -15,12 +15,14 @@ The coordinator carries the request through planning, execution, validation, and
 
 | Situation | Route |
 |---|---|
+| Frontier dumps / research files → context, outline or cohesive narrative | `math-workflow`'s [synthesis sequence](../../../../skills/math-workflow/references/synthesis.md); selected-file context via `create-exposition`, outline via `rapid-prototype`, filling via `fill-in-prototype` |
+| One exact result with prerequisites to backfill | Fix the full target in the synthesis plan, then close its dependencies; final definitions still precede their use |
 | “Is X proved?” | Reconcile live source and ledger per `math-workflow`; report evidence and review status. Missing row means unrecorded, not false. |
 | “What is known/open?” / deep research | `math-workflow` research phase |
 | “Are we reinventing the wheel?” / before new construction | `check-zero` |
 | “What could we prove?” | `find-proposition`; consume its candidates and continue if proving is requested |
 | “Prove X” / “refute X” | Pack `subdomains/proof-assist/PROVERS.md`; return evidence to the coordinator for review |
-| “Attack the skeleton” / gaps in a prototype | `fill-in-prototype`; continue selected obligations within the plan |
+| “Fill the prototype” / “attack the skeleton” | `fill-in-prototype`; fill established material, investigate selected gaps, review and return to the authorized synthesis stage |
 | “I doubt that” / “are you sure?” | `doubt`; skepticism outranks a bare status answer |
 | Conflicting claims / before harvest or promotion | `contradiction-check`; resolve the conflict before dependent work |
 | “Gather background” / expository spec | `create-exposition` |

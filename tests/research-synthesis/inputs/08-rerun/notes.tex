@@ -1,0 +1,33 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb,amsthm}
+\newtheorem{proposition}{Proposition}
+\newtheorem{conjecture}[proposition]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[proposition]{Definition}
+\newtheorem{example}[proposition]{Example}
+\newtheorem{remark}[proposition]{Remark}
+\newcommand{\taylor}[1]{\textbf{[Owner: #1]}}
+\newcommand{\todo}[1]{\textbf{[To do: #1]}}
+\newcommand{\agentreply}[1]{\textit{[Agent: #1]}}
+\begin{document}
+\section{Bounds}
+% Human note: do not lose the interval restriction.
+\taylor{Keep a worked value between the endpoints.}
+% >>> [agent-fixture 2026-09-18 bounded-square]
+The interval $[0,1]$ consists of real numbers $x$ with $0\leq x\leq1$.
+\begin{proposition}\label{prop:bounded-square}
+Let $x$ be a real number with $0\leq x\leq1$. Then $x^2\leq x$.
+\end{proposition}
+\begin{proof}
+Both $x$ and $1-x$ are nonnegative. Thus $x-x^2=x(1-x)\geq0$.
+\end{proof}
+\begin{remark}\label{rem:bounded-square-equality}
+For real $x$ in $[0,1]$, equality holds exactly at $x=0$ or $x=1$,
+by the zero-product property applied to $x(1-x)$.
+\end{remark}
+For example, $x=1/2$ gives $x^2=1/4\leq1/2$.
+% <<< [agent-fixture 2026-09-18 bounded-square]
+
+\section{Closing note}
+This paragraph belongs to the owner and is outside the current research.
+\end{document}

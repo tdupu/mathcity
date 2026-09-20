@@ -93,6 +93,8 @@ has no proof; `refuted` needs a verified counterexample.
 All `.tex` output, including indirect suggestions from research leaves,
 returns through `using-latexpowers` and pack `subdomains/latex/WRITERS.md`.
 Use the user-named, declared destination or the declared notes-tier file.
+For research-file synthesis, [synthesis.md](synthesis.md) owns the two review
+stages and integration; its default is `notes.tex`, subject to these contracts.
 If none exists, prepare the layout/init proposal and request only the needed
 approval; do not create an undeclared `notes.tex` or a competing manuscript.
 
@@ -127,7 +129,9 @@ failed approaches, sources, reviews, usage records, and the plan needed to
 resume. Stop finished run-owned workers/processes; remove only run-owned,
 disposable artifacts after checking they are not evidence or user work.
 Editorial stripping belongs to `garbage-collect` and its concrete approval
-gate. Do not remove human comments/tags or delete worktrees as routine tidying.
+gate. Preserve human comments/tags. Remove a task-created worktree only after
+checking it is clean and its work/evidence is preserved; retain branches with
+unintegrated work and never infer staleness from age or a clean status alone.
 
 Report what was proved/refuted/unresolved, where artifacts landed, validation
 and review results, remaining gaps, and cleanup performed. A completed plan,

@@ -1,0 +1,14 @@
+{
+  "chunk": "legacy/chunk-parity.tex",
+  "definitions": {
+    "integer-even-odd-definitions": "An integer is even if it equals 2q for an integer q, and odd if it equals 2q+1. Division by 2 gives exactly one of these forms for each integer."
+  },
+  "atoms": {
+    "parity-product": {
+      "depends_on": ["integer-even-odd-definitions"],
+      "draft_origin": "owner's earlier notes",
+      "generated_origin": "unaccepted continuation",
+      "status": "generated"
+    }
+  }
+}

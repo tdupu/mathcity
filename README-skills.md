@@ -29,6 +29,33 @@ need their declared backend, source access, and TeX toolchain.
 | Proof with manuscript stub | Agent | Same, plus declared notes file and local TeX build | `using-latexpowers prove X and put a stub in notes.tex` | `tests/math-workflow/scenarios.md`, B | Behavioral validation recorded in linked design; live manuscript run not certified | N/A — current refactor |
 | Alias status check | Agent | Existing project source and optional ledger | `using-math: is X proved?` | `tests/math-workflow/scenarios.md`, C | Behavioral validation recorded in linked design | N/A — compatibility |
 
+## Research files to a presentation
+
+Use `using-latexpowers: use these selected frontier dumps to build a
+self-contained introduction to the topic for a first-year graduate reader;
+review the prototype, fill it, review again, and integrate into notes.tex`.
+`using-mathpowers` enters the same [synthesis sequence](skills/math-workflow/references/synthesis.md).
+Specify a different target or existing canonical file when needed. For a single
+result, give its full statement first and ask the workflow to backfill prerequisites.
+
+`create-exposition` gathers the selected context, `rapid-prototype` combines
+outline and skeleton work, and `fill-in-prototype` coordinates writing and
+focused research. `fp-finder-latex` distinguishes outline, filled-presentation
+and integrated-manuscript criteria. Source maps retain refutations and excluded
+findings; originals remain evidence. A finished paper introduction still uses
+`write-introduction` and its readiness gates. The retired ChatGPT harvest and
+ATOM-marker system is not required.
+
+See the [validation record](docs/superpowers/plans/2026-09-20-frontier-synthesis-validation.md)
+for exact review versions, executed checks and remaining limits.
+
+### Example Coverage
+
+| Example | Runner | Prerequisites | Command | Test path | Status | Issue |
+|---|---|---|---|---|---|---|
+| Selected research to reviewed presentation | Agent | Installed powers/leaves; selected research files; adopted project contracts; independent agents; TeX tools for final integration | `using-latexpowers: synthesize these dumps for the stated audience into notes.tex` | `tests/research-synthesis/` | See validation record; fixture checks alone do not certify agent execution | N/A — this refactor |
+| Exact target with prerequisite backfill | Agent | Same; exact requested statement and evidence | `using-mathpowers: start from this target, backfill, then write the presentation` | `tests/research-synthesis/` | See validation record; no claim of general proof certification | N/A — this refactor |
+
 ### Parent pack — `mathcity/skills/`  (62)
 
 | Skill | Alias | What it does |
@@ -168,7 +195,7 @@ need their declared backend, source access, and TeX toolchain.
 | `merge-latex-sections` | `mathcity-latex.merge-latex-sections` | STATUS: PLACEHOLDER — full F2 implementation deferred until F1 (latex-hurdle five-hurdle formula) is complete |
 | `new-latex-bead` | `mathcity-latex.new-latex-bead` | Create a new LaTeX work bead that is well-formed under the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) and POLICY-beads.md BP7 from birth - real bd type (never an invented type, P5.3), [LATEX] label plus exactly… |
 | `new-latex-policy` | `mathcity-latex.new-latex-policy` | Propose and apply an amendment to the LaTeX Subdomain Policy (mathcity/subdomains/latex/POLICY.md, LX-rules) |
-| `rapid-prototype` | `mathcity-latex.rapid-prototype` | Skeleton a discussion into conjecture/definition stubs in the canonical notes file; statuses agent-side |
+| `rapid-prototype` | `mathcity-latex.rapid-prototype` | Combined outline and prototype: audience-aware narrative, exact targets, dependency planning and theorem-first backfill |
 | `referee-report` | `mathcity-latex.referee-report` | Adversarial referee-grade review of OUR draft at prover level, to scratch; never edits tex (mechanism-5 rule) |
 | `resolve-dependencies` | `mathcity-latex.resolve-dependencies` | Include-what-you-use walk of a proof: present/imported/missing per item; ledger depends-on; placement is the human's |
 | `revise` | `mathcity-latex.revise` | Apply an ACCEPTED review report item-by-item as tagged edits with an item-to-region map; bulk rewrites refused |
@@ -242,8 +269,8 @@ need their declared backend, source access, and TeX toolchain.
 |---|---|---|
 | `using-mathpowers` | `mathcity-proof-assist.using-mathpowers` | Mathematical research and proof entry point with shared framing, planning, execution, review, and cleanup |
 | `using-math` | `mathcity-proof-assist.using-math` | Compatibility alias for using-mathpowers |
-| `create-exposition` | `mathcity-proof-assist.create-exposition` | Gather a topic's definitions/theorems into a linked .md spec (verified sources) staging the writers |
-| `fill-in-prototype` | `mathcity-proof-assist.fill-in-prototype` | Attack a prototype's conjectural items (prove/refute per PROVERS.md) -> harvest to scratch + ledger |
+| `create-exposition` | `mathcity-proof-assist.create-exposition` | Gather selected research files into a source-linked context/spec with claims, prerequisites and negative evidence |
+| `fill-in-prototype` | `mathcity-proof-assist.fill-in-prototype` | Fill a coherent presentation from evidence, research missing obligations and compose gated writers |
 | `find-proposition` | `mathcity-proof-assist.find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
 | `contradiction-check` | `mathcity-proof-assist.contradiction-check` | Loud detection + refusal on claims contradicting earlier ones; structured contradiction report; silent supersession prohibited |
 | `install-loogle` | `mathcity-proof-assist.install-loogle` | Install and configure a Loogle / Mathlib4 search MCP server (canonical: mathlas) so Lean 4 lemma lookup works through a connected MCP tool instead of only the raw web API |

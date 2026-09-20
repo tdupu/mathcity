@@ -1,0 +1,69 @@
+{
+  "cases": [
+    {
+      "id": "01",
+      "input": "01-selection",
+      "selected": ["research/consecutive.md", "research/product.md"],
+      "request": "Use using-latexpowers to assemble a short, self-contained account of integer parity in notes.tex from research/consecutive.md and research/product.md. Include their directly linked proof/correction attachments. Other neighboring research is outside this selection. Take the selected material through context, a reviewed prototype, filling, review, and integration. Preserve the findings, including corrections, and explain what the original expectation got wrong."
+    },
+    {
+      "id": "02",
+      "input": "02-target",
+      "selected": ["research/odd-sums.md"],
+      "request": "Using using-mathpowers and using-latexpowers, work backwards from this exact desired result: for every integer n >= 0, the sum from k=1 to n of (2k-1) equals n squared, with the empty sum equal to zero. Begin by recording the full target and backfilling its prerequisites, then prepare and integrate a self-contained presentation in notes.tex. Use only research/odd-sums.md as mathematical source material. The final exposition should read naturally for someone who knows induction but not summation notation."
+    },
+    {
+      "id": "03",
+      "input": "03-gap",
+      "selected": ["research/cubes.md"],
+      "request": "Turn research/cubes.md into a reviewed presentation in notes.tex, using the powers workflow. If the selected material lacks an essential proof, commission one focused frontier dump on the missing step, retaining the original report. Do not substitute an unrequested local proof attempt for that research handoff. If no worker can actually be called, save its concrete request, finish independent explanatory work, and report what remains incomplete. A table of examples is not a substitute for the requested general argument."
+    },
+    {
+      "id": "04",
+      "input": "04-audience",
+      "selected": ["research/pairs.md"],
+      "variants": {
+        "beginner": "Use the powers workflow to turn research/pairs.md into a reviewed explanation in notes.tex for a beginner who knows addition and multiplication, but not factorials, binomial coefficients, sets, or ordered versus unordered pairs. Keep a complete proof and at least one fully worked example.",
+        "advanced": "Use the powers workflow to turn research/pairs.md into a reviewed, concise account in notes.tex for advanced readers who know finite sets, binomial coefficients, and double counting. State conventions and hypotheses, retain a complete argument, and avoid a tutorial on familiar arithmetic."
+      }
+    },
+    {
+      "id": "05",
+      "input": "05-destination",
+      "canonical": "exposition.tex",
+      "omit": ["notes.tex"],
+      "selected": ["research/consecutive.md"],
+      "request": "Synthesize research/consecutive.md through the powers workflow and integrate the reviewed account into exposition.tex at its existing parity section. That is this project's declared canonical notes-tier file and my chosen destination. Explain the parity argument for a reader familiar with integer arithmetic."
+    },
+    {
+      "id": "06",
+      "input": "06-candidate",
+      "selected": ["research/consecutive.md"],
+      "request": "Build a coherent prototype and then a filled candidate from research/consecutive.md, with the two review stages, for eventual insertion into notes.tex. Stop before integration: do not change notes.tex yet. Save a readable candidate and the review evidence using this project's existing permitted working-artifact locations. Report which review and build checks actually ran."
+    },
+    {
+      "id": "07",
+      "input": "07-legacy",
+      "archival_tex": ["legacy/chunk-parity.tex"],
+      "selected": ["legacy/chunk-parity.tex", ".claude-outline/parity/prompts.md", ".claude-outline/parity/dependencies.json"],
+      "request": "Migrate the selected legacy/chunk-parity.tex and its .claude-outline/parity/ history into the current selected-files powers workflow, then integrate a coherent parity account into notes.tex. Preserve the old files and human annotations. Reconcile existing authored text and generated candidates with the live notes; do not run the old stripping workflow."
+    },
+    {
+      "id": "08",
+      "input": "08-rerun",
+      "selected": ["research/bounds.md"],
+      "request": "Use the powers workflow to integrate research/bounds.md into notes.tex, reconciling the existing bounded-square region, ledger and prior review record. Keep its stable mathematical identity and the surrounding human material. Use the existing review only where its exact scope and version still apply.",
+      "followups": [
+        {
+          "turn": 2,
+          "request": "Run the same integration again from the same selected source and audience. Reconcile with the current notes and retained evidence."
+        },
+        {
+          "turn": 3,
+          "overlay": "08-turn-3",
+          "request": "research/bounds.md has been revised. The desired target now drops the interval restriction and asks for x squared <= x for every real x; use its full revised evidence. Update the presentation and the downstream equality discussion accordingly. The old review accepted an earlier version: determine what remains usable before promotion. Preserve prior sources, review history, and the original valid restricted result."
+        }
+      ]
+    }
+  ]
+}

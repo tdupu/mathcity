@@ -1,6 +1,6 @@
 ---
 name: math-workflow
-description: Use when a mathematical research or manuscript task needs framing, research, planning, coordinated execution, proof review, or completion bookkeeping; also when using-mathpowers or using-latexpowers starts or resumes work.
+description: Coordinate mathematical research and manuscript work, including selected frontier research files through context gathering, a reviewed prototype, a filled presentation, and integration. Shared process for using-mathpowers and using-latexpowers.
 ---
 
 # Math and manuscript process
@@ -31,9 +31,17 @@ repository says, while proofs and checked sources support mathematical truth.
 For manuscript work use pack `subdomains/repo-docs/RESOLUTION.md`.
 Adapt every `init-repo-docs` call: preserve existing contracts and declared
 paths; draft only missing documents before adoption approval. Never run its
-unconditional five-template copy over existing contracts.
+unconditional template copy over existing contracts.
 
 ## Workflow
+
+For a presentation built from frontier dumps or related research files, read
+[synthesis.md](references/synthesis.md). It composes `create-exposition`, the
+combined outline/prototype stage, and `fill-in-prototype`, with separate
+prototype and presentation reviews through `fp-finder-latex`, then integration
+into the declared target (`notes.tex` by default). Theorem-first/backfill is
+supported. That reference owns the stage sequence; the process below supplies
+framing, proof/writer gates and completion within it, without another intake.
 
 1. **Frame, investigate, plan.** Read [planning.md](references/planning.md).
    Complete its mathematical brainstorming and depth selection. Record the
