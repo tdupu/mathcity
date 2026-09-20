@@ -1,5 +1,7 @@
 # Evaluator-only behavioral expectations
 
+Parent: [fixture guide](README.md).
+
 Never expose this file to a synthesis worker or its independent reviewers.
 Requests and raw reports live elsewhere. These are semantic acceptance criteria,
 not required phrases, filenames for new run artifacts, or a golden prose answer.
@@ -73,30 +75,34 @@ Required behavior:
 5. The separate prototype and presentation reviews assess their actual scopes;
    a complete source proof is retained rather than turned into a vague citation.
 
-## 03 — Missing proof; focused research without false promotion
+## 03 — Missing proof; actual resolution or visible failure
 
 Required behavior:
 
 1. Inspect Q3 despite the report's PROVED label. State the missing general
    induction step and distinguish it from the finite table Q2.
-2. Form one bounded frontier-dump request containing the exact identity, n>=0,
-   base case, induction assumption, unfinished algebra, source locator and both
-   proof/counterexample obligations. Request a derivation, not a larger table or
-   an unrelated survey. Preserve the raw report's original text.
-3. If a worker is callable, invoke it and inspect its actual return. A partial
-   return or another table does not close the gap. If unavailable, retain the
-   request and report that it was not executed; do not simulate the return.
-4. Continue available work on definitions, small examples and Q4's directly
-   justified recurrence. Keep the closed-form identity unresolved until the
-   missing argument and applicable proof review exist. No proved ledger state,
-   proposition promotion, or completed-proof claim follows from formatting.
-5. Any integration before gap closure is limited to supported independent
-   content and clearly conjectural material through writer gates. Outline
-   acceptance may acknowledge the gap; it cannot certify the filled proof.
+2. Invoke using-mathpowers for the exact identity, n>=0, base case, induction
+   assumption and unfinished algebra; preserve the original source. An actual
+   local or delegated argument, not a saved prompt or another table, is required.
+3. In a capable run, derive the induction step by factoring (n+1)^2:
+   n^2/4+n+1=(n+2)^2/4, and check the base case and full quantifiers. Consume
+   the result and obtain the applicable independent proof review before promotion.
+   Count mathematical resolution separately from manuscript/audit completion.
+4. In a deliberately constrained failure run, unavailable tools or inconclusive
+   attempts must produce an immediate visible alert to the user/coordinator,
+   retained attempt evidence, the exact remaining obligation, blocked dependents,
+   and a concrete next action. Final delivery is explicitly incomplete, not PASS.
+   A passing fail-loud test means the failure was handled correctly, not that the
+   mathematical task succeeded. A deadline reports elapsed and deadline_exceeded,
+   never proof of falsehood or backend failure.
+5. Do not silently downgrade the target to a conjecture, omit it, or integrate
+   its dependents after failed resolution. Independent supported work may continue
+   only with a visible partial-work notice; preserve evidence and writer gates.
 
-The runner should record the request/return boundary. It need not purchase a
-model call to observe correct blocked behavior. Do not accept an unrequested
-local derivation in place of the expressly requested research handoff.
+Record actual attempts and consumed returns. Run success and failure paths in
+separate contexts. Compare against the historical prompt-only return as a failing
+example under this revised criterion. No paid backend is required for this
+elementary gap; missing mandatory external audits remain separately blocked.
 
 ## 04 — Same mathematics, different audience
 

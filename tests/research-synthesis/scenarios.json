@@ -16,7 +16,7 @@
       "id": "03",
       "input": "03-gap",
       "selected": ["research/cubes.md"],
-      "request": "Turn research/cubes.md into a reviewed presentation in notes.tex, using the powers workflow. If the selected material lacks an essential proof, commission one focused frontier dump on the missing step, retaining the original report. Do not substitute an unrequested local proof attempt for that research handoff. If no worker can actually be called, save its concrete request, finish independent explanatory work, and report what remains incomplete. A table of examples is not a substitute for the requested general argument."
+      "request": "Turn research/cubes.md into a reviewed presentation in notes.tex, using the powers workflow. Resolve any undetermined mathematics through using-mathpowers: actually attempt the missing argument and inspect the result, using appropriate available local reasoning or a focused research backend. Preserve the original report. If the permitted attempts cannot resolve an obligation, alert me immediately with what was tried, what remains blocked and what is needed next; do not quietly mark the synthesis complete. A saved research request or table of examples is not a substitute for the general argument."
     },
     {
       "id": "04",

@@ -21,7 +21,8 @@ For an exposition assembled from research files, both routers use the
 [selected-source synthesis sequence](../../skills/math-workflow/references/synthesis.md).
 `create-exposition` gathers the chosen corpus; `rapid-prototype` sets its
 audience and dependency structure; `fill-in-prototype` uses existing evidence
-and investigates gaps. A single-result request may start with the exact target
+and resolves gaps through `using-mathpowers`; unresolved attempts surface loudly
+and block dependent delivery. A single-result request may start with the exact target
 and backfill prerequisites. See the [examples and coverage](../../README-skills.md#research-files-to-a-presentation).
 
 ## Skills

@@ -16,6 +16,124 @@ Outline, presentation-source and integrated-manuscript acceptance are distinct.
 The last requires independent review of the actual integrated version and its
 build/PDF; unchanged proof audits may be reused only with their recorded limits.
 
+## Correction: resolve undetermined mathematics, or fail loudly
+
+The earlier trials below are historical evidence, not certification of this
+strengthened rule. In particular, the original case 03 forbade a local proof
+attempt and tested a saved research handoff, not resolution. Its limited PASS
+does **not** satisfy the current case 03; missing proof must now go through an
+actual `using-mathpowers` attempt. Unsuccessful resolution triggers the shared
+[visible failure gate](../../../skills/math-workflow/references/execution.md#undetermined-mathematics-is-work-not-a-disposition),
+blocking dependent delivery and any overall completion claim. Untested integration,
+PDF inspection and external audits remain untested, not silently successful.
+
+### E — Alternatives and hygiene
+
+This is a repo-side correction to the existing mathcity skill sources and
+their tests/docs, not a new solver, backend, policy or runtime installation.
+`check-wheel`: adapt `using-mathpowers`, the existing execution/retry contract
+and PROVERS backend; reject a parallel resolver or a prompt-only handoff as the
+completion rule. Existing skills, formulas, orders and test sources were surveyed;
+the gap is mandatory consumption and immediate failure visibility, not a missing
+solver. Live city and Beads history are not a source of mathematical resolution;
+Beads access is unavailable in this isolated checkout. Magma, database and new
+Python tooling are unnecessary for the workflow change.
+
+`check-plan-hygiene`: source edits stay in the owned pack, preserve inputs and
+review history, introduce no imports or new skill identities, and leave live
+activation/push human-gated. Three instruction files share one resolution gate;
+no host values or sink edits are introduced. P6.1-P6.3 require visible failure,
+falsifiable tests and distinct deadline reporting. Documentation follows this
+source change; historical review hashes do not approve the changed tuple.
+
+### Executed resolution-phase regression
+
+Two fresh actors received only their exported project, selected report and
+installed skills, not evaluator expectations. They could reason locally and
+write scratch evidence; external research, backend calls, manuscript edits and
+worker-owned review were disallowed. This is a bounded phase test, not a full
+synthesis run. The coordinator separately dispatched the proof reviewer.
+
+- **Solvable gap:** the cubes actor actually invoked mathpowers, supplied the
+  missing general induction algebra and a second telescoping proof. An independent
+  `doubt` reviewer inspected the exact source and candidate and returned SOUND,
+  checking quantifiers, the empty sum, both proofs and every algebraic step.
+  Candidate SHA-256: `e6097d9c56f7d84e98c77833a748c2b8432c044972fb1d72a246c131ada53712`.
+  This closes the mathematical proof gap; it does not close the separately unrun
+  literature, promotion, manuscript, build or PDF gates.
+- **Missing-data case:** the second actor selected the particular symmetric
+  matrix from experiment R, whose entries/certificates are unavailable. It tried
+  a direct quadratic-form argument, then exhibited compatible matrices with
+  different definiteness. This diagnoses insufficient evidence, not a refutation
+  of the actual matrix. Its native execution trace shows the visible
+  `ERROR — mathematical resolution incomplete` immediately after the witness
+  check and before final evidence/report writing. The alert names the missing
+  data/certificate and blocked promotion. **Mathematical target BLOCKED;
+  fail-loud behavior PASS.** These verdicts must not be conflated.
+- **Negative discriminator:** the retained original case-03 artifact explicitly
+  says no worker ran and no local proof attempt supplied the missing equality.
+  It fails the revised actual-resolution criterion. This re-scores an observed
+  historical artifact; it is not a randomized before/after model benchmark.
+- Both selected originals and both copies of `notes.tex` remained byte-identical.
+  No false backend, review, literature-search, cost or manuscript-acceptance
+  claims are accepted as test success.
+
+The phase runs used the initial correction tuple. Subsequent interface-review
+changes and their validation are recorded separately; these observations do not
+certify Fable execution, hard-deadline cancellation or integrated manuscripts.
+
+### Correction interface review
+
+Three independent instruction critics found six actionable interface problems:
+automatic unresolved manuscript stubs, conflict investigation versus human
+adoption, Fable freshness/delegation, initial backend output permissions,
+hard/advisory deadline handling, and a finite allowance shared across retries
+and review-triggered repairs. A separate revisor centralized their resolution
+in execution.md and linked the two consumers to it. No backend leaf was changed.
+
+The driver measured substantive strict shrink in all three revised files:
+execution 10,769 to 10,702 bytes, synthesis 7,765 to 7,748, and fill 5,751 to
+5,654. Fresh per-path critics each returned zero-finding APPROVING after checking
+the actual adjacent contracts. This is static instruction review, not execution
+of Fable or hard-deadline cancellation. The proof and fail-loud observations
+above retain their initial-tuple scope.
+
+A final two-byte execution edit rephrased the one-writer list to avoid a
+portability scanner false positive; it changed no ownership or dispatch rule.
+The driver verified the exact single-sentence delta and strict shrink to 10,700
+bytes. All three final per-path critics again returned zero-finding APPROVING.
+The final tuple revisor answered exactly `NO`; the bounded three-round correction
+loop reached mutual approval with no factoring.
+
+| Final instruction | SHA-256 |
+| --- | --- |
+| execution.md | `9026f09194ab1223ffb3f4a3ebc00568b96ec1e24528b1007265c87940f18f0e` |
+| synthesis.md | `bb678c6d258370a42ff805285805c191f084c01baaf00d0faf56882422b84060` |
+| fill-in-prototype/SKILL.md | `c8ddefb914fd45b491a121a43234c6d5c4a64b78f825939b4ce032d6510fa7b9` |
+
+Raw critic, revisor, proof-review and native-alert records remain alongside
+the isolated trials in the task's external review directory. Neither source
+approval nor an auxiliary proof of insufficient evidence is a proof of the
+missing matrix's definiteness.
+
+### Correction mechanical and documentation checks
+
+The final tuple passed fixture packaging (eight cases), both skill frontmatter
+validators, portability scans, diff whitespace checks and secrets scans of both
+changed skill roots and the fixture suite. All 37 local Markdown links and six
+anchors across the eight changed Markdown files resolved. The changed request
+and oracle explicitly reject the historical prompt-only completion rule and
+separate mathematical resolution from successful failure handling.
+
+`improve-documentation` updated the skills index's usage/Example Coverage,
+proof-assist guide, fixture instructions/oracle and this record; it added missing
+parent links to the two touched test guides. The adopted documentation policy's
+diff audit is PASS-WITH-NOTES: changed examples/tests and navigation agree with
+source; no skill identities, formulas or subdomain roots changed. The index's
+pre-existing create-issue row still names a repository owner (DOC1.2 scan);
+it is outside this correction. Beads remains unavailable, so no issue or remote
+sync is claimed. These are scoped checks, not a whole-pack documentation audit.
+
 ## Execution limits
 
 Validation uses native Codex agents in the same model family. Independent roles
@@ -24,7 +142,7 @@ usage counters and prices are unavailable; no totals or costs are inferred.
 No paid external research backend or literature search is part of these trials.
 Behavioral test inputs are elementary, synthetic project fixtures.
 
-## Mechanical checks
+## Historical package mechanical checks
 
 - Fixture packaging checks: eight input/oracle pairs; selected sources and
   attachments; canonical TeX inventories; audience variants; withheld follow-ups;
@@ -43,7 +161,7 @@ Behavioral test inputs are elementary, synthetic project fixtures.
   These are input-fixture builds, not integrated-output acceptance.
 - Exporting into an existing trial directory was correctly refused.
 
-## Fixed-point review
+## Historical fixed-point review
 
 Design review found two handoff defects: scratch-only drafting was ambiguous
 with canonical writer execution, and integrated acceptance needed an explicit
@@ -62,7 +180,7 @@ package loop reached mutual approval. The driver verified structured receipts
 for all eight skill roots. See [retained reports and exact hashes](2026-09-20-frontier-synthesis-reviews.md).
 This stabilizes skill contracts, not general mathematical judgment.
 
-## Behavioral execution
+## Historical behavioral execution
 
 Requests and raw inputs are in the fixture suite; expected outcomes were withheld
 from the actors. An independent evaluator received them afterward. Isolation was

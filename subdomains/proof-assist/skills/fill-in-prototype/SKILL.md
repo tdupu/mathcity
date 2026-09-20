@@ -28,21 +28,19 @@ presentation includes its definitions, proofs, examples and explanatory prose.
    qualifications and counterexamples. Verify imported results through
    `track-down-reference`; a source citation does not replace a required
    self-contained proof.
-3. For unresolved claims, dispatch focused attempts through
-   [PROVERS.md](../../PROVERS.md), giving the exact statement, prerequisites,
-   selected evidence and requested proof **and** counterexample search.
-   Harvest by the backend contract into the permitted dated run directory;
-   retain packages, partial proofs, reductions and failed expectations.
-   Update the existing spec/ledger evidence and dependency links without
-   silently expanding source selection. Missing tools/evidence leave a named
-   obligation open; continue independent supported work.
-4. Route refutations and conflicts through `contradiction-check` before any
-   dependent promotion; never silently replace an earlier claim. Run `doubt`
-   on claims to be promoted, continue independent work while it runs, and
-   collect its recorded verdict before integration promotes a claim. Only SOUND
-   on the actual statement/argument/dependencies satisfies the gate; changed
-   evidence needs renewed scrutiny. WEAK, SUSPECT or absent verdicts block
-   the affected promotion, including computational or negative claims.
+3. Resolve undetermined mathematics through `using-mathpowers` under the shared
+   [execution contract](../../../../skills/math-workflow/references/execution.md):
+   supply exact statement, prerequisites and selected evidence; execute and
+   consume attempts. Its backend/path preflight, delegation limits, persistent
+   allowance, deadlines and loud failure gate govern every retry/review.
+   Preserve packages, partial proofs, reductions and failed expectations; update
+   spec/ledger links without silently expanding selection.
+4. Apply that contract's conflict investigation/adoption gate through
+   `contradiction-check`; never silently replace an earlier claim. Run `doubt`
+   before promotion and collect its verdict while independent work continues.
+   Only SOUND on the actual statement/argument/dependencies satisfies the gate;
+   changed evidence needs renewed scrutiny. WEAK, SUSPECT or absent verdicts
+   block affected promotion, including computational or negative claims.
 5. Compose `write-definition`, `write-proposition`, `write-example` and
    `write-remark` for their respective content; use `explain-experiment` for
    computational exposition when needed. Supply each writer its evidence,
@@ -55,7 +53,8 @@ presentation includes its definitions, proofs, examples and explanatory prose.
    inside explanatory prose still require the proposition gates.
 6. Keep pre-integration candidates in permitted scratch Markdown, including
    LaTeX excerpts where useful; do not invent an undeclared `.tex` target.
-   At requested integration the coordinator invokes
+   At requested integration, follow the [manuscript-return gate](../../../../skills/math-workflow/references/execution.md#manuscript-return),
+   including its partial-stub restriction. The coordinator invokes
    [WRITERS.md](../../../latex/WRITERS.md) and the composed leaves in full at
    the declared canonical/aspirational destination. Preserve human markers
    and tagged history; keep statuses in the ledger.

@@ -44,7 +44,10 @@ focused research. `fp-finder-latex` distinguishes outline, filled-presentation
 and integrated-manuscript criteria. Source maps retain refutations and excluded
 findings; originals remain evidence. A finished paper introduction still uses
 `write-introduction` and its readiness gates. The retired ChatGPT harvest and
-ATOM-marker system is not required.
+ATOM-marker system is not required. Undetermined mathematics goes through an
+actual `using-mathpowers` resolution attempt. Exhausted or blocked resolution
+is a visible error with blocked dependents, not successful synthesis; see the
+[shared failure gate](skills/math-workflow/references/execution.md#undetermined-mathematics-is-work-not-a-disposition).
 
 See the [validation record](docs/superpowers/plans/2026-09-20-frontier-synthesis-validation.md)
 for exact review versions, executed checks and remaining limits.
@@ -54,6 +57,7 @@ for exact review versions, executed checks and remaining limits.
 | Example | Runner | Prerequisites | Command | Test path | Status | Issue |
 |---|---|---|---|---|---|---|
 | Selected research to reviewed presentation | Agent | Installed powers/leaves; selected research files; adopted project contracts; independent agents; TeX tools for final integration | `using-latexpowers: synthesize these dumps for the stated audience into notes.tex` | `tests/research-synthesis/` | See validation record; fixture checks alone do not certify agent execution | N/A — this refactor |
+| Undetermined mathematics: resolve or visibly block | Agent | Same skill package; local reasoning and independent proof reviewer; supplied test evidence | Run the case-03 phase trials in `tests/research-synthesis/README.md` | `tests/research-synthesis/`, case 03 | See the correction section of the validation record; historical prompt-only PASS is insufficient | N/A — this correction |
 | Exact target with prerequisite backfill | Agent | Same; exact requested statement and evidence | `using-mathpowers: start from this target, backfill, then write the presentation` | `tests/research-synthesis/` | See validation record; no claim of general proof certification | N/A — this refactor |
 
 ### Parent pack — `mathcity/skills/`  (62)

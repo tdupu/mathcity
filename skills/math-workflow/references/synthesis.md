@@ -4,7 +4,9 @@ Parent: [math-workflow](../SKILL.md). Both powers routers use this sequence
 when the user wants selected research assembled into an exposition. Resume
 at the requested stage; an outline-only request stops at the reviewed outline.
 One coordinator owns selection, dependencies, reviews and final integration.
-There is no browser-conversation prerequisite.
+[execution.md](execution.md) owns backend/path preflight, delegation, shared
+limits, conflict investigation/adoption and partial-stub delivery. No browser
+conversation is required.
 
 ## Select and gather
 
@@ -55,12 +57,12 @@ proved. Use its bounded review cycle and retain findings, responses and exact
 versions. Apply `fp-finder-skill` only to changes to these skill instructions,
 never its strict-shrink rule to the mathematical presentation.
 
-When sources do not answer an essential question, dispatch a focused
-`frontier-dump` or suitable search/prover leaf within the user's research scope.
-State the missing claim, prerequisites and requested evidence. Keep the new
-package; update selection and the spec, revisit affected dependencies and
-repeat the affected review. Missing tools or evidence block that obligation;
-continue independent work without claiming the gap closed.
+Resolve undetermined mathematics through `using-mathpowers` under the
+[shared gate](execution.md#undetermined-mathematics-is-work-not-a-disposition),
+including actual attempts, finite allowance, deadline outcomes and loud errors.
+Preserve new evidence packages, record authorized selection, update spec and
+dependencies, and repeat affected reviews within those limits. Bounded
+gather/outline-only requests stop at their stage and claim no math resolution.
 
 ## Fill, review and integrate
 
@@ -79,8 +81,8 @@ criterion: declared self-containedness, supported statements, complete required
 proofs, verified imports, retained counterexamples/qualifications, coherent notation
 and readable exposition. Record assumed prerequisites. Outline acceptance does not
 transfer. Review changed statements, proofs, source selection or order across
-affected dependencies. Budgets and stalls yield honest incompleteness, never
-forced acceptance.
+affected dependencies under the shared limits; reviews never renew the resolution
+allowance. Never force acceptance or call partial work complete.
 
 Default to `notes.tex`; honor user or repository-declared targets. Resolve
 missing/conflicting declarations through contract adoption; never create an
@@ -89,8 +91,9 @@ and complete Markdown/LaTeX-excerpt candidate for review.
 A declared working `.tex` is usable if permitted. Record source-only review
 honestly; final acceptance requires actual build/PDF checks.
 
-Integrate the reviewed candidate at the planned location using the relevant
-writers and full [WRITERS.md](../../../subdomains/latex/WRITERS.md) preamble and
+Integrate eligible reviewed content under [manuscript return](execution.md#manuscript-return)
+at the planned location using the relevant writers and full
+[WRITERS.md](../../../subdomains/latex/WRITERS.md) preamble and
 postamble; human acceptance remains separate. Workflow authorization covers
 routine ordering/insertion within the agreed
 topic/target unless repository rules reserve that decision. Preserve human
