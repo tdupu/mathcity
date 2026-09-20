@@ -77,4 +77,4 @@ exists to prevent.
 | Repo `STYLE.md` / `LAYOUT.md` / `AGENTS.md` | `new-repo-style-policy` / `new-repo-layout-policy` / `new-repo-agents-policy` |
 | Repo `ADR.md` / `LATEX.md` | `new-repo-adr-policy` / `new-repo-latex-policy` |
 | What a task used or cost (`ai-usage.md`, `tokens.md`) | `update-ai-usage` / `update-tokens` — records, not contract |
-| The pack templates themselves | agents decide (Taylor, 2026-09-19), subject to the rule budget in the template header — no skill owns these, so propose durably, tighten the wording, and record the reasoning in the Change Log |
+| The pack templates themselves | agents decide (delegated by the repository owner, 2026-09-19), subject to the rule budget in the template header — no skill owns these, so propose durably, tighten the wording, and record the reasoning in the Change Log |

@@ -269,5 +269,9 @@ undeclared index consolidated as a record; or an ambiguity resolved by guess.
 
 | Date | Change | Approved by |
 | --- | --- | --- |
-| 2026-09-19 | Add AI20 (records are self-describing: task identifier + index-vs-record). Proposed as two rules, AI20 and AI21, split on when each is checked — written versus consolidated. Merged to one on re-read: the house separates rules by **obligation**, not by check moment (AI12 spans abstract and body, AI15 spans uniqueness, write paths and retention), and "a record says what it is" is one obligation with two facets. Do not re-split without a new argument. Both mechanisms shipped before the rule. | Taylor Dupuy (decision delegated to agents, 2026-09-19) |
+<!-- This template ships with an EMPTY Change Log, like its siblings. Rows
+     are the INSTANTIATING repo's amendment history, recorded by
+     new-repo-ai-policy. Pack-side history for the template itself lives in
+     subdomains/repo-docs/proposals/ and in git, and is deliberately not
+     copied into every instance. -->
 | `<YYYY-MM-DD>` | Instantiated from the mathcity repo-docs template. | `<human name>` |
