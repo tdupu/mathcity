@@ -21,7 +21,7 @@ The coordinator carries the request through planning, execution, validation, and
 | “What is known/open?” / deep research | `math-workflow` research phase |
 | “Are we reinventing the wheel?” / before new construction | `check-zero` |
 | “What could we prove?” | `find-proposition`; consume its candidates and continue if proving is requested |
-| “Prove X” / “refute X” | Pack `subdomains/proof-assist/PROVERS.md`; return evidence to the coordinator for review |
+| “Prove X” / “refute X” | Pack `subdomains/lean/PROVERS.md`; return evidence to the coordinator for review |
 | “Fill the prototype” / “attack the skeleton” | `fill-in-prototype`; fill established material, investigate selected gaps, review and return to the authorized synthesis stage |
 | “I doubt that” / “are you sure?” | `doubt`; skepticism outranks a bare status answer |
 | Conflicting claims / before harvest or promotion | `contradiction-check`; resolve the conflict before dependent work |

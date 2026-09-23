@@ -9,14 +9,14 @@ The [Semantic Scholar Academic Graph API](https://api.semanticscholar.org) is th
 
 Use configured MCP servers:
 
-- **scholar-mcp** — built-in FastMCP stdio wrapper at `mathcity/subdomains/proof-assist/mcp/scholar/`; see §Setup.
+- **scholar-mcp** — built-in FastMCP stdio wrapper at `mathcity/subdomains/lean/mcp/scholar/`; see §Setup.
 - Community alternatives: search `uvx semantic-scholar-mcp` or similar; verify source before installing.
 
 ## Setup (one-time, requires human approval)
 
 ```bash
 # 1. Install the mathcity scholar-mcp server
-cd <mathcity-pack-root>/subdomains/proof-assist/mcp/scholar
+cd <mathcity-pack-root>/subdomains/lean/mcp/scholar
 pip install -e .
 
 # 2. Wire it to Claude
@@ -99,7 +99,7 @@ persistent throttling. A key or fixed wait does not guarantee success.
 | Who cites a paper | `get_citations("205d6b942dbe9d1d5c3e6cac7d2b36c3a5d1d1d5", limit=20)` |
 | Search by author name | `search_authors("Andrew Wiles", limit=5)` |
 
-## Relationship to other proof-assist skills
+## Relationship to other lean-subdomain skills
 
 - [[search-arxiv]] — arXiv ID or keyword → PDF + BibTeX. Prefer for preprints; use both if needed.
 - [[search-mathlib]] — Lean 4 declaration search via Loogle. For formalization, not bibliography.

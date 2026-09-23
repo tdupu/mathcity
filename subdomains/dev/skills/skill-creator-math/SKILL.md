@@ -22,7 +22,7 @@ Set `<mathcity-pack-root>` to the checkout or imported pack root containing
 | Cross-domain or brief-cycle core | `<mathcity-pack-root>/skills/<name>/` | `mathcity.<name>` |
 | Brief-system pipeline internals | `<mathcity-pack-root>/subdomains/brief-system/skills/<name>/` | `mathcity-brief-system.<name>` |
 | Computing | `<mathcity-pack-root>/subdomains/computing/skills/<name>/` | `mathcity-computing.<name>` |
-| Proof assistants | `<mathcity-pack-root>/subdomains/proof-assist/skills/<name>/` | `mathcity-proof-assist.<name>` |
+| Proof assistants | `<mathcity-pack-root>/subdomains/lean/skills/<name>/` | `mathcity-lean.<name>` |
 | LaTeX and notes screening | `<mathcity-pack-root>/subdomains/latex/skills/<name>/` | `mathcity-latex.<name>` |
 | LMFDB workflows | `<mathcity-pack-root>/subdomains/lmfdb/skills/<name>/` | `mathcity-lmfdb.<name>` |
 | Pack development, hygiene, policy gates | `<mathcity-pack-root>/subdomains/dev/skills/<name>/` | `mathcity-dev.<name>` |

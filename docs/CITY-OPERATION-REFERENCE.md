@@ -371,7 +371,7 @@ the approved body. On reject/revise/defer, normal brief routing applies.
 
 The `mathcity` pack is organized into subdomains under `<mathcity-pack-root>/subdomains/`:
 
-`brief-system`, `computing`, `dev`, `latex`, `lean`, `lmfdb`, `magma`, `proof-assist`, `teaching`
+`brief-system`, `computing`, `dev`, `latex`, `lean`, `lmfdb`, `magma`, `teaching`
 
 **Name mapping:** `mathcity-brief-system` in discussion refers to the `brief-system` subdomain; `mathcity-dev` refers to the `dev` subdomain. Directory names are the canonical form (no `mathcity-` prefix in the filesystem).
 

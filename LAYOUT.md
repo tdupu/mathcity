@@ -90,7 +90,7 @@ with its own manifest. See
 for the design rationale.
 
 Current subdomains: `brief-system`, `computing`, `dev`, `latex`, `lean`,
-`lmfdb`, `magma`, `proof-assist`, `teaching`.
+`lmfdb`, `magma`, `teaching`.
 
 A subdomain follows the same internal shape as the root pack, scoped to its
 concern:

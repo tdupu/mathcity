@@ -2,37 +2,50 @@
 
 Parent: [../../README-subdomains.md](../../README-subdomains.md)
 
-Lean 4 and Mathlib formalization. This subdomain holds the `using-leanpowers`
-router and its 26 leaves.
+Lean 4 and Mathlib formalization, together with the proof-assistant and search
+surfaces that feed it. This subdomain absorbed the former `proof-assist`
+subdomain: one folder now holds the formal work and the search/verification
+surfaces it depends on, rather than splitting them across two.
 
 The governing distinction: **compilation and source fidelity are separate
-gates.** A build that succeeds establishes that a formal statement typechecks,
-not that it says what the manuscript says. `lean-verify` answers the first and
-`lean-fidelity` the second, and neither substitutes for the other. A declaration
-count is not a measure of mathematical progress.
+gates.** A successful build establishes that a formal statement typechecks, not
+that it says what the manuscript says. `lean-verify` answers the first and
+`lean-fidelity` the second; neither substitutes for the other, and a declaration
+count is not a measure of mathematical progress. This subdomain is the escalation
+target for prose-math correctness that embeddings and reviewers cannot settle,
+and a passing build is the strongest evidence it can produce — of the formal
+statement, and of nothing else.
 
-## Using the workflow
+## Using the workflows
 
-Start with `using-leanpowers`, which routes by observable request or condition.
-Multi-phase work goes through `lean-workflow`; informal mathematics stays in
-`using-mathpowers` and manuscript writing in `using-latexpowers`, with one plan
-shared across all three.
+Two routers live here and share one plan:
+
+- `using-leanpowers` — formal artifacts. Routes by observable request or
+  condition; multi-phase work goes through `lean-workflow`.
+- `using-mathpowers` (alias `using-math`) — informal mathematics, research and
+  proof. Both entry points use [math-workflow](../../skills/math-workflow/SKILL.md).
+
+Manuscript writing stays in `using-latexpowers`. Requested `.tex` output routes
+there within the same plan rather than starting a second intake.
+
+Formulas: `proof-check` (mechanical hurdle) and `formalize-claim` (agent → build
+gate). Proof-assistant doctrine is in [PROVERS.md](./PROVERS.md). The `mcp/`
+directory ships the Stacks and Scholar MCP servers that `search-stacks` and
+`search-scholar` drive.
 
 Before planning, a repository-root `POWERS.md` (when present) tightens these
-defaults for that repository only; `new-powers-policy` is the sole route for
+defaults for that repository only. `new-powers-policy` is the sole route for
 amending either a local `POWERS.md` or a global default.
 
 ## Credits and prior art
 
-The leaf decomposition in this subdomain covers substantially the same ground as
+The Lean leaf decomposition here covers substantially the same ground as
 **[mathlib-quality](https://github.com/CBirkbeck/mathlib-quality)** by
 [@CBirkbeck](https://github.com/CBirkbeck) — a Claude Code plugin for developing,
 proving, cleaning up and bringing Lean 4 code up to Mathlib standards, with
 phase-numbered gated workflows in which mathematical judgement is enforced
 through required evidence rather than post-hoc review. That project is prior art
 here and is credited accordingly.
-
-The correspondence is close enough to be worth naming explicitly:
 
 | mathlib-quality | this subdomain |
 |---|---|
@@ -47,8 +60,5 @@ The correspondence is close enough to be worth naming explicitly:
 | style and naming rules | `lean-style` |
 | Mathlib search methodology | `lean-search` |
 
-`mathlib-quality` is **MIT licensed**. If any text in these leaves is derived
-from it rather than independently written, MIT requires the copyright notice and
-permission notice to be retained — a stronger obligation than attribution. That
-has not been established file by file, so it is recorded here as an open item
-rather than asserted either way.
+`mathlib-quality` is MIT licensed; see the repository-root `LICENSES/` notes for
+how that interacts with this pack's licence.

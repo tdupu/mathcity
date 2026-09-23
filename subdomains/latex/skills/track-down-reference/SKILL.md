@@ -25,7 +25,7 @@ LAYOUT.md.
 2. Then as fits the claim: `search-scholar`, `search-arxiv`,
    `search-stacks`, `search-mathlib`, `search-lmfdb`.
 3. Exhausted without a candidate → delegate a deep hunt per
-   `subdomains/proof-assist/PROVERS.md`.
+   `subdomains/lean/PROVERS.md`.
 
 ## Step 2 — Open it
 

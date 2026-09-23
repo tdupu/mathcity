@@ -101,7 +101,7 @@ target). This leaf's middle:
 - When used, cite Dupuy's **latexpowers** and **mathpowers** workflow
   collections from the public `mathcity` repository, in addition to the AI
   provider: [LaTeX workflows](https://github.com/tdupu/mathcity/tree/main/subdomains/latex)
-  and [mathematics workflows](https://github.com/tdupu/mathcity/tree/main/subdomains/proof-assist).
+  and [mathematics workflows](https://github.com/tdupu/mathcity/tree/main/subdomains/lean).
   Verify those locations at drafting time. Prefer an accessible versioned
   release or commit when it actually contains the version used. A local
   checkout or a private `agent-skills` mirror does not establish that a

@@ -267,18 +267,18 @@ for exact review versions, executed checks and remaining limits.
 | `new-repo-style-policy` | `mathcity-repo-docs.new-repo-style-policy` | Sole write path for a repo's STYLE.md — writing rules and style variables; human-gated |
 | `triage-variants` | `mathcity-repo-docs.triage-variants` | Disposition each undeclared sibling .tex — merge/demote/declare/delete — one human approval per file; brownfield fork-not-merge repair |
 
-### Proof assistants — `subdomains/proof-assist/skills/`  (11)
+### Proof assistants — `subdomains/lean/skills/`  (11)
 
 | Skill | Alias | What it does |
 |---|---|---|
-| `using-mathpowers` | `mathcity-proof-assist.using-mathpowers` | Mathematical research and proof entry point with shared framing, planning, execution, review, and cleanup |
-| `using-math` | `mathcity-proof-assist.using-math` | Compatibility alias for using-mathpowers |
-| `create-exposition` | `mathcity-proof-assist.create-exposition` | Gather selected research files into a source-linked context/spec with claims, prerequisites and negative evidence |
-| `fill-in-prototype` | `mathcity-proof-assist.fill-in-prototype` | Fill a coherent presentation from evidence, research missing obligations and compose gated writers |
-| `find-proposition` | `mathcity-proof-assist.find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
-| `contradiction-check` | `mathcity-proof-assist.contradiction-check` | Loud detection + refusal on claims contradicting earlier ones; structured contradiction report; silent supersession prohibited |
-| `install-loogle` | `mathcity-proof-assist.install-loogle` | Host-neutral setup and smoke tests for LeanSearch/Loogle MCP and optional local Lean LSP |
-| `search-arxiv` | `mathcity-proof-assist.search-arxiv` | Search arXiv by paper ID or keyword and return title, abstract, authors, and BibTeX |
-| `search-mathlib` | `mathcity-proof-assist.search-mathlib` | Search Mathlib with LeanSearch/Loogle MCP or direct/local fallback; verify candidates under the target pin |
-| `search-scholar` | `mathcity-proof-assist.search-scholar` | Search Google Scholar / Semantic Scholar for papers via MCP and return citations and metadata |
-| `search-stacks` | `mathcity-proof-assist.search-stacks` | Retrieve tagged Stacks statements/proofs by MCP or direct HTTP; preserve informal source evidence |
+| `using-mathpowers` | `mathcity-lean.using-mathpowers` | Mathematical research and proof entry point with shared framing, planning, execution, review, and cleanup |
+| `using-math` | `mathcity-lean.using-math` | Compatibility alias for using-mathpowers |
+| `create-exposition` | `mathcity-lean.create-exposition` | Gather selected research files into a source-linked context/spec with claims, prerequisites and negative evidence |
+| `fill-in-prototype` | `mathcity-lean.fill-in-prototype` | Fill a coherent presentation from evidence, research missing obligations and compose gated writers |
+| `find-proposition` | `mathcity-lean.find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
+| `contradiction-check` | `mathcity-lean.contradiction-check` | Loud detection + refusal on claims contradicting earlier ones; structured contradiction report; silent supersession prohibited |
+| `install-loogle` | `mathcity-lean.install-loogle` | Host-neutral setup and smoke tests for LeanSearch/Loogle MCP and optional local Lean LSP |
+| `search-arxiv` | `mathcity-lean.search-arxiv` | Search arXiv by paper ID or keyword and return title, abstract, authors, and BibTeX |
+| `search-mathlib` | `mathcity-lean.search-mathlib` | Search Mathlib with LeanSearch/Loogle MCP or direct/local fallback; verify candidates under the target pin |
+| `search-scholar` | `mathcity-lean.search-scholar` | Search Google Scholar / Semantic Scholar for papers via MCP and return citations and metadata |
+| `search-stacks` | `mathcity-lean.search-stacks` | Retrieve tagged Stacks statements/proofs by MCP or direct HTTP; preserve informal source evidence |
