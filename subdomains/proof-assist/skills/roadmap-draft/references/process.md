@@ -161,6 +161,25 @@ believe in, not a fix you have.
 **Re-check every sibling copy after fixing a shared file.** Same mechanism, spatial
 rather than temporal.
 
+Both are instances of one rule, and it is worth stating in its general form:
+**a verification is a statement about the moment it was made.** Checking at the
+source is necessary and not sufficient, because nothing re-checks a record when
+the thing it cites moves underneath it. So re-check a shared path or claim **at
+use**, not only at write.
+
+Three instances in a single evening, none caught by review, all after the rule
+above had been written down:
+
+| Record | Cited | Moved | Caught by |
+|---|---|---|---|
+| a census finding | a Stacks tag label | a later commit acted on it | reading the new commit |
+| a handoff | "urgent defect at HEAD" | the defect was repaired one commit later | checking HEAD while writing to someone else |
+| a peer's decision record | a directory path, verified at source | renamed two commits after verification | the renamer volunteering it |
+
+Note what caught each: none was a review, and two were luck. A document stating
+the rule is not a control — the control is re-reading the cited thing at the
+moment you rely on it.
+
 And a rule about the review record itself: a review that did not run has no
 findings, and writing its findings in advance because the dispatch is in flight
 corrupts the one artifact whose whole value is accuracy. When a dispatched review
