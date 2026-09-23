@@ -67,5 +67,18 @@ jobs:
           command -v bd || { echo "::error::bd not on PATH after install"; exit 1; }
           bd --version || { echo "::error::bd present but not runnable"; exit 1; }
 
+      - name: Initialise an empty bead store for the gate to query
+        # Second CI run got past "bd required on PATH" and into "no beads database
+        # found" -- the gate still refused to call an unreachable store zero, which
+        # is again correct. An ephemeral empty store is the honest fixture for the
+        # 0/0/0 assertion: zero gap beads BECAUSE the store was read and held none,
+        # not because it could not be reached. .beads/ is gitignored, and the
+        # runner is thrown away, so this never touches a shared store.
+        run: |
+          bd init 2>&1 | tail -3
+          bd list --status open --json >/dev/null \
+            || { echo "::error::bd init succeeded but the store is not queryable"; exit 1; }
+          echo "store queryable; open beads: $(bd list --status open --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo unknown)"
+
       - name: Run lean-formalize gate suite
         run: bash scripts/run-local-tests.sh tests/lean-formalize-gates
