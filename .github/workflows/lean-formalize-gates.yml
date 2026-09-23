@@ -1,0 +1,52 @@
+# Scope, stated plainly because P6.2 requires a validator to claim no more than
+# it compares: this runs the lean-formalize gate suite ONLY. It does NOT run
+# mathcity's full local suite.
+#
+# Why not: measured 2026-09-23 on main, `bash scripts/run-local-tests.sh` fails
+# with 10 shell failures plus a pytest failure, ALL PRE-EXISTING on main and
+# unrelated to any one PR. Wiring full-suite CI today would paint every PR red
+# on arrival, and a check that always fails is ignored exactly as fast as one
+# that cannot fail. Widening this workflow is gated on that suite going green.
+#
+# This check CAN fail, and was observed doing so before it was committed:
+# injecting `exit 1` into the gate test made `run-local-tests.sh` report
+# "0 pass / 1 fail", name the failing script, and exit 1; restoring the test
+# returned exit 0.
+name: lean-formalize gates
+
+on:
+  pull_request:
+    paths:
+      - 'formulas/lean-formalize*.formula.toml'
+      - 'assets/workflows/lean-formalize/**'
+      - 'subdomains/lean/**'
+      - 'tests/lean-formalize-gates/**'
+      - 'scripts/run-local-tests.sh'
+      - '.github/workflows/lean-formalize-gates.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'formulas/lean-formalize*.formula.toml'
+      - 'assets/workflows/lean-formalize/**'
+      - 'subdomains/lean/**'
+      - 'tests/lean-formalize-gates/**'
+  workflow_dispatch:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert the test operand resolves
+        # P6.2 shape (a): a scan whose operand may not resolve reports an empty
+        # sweep as success. Fail loudly instead of discovering nothing quietly.
+        run: |
+          test -d tests/lean-formalize-gates \
+            || { echo "::error::tests/lean-formalize-gates is absent - the suite would pass by finding nothing"; exit 1; }
+          test -x scripts/run-local-tests.sh || test -f scripts/run-local-tests.sh \
+            || { echo "::error::scripts/run-local-tests.sh is absent"; exit 1; }
+
+      - name: Run lean-formalize gate suite
+        run: bash scripts/run-local-tests.sh tests/lean-formalize-gates
