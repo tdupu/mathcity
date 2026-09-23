@@ -48,5 +48,24 @@ jobs:
           test -x scripts/run-local-tests.sh || test -f scripts/run-local-tests.sh \
             || { echo "::error::scripts/run-local-tests.sh is absent"; exit 1; }
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install bd
+        # lean-gap-accounting.sh counts gap beads and REFUSES to assume zero when
+        # it cannot look ("an unreachable store is not zero beads"). That is the
+        # correct behaviour, so CI must supply the instrument rather than let the
+        # gate degrade into a pass. Without bd the suite is 13/14 by environment,
+        # not by code.
+        run: |
+          go install github.com/steveyegge/beads/cmd/bd@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify bd is usable, not merely present
+        run: |
+          command -v bd || { echo "::error::bd not on PATH after install"; exit 1; }
+          bd --version || { echo "::error::bd present but not runnable"; exit 1; }
+
       - name: Run lean-formalize gate suite
         run: bash scripts/run-local-tests.sh tests/lean-formalize-gates
