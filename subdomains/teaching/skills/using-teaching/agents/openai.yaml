@@ -1,0 +1,4 @@
+interface:
+  display_name: "Using Teaching"
+  short_description: "Plan and coordinate course-material work"
+  default_prompt: "Use $using-teaching to plan and carry out this course-material task with the appropriate skills."

@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-teaching"
+version = "0.1.0"
+schema = 2
+description = "Course-material work: the using-teaching router and its leaves for offerings, syllabi, assessments, course webpages, scanned-notes transcription and lecture-note publication."

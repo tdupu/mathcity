@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Course Webpage"
+  short_description: "Edit, check, commit and push course pages"
+  default_prompt: "Use $update-course-webpage to make this course-page change, then commit and push it."

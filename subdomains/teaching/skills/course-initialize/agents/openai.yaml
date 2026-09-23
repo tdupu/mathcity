@@ -1,0 +1,4 @@
+interface:
+  display_name: "Initialize Course"
+  short_description: "Set up one course's policies, references, and links"
+  default_prompt: "Use $course-initialize to initialize this course and its current offering from existing syllabi and prior materials, confirming policies and recording decisions."

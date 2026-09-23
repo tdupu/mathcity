@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Syllabus"
+  short_description: "Draft a minimal, verified course syllabus"
+  default_prompt: "Use $generate-syllabus to draft a minimal syllabus from my old course webpage and current UVM requirements."
