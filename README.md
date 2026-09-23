@@ -158,3 +158,15 @@ See [README-subdomains.md](./README-subdomains.md) for the complete table.
 | `lmfdb` | LMFDB lookup and data pipeline workflows. |
 | `magma` | Magma package policy and hygiene. |
 | `lean` | Lean/Mathlib formalization plus proof-assistant and mathematical search surfaces. |
+
+## Licence
+
+mathcity is licensed **GPL-3.0-or-later** — see [LICENSE](./LICENSE).
+
+```
+SPDX-License-Identifier: GPL-3.0-or-later
+```
+
+Third-party material and its notices are inventoried in
+[LICENSES/README.md](./LICENSES/README.md), which also records what has and has
+not been established about that material rather than assuming either way.
