@@ -40,6 +40,7 @@ and backfill prerequisites. See the [examples and coverage](../../README-skills.
 | `create-exposition` | Selected research files to source-linked context, claims, dependencies and preserved negative findings |
 | `fill-in-prototype` | Fill a presentation from evidence; research gaps and compose the proof/review/writing leaves |
 | `find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
+| `lean-frontier-dump` | Dump the mathematical frontier around a STUCK Lean goal — goal state, what Mathlib has nearby, the gap stated as a provable proposition, candidate and refuted routes — to a dated `ai/` package. Escalation target of `lean-formalize-prove` on bounded-retry exhaustion; for type-3 obstructions only. |
 
 ## Loogle
 
