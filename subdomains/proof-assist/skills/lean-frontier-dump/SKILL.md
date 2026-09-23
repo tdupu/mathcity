@@ -8,22 +8,17 @@ description: Dump the mathematical frontier around a STUCK Lean goal — the goa
 ## When this is the right skill
 
 `lean-formalize-prove` bounds its proof/diagnose loop. On exhaustion the honest
-output is a **recorded obstruction**, not another tactic. This skill produces that
-record.
+output is a **recorded obstruction**, not another tactic. This skill produces it —
+but only for the third row, after `lean-diagnose` has classified the failure:
 
-Run it only after `lean-diagnose` has classified the failure as **type 3 — a
-genuine mathematical obstruction**: the result needs theory the project and Mathlib
-do not have. The other two classes have different remedies and must not arrive here:
-
-| Diagnosis | Remedy | Not this skill |
+| Diagnosis | Remedy | Here? |
 |---|---|---|
-| Proof engineering — right statement, wrong tactic | retry via `lean-diagnose` | ✗ |
-| Statement problem — unprovable as stated, or vacuous | return to `lean-align-statement` | ✗ |
-| Mathematical obstruction — theory is missing | **this skill** | ✓ |
+| Proof engineering — right statement, wrong tactic | retry via `lean-diagnose` | no |
+| Statement problem — unprovable as stated, or vacuous | back to `lean-align-statement` | no |
+| Mathematical obstruction — theory is missing | **this skill** | yes |
 
-Running this on a type-1 failure wastes a frontier-model call on a goal that a
-different tactic closes. Say which classification you are acting on, and on what
-evidence.
+Running this on row 1 spends a frontier-model call on a goal a different tactic
+closes. State which row you are acting on, and your evidence.
 
 ## Dependency pre-flight (P1.14)
 
@@ -55,9 +50,7 @@ could not actually print is fiction.
    `search-mathlib` / `search-stacks` where relevant. Enumerate what exists NEAR the
    goal: adjacent lemmas, the general form of which this is a special case, the same
    result over a different base.
-   **An empty search result is not evidence of absence** — it is evidence about your
-   query. Record the exact queries you ran. If you cannot find something, say "I
-   searched for X, Y, Z and found nothing", never "Mathlib does not have this".
+   Record the exact queries you ran, not your conclusions about the library.
 
 4. **Name the gap precisely.** State the mathematical content that is missing, as a
    statement someone could prove. "This is hard" is not a gap; "Mathlib has this for
@@ -74,9 +67,9 @@ could not actually print is fiction.
 6. **Write the dump** to `ai/YYYY-MM-DD-lean-<slug>/`, never overwriting; append a
    numeric suffix if the target exists. Confine writes to that folder.
 
-7. **Create the bead and the gap entry.** The obstruction must be tracked, or the
-   three-count invariant in `lean-formalize-verify` will fail: every `sorry` needs a
-   named gap entry in the gap document AND an open bead. Do all three or none.
+7. **Record it in all three places or none:** the dump, a named gap entry in the
+   gap document, and an open bead. `lean-formalize-verify` reconciles those counts
+   against the project's `sorry`s, and a partial record is what that gate catches.
 
 ## Required dump
 
@@ -86,9 +79,8 @@ could not actually print is fiction.
 - **Classification** — why this is a mathematical obstruction and not the other two
   classes, with the evidence for that call.
 - **Attempted** — what was tried and how each failed.
-- **Searched** — the exact queries run and what each returned. Queries, not
-  conclusions about the library.
-- **Nearest existing results** — with their Mathlib names and how they fall short.
+- **Searched** — each query run, verbatim, and what it returned.
+- **Nearest existing results** — Mathlib names, and how each falls short.
 - **The gap** — stated as a provable proposition.
 - **Candidate routes** — each with its cost and its risk, including any that would
   require changing the source statement (flag those: a statement change re-enters
@@ -104,7 +96,9 @@ could not actually print is fiction.
   do not apply it.
 - **Never leave a silent `sorry`.** An unrecorded hole behind a green build is the
   most misleading state a formalization can be in.
-- **Never report absence you did not search for.** See step 3.
+- **Never report absence you did not search for.** An empty result is evidence
+  about your query, not about Mathlib. Write "I searched X, Y, Z and found
+  nothing", never "Mathlib does not have this".
 - **Never trigger a cold Mathlib build.** If one appears unavoidable, stop and file
   a blocker.
 - **Never write upstream.** TauCetiRoadmap is read-only to agents; derive a local
