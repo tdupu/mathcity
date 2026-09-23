@@ -1,0 +1,52 @@
+description = """
+Lean formalization — stage 1: establish a trustworthy workspace baseline.
+
+A reusable expansion (ADR 0007: expansion is the default shape; a domain does not
+need a matching gascity base). Every later stage assumes a Lean project that
+builds and a toolchain whose version is known. This stage establishes both, or
+stops. Nothing downstream is meaningful without it.
+
+NEVER triggers a cold Mathlib build. On kolchin the cache is warm and a cold
+build is a multi-hour trap; if the baseline cannot be established without one,
+the stage FAILS and files a blocker rather than starting the build.
+
+Skills: lean-project, lean-doctor (routed by using-leanpowers).
+"""
+formula = "lean-formalize-baseline"
+type = "expansion"
+version = 1
+contract = "graph.v2"
+
+[catalog]
+name = "lean-formalize-baseline"
+description = "Stage 1 of Lean formalization: locate or create the Lean workspace and establish a known-good toolchain/build baseline, without ever triggering a cold Mathlib build."
+
+[vars]
+[vars.lean_project_dir]
+description = "Path to the Lean project (workspace root containing lakefile and lean-toolchain)."
+default = ""
+
+[vars.allow_cold_build]
+description = "Whether a cold Mathlib build may be started. Default false: a cold build is a multi-hour operation and must be a human decision."
+default = "false"
+
+[[template]]
+id = "{target}.lean-workspace"
+title = "Locate or create the Lean workspace"
+metadata = { "gc.run_target" = "gc.run-operator" }
+description_file = "../assets/workflows/lean-formalize-baseline/{target}.lean-workspace.md"
+
+[[template]]
+id = "{target}.lean-baseline"
+title = "Establish toolchain and build baseline"
+needs = ["{target}.lean-workspace"]
+metadata = { "gc.run_target" = "gc.run-operator" }
+description_file = "../assets/workflows/lean-formalize-baseline/{target}.lean-baseline.md"
+
+[template.check]
+max_attempts = 2
+
+[template.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/lean-baseline-green.sh"
+timeout = "20m"

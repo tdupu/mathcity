@@ -1,0 +1,45 @@
+description = """
+Lean formalization — stage 2: inventory what the source actually claims.
+
+A reusable expansion. Turns prose mathematics into an explicit, enumerated list of
+claims with their dependencies and their gaps, BEFORE any Lean is written. The
+inventory is the contract the rest of the pipeline is measured against: stage 6
+(fidelity) asks "does the Lean express THIS claim", and it needs a "this" to
+point at.
+
+Routed to planning roles per POLICY-formulas F1.1 — deciding what a manuscript
+claims, and where it is silent, is requirements work and mathematical judgment,
+not execution.
+
+Skills: lean-extract-claims, lean-status (routed by using-leanpowers).
+"""
+formula = "lean-formalize-claims"
+type = "expansion"
+version = 1
+contract = "graph.v2"
+
+[catalog]
+name = "lean-formalize-claims"
+description = "Stage 2 of Lean formalization: enumerate the source's claims, dependencies and gaps into an explicit inventory that later fidelity checks are measured against."
+
+[vars]
+[vars.source_document]
+description = "Path to the source manuscript or section being formalized (e.g. a .tex file or a bounded section of one)."
+default = ""
+
+[vars.scope_box]
+description = "The bounded section under formalization. Formalization scope must be stated, never inferred from the whole document."
+default = ""
+
+[[template]]
+id = "{target}.extract-claims"
+title = "Extract and enumerate source claims"
+metadata = { "gc.run_target" = "gc.requirements-planner" }
+description_file = "../assets/workflows/lean-formalize-claims/{target}.extract-claims.md"
+
+[[template]]
+id = "{target}.claims-review"
+title = "Review the claim inventory for completeness"
+needs = ["{target}.extract-claims"]
+metadata = { "gc.run_target" = "gc.review-synthesizer" }
+description_file = "../assets/workflows/lean-formalize-claims/{target}.claims-review.md"

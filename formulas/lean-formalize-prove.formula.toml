@@ -1,0 +1,61 @@
+description = """
+Lean formalization — stage 5: decompose, prove, and diagnose in a bounded loop.
+
+A reusable expansion, run per aligned statement. Decomposition is judgment (which
+obligations, in what order, resting on what prerequisites) and routes to a planning
+role; proving and diagnosing are execution.
+
+The loop is BOUNDED. An agent that cannot close a goal will otherwise grind
+indefinitely, and the honest outcome of a hard obstruction is a recorded
+obstruction — not an unbounded retry. On exhaustion this stage escalates to
+`lean-frontier-dump` rather than silently leaving a `sorry` behind.
+
+Skills: lean-decompose, lean-prove, lean-diagnose, lean-search, lean-frontier-dump.
+"""
+formula = "lean-formalize-prove"
+type = "expansion"
+version = 1
+contract = "graph.v2"
+
+[catalog]
+name = "lean-formalize-prove"
+description = "Stage 5 of Lean formalization: split an aligned statement into obligations, prove them in a bounded loop, and escalate genuine obstructions to a frontier dump instead of retrying forever."
+
+[vars]
+[vars.max_proof_attempts]
+description = "Bound on proof/diagnose cycles before the obstruction is escalated rather than retried."
+default = "4"
+
+[[template]]
+id = "{target}.decompose"
+title = "Split the statement into proof obligations"
+metadata = { "gc.run_target" = "gc.design-author" }
+description_file = "../assets/workflows/lean-formalize-prove/{target}.decompose.md"
+
+[[template]]
+id = "{target}.prove-loop"
+title = "Prove the obligations"
+needs = ["{target}.decompose"]
+metadata = { "gc.run_target" = "gc.run-operator" }
+description_file = "../assets/workflows/lean-formalize-prove/{target}.prove-loop.md"
+
+[template.check]
+max_attempts = 4
+
+[template.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/lean-no-sorry.sh"
+timeout = "30m"
+
+[[template.children]]
+id = "{target}.prove"
+title = "Prove one obligation"
+metadata = { "gc.run_target" = "gc.implementation-worker" }
+description_file = "../assets/workflows/lean-formalize-prove/{target}.prove.md"
+
+[[template.children]]
+id = "{target}.diagnose"
+title = "Diagnose a failing or stalled goal"
+needs = ["{target}.prove"]
+metadata = { "gc.run_target" = "gc.implementation-worker", "gc.continuation_group" = "lean-proof-fixes" }
+description_file = "../assets/workflows/lean-formalize-prove/{target}.diagnose.md"
