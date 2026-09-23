@@ -16,9 +16,8 @@ Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's m
   repeatable, mechanism unfollowable = FAIL): the exposition must let
   a reader RERUN the reasoning — setup, mechanism, and what would
   have falsified it.
-- Traceability: name the script/notebook path and its
-  inputs in a tex comment (ephemeral cache, deletable — D4) and in the
-  ledger row (durable).
+- Traceability: retain claim-to-script/notebook/input paths in a provenance
+  file; tex comments and ledger rows are deletable pointers to it (D4).
 - Statements: `proved` claims — and computational claims whose ledger
   row carries a SOUND doubt run — enter per write-proposition
   (composed, its gates); `conjectural` → conjecture env or omitted.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Post Lecture Notes"
+  short_description: "Prepare and publish reviewed lecture notes"
+  default_prompt: "Use $post-lecture-notes to prepare these notes if needed and publish the reviewed PDF to the course page."

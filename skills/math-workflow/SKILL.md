@@ -17,6 +17,12 @@ paths, permissions, and outstanding work. Cross-router calls pass this context
 and a bounded phase, returning artifacts without restarting brainstorming.
 Leaf workers follow their briefs without recursive orchestration.
 
+For requested Lean formalization, invoke `using-leanpowers` as a bounded phase
+with the current plan, source claims and evidence. It owns the Lean workspace,
+compiler/axiom checks and source fidelity. Return exact checked statements and
+open obligations here; a build alone never establishes manuscript fidelity.
+Report an unavailable Leanpowers installation and continue independent phases.
+
 Resolve this skill's real installed path and the enclosing mathcity pack root
 (contains `pack.toml` and `subdomains/`). All `subdomains/...` references in
 this package are relative to that root, not the research repository.

@@ -30,11 +30,10 @@ finding (LY2).
 <repo-name>/
 ├── <dir>/          ← <purpose>
 ├── ai/             ← durable agent-generated investigations; dated dirs,
-│                    own descriptive LAYOUT.md, holds ai-usage.md + tokens.md
+│                    own descriptive LAYOUT.md, holds the master AI records
 ├── scratch/        ← genuinely transient output (LY3); disposable
 ├── LAYOUT.md  LATEX.md  STYLE.md  ADR.md  AGENTS.md
 ├── AI-POLICY.md  AI-POLICY-SHORT.md
-├── ai-usage.md  tokens.md
 └── ── gitignored but KEEP on disk ──
 ```
 
@@ -84,7 +83,7 @@ only one of them silently starts auditing the other as canonical.
 
 **LY1 — Clean-tree test [C].** A collaborator opening the repo finds
 only the published artifact, its documentation, the six repo docs (`AI-POLICY.md` carrying its
-`AI-POLICY-SHORT.md` companion), and the two AI records (`ai-usage.md`, `tokens.md`).
+`AI-POLICY-SHORT.md` companion), and the two AI records (`ai/ai-usage.md`, `ai/tokens.md`).
 No agent or orchestration scaffolding outside the non-canonical trees.
 Pass: every tracked path matches a tree row. Fail: any tracked path
 with no row.

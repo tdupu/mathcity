@@ -17,10 +17,12 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 |---|---|
 | Selected frontier dumps / research files → introduction to a topic or coherent presentation | `math-workflow`'s [synthesis sequence](../../../../skills/math-workflow/references/synthesis.md): gather context, prototype, review, fill, review, integrate |
 | “make-outline” / audience-aware outline / theorem-first backfill | `rapid-prototype` — combined outline and skeleton stage; resume synthesis if already active |
-| Missing contracts | `init-repo-docs` via `math-workflow`'s preserve-existing adapter; adoption gate |
+| Missing contracts or requested cleanup | Run the LaTeX-power initialization pass: inventory the repository, apply explicit user dispositions automatically, ask only about genuinely ambiguous rows, and verify the canonical build. `init-repo-docs` is an implementation helper, not a separate adoption gate. |
 | Layout health / “which file is real?” | `check-layout` |
 | Undeclared sibling `.tex` | `triage-variants` — authorized per-file disposition before affected writing |
 | Style / build / LaTeX hygiene / references / citations | `check-style` / `check-latex` / `check-latex-hygiene` / `check-labels-and-refs` / `check-citations` |
+| Compare two manuscript source versions | `latex-diff` — resolve both `.tex` inputs, generate a disposable `latexdiff`, and report the exact sources and validation result |
+| Formalize manuscript claims | `using-leanpowers` under the same coordinator and claim IDs; return exact checked statements, assumptions and fidelity evidence before writing |
 | “Prove X” / research gap / suspect mathematics | `using-mathpowers` for that obligation, then return here for the requested artifact |
 | Claim needs a source / suspect cite / verification marker | `track-down-reference`; `clean-citations` for citation-repair proposals |
 | Evidenced statement / definition / connecting explanation | `write-proposition` / `write-definition` / `write-remark` |
@@ -31,8 +33,9 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | Worked case / finite example / counterexample | `write-example`; compose `add-figure` when a graphic explains it |
 | “What does this proof use?” | `resolve-dependencies` |
 | ACCEPTED report to apply | `revise` — item-to-edit map |
-| “Referee our section” | `referee-report` — read-only review |
-| Received referee report | `triage-referee-report` or manual frontier/fable route — preserve the human's choice and authorized revision destination |
+| “Referee our section” / “adversarial review of our manuscript” | `referee-report` — read-only self-review; do not use this route for a supplied referee report |
+| Received referee report / “response to the referee” / “reply to reviewers” | `triage-referee-report` — use its artifact-only received-review mode for report/response TeX/PDF packages, or its four-round mode when substantive manuscript revision is authorized |
+| Review-response attachments / report with responses / response-letter PDF | `triage-referee-report` artifact-only mode — preserve the supplied report as the black source, omit interleaved author comments from the report copy, and place one matching response below each item in `\color{red}` |
 | Decision-record audit | `check-adr` |
 | “Prep for arXiv” / editorial stripping | `garbage-collect` — approval of the concrete strip set |
 | Methods / software / AI disclosure | `write-materials-and-methods` — to the repo's `AI-POLICY.md` contract |
@@ -41,12 +44,65 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | Amend the repo's AI-usage contract | `new-repo-ai-policy` — human-authorized amendment |
 | Finished manuscript introduction/abstract request | `write-introduction` — readiness/refusal gates; an introductory topic prototype uses the synthesis route |
 | Amend layout / LaTeX / style / decisions / agent contracts | `new-repo-layout-policy` / `new-repo-latex-policy` / `new-repo-style-policy` / `new-repo-adr-policy` / `new-repo-agents-policy` — human-authorized amendments |
-| Amend LX rules | `new-latex-policy` — human-authorized policy change |
+| Amend LX rules | `new-latex-policy` — human-authorized amendment to the separate mathcity `subdomains/latex/POLICY.md`; this route does not govern global `using-latexpowers` guidance |
+| Amend global LaTeX workflow guidance | Apply the requested change directly to this skill; do not route it through mathcity's `new-latex-policy` gate |
+| Amend powers defaults | `new-powers-policy` — choose explicitly between a repository-local `POWERS.md` override and a global router amendment |
 | Reorder within the current synthesis | Coordinator adjusts the plan, preserves item/source links and rechecks dependencies; unrelated section merges remain `merge-latex-sections` HOLD |
 | Refuted claim / counterexample / failed expectation from prior work | State it as a result (LX11) — `write-proposition` or `write-example` for the refutation, `write-remark` for the intuition it corrects; never drop the claim and its refutation together |
 | Rendering prior work into a new document (dump, digest, synthesis, revision, introduction, exposition, merge, handoff) | Carry the input's negative results forward first (LX12); list any excluded finding with its scope reason |
 
-Checks precede affected writes. Definitions, constructions, and new notation precede theorem-class statements (LX10), even without a local ST10. Review statement bodies; compilation alone does not verify this.
+Checks precede affected writes. Definitions, constructions, and new notation precede theorem-class statements (LX10), even without a local ST10. Once a definition is introduced, later sections may explain or specialize it but may not silently change its meaning; revise the first definition and its dependents together if the semantics must change. Review statement bodies; compilation alone does not verify this.
+
+For received-review response artifacts, the supplied report is the authoritative
+source text. The report artifact must preserve its item order and review wording
+while omitting author-response comments. The response artifact must reproduce
+that same review text and place one corresponding author response below each
+item in `\color{red}`; use a prior response-letter template when one is
+available. Do not synthesize a new adversarial review or substitute a
+resolution ledger for the received report. Keep the `.tex` sources and their
+compiled PDFs together in the declared scratch or revision root.
+
+The received-review trigger takes precedence over the self-review trigger when
+the user supplies an existing report or asks for a response to one. Phrases
+such as “response to the referee,” “reply to reviewers,” “report with
+responses,” “review-response attachments,” and “convert the attached review to
+TeX/PDF” all select `triage-referee-report` artifact-only mode unless the user
+also authorizes substantive manuscript revision.
+
+## Online references and link macros
+
+When a reader should consult an HTML page—such as a Stacks Project tag, an
+LMFDB record, or a GitHub repository—give both a bibliography citation and an
+explicit hyperlink to that page. The citation remains the source attribution;
+the hyperlink is a navigation aid and must not replace the citation. For
+repeated links, define a site- or project-specific macro in the document
+preamble whose expansion emits the citation first and the hyperlink second,
+with a compact displayed label or short URL. Keep a source comment immediately
+beside the macro recording the URL template, for example:
+
+```tex
+% URL: https://www.lmfdb.org/Variety/Abelian/Fq/<label>
+\newcommand{\avlink}[2]{\cite[#1]{LMFDB}\,\href{https://www.lmfdb.org/Variety/Abelian/Fq/#2}{\textsf{#2}}}
+```
+
+Use the same pattern for Stacks, GitHub, and other reader-facing HTML
+references; adapt the BibTeX key and pinpoint locator to the actual source.
+The pass criterion is mechanical: every such macro has a resolving `\cite`, an
+explicit `\href`, and a nearby URL comment, and every use presents both the
+citation and the link. A bare URL, a hyperlink without a bibliography entry,
+or a bibliography entry without the reader-facing link fails and must be
+revised.
+
+## Definition layout
+
+When a definition introduces multiple words, put them in a dedicated
+`enumerate` environment with one `\item` per word; do not hide separate
+definitions in running prose. If an immediate consequence follows two or more
+definitions, close the `definition` environment first and state the
+consequence in prose, a remark, or a theorem-class environment outside it.
+The definition environment contains definitions only. Pass requires every
+multi-word definition to have an explicit enumeration and every immediate
+consequence to occur after the closing `\end{definition}`.
 
 Negative results are results (LX11). When the work behind a document refuted a
 claim, disproved an expectation, found a counterexample, or showed a proposed
@@ -63,13 +119,34 @@ document-quality floors: enumerate the evidence trail, match findings to
 statements, and report counts; a keyword scan does not discharge them.
 
 AI disclosure is a document-quality floor, not an optional courtesy. The
-repo's `AI-POLICY.md` (AI-rules; template at
-`mathcity/subdomains/repo-docs/templates/AI-POLICY.md`) governs what any
-manuscript must say about models, software, and AI-results, and requires a
-master `ai-usage.md` and `tokens.md` at the repository root. Every AI-result
-carries a literature search and a derivation account; software—including AI
-providers and the workflow skills themselves—is cited like Magma or
+repo's `AI-POLICY.md` governs what any manuscript must say about models,
+software, and AI-results, and requires one master `ai/ai-usage.md` and one
+master `ai/tokens.md`, with dated call folders for supporting material. Every
+AI-result carries a literature search and a derivation account;
+software—including AI providers and workflow skills—is cited like Magma or
 SageMath; agents are never authors and never the source of a mathematical
 claim.
 
+## Initialization and hygiene
+
+When the user asks to initialize or hygienize a LaTeX repository, this skill
+owns the pass. Preserve the user's named canonical manuscript and declared
+folder structure. Treat explicit instructions to move, retain, ignore, or
+delete named files as dispositions already approved by the user; execute them
+without a second adoption gate. Ask one question only for an artifact whose
+disposition is genuinely ambiguous. Put AI outputs in dated directories under
+`ai/`, keep the two master records directly under `ai/`, keep references in
+the declared references directory, and keep generated LaTeX output ignored
+and out of the canonical tree. Verify the resulting manuscript and
+bibliography before committing the cleanup. Only after that commit should a
+requested review or grilling workflow begin.
+
 User instructions and repository contracts take precedence over skills, subject to LaTeX policy floors. Preserve leaf gates and report unresolved conflicts explicitly.
+
+## Repository-local powers policy
+
+Before planning, read the repository-root `POWERS.md` when it exists. Apply
+the section for `latexpowers` as a repository-local addition or tightening of
+these defaults; it does not replace global floors and must not be propagated
+to another repository. Use `new-powers-policy` when the user asks to create or
+amend this file, or when the user asks to change the global default instead.

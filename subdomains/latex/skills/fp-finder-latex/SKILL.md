@@ -45,7 +45,7 @@ Ordinary manuscript review continues to require final build/PDF checks.
 
 Read the nearest project instructions and canonical-file contracts. Load
 [using-latexpowers](../using-latexpowers/SKILL.md),
-[using-mathpowers](../../../proof-assist/skills/using-mathpowers/SKILL.md),
+[using-mathpowers](../../../lean/skills/using-mathpowers/SKILL.md),
 [referee-report](../referee-report/SKILL.md) and the relevant shared
 [writer mechanics](../../WRITERS.md). Use their scoped proof/source/writing
 leaves in workers, without restarting the whole intake in every worker.

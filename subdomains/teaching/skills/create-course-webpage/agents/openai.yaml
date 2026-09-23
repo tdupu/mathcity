@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Course Webpage"
+  short_description: "Build a minimal, repeatable course reference page"
+  default_prompt: "Use $create-course-webpage to create or reconcile this offering's minimal webpage from the syllabus, assessments, textbook, and prior same-course page."

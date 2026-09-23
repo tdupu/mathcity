@@ -20,11 +20,9 @@ Run `subdomains/repo-docs/RESOLUTION.md` in full before the first finding:
 §1 resolve repo-local-first (`AGENTS.md` declarations, then `<repo>/AI-POLICY.md`);
 §2 on a miss **instantiate and interrupt the human** — never silently fall
 back to the pack template, whose declared-tools table is empty and would make
-AI2 pass vacuously. Instantiating `AI-POLICY.md` also lands `AI-POLICY-SHORT.md`,
-`ai-usage.md`, and `tokens.md`, so the interrupt must carry the contract's
-instantiation prerequisite (LAYOUT and AGENTS amendments) — an audit that
-silently leaves the repo failing `check-layout` has damaged what it came to
-measure; §3 floor semantics — compare the repo's copy against the template's `[F]`
+AI2 pass vacuously. Instantiation also lands `AI-POLICY-SHORT.md`,
+`ai/ai-usage.md` and `ai/tokens.md`; the interrupt must carry prerequisite
+LAYOUT and AGENTS amendments so `check-layout` still passes; §3 floor semantics — compare the repo's copy against the template's `[F]`
 rules and raise `FLOOR-BREACH` on any that is missing or weakened, reported
 against the repo doc and never downgraded to advisory; §4 read the policy's
 own `Status` (`Adopted` → binding; `Draft` → full check, verdict prefixed
@@ -40,15 +38,15 @@ must be able to fail.
   audit each manuscript in the repo. A repo with no manuscript reports
   "checked 0 manuscripts", never a silent pass. AI15/AI16 amendments verify
   against `update-ai-usage` / `update-tokens` instead.
-- **trail**: `<repo>/ai-usage.md`, `<repo>/tokens.md`.
+- **trail**: `<repo>/ai/ai-usage.md`, `<repo>/ai/tokens.md`, unless the repo
+  policy explicitly declares other locations.
 
 ## Checks
 
-Rules in numeric order. Rules marked `[C]` are checked here. Rules marked
-`[R]` only — AI10, AI15, AI16, AI17 — are the records' write-time gates and
-are **reported as delegated** with their count, never silently omitted. A
-rule marked `[C][R]` is checked here on its manuscript face and delegated on
-its record face; say which face failed.
+Derive rule inventory and counts from the resolved policy's markers, in numeric
+order: check `[C]` faces here; report every `[R]` face as **delegated**, including
+AI20. `[R]`-only rules are records' write-time gates; for `[C][R]`, check the
+manuscript and delegate the record face. Name the failing face; omit no rule.
 
 | Rule | Check |
 | --- | --- |
@@ -62,7 +60,7 @@ its record face; say which face failed.
 | AI8 | Each AI-result has a derivation account. |
 | AI9 | Explicit human-responsibility statement present. |
 | AI11 | No unverified AI-proposed reference **in the `.bib`**; a surfaced-then-discarded reference is not a finding. |
-| AI12 | Unnumbered **Software and AI assistance** subsection at the first position the document admits: end of the introduction; else after the opening overview; else first unnumbered subsection before the first numbered section. The abstract carries the disclosure sentence **iff the document has an abstract**. A placement override recorded with the manuscript is honoured; name where you found it. |
+| AI12 | Unnumbered **Software and AI assistance** subsection at the first admitted position: end of introduction; else after opening overview; else first unnumbered subsection before first numbered section; else immediately after front matter. Abstract disclosure sentence **iff an abstract exists**. Honour a recorded manuscript placement override; name its location. |
 | AI13 | Computational claims attributed to a system actually run; "model asserted" not worded as "system computed". |
 | AI14 | Negative findings exhibited with their numbered statement and both locators, **before** the positives, each naming the expectation it corrects; counts carried and excluded reported. A keyword scan does not discharge this. |
 | AI18 | No prompt residue; no reader directed to `ai-usage.md`, `tokens.md`, scratch paths, or private chats. |

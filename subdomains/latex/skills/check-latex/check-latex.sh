@@ -62,6 +62,7 @@ fi
 BEAD="${BEAD:-unbeaded}"
 OUT="${OUT:-$HOME/gt/tmp-for-review/$BEAD}"
 mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"
 
 TEX_ABS="$(cd "$(dirname "$TEX")" && pwd)/$(basename "$TEX")"
 TARGET_DIR="$(dirname "$TEX_ABS")"
@@ -86,11 +87,11 @@ if [ -z "$COMPILE_TOOL" ]; then
   COMPILE_DETAIL="No TeX build tool (latexmk/pdflatex/xelatex/lualatex/tectonic) found on PATH. Compile not attempted; NOT faked."
 else
   case "$COMPILE_TOOL" in
-    latexmk)  BUILD_CMD="latexmk -pdf -interaction=nonstopmode -halt-on-error -outdir=$OUT $ROOT_ABS" ;;
-    tectonic) BUILD_CMD="tectonic --outdir $OUT $ROOT_ABS" ;;
-    *)        BUILD_CMD="$COMPILE_TOOL -interaction=nonstopmode -halt-on-error -output-directory=$OUT $ROOT_ABS" ;;
+    latexmk)  BUILD_CMD=(latexmk -pdf -interaction=nonstopmode -halt-on-error "-outdir=$OUT" "$ROOT_ABS") ;;
+    tectonic) BUILD_CMD=(tectonic --outdir "$OUT" "$ROOT_ABS") ;;
+    *)        BUILD_CMD=("$COMPILE_TOOL" -interaction=nonstopmode -halt-on-error "-output-directory=$OUT" "$ROOT_ABS") ;;
   esac
-  if ( cd "$ROOT_DIR" && eval "$BUILD_CMD" ) >"$COMPILE_LOG" 2>&1; then
+  if ( cd "$ROOT_DIR" && "${BUILD_CMD[@]}" ) >"$COMPILE_LOG" 2>&1; then
     if grep -Eq 'LaTeX Warning: .*undefined|Reference .* undefined' "$COMPILE_LOG"; then
       COMPILE_STATUS="pass-with-undefined-refs"
       COMPILE_DETAIL="Compiled but log has undefined references (cross-refs may need a second pass). tool=$COMPILE_TOOL root=$ROOT_ABS log=$COMPILE_LOG"
@@ -114,67 +115,46 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 in_git() { ( cd "$REPO_DIR" && git rev-parse --git-dir >/dev/null 2>&1 ); }
 
+WHOLE_FILE=false
+OLD_SOURCE="$OUT/base-source.tex"
+: >"$OLD_SOURCE"
 if in_git; then
-  # Resolve the repo TOPLEVEL and run every git op from there, using a
-  # toplevel-relative pathspec — running from a subdir with a --full-name
-  # pathspec silently produces an empty (false-clean) diff.
-  GIT_TOP="$( cd "$REPO_DIR" && git rev-parse --show-toplevel 2>/dev/null )"
-  GIT_TOP="${GIT_TOP:-$REPO_DIR}"
-  REL="$( cd "$GIT_TOP" && git ls-files --full-name "$TEX_ABS" 2>/dev/null | head -n1 )"
-  REL="${REL:-$( cd "$GIT_TOP" && git ls-files --others --exclude-standard --full-name -- "$TEX_ABS" 2>/dev/null | head -n1 )}"
-  REL="${REL:-$(python3 - "$GIT_TOP" "$TEX_ABS" <<'PY'
-import os
-import sys
+  GIT_TOP="$(cd "$REPO_DIR" && git rev-parse --show-toplevel)"
+  REL="$(python3 - "$GIT_TOP" "$TEX_ABS" <<'PYTHON'
+import os, sys
 print(os.path.relpath(sys.argv[2], sys.argv[1]))
-PY
-)}"
-  if ( cd "$GIT_TOP" && git ls-files --error-unmatch -- "$REL" >/dev/null 2>&1 ); then
-    TARGET_TRACKED=true
-  else
-    TARGET_TRACKED=false
+PYTHON
+)"
+  COMPARE_REF="${BASE:-HEAD}"
+  if ! (cd "$GIT_TOP" && git rev-parse --verify "$COMPARE_REF^{commit}" >/dev/null 2>&1); then
+    if [ -n "$BASE" ] || (cd "$GIT_TOP" && git rev-parse --verify HEAD >/dev/null 2>&1); then
+      echo "check-latex: invalid comparison ref: $COMPARE_REF" >&2
+      exit 2
+    fi
+    COMPARE_REF=""  # An unborn repository has no baseline.
   fi
-  diff_target() {
-    if [ "$TARGET_TRACKED" = true ]; then
-      if [ -n "$1" ]; then
-        ( cd "$GIT_TOP" && git diff "$1" -- "$REL" )
-      else
-        ( cd "$GIT_TOP" && git diff -- "$REL" )
-      fi
-    else
-      # Untracked files have no ordinary git diff; compare them with /dev/null
-      # so a scoped check still has a concrete full-file diff to scan.
-      ( cd "$GIT_TOP" && git diff --no-index -- /dev/null "$REL" ) || true
-    fi
-  }
-  if [ -n "$BASE" ]; then
-    if [ "$TARGET_TRACKED" = true ] && ( cd "$GIT_TOP" && git rev-parse --verify "$BASE" >/dev/null 2>&1 ); then
-      diff_target "$BASE" >"$DIFF_FILE" 2>/dev/null || true
-      DIFF_STATUS="git-diff vs $BASE"
-      FILES_TOUCHED="$REL"
-    else
-      if [ "$TARGET_TRACKED" = true ]; then
-        DIFF_STATUS="base-ref-not-found: $BASE (fell back to working-tree diff)"
-      else
-        DIFF_STATUS="untracked-file-vs-/dev/null (base $BASE ignored)"
-      fi
-      diff_target "" >"$DIFF_FILE" 2>/dev/null || true
-      FILES_TOUCHED="$REL"
-    fi
+  if [ -n "$COMPARE_REF" ] && (cd "$GIT_TOP" && git cat-file -e "$COMPARE_REF:$REL" 2>/dev/null); then
+    (cd "$GIT_TOP" && git show "$COMPARE_REF:$REL") >"$OLD_SOURCE"
+    (cd "$GIT_TOP" && git diff --no-ext-diff --no-textconv "$COMPARE_REF" -- "$REL") >"$DIFF_FILE"
+    DIFF_STATUS="git-diff working-tree vs $COMPARE_REF"
   else
-    diff_target "" >"$DIFF_FILE" 2>/dev/null || true
-    if [ "$TARGET_TRACKED" = true ]; then
-      DIFF_STATUS="git-diff working-tree vs HEAD"
-    else
-      DIFF_STATUS="untracked-file-vs-/dev/null"
+    set +e
+    (cd "$GIT_TOP" && git diff --no-index --no-ext-diff --no-textconv -- /dev/null "$REL") >"$DIFF_FILE"
+    DIFF_EXIT=$?
+    set -e
+    if [ "$DIFF_EXIT" -gt 1 ]; then
+      echo "check-latex: diff failed (exit $DIFF_EXIT)" >&2
+      exit "$DIFF_EXIT"
     fi
-    FILES_TOUCHED="$REL"
+    DIFF_STATUS="new-file-vs-/dev/null"
   fi
+  if [ -s "$DIFF_FILE" ]; then FILES_TOUCHED="$REL"; fi
 else
+  WHOLE_FILE=true
   DIFF_STATUS="not-a-git-repo (no diff available; whole-file treated as content)"
+  FILES_TOUCHED="$(basename "$TEX_ABS")"
   : >"$DIFF_FILE"
 fi
-
-[ -n "$FILES_TOUCHED" ] || FILES_TOUCHED="$(basename "$TEX_ABS")"
 
 # Semantic summary: scan the ADDED/REMOVED lines of the diff (fallback: whole file).
 SCOPE_MATCH=false
@@ -191,7 +171,7 @@ SCOPE_SOURCE="$OUT/scope-source.txt"
 SCOPE_DIFF="$OUT/scope-diff.txt"
 
 if [ -n "$SCOPE" ]; then
-  if ! python3 "$SCRIPT_DIR/scope.py" "$TEX_ABS" "$ROOT_ABS" "$SCOPE" "$DIFF_FILE" "$SCOPE_META" "$SCOPE_SOURCE" "$SCOPE_DIFF"; then
+  if ! python3 "$SCRIPT_DIR/scope.py" "$TEX_ABS" "$ROOT_ABS" "$SCOPE" "$DIFF_FILE" "$SCOPE_META" "$SCOPE_SOURCE" "$SCOPE_DIFF" "$OLD_SOURCE"; then
     echo "check-latex: scope selector did not match exactly one heading: $SCOPE" >&2
     exit 2
   fi
@@ -209,17 +189,17 @@ if [ -n "$SCOPE" ]; then
   SCOPE_CHANGED_LINES="$(scope_get changed_lines_in_scope)"
   if [ -s "$SCOPE_DIFF" ]; then
     SCAN_SRC="$(cat "$SCOPE_DIFF")"
-  elif [ -s "$DIFF_FILE" ]; then
-    # A real diff exists, but it did not touch the selected heading. Keep the
-    # semantic counts empty rather than treating the unchanged scope as a diff.
-    SCAN_SRC=""
-  else
+  elif [ "$WHOLE_FILE" = true ]; then
     SCAN_SRC="$(cat "$SCOPE_SOURCE")"
+  else
+    SCAN_SRC=""
   fi
 elif [ -s "$DIFF_FILE" ]; then
   SCAN_SRC="$( grep -E '^[+-]' "$DIFF_FILE" | grep -vE '^(\+\+\+|---)' || true )"
-else
+elif [ "$WHOLE_FILE" = true ]; then
   SCAN_SRC="$( sed 's/^/+/' "$TEX_ABS" )"
+else
+  SCAN_SRC=""
 fi
 
 count_pat() { printf '%s\n' "$SCAN_SRC" | grep -cE "$1" || true; }
@@ -229,7 +209,7 @@ THEOREMS="$(   printf '%s\n' "$SCAN_SRC" | grep -oE '\\begin\{(theorem|propositi
 N_EQUATIONS="$(count_pat '\\begin\{(equation|align|gather|multline|eqnarray)\*?\}')"
 N_LABELS="$(   count_pat '\\label\{')"
 N_CITES="$(    count_pat '\\cite[a-z]*\{')"
-N_HUMAN_TAGS="$(count_pat '\\(taylor|david|claude|note|todo)\{')"
+N_HUMAN_TAGS="$(count_pat '\\(reviewer|taylor|david|claude|note|todo)\{')"
 
 json_escape() { printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '""'; }
 
@@ -263,7 +243,7 @@ MD="$OUT/check-latex-report.md"
   echo "    \"status\": $(json_escape "$DIFF_STATUS"),"
   echo "    \"pointer\": $(json_escape "$DIFF_FILE")"
   echo "  },"
-  echo "  \"files_touched\": $(printf '%s\n' "$FILES_TOUCHED" | python3 -c 'import json,sys; print(json.dumps([l for l in sys.stdin.read().split() if l]))' 2>/dev/null || echo '[]'),"
+  echo "  \"files_touched\": $(printf '%s\n' "$FILES_TOUCHED" | python3 -c 'import json,sys; print(json.dumps([l for l in sys.stdin.read().splitlines() if l]))' 2>/dev/null || echo '[]'),"
   echo "  \"semantic\": {"
   echo "    \"equations_touched\": ${N_EQUATIONS:-0},"
   echo "    \"labels_touched\": ${N_LABELS:-0},"

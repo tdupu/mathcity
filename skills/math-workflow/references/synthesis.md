@@ -10,7 +10,7 @@ conversation is required.
 
 ## Select and gather
 
-Use [create-exposition](../../../subdomains/proof-assist/skills/create-exposition/SKILL.md)
+Use [create-exposition](../../../subdomains/lean/skills/create-exposition/SKILL.md)
 to gather context from the chosen frontier dumps or related files. Record the
 topic, audience, assumed background, intended depth, requested output and exact
 selected paths/sections in the existing run plan or spec. The selection may be
@@ -66,7 +66,7 @@ gather/outline-only requests stop at their stage and claim no math resolution.
 
 ## Fill, review and integrate
 
-Use [fill-in-prototype](../../../subdomains/proof-assist/skills/fill-in-prototype/SKILL.md)
+Use [fill-in-prototype](../../../subdomains/lean/skills/fill-in-prototype/SKILL.md)
 to fill from selected evidence. Assign scratch-only drafting of definitions,
 statements/proofs, examples and connective prose using writers' content disciplines,
 without invoking canonical writer execution or its postamble. Return candidate

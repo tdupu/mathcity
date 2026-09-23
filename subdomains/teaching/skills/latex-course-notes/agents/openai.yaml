@@ -1,0 +1,4 @@
+interface:
+  display_name: "LaTeX Course Notes"
+  short_description: "Transcribe, review and post lecture notes"
+  default_prompt: "Use $latex-course-notes to typeset these scans, obtain independent review, and post the corrected notes beside the topic."

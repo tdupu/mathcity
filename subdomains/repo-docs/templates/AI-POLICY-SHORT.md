@@ -32,7 +32,7 @@ AI16, AI20.
 | Put the unnumbered **Software and AI assistance** subsection at the end of the introduction — else after the opening overview, else first before the first numbered section; add the abstract sentence iff the document has an abstract | AI12 |
 | Re-derive AI-originated computations in a real system and report them as that system's output | AI13 |
 | Record refutation-only sessions too, and carry the refutation into the document | AI14 |
-| Keep one master `ai-usage.md` and one `tokens.md` at the repo root — written only by `update-ai-usage` / `update-tokens` — with the evidence behind them retained at a named location | AI15 |
+| Keep one master `ai/ai-usage.md` and one `ai/tokens.md` — written only by `update-ai-usage` / `update-tokens` — with the evidence behind them retained at a named location | AI15 |
 | Price tokens per task: counts, model, rates, cost, task date, rate as-of date | AI16 |
 | Give every record a task identifier — ISO datetime with offset, `__skill__slug` — minted once by `update-ai-usage`, joining `ai-usage.md` to `tokens.md` | AI20 |
 | Clear `latex-ai-statement` on the exact submitted revision, every DEFER resolved or accepted by a named human, the audit retained with the submission — an ADVISORY verdict does not clear the gate | AI19 |

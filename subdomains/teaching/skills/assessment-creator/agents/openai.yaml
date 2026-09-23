@@ -1,0 +1,4 @@
+interface:
+  display_name: "Assessment Creator"
+  short_description: "Create policy-aligned quizzes and exams"
+  default_prompt: "Use $assessment-creator to make an assessment for this course under its current policies."

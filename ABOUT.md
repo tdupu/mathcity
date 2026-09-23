@@ -10,7 +10,7 @@ Math research involves a lot of structured, repetitive work around computation, 
 
 Because [Gas City](https://github.com/gastownhall/gascity) lets you choose the model powering each agent, Mathcity is not tied to any particular harness or provider. It works with [OpenCode](https://opencode.ai/), [oh-my-pi](https://github.com/can1357/oh-my-pi), [Ollama](https://ollama.com/), and other open-source agent harnesses as cheaper or self-hosted alternatives to Codex and Claude Code, and you can route through [OpenRouter](https://openrouter.ai/) to swap in whatever model fits your budget or needs.
 
-Mathcity is also designed to be modular. You don't have to import all of it — you can pull in only the subdomains you actually use (just LMFDB, just proof-assist, just the brief system, etc.) and ignore the rest. And if you don't like the way something is done, you can import your own version of that piece instead; packs compose, so swapping out a subdomain or overriding a skill doesn't require forking the whole thing. Some of this composability will have growing pains at first, but that's part of what early testing is for.
+Mathcity is also designed to be modular. You don't have to import all of it — you can pull in only the subdomains you actually use (just LMFDB, just lean, just the brief system, etc.) and ignore the rest. And if you don't like the way something is done, you can import your own version of that piece instead; packs compose, so swapping out a subdomain or overriding a skill doesn't require forking the whole thing. Some of this composability will have growing pains at first, but that's part of what early testing is for.
 
 It is early, actively under construction, and looking for people to test what's here and contribute their own workflows.
 
@@ -40,7 +40,7 @@ The **LMFDB subdomain** is probably the most developed. It has skills for creati
 
 ### Proof assistant tools
 
-The **proof-assist subdomain** wraps Lean 4 / Mathlib4 search via [Loogle](https://loogle.lean-lang.org), the Stacks Project (tag lookup and keyword search), arXiv (ID or keyword → title / abstract / BibTeX), and Semantic Scholar (paper search by keyword or title). These are available as skills you can invoke from your own agent workflows.
+The **lean subdomain** wraps Lean 4 / Mathlib4 search via [Loogle](https://loogle.lean-lang.org), the Stacks Project (tag lookup and keyword search), arXiv (ID or keyword → title / abstract / BibTeX), and Semantic Scholar (paper search by keyword or title). These are available as skills you can invoke from your own agent workflows.
 
 Work in progress: adapting the UCLA TEAM and IMProof systems for proof assistant formalization workflows, integrating [Patcher](https://github.com/Patcher/span)'s span tool for converting between LaTeX and Lean blueprints, and connecting [firstproof](https://github.com/Tomodovodoo/firstproof) — an autonomous subagent/orchestrator system using lean-lsp-mcp and Aristotle for proof solving.
 
@@ -57,7 +57,7 @@ Mathcity is most useful if it has workflows for the things mathematicians actual
 - **SageMath users** — there's no Sage subdomain yet
 - **Macaulay2 developers** — no M2 subdomain yet either
 - **Blueprint contributors** — [Patcherlab Span](https://github.com/Patcher/span) integration and other LaTeX ↔ Lean blueprint tooling improvements are works in progress and could use people with experience in this space
-- **Lean / Mathlib contributors** — the proof-assist tools exist but need people to use and stress-test them, and the formalization workflow integrations are works in progress
+- **Lean / Mathlib contributors** — the lean-subdomain tools exist but need people to use and stress-test them, and the formalization workflow integrations are works in progress
 - **Number theorists with LMFDB datasets** — the pipeline is there; does it work for your data type?
 - **Anyone with a workflow they keep redoing by hand** — if you have a structured task you do repeatedly (reformatting bibliography entries, converting Magma output to LaTeX tables, checking referee report citations, whatever), it's probably wrappable as a skill
 
@@ -85,4 +85,4 @@ If you want to contribute a skill or try out an existing workflow and run into f
 
 ## Architecture in one paragraph
 
-Mathcity extends the gascity `build-basic` factory with a `build-basic-briefed` variant that replaces the publish step with brief production. When a branch or experiment closes, an agent prepares a brief, gates are checked, and the brief goes into a stack for human adjudication. On approve, the normal publish path runs; on reject or revise, a follow-up bead is created. The brief system is in `mathcity/subdomains/brief-system/`; the math-domain tools (Magma, LMFDB, proof-assist, LaTeX) are in `mathcity/subdomains/`. See [README-skills.md](./README-skills.md) for a complete skill inventory.
+Mathcity extends the gascity `build-basic` factory with a `build-basic-briefed` variant that replaces the publish step with brief production. When a branch or experiment closes, an agent prepares a brief, gates are checked, and the brief goes into a stack for human adjudication. On approve, the normal publish path runs; on reject or revise, a follow-up bead is created. The brief system is in `mathcity/subdomains/brief-system/`; the math-domain tools (Magma, LMFDB, lean, LaTeX) are in `mathcity/subdomains/`. See [README-skills.md](./README-skills.md) for a complete skill inventory.

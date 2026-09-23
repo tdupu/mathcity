@@ -8,6 +8,17 @@ description: HUMAN-GATED pre-submission strip of retained editorial machinery fr
 Runs `subdomains/latex/WRITERS.md` preamble (resolution + target); the strip itself is
 this leaf's gated middle:
 
+## Preserve findings before approval (LX11, LX12)
+
+`mathcity/subdomains/latex/POLICY.md` applies even outside this subdomain.
+Enumerate input refutations, counterexamples, ill-posed proposals and failed
+expectations, naming the expectation each corrects. Flag and retain candidates
+whose findings would be absent from the surviving text until a separately
+authorized revision carries them forward under LX11, or an authorized
+exclusion records each scope reason.
+Report counts carried and excluded. GC never adds mathematical content;
+class-wide strip approval alone cannot authorize losing unique findings.
+
 ## Enumerate → gate → strip
 
 1. Enumerate candidates with counts and line numbers, by class:
@@ -33,13 +44,3 @@ this leaf's gated middle:
 | "Old commented-out text is obviously junk" | It is the low-tech version control (ADR 0003). Gate it. |
 | "I'll strip the \taylor{} leftovers too, it's going public" | Human markers are the human's. Explicit inclusion only. |
 
-## Negative results travel with the positive ones (LX11, LX12)
-
-This skill renders previous work into a new artifact, so the negative-result
-floor of `mathcity/subdomains/latex/POLICY.md` (LX11, LX12) applies even
-outside the latex subdomain. Before finishing, enumerate the inputs'
-refutations, counterexamples, ill-posed proposals, and failed expectations, and
-carry each into the output, naming the expectation it corrects: "it is natural
-to expect X; in fact Y". Report the count carried and, for anything
-deliberately left out, the scope reason. Dropping a refuted claim together with
-its refutation loses the finding that survived: the refutation is the result.

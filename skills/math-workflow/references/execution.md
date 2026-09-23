@@ -36,7 +36,7 @@ dependent work waits for evidence.
 
 ### Backend eligibility
 
-Read pack `subdomains/proof-assist/PROVERS.md` for heavy proving. Before prompts/dispatch, verify callability, models, isolation, child
+Read pack `subdomains/lean/PROVERS.md` for heavy proving. Before prompts/dispatch, verify callability, models, isolation, child
 permissions, deadlines and every initial write path: package, responses, dump,
 contradiction report and accounting/master files. Resolve paths against permitted
 roots. Fixed `~/Documents/FABLE-PROMPTS/<slug>/` is not permission; change roots

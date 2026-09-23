@@ -1,0 +1,5 @@
+[pack]
+name = "mathcity-lean"
+version = "0.2.0"
+schema = 2
+description = "Lean 4 / Mathlib formalization and the proof-assistant and search surfaces that feed it: the leanpowers and mathpowers routers, Lean workflow leaves, Stacks/arXiv/Mathlib/scholar search, and the escalation target for prose-math correctness reviewers cannot settle. Compilation and source fidelity are separate gates."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Teachingpowers"
+  short_description: "Alias for the teaching workflow controller"
+  default_prompt: "Use $using-teachingpowers to coordinate this teaching task through one shared plan."

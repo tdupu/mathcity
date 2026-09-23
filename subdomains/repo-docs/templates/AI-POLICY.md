@@ -38,12 +38,11 @@ specialize LX2 and LX6. Community anchors: the
 the [AMS AI policy](https://www.ams.org/publications/journals/policies/UseofArtificialIntelligence),
 and arXiv's 2026 sanction for hallucinated citations.
 
-**Instantiation prerequisite.** This contract adds four tracked root files —
-`AI-POLICY.md`, its `AI-POLICY-SHORT.md` companion, `ai-usage.md`, and
-`tokens.md`. Before instantiating, amend `LAYOUT.md` through
-`new-repo-layout-policy` (tree rows for all four; LY1/LY2/LY5 doc set; an LY3
-carve-out for the two root ledgers; and LY6's per-doc cap, which binds this
-file only once LY5 lists it) and the `AGENTS.md` contracts table through
+**Instantiation prerequisite.** This contract adds four tracked files —
+`AI-POLICY.md`, its `AI-POLICY-SHORT.md` companion, `ai/ai-usage.md`, and
+`ai/tokens.md`. Before instantiating, amend `LAYOUT.md` through
+`new-repo-layout-policy` (tree rows for all four; LY1/LY2/LY5 doc set; and
+LY6's per-doc cap) and the `AGENTS.md` contracts table through
 `new-repo-agents-policy`. Skipping this leaves the four files undeclared,
 which `check-layout` reports against LY2's tree diff.
 
@@ -191,17 +190,18 @@ its locators, in that order and framing; counts reported.
 Fail: a refuted claim deleted together with its refutation, a finding recorded
 but not exhibited, or a refutation-only session with no `ai-usage.md` entry.
 
-**AI15 — One master `ai-usage.md` and one `tokens.md` per repository [R][F].**
-Both at the repository root, covering the whole repo. Subdirectory artifacts
-keep working records; those are sources consolidated upward, never competing
-ledgers. `update-ai-usage` is the sole write path for `ai-usage.md`,
-`update-tokens` for `tokens.md`. Session transcripts and raw telemetry behind an
+**AI15 — One master `ai/ai-usage.md` and one `ai/tokens.md` per repository [R][F].**
+Both under the repository's `ai/` directory, covering the whole repo. Dated
+call folders hold supporting artifacts. Subdirectory artifacts keep working
+records; those are sources consolidated upward, never competing ledgers.
+`update-ai-usage` is the sole write path for `ai/ai-usage.md`,
+`update-tokens` for `ai/tokens.md`. Session transcripts and raw telemetry behind an
 entry are retained for the life of the submission as the primary evidence
 beneath the AI4/AI5/AI8 accounts. The repo declares the default location in
 this file's header; an entry names its own only when it differs.
-Pass: exactly one of each at the root; the header's retention location
+Pass: exactly one of each under `ai/`; the header's retention location
 resolves, and any entry-level override resolves too.
-Fail: a root-level duplicate, an unconsolidated orphan, or an account with no
+Fail: a duplicate, an unconsolidated orphan, or an account with no
 surviving evidence.
 
 **AI16 — Token usage is priced and dated [R][F].**

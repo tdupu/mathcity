@@ -22,7 +22,7 @@ an ID and a pass/fail criterion a skill can cite.
 **Owned pack set** (the directories these rules call "yours"):
 
 - `mathcity/` and every nested child pack under it — currently
-  `mathcity/subdomains/{brief-system,computing,proof-assist,latex,lmfdb}/`
+  `mathcity/subdomains/{brief-system,computing,lean,latex,lmfdb}/`
   (per [ADR 0002](../../docs/adr/0002-mathcity-subdomain-pack-model.md)).
 - Any future pack the human adjudicator creates in this repo, added by amending this list.
 
