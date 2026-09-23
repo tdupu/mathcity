@@ -277,8 +277,8 @@ for exact review versions, executed checks and remaining limits.
 | `fill-in-prototype` | `mathcity-proof-assist.fill-in-prototype` | Fill a coherent presentation from evidence, research missing obligations and compose gated writers |
 | `find-proposition` | `mathcity-proof-assist.find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
 | `contradiction-check` | `mathcity-proof-assist.contradiction-check` | Loud detection + refusal on claims contradicting earlier ones; structured contradiction report; silent supersession prohibited |
-| `install-loogle` | `mathcity-proof-assist.install-loogle` | Install and configure a Loogle / Mathlib4 search MCP server (canonical: mathlas) so Lean 4 lemma lookup works through a connected MCP tool instead of only the raw web API |
+| `install-loogle` | `mathcity-proof-assist.install-loogle` | Host-neutral setup and smoke tests for LeanSearch/Loogle MCP and optional local Lean LSP |
 | `search-arxiv` | `mathcity-proof-assist.search-arxiv` | Search arXiv by paper ID or keyword and return title, abstract, authors, and BibTeX |
-| `search-mathlib` | `mathcity-proof-assist.search-mathlib` | Search Lean 4 / Mathlib4 declarations via the Loogle search engine — by name, type signature, subexpression, or conclusion pattern |
+| `search-mathlib` | `mathcity-proof-assist.search-mathlib` | Search Mathlib with LeanSearch/Loogle MCP or direct/local fallback; verify candidates under the target pin |
 | `search-scholar` | `mathcity-proof-assist.search-scholar` | Search Google Scholar / Semantic Scholar for papers via MCP and return citations and metadata |
-| `search-stacks` | `mathcity-proof-assist.search-stacks` | Query the Stacks Project (algebraic geometry / commutative algebra) by tag or keyword via its MCP server |
+| `search-stacks` | `mathcity-proof-assist.search-stacks` | Retrieve tagged Stacks statements/proofs by MCP or direct HTTP; preserve informal source evidence |

@@ -1,105 +1,67 @@
 ---
 name: search-stacks
-description: Query the Stacks Project (stacks.math.columbia.edu) for theorems, lemmas, definitions, and proofs in algebraic geometry and commutative algebra. Use this skill whenever the user asks about a Stacks tag, wants to look up a statement in the Stacks Project, search for results by keyword, verify a reference, or retrieve LaTeX source for a known result. Trigger on phrases like "look up in Stacks", "what does the Stacks project say about", "find the Stacks tag for", "fetch tag 00XY", "search Stacks for Cohen-Macaulay", or any request to query algebraic geometry definitions/lemmas/theorems from the Stacks Project.
+description: Use when retrieving or verifying a Stacks Project tag, searching its definitions or results, or obtaining a tagged statement and proof in algebraic geometry or commutative algebra.
 ---
 
-# Stacks Project Search Skill
+# Retrieve Stacks source evidence
 
-The Stacks Project MCP server gives tag lookup and keyword search access to
-[stacks.math.columbia.edu](https://stacks.math.columbia.edu).
-Tools are available as `mcp__stacks__*` once configured.
+Input: tag or keyword query and the caller's mathematical scope.
+Output: verified tag URL, statement, hypotheses, available proof and retrieval
+snapshot, or a precise retrieval limitation. Preserve the active coordinator.
 
-## Existing MCP servers (adopt/cite if available)
-
-No established third-party Stacks MCP server is known as of 2026-07.
-This skill ships its own server; see **Setup** below.
-
-## Setup
-
-Install and configure the server once per machine:
-
-```bash
-pip install -e <mathcity-pack-root>/subdomains/proof-assist/mcp/stacks
-claude mcp add stacks -- stacks-mcp
-```
-
-Verify with `claude mcp list` — should show `stacks: ✓ Connected`.
-
-If the tools are not available in this session, say:
-
-> I'm sorry, I can't do that — the stacks MCP server is not connected.
-> Configure it with: `pip install -e .../mcp/stacks && claude mcp add stacks -- stacks-mcp`
-> then restart your Claude Code session.
-
-## Available tools
+Discover current-host tools and schemas; server prefixes vary. The local Stacks
+MCP exposes:
 
 | Tool | Purpose |
-|------|---------|
-| `mcp__stacks__get_tag(tag, include_proof)` | Statement (+ optional proof) for a 4-char tag |
-| `mcp__stacks__search_stacks(query, max_results)` | Keyword search; returns tag list with LaTeX previews |
-| `mcp__stacks__tag_info(tag)` | Metadata: type, book\_id, chapter, section |
+|---|---|
+| `get_tag(tag, include_proof=false)` | Tagged statement and optional proof |
+| `search_stacks(query, max_results=20)` | Bounded keyword search |
+| `tag_info(tag)` | Type, chapter/section and source URL |
 
-## Standard workflow
+Fetch known tags directly. Otherwise search, then fetch selected tags rather
+than citing previews. Use bounded `max_results`; quoted phrases such as
+`"flat module"` and wildcard `ideal*` are supported by the site's search.
+`00N3` is a definition; `0BBY` is a lemma with proof. Tags can also identify
+chapters: requesting a proof for `01YT` does not produce a theorem proof.
 
-1. **Known tag** → `get_tag("XXXX")` directly.
-2. **Keyword search** → `search_stacks("keyword*")` to find tags, then `get_tag` on the relevant one.
-3. **Location context** → `tag_info("XXXX")` to get chapter/section placement.
+Inspect content as well as MCP success. Preview labels/counts can be incomplete
+or refer to enclosing sections. The current server can encode network errors
+as successful tool payloads, and a failed HTML parse can appear as zero results.
+Confirm an explicit zero-result search page through direct HTTP before claiming
+an empty search; otherwise report retrieval/parse uncertainty.
 
-## Search syntax
+## Setup and fallback
 
-The search engine uses SQLite FTS3:
-- `ideal*` matches "ideal", "ideals", "idealization", …
-- `"quasi-compact"` (quoted) prevents the hyphen being read as NOT.
-- Default returns up to 20 results; pass `max_results=N` for more.
+For requested setup, locate the canonical server beside this skill at
+`../../mcp/stacks` and read its README. Install it into a local virtual environment
+and register the absolute `stacks-mcp` executable as a stdio command in the active
+host. Do not assume a published `uvx stacks-mcp` package or require Claude CLI
+for another host. Smoke-test tool discovery and an actual tagged statement/proof;
+registration alone does not establish callability in this session.
 
-## LaTeX output format
+Without MCP, fetch public HTML directly, URL-encoding query parameters:
 
-Statements are returned as LaTeX-rich text:
-- Inline math: `$...$`
-- Display math: `\[...\]` or `\begin{equation}...\end{equation}`
-- Theorem environments preserved as plain text with the environment name as prefix.
-
-## Example queries
-
-**Fetch a known tag:**
-```python
-get_tag("00N3")          # → Definition 10.103.1 (Cohen-Macaulay modules)
-get_tag("00XY")          # → Lemma 7.22.2 (morphisms of sites)
-get_tag("01YT", include_proof=True)  # includes proof
+```text
+https://stacks.math.columbia.edu/data/tag/00N3/content/statement
+https://stacks.math.columbia.edu/data/tag/0BBY/content/full
+https://stacks.math.columbia.edu/search?query=%22flat%20module%22
 ```
 
-**Keyword search:**
-```python
-search_stacks("Cohen-Macaulay")          # 306 results
-search_stacks('"flat module"', 10)       # exact phrase
-search_stacks("etale*")                  # wildcard
-```
+Validate HTTP status and expected statement/proof/search content. Preserve
+LaTeX mathematics while extracting HTML; don't invent unavailable raw-LaTeX or
+metadata endpoints. Missing MCP/source blocks only that setup path; public
+retrieval remains available. Report HTTP/network/parse failures distinctly from
+a successful empty search or an absent proof.
 
-**Tag metadata:**
-```python
-tag_info("00N3")
-# tag: 00N3
-# type: definition
-# book_id: 10.103.1
-# chapter: Chapter 10: Commutative Algebra
-# section: Section 10.103: Cohen-Macaulay modules
-# url: https://stacks.math.columbia.edu/tag/00N3
-```
+## Return to mathematics or formalization
 
-## Direct API fallback (no MCP required)
+Verify the selected tag's actual type/title, assumptions, conclusion and proof.
+Record `https://stacks.math.columbia.edu/tag/TAG`, retrieval date and source
+snapshot; follow relevant dependencies with precise locators.
 
-If the MCP server is unavailable, the Stacks website has HTML endpoints:
-
-```bash
-# Statement HTML (contains LaTeX as $...$)
-curl "https://stacks.math.columbia.edu/data/tag/00N3/content/statement"
-
-# Full statement + proof HTML
-curl "https://stacks.math.columbia.edu/data/tag/00N3/content/full"
-
-# Keyword search (returns HTML tree with previews)
-curl "https://stacks.math.columbia.edu/search?query=Cohen-Macaulay"
-```
-
-Note: raw LaTeX and JSON metadata endpoints (`/data/tag/TAG/meta`, `.../raw`) are
-not currently served; use the HTML endpoints and strip tags to recover LaTeX.
+A published Stacks proof is informal source evidence, not a Lean certificate.
+Mathpowers consumes it for research/proof context. Requested formalization goes
+to `using-leanpowers`, carrying the statement, proof and source receipts through
+claim extraction, alignment and `lean-search`. A Mathlib match must compile
+under the target pin; unresolved prerequisites remain obligations. Only current
+verification plus source-fidelity review can support FORMALIZED status.

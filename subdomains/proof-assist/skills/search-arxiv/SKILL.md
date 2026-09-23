@@ -4,19 +4,13 @@ description: >
   Search arXiv by paper ID or keyword and return title, abstract, authors, and BibTeX.
   Use when asked to look up an arXiv paper, fetch metadata for a citation, check what
   a paper is about, generate BibTeX for an arXiv ID, or find papers on a topic.
-  Trigger on phrases like "look up arXiv 2407.19122", "BibTeX for this paper",
-  "search arXiv for X", "what is arXiv:XXXX", "fetch metadata for", "cite this paper",
-  or any request to retrieve or cite arXiv papers by ID or keyword.
 ---
 
 # search-arxiv
 
-Fetch paper metadata (title / abstract / authors / BibTeX) from arXiv.
-
-**Adopted upstream:** [`blazickjp/arxiv-mcp-server`](https://github.com/blazickjp/arxiv-mcp-server)
-(Python, 3 k stars, v0.5.0) — the recommended MCP server for full-paper download and
-reading. The skill below uses the arXiv Atom API directly for lightweight metadata
-retrieval; install the MCP server for full-text access (see §MCP enhancement).
+Use the Atom API for metadata; optional
+[`arxiv-mcp-server`](https://github.com/blazickjp/arxiv-mcp-server) adds full-paper
+access (see §MCP enhancement).
 
 ---
 
@@ -38,11 +32,16 @@ https://export.arxiv.org/api/query?id_list=<ID>
 Example: `https://export.arxiv.org/api/query?id_list=2407.19122`
 
 Prompt: *"Extract from this Atom XML: paper title, full abstract/summary, all
-author names (in order), the arXiv ID (numeric part of `<id>`), the year
-from `<published>`, and the `term` attribute of `<arxiv:primary_category>`."*
+author names (in order), the complete arXiv ID (strip only the URL prefix from
+`<id>`), the year from `<published>`, and the `term` attribute of
+`<arxiv:primary_category>`."*
 
-If the `<entry>` is missing or `<title>` is `"Error"`, the ID does not exist —
-report that and stop.
+Retain legacy prefixes such as `math/` and requested versions such as `v2`
+in requests, metadata, eprint and URL.
+
+For either lookup path, validate HTTP success and Atom structure. Report fetch,
+parse or `Error` entries (including their summary) as failures. Only a valid,
+successful empty feed establishes no result for the query.
 
 ---
 
@@ -51,10 +50,11 @@ report that and stop.
 WebFetch:
 
 ```
-https://export.arxiv.org/api/query?search_query=all:<QUERY>&max_results=10&sortBy=relevance
+https://export.arxiv.org/api/query?search_query=<ENCODED-QUERY>&max_results=10&sortBy=relevance
 ```
 
-URL-encode spaces as `+`. Example: `search_query=all:clifford+bianchi+groups`
+URL-encode the entire `all:<QUERY>` parameter value, not just spaces:
+`all:C++` becomes `all%3AC%2B%2B`. Check the feed's echoed query.
 
 Prompt: *"List the arXiv papers in this Atom XML: for each `<entry>` extract
 title, authors (all names), arXiv ID, and primary category. Return as a
@@ -74,10 +74,10 @@ From the extracted metadata, generate one `@misc` entry per paper:
   title        = {<title>},
   author       = {<Last, First and Last, First and ...>},
   year         = {<YYYY>},
-  eprint       = {<numeric-ID>},
+  eprint       = {<ID>},
   archivePrefix = {arXiv},
   primaryClass  = {<primary-category>},
-  url          = {https://arxiv.org/abs/<numeric-ID>}
+  url          = {https://arxiv.org/abs/<ID>}
 }
 ```
 
@@ -108,25 +108,19 @@ For full-paper download and reading, install `blazickjp/arxiv-mcp-server`:
 uv tool install arxiv-mcp-server
 ```
 
-Add to your Claude Code project settings (`.claude/settings.json`):
+Register in the project root's `.mcp.json` via:
 
-```json
-{
-  "mcpServers": {
-    "arxiv-mcp-server": {
-      "command": "arxiv-mcp-server"
-    }
-  }
-}
+```bash
+claude mcp add --scope project --transport stdio arxiv-mcp-server -- arxiv-mcp-server
 ```
 
-Restart the session. Verify with `claude mcp list` — should show
-`arxiv-mcp-server: ✓ Connected`.
+Restart; check `claude mcp list` for connection status and discover session tools.
 
 When connected, the tools `mcp__arxiv-mcp-server__search_papers`,
 `mcp__arxiv-mcp-server__download_paper`, and `mcp__arxiv-mcp-server__read_paper`
-become available for richer workflows (local caching, semantic search, citation
-graphs). The Atom API path above still works alongside it.
+support download/read and local caching. Citation graphs use `citation_graph`;
+`semantic_search` additionally requires the optional `arxiv-mcp-server[pro]`
+install. The Atom path remains available.
 
 ---
 
@@ -136,5 +130,5 @@ graphs). The Atom API path above still works alongside it.
 Query: arXiv ID 2407.19122
 Expected title: "The Basic Theory of Clifford-Bianchi Groups for Hyperbolic n-Space"
 Expected authors: non-empty list matching the arXiv API response
-Expected BibTeX: non-empty @misc with eprint = {2407.19122}
+Expected BibTeX: @misc with eprint containing 2407.19122; retain requested version
 ```

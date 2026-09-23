@@ -79,19 +79,20 @@ def heading_at(lines, line_index):
     }
 
 
-def resolve_include(parent, name):
+def resolve_include(include_root, name):
     raw = name.strip()
-    candidates = [parent.parent / raw]
+    candidates = [include_root / raw]
     if not raw.endswith(".tex"):
-        candidates.append(parent.parent / (raw + ".tex"))
+        candidates.append(include_root / (raw + ".tex"))
     for candidate in candidates:
         if candidate.is_file():
             return candidate.resolve()
     return None
 
 
-def walk(path, target, events, counters, stack):
+def walk(path, target, events, counters, stack, include_root=None):
     path = path.resolve()
+    include_root = include_root or path.parent
     if path in stack or not path.is_file():
         return
     stack.add(path)
@@ -102,10 +103,16 @@ def walk(path, target, events, counters, stack):
             level = LEVELS[heading["command"]]
             if not heading["starred"]:
                 counters[level] += 1
-                for lower in range(level + 1, len(counters)):
-                    counters[lower] = 0
-                nonzero = [value for value in counters[: level + 1] if value]
-                heading["number"] = ".".join(str(value) for value in nonzero)
+                if level == 0:
+                    # Standard parts neither prefix nor reset chapter/section
+                    # numbers. Select a part by title or label, not an inferred
+                    # class-dependent Roman numeral.
+                    heading["number"] = ""
+                else:
+                    for lower in range(level + 1, len(counters)):
+                        counters[lower] = 0
+                    nonzero = [value for value in counters[1 : level + 1] if value]
+                    heading["number"] = ".".join(str(value) for value in nonzero)
             else:
                 heading["number"] = ""
             heading["level"] = level
@@ -114,9 +121,9 @@ def walk(path, target, events, counters, stack):
                 events.append(heading)
 
         for include in INCLUDE.finditer(line):
-            included = resolve_include(path, include.group(1))
+            included = resolve_include(include_root, include.group(1))
             if included:
-                walk(included, target, events, counters, stack)
+                walk(included, target, events, counters, stack, include_root)
     stack.remove(path)
 
 
@@ -186,7 +193,7 @@ def select_event(events, lines, selector):
     return matches[0]
 
 
-def changed_lines(diff_text, start_line, end_line):
+def changed_lines(diff_text, start_line, end_line, old_range=None):
     """Return added/removed diff lines whose source line is in the scope."""
     if not diff_text:
         return []
@@ -207,7 +214,7 @@ def changed_lines(diff_text, start_line, end_line):
                 selected.append(line)
             new_line += 1
         elif line.startswith("-"):
-            if start_line <= old_line <= end_line:
+            if old_range and old_range[0] <= old_line <= old_range[1]:
                 selected.append(line)
             old_line += 1
         elif line.startswith(" "):
@@ -218,9 +225,9 @@ def changed_lines(diff_text, start_line, end_line):
 
 if __name__ == "__main__":
     # Keep argument handling explicit so paths containing spaces remain intact.
-    if len(sys.argv) != 8:
+    if len(sys.argv) != 9:
         print(
-            "usage: scope.py <target.tex> <root.tex> <selector> <diff> <meta> <scope> <scope-diff>",
+            "usage: scope.py <target.tex> <root.tex> <selector> <diff> <meta> <scope> <scope-diff> <old-target.tex>",
             file=sys.stderr,
         )
         raise SystemExit(2)
@@ -231,6 +238,7 @@ if __name__ == "__main__":
     meta_path = Path(sys.argv[5])
     scope_path = Path(sys.argv[6])
     diff_scope_path = Path(sys.argv[7])
+    old_target = Path(sys.argv[8])
     events = []
     walk(root, target, events, [0] * len(LEVELS), set())
     if not events:
@@ -247,7 +255,33 @@ if __name__ == "__main__":
             break
     start_line = event["line"]
     scope_lines = lines[start_line : end_line + 1]
-    diff_scope = changed_lines(diff_path.read_text(encoding="utf-8"), start_line + 1, end_line + 1)
+    diff_text = diff_path.read_text(encoding="utf-8")
+    old_lines = read_lines(old_target)
+    old_events = []
+    for index in range(len(old_lines)):
+        heading = heading_at(old_lines, index)
+        if heading:
+            heading['level'] = LEVELS[heading['command']]
+            old_events.append(heading)
+    for index, heading in enumerate(old_events):
+        heading['labels'] = labels_for_event(old_events, old_lines, index)
+    matches = [h for h in old_events if set(h['labels']) & set(event['labels'])]
+    if not matches:
+        matches = [h for h in old_events if h['command'] == event['command']
+                   and h['title'].casefold() == event['title'].casefold()]
+    old_range = None
+    if len(matches) == 1:
+        old_event = matches[0]
+        old_end = len(old_lines)
+        for following in old_events[old_events.index(old_event) + 1:]:
+            if following['level'] <= old_event['level']:
+                old_end = following['line']
+                break
+        old_range = (old_event['line'] + 1, old_end)
+    elif old_lines and diff_text:
+        raise SystemExit('check-latex: cannot pair this scope with a unique baseline '
+                         'heading; run without --section to review the full diff')
+    diff_scope = changed_lines(diff_text, start_line + 1, end_line + 1, old_range)
     meta = {
         "selector": selector,
         "matched": True,
@@ -260,6 +294,7 @@ if __name__ == "__main__":
         "root_file": str(root),
         "start_line": start_line + 1,
         "end_line": end_line + 1,
+        "baseline_range": old_range,
         "changed_lines_in_scope": len(diff_scope),
     }
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")

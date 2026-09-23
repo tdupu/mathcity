@@ -1,111 +1,56 @@
 ---
 name: install-loogle
-description: Install and configure a Loogle / Mathlib4 search MCP server so Lean 4 lemma lookup (and, for Lean work, live goal/build/run tooling) works through a connected MCP tool instead of only the raw web API. Recommended for Lean work is lean-lsp-mcp (`claude mcp add lean-lsp uvx lean-lsp-mcp`) — full LSP server with loogle/lean_search/lean_hammer plus lean_goal/lean_build/lean_run_code, needs a Lean project + uv; the lightweight search-only option is mathlas (`claude mcp add mathlas -- uvx mathlas-mcp`), no Lean install. Verifies with `claude mcp list` and falls back to the direct Loogle JSON API (see search-mathlib) if no MCP connects. Use when the user says "install loogle", "set up mathlib mcp", "add loogle mcp", "install lean-lsp", "install-loogle", "configure loogle search", or when search-mathlib reports no Loogle MCP is connected. Companion to search-mathlib (which USES the server this skill installs).
+description: Use when asked to install or configure Mathlib, LeanSearch or Loogle MCP search, or to diagnose unavailable Lean MCP tools.
 ---
 
-# install-loogle
+# Set up Mathlib search and Lean MCP
 
-Installs an MCP server that exposes **Loogle** (the Lean 4 / Mathlib4 search
-engine) as a callable tool, mirroring how `stacks` and `scholar` are set up in
-this subdomain. Loogle itself is a hosted web service; this skill wires a local
-MCP server in front of it so lemma search is a first-class tool call.
+Input: active host, requested search/LSP capabilities and selected workspace.
+Output: tested tool availability and versions, or exact blockers and fallbacks.
 
-## Pre-flight
+Discover the current session's tools first. Registration in another host and a
+CLI “Connected” label do not establish callability here. Do not require Claude
+Code for a Codex or other MCP host. Ordinary search does not authorize global
+installation; use `search-mathlib`'s fallback unless setup is requested.
 
-- `claude` CLI must be on PATH (`command -v claude`). If missing, stop and tell
-  the user to install/point at the Claude Code CLI first.
-- `uvx` (from `uv`) is needed for the `uvx` install form. Check `command -v uvx`;
-  if absent, either install `uv` (https://docs.astral.sh/uv/) or use a clone +
-  `pip install -e .` form of whichever server is chosen.
+## Configure the selected host
 
-## Choose a server
+For search plus local Lean, use [lean-lsp-mcp](https://github.com/oOo0oOo/lean-lsp-mcp).
+Its host-neutral stdio entry uses command `uvx`, args `["lean-lsp-mcp"]`, env
+`LEAN_PROJECT_PATH=/absolute/selected/workspace`. Check `uvx`, `lake` and `rg`;
+if uv is unavailable, use a project-local virtual environment and its absolute
+`lean-lsp-mcp` executable. Record the resolved package version. Register through
+the active host's supported MCP settings at the requested scope. For Claude
+Code specifically, consult `claude mcp add --help`; other hosts use their own
+configuration, not the Claude CLI.
 
-Two good options, by whether you are *searching* Mathlib or actually *working
-in Lean*:
+Read the project's contracts, `lean-toolchain`, Lake configuration and baseline.
+The tested server 0.30.0 with leanclient 0.13.2 requires Lean >=4.24 for LSP.
+Check the installed version's requirements; never upgrade a project's pin merely
+to enable optional tooling. Older projects keep CLI verification. A separate
+compatible search workspace cannot validate their code.
 
-### Recommended for Lean work — lean-lsp-mcp
+For search only, existing [mathlas](https://github.com/Archerkattri/mathlas) is an
+alternative stdio entry: command `uvx`, args `["mathlas-mcp"]`; discover its
+actual `search_formal_math` schema. No Lean toolchain is needed for this lookup.
 
-Full LSP-based server. Exposes search — `loogle`, `lean_search`, `lean_finder`,
-`lean_hammer`, `lean_state_search` — **plus** live Lean-project interaction:
-`lean_goal`, `lean_build`, `lean_run_code`, `lean_local_search` (goal states,
-diagnostics, build, run). Best whenever you have a Lean project open.
+## Verify capability, not just connection
 
-```bash
-claude mcp add lean-lsp uvx lean-lsp-mcp
-# project-scoped:
-claude mcp add lean-lsp -s project uvx lean-lsp-mcp
-```
+Initialize the server, discover schemas, and make a real call. Current Lean MCP
+names include `lean_leansearch(query,num_results)` for informal language and
+`lean_loogle(query,num_results)` for names/types. Smoke-test Loogle `add_comm`
+and a semantic query; inspect returned declarations, not just transport success.
+For local LSP, test `lean_goal` or `lean_diagnostic_messages` against the chosen
+compatible project. Check payload errors, partial results and diagnostic severity.
+Restart/reconnect only as required by the host and report capabilities still
+unavailable in this session.
 
-Requires: a valid Lean project (`lean-toolchain` + `lakefile.lean|toml`), `uv`
-on PATH, and a one-time `lake build` first (recommended); `ripgrep` for local
-search. Optional **Local Loogle** avoids Loogle rate limits (~2 GB, needs
-git+lake, Unix only). Beta — grants filesystem access + external network calls;
-may time out on the first `lake serve`.
+Return server/version, workspace/pin, discovered tool names, actual response and
+remaining gaps. Search hits require local `#check` and compiled applications
+through installed `lean-search` before formal reuse. LSP diagnostics do not
+replace `lean-verify` or source fidelity review.
 
-### Lightweight, search-only — mathlas
-
-No Lean toolchain needed. Wraps **Loogle + LeanSearch** behind one
-`search_formal_math` tool with a 7-day cache. Use for quick Mathlib lookups
-from a non-Lean repo (e.g. searching from the Magma / hecke side).
-
-```bash
-claude mcp add mathlas -- uvx mathlas-mcp
-```
-
-Verify either:
-
-```bash
-claude mcp list | grep -iE 'lean-lsp|mathlas'    # want: "✓ Connected"
-```
-
-Once a server is connected, `search-mathlib` uses its search tool instead of
-the raw API.
-
-## Fallback — no MCP required
-
-If the MCP will not connect (network, `uvx` missing, package unavailable),
-**do not block Mathlib search** — `search-mathlib` already queries the Loogle
-JSON API directly and fails soft:
-
-```bash
-curl -s "https://loogle.lean-lang.org/json?q=add_comm"
-```
-
-Report the MCP failure, then point the user at `search-mathlib` for the
-direct-API path. Installation is an enhancement (caching, one tool call), not a
-prerequisite for search.
-
-## Alternative server
-
-| Server | What it adds | Install |
-|--------|--------------|---------|
-| `lean-mathlib-docs-mcp` | Local Mathlib docs search only | see repo (Sources) |
-
-Cite whichever server you install in the `## Sources` section of any work that
-uses it.
-
-## Sources / Citations
-
-Cite these wherever this server or its results are used (per repo policy: cite
-all sources).
-
-- **Loogle** — the Lean 4 / Mathlib4 search engine, hosted by the **Lean FRO**
-  (Lean Focused Research Organization). https://loogle.lean-lang.org
-  (JSON API: `https://loogle.lean-lang.org/json?q=<query>`).
-- **mathlas MCP** — Loogle + LeanSearch proxy with cache.
-  https://github.com/Archerkattri/mathlas
-- **lean-lsp-mcp** — LSP-based Lean MCP server with Loogle integration.
-  https://github.com/oOo0oOo/lean-lsp-mcp
-- **lean-mathlib-docs-mcp** — local Mathlib docs search MCP.
-  https://github.com/CriticalLine/lean-mathlib-docs-mcp
-- **Mathlib4** — the Lean 4 mathematical library being searched.
-  https://github.com/leanprover-community/mathlib4
-- **Mathlib4 docs** — rendered declaration documentation.
-  https://leanprover-community.github.io/mathlib4_docs/
-
-## See also
-
-- `search-mathlib` — the skill that USES this server (and works without it via
-  the direct JSON API).
-- `mcp/stacks/README.md`, `mcp/scholar/README.md` — the sibling MCP install
-  patterns this skill mirrors.
+When setup fails, report the specific startup/network/version/schema error and
+continue broader work through `search-mathlib`'s direct HTTP or local-source/CLI
+path. Unavailability is not an empty search. Stacks setup and tagged-source
+retrieval belong to `search-stacks`.

@@ -75,6 +75,11 @@ then prove that it works; do not silently assume the conclusion. A purely
 local abbreviation inside a proof may stay there, but terminology used
 outside that proof belongs before its first use.
 
+Definitions are stable after introduction. Later sections may give equivalent
+characterizations, specialize the definition, or explain consequences, but
+they may not silently change its scope or meaning. If the intended definition
+changes, revise the first definition and every dependent statement together.
+
 - Pass: enumerate every theorem-class environment (including custom aliases
   and starred forms), review each body in context, and report the number
   checked and zero embedded definitions. A keyword scan alone cannot pass.

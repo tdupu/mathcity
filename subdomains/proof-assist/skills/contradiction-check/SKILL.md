@@ -5,11 +5,9 @@ description: Detect and LOUDLY report any later mathematical claim that contradi
 
 # contradiction-check
 
-Mechanism 2's fix (design record, survey 2026-09-18): the observed
-wild failure is "the manuscript supersedes the conflicting claims in
-the earlier sections of this report" — history silently overwritten.
-Here a contradiction is a loud, recorded
-event, and the operation that surfaced it stops.
+Mechanism 2 (design record, survey 2026-09-18) forbids silently letting
+a manuscript supersede earlier conflicting claims. Record the contradiction
+loudly and stop the operation that exposed it.
 
 ## Step 0 — Scope
 
@@ -21,8 +19,9 @@ reconcile by rescanning the tex — design ADR 0004).
 
 ## Step 1 — Collect
 
-For a TARGETED check (a claim being promoted/written/harvested):
-gather every recorded statement about the same objects/invariants.
+Before a TARGETED promotion/write/harvest, collect the proposed claim
+with all hypotheses (even if unwritten) and every recorded statement
+about the same objects/invariants.
 For a SWEEP ("check the repo"): enumerate statement environments and
 scratch claim lists. Report counts (RESOLUTION.md §5 in
 `subdomains/repo-docs/` — zero claims collected where claims exist is
@@ -34,8 +33,8 @@ Pairwise over the collected set: direct negation; incompatible
 formulas for the same invariant; silently changed hypotheses (same
 conclusion, weaker assumptions, no acknowledgement); a "corrected"
 claim whose predecessor is still live anywhere. Quote BOTH sides with
-file:line provenance. Classification is mechanical; truth is not
-yours.
+file:line provenance, or request/draft provenance when unavailable.
+Classification is mechanical; truth is not yours.
 
 ## Step 3 — On any contradiction: loud refusal
 

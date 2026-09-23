@@ -5,8 +5,8 @@ Parent: [../../README-subdomains.md](../../README-subdomains.md)
 Lean/Coq/Isabelle proof checking and arXiv bibliography for mathematics claims.
 
 This sub-namespace (`mathcity-proof-assist.*` (ADR 0002 alias)) is the escalation target for
-prose-math correctness that embeddings and reviewers cannot settle. A passing
-Lean build is the strongest possible G4 (critical-review) evidence. Formulas:
+prose-math correctness that embeddings and reviewers cannot settle. Lean compilation checks the formal statement; separate source-fidelity review
+is required before claiming it proves the original mathematical claim. Formulas:
 `proof-check` (mechanical hurdle) + `formalize-claim` (agent → build gate).
 
 ## Using the workflow
@@ -29,10 +29,10 @@ and backfill prerequisites. See the [examples and coverage](../../README-skills.
 
 | Skill | Purpose |
 |-------|---------|
-| `install-loogle` | Install and configure a Loogle / Mathlib4 search MCP server when hosted lookup is not enough. |
+| `install-loogle` | Host-neutral LeanSearch/Loogle MCP setup and actual tool smoke tests. |
 | `search-arxiv` | arXiv ID or keyword → title / abstract / authors / BibTeX. Adopted upstream: [`blazickjp/arxiv-mcp-server`](https://github.com/blazickjp/arxiv-mcp-server). |
-| `search-mathlib` | Lean 4 / Mathlib4 declaration search via the hosted Loogle engine. Query by name, type signature, subexpression, or conclusion pattern. Direct JSON API path (no MCP required); fail-soft on downtime. See §Loogle below. |
-| `search-stacks` | Stacks Project (algebraic geometry / commutative algebra) — tag lookup and keyword search via the `mcp__stacks__*` MCP tools. |
+| `search-mathlib` | LeanSearch semantic and Loogle name/type search through MCP or direct HTTP; local pinned applicability checks via installed `lean-search`. |
+| `search-stacks` | Stacks tagged statements/proofs and keyword lookup through discovered MCP tools or direct HTTP. |
 | `search-scholar` | Semantic Scholar — paper search by keyword or title via the `mcp__scholar__*` MCP tools. |
 | `using-mathpowers` | Entry point with shared planning, research, execution, review, and cleanup; see `math-workflow` |
 | `using-math` | Compatibility alias for `using-mathpowers` |
@@ -41,24 +41,42 @@ and backfill prerequisites. See the [examples and coverage](../../README-skills.
 | `fill-in-prototype` | Fill a presentation from evidence; research gaps and compose the proof/review/writing leaves |
 | `find-proposition` | Prover-level hunt for plausible propositions -> scratch dump + conjectural ledger rows; never touches tex |
 
-## Loogle
+## Search and formalization
 
-[Loogle](https://loogle.lean-lang.org) is the canonical search engine for Lean 4 / Mathlib4, hosted by the Lean FRO. It indexes the full Mathlib4 library.
+`using-mathpowers` dispatches natural-language and typed Mathlib queries through
+[search-mathlib](skills/search-mathlib/SKILL.md), setup requests through
+[install-loogle](skills/install-loogle/SKILL.md), and Stacks references through
+[search-stacks](skills/search-stacks/SKILL.md). Discover tools in the active host;
+registration in a different CLI does not establish availability in this session.
 
-The `search-mathlib` skill uses Loogle as its primary backend via the hosted JSON API:
+For example, ask `using-mathpowers: find a Mathlib lemma for commutativity of
+addition`, or `using-mathpowers: retrieve Stacks tag 0BBY with its proof`.
+LeanSearch supplies semantic candidates; Loogle handles names and type patterns.
+Fetch selected Stacks tags to verify their exact statements and assumptions.
+Preview labels and result counts are discovery aids, not authoritative citations.
 
-```
-https://loogle.lean-lang.org/json?q=<URL-encoded query>
-```
+For requested formalization, invoke installed `using-leanpowers` under the same
+plan and pass source receipts into claim extraction, alignment and `lean-search`.
+Compile candidate applications in the target project: online Mathlib indices may
+use different names or modules. Stacks prose is informal evidence, never a Lean
+certificate. Missing optional MCP tools have direct HTTP and local CLI fallbacks.
 
-**Three query modes** (combine with commas for AND-filter):
+The tested Lean MCP 0.30.0 requires Lean >=4.24 for local LSP. Older projects keep
+their pins and use CLI checks. No project upgrade or global MCP registration is
+implied by ordinary search. Setup details belong to the linked skills and
+[Stacks server guide](mcp/stacks/README.md).
 
-| Mode | Example | Effect |
-|------|---------|--------|
-| By name / constant | `add_comm` | All lemmas mentioning `add_comm` |
-| By name substring | `"add_comm"` | All lemmas with `"add_comm"` in their name |
-| By conclusion | `\|- ?a + ?b = ?b + ?a` | Lemmas whose conclusion matches the pattern |
+### Example Coverage
 
-The API returns `{count, hits: [{name, module, type, doc}]}` on success or `{error, suggestions}` on no match. The skill fails soft (P1.14) on API downtime or format drift.
+Development evidence is deliberately untracked, per the user's test-scope
+instruction. Paths below are relative to the agent-skills checkout used for the
+run; a clean checkout provides the skills, not these saved local transcripts.
 
-Shared reference: [PROVERS.md](./PROVERS.md) — harness-conditional prover backend (ADR 0005).
+| Example | Runner | Prerequisites | Command | Test path | Status | Issue |
+|---|---|---|---|---|---|---|
+| Mathlib query | Agent/integration | Lean MCP or public HTTP; Lean for applicability | `using-mathpowers: find add_comm and check it in this project` | `ai/leanpowers-2026-09-20/mcp-handoff/` | Live search and pinned application passed | N/A |
+| Stacks lemma and proof | Agent/integration | Stacks MCP or public HTTP | `using-mathpowers: retrieve tag 0BBY with proof` | `ai/leanpowers-2026-09-20/mcp-integration/` | Live tagged proof retrieval passed; no formalization claim | N/A |
+| Local goal/diagnostics | Integration | Compatible Lean MCP, Lean 4.24 fixture | Discovered `lean_goal` and `lean_diagnostic_messages` tools | `ai/leanpowers-2026-09-20/mcp-integration/` | Good goal and intentional-error checks passed | N/A |
+
+Shared reference: [PROVERS.md](./PROVERS.md) — harness-conditional prover backend
+(ADR 0005).
