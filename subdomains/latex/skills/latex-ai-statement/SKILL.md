@@ -1,6 +1,6 @@
 ---
 name: latex-ai-statement
-description: Read-only audit of a specified .tex file's Software and AI assistance disclosure against the repo's AI-POLICY.md (AI rules) and against the ai-usage.md / tokens.md trail — placement, abstract sentence, model and harness naming, software and skill citations with hyperlinked pinpoint locators, AI-result declarations with literature-search outcomes, human-responsibility statement, and absence of agent-as-warrant or prompt residue. Emits a structured verdict block with per-rule PASS/FAIL/DEFER, counts, and quoted evidence; routes repairs, never applies them. Use on "check the AI statement", "latex-ai-statement", "check-ai-statement", "is the disclosure correct", "audit the software section", before arXiv submission, or as the AI19 gate before any manuscript promotion. NOT for writing the disclosure (write-materials-and-methods) and NOT for the master records themselves (update-ai-usage, update-tokens).
+description: Read-only audit of a specified .tex file's Software and AI assistance disclosure against the repo's AI-POLICY.md (AI rules) and against the ai-usage.md / tokens.md trail — placement, abstract sentence, model and harness naming, software and skill citations with hyperlinked pinpoint locators, self-disclosure that the AI statement itself was generated or drafted by AI, AI-result declarations with literature-search outcomes, human-responsibility statement, and absence of agent-as-warrant or prompt residue. Emits a structured verdict block with per-rule PASS/FAIL/DEFER, counts, and quoted evidence; routes repairs, never applies them. Use on "check the AI statement", "latex-ai-statement", "check-ai-statement", "is the disclosure correct", "audit the software section", before arXiv submission, or as the AI19 gate before any manuscript promotion. NOT for writing the disclosure (write-materials-and-methods) and NOT for the master records themselves (update-ai-usage, update-tokens).
 ---
 
 # latex-ai-statement
@@ -13,6 +13,30 @@ member of the `check-*` family and runs their shared preamble.
 The disclosure is checked against two things at once: the **policy** (what it
 must contain) and the **trail** (what is actually true). A disclosure that
 satisfies the policy but overstates the trail is the worse failure.
+
+The object being audited includes the disclosure itself. When AI drafted or
+revised the Software and AI assistance subsection, that subsection is an
+AI-result and must say so explicitly; a sentence elsewhere saying that AI was
+used does not discharge this requirement.
+
+## Self-disclosure of the AI statement
+
+Require an explicit sentence or paragraph in every audited AI statement that:
+
+1. says that the statement itself was generated, drafted, or written by AI;
+2. identifies the model, harness, and date for the drafting or revision pass
+   (or says which facts were not exposed);
+3. names the skills or workflows actually used to generate, revise, or audit
+   the statement, distinguishing executed skills from skills that were only
+   read or consulted; and
+4. distinguishes AI drafting from human review, acceptance, and responsibility.
+
+The skill chain is evidence, not authority. A skill name must not be presented
+as a mathematical warrant, and a private skill must not be cited by a local
+filesystem path. If the repository policy requires a public version-pinned
+workflow locator but none exists, report the AI3 gap rather than inventing a
+URL. Do not infer the self-disclosure from the audit report: it must appear in
+the manuscript's own statement.
 
 ## Preamble — mandatory
 
@@ -53,7 +77,7 @@ manuscript and delegate the record face. Name the failing face; omit no rule.
 | AI1 | Model id, harness, date on every AI mention; reasoning-effort/temperature where the trail records them. |
 | AI2 | Enumerate from the policy's **declared-tools table**, not from what the `.tex` happens to name — a tool used and never named is the dominant violation. Each has a `.bib` entry and a pinpoint `\cite`; unpaginated sources use AI3's hyperlink locator; no dead entries. **An empty declared-tools table is `EVIDENCE-ABSENT`, never PASS** — a freshly instantiated policy ships it empty, so a vacuous pass here is the likeliest false clear. |
 | AI3 | Skills/packs cited to a public URL pinned at the version used, hyperlinked locator, not a local path. |
-| AI4 | Every trail AI-result declared, with model, harness, and producing skill — drafted prose included. |
+| AI4 | Every trail AI-result declared, with model, harness, and producing skill — drafted prose included. Drafting or revising the AI statement itself is an AI-result and must be explicitly identified with its model, harness, date, and actual skill chain. |
 | AI5 | Per AI-result: hits with pinpoint locators **and** method comparison, or an explicit no-hits statement. |
 | AI6 | Three clauses: no AI system in the author block; no model `\cite` inside a sentence making a mathematical assertion; and no claim whose **stated support is a model** — the third catches "the model proved Lemma 4.2" where no `\cite` appears at all. Origin is fine, warrant is not. |
 | AI7 | Starting material stated, human vs AI provenance distinguished. |
@@ -94,6 +118,8 @@ is missing per DEFER, and report the DEFER count in the verdict.
     Cycle: <n> of 3   Prior report: <path, or none — first run>
     Scope: <n> manuscripts checked   Revision: <commit or version string>
     Rules: <n> checked, <n> delegated [R], <n> DEFER
+    Statement self-disclosure: <n> checked, <n> explicit AI-authorship declarations,
+    <n> missing skill chains, <n> missing human-review clauses
     Findings: <code> <rule> <quoted evidence>
 
 Finding codes: `FAIL`, `DEFER`, `EVIDENCE-ABSENT`, `FLOOR-BREACH`,
@@ -102,7 +128,8 @@ Finding codes: `FAIL`, `DEFER`, `EVIDENCE-ABSENT`, `FLOOR-BREACH`,
 ## Routing
 
 Report first, always. On authorization, route — never apply:
-failed content rules inside the disclosure → `write-materials-and-methods`,
+failed content rules inside the disclosure, including a missing or incomplete
+self-disclosure → `write-materials-and-methods`,
 carrying the **exact required heading string and rule numbers**; an AI6
 author-block failure or AI18 residue **outside** the disclosure is not its
 property — report those to the human, naming the location; citation
