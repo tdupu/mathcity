@@ -73,6 +73,11 @@ Both filed; both had to be worked around by hand.
 
 ### 4.1 Provider resolution — the city ran nothing
 
+> **Superseded 2026-09-23.** The defect below is FIXED: the marker block now
+> writes `[agent_defaults]`, the schema's canonical key. This section is kept as
+> the incident record. For current procedure see
+> [KOLCHIN-SETUP.md](./KOLCHIN-SETUP.md).
+
 [#257](https://github.com/tdupu/mathcity/issues/257). `~/bin/mathcity-provider`
 writes the provider into `[defaults.agent]`, which this `gc` binary discards as
 an unknown field. Every pool was therefore skipped:

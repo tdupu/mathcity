@@ -61,6 +61,7 @@ README.md
 | --- | --- |
 | [SETUP.md](./SETUP.md) | Setup from first principles for supported operator environments. |
 | [docs/INSTALL.md](./docs/INSTALL.md) | Command-level installation guide. |
+| [docs/KOLCHIN-SETUP.md](./docs/KOLCHIN-SETUP.md) | Operating the kolchin server: access, switching Claude accounts, and agent mail. |
 | [README-dolt.md](./README-dolt.md) | Private bead backup and Dolt remote setup. |
 | [GLOSSARY.md](./GLOSSARY.md) | Canonical vocabulary. |
 | [LAYOUT.md](./LAYOUT.md) | Repository folder structure and the subdomain pack model. |
