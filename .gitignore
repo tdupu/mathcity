@@ -1,7 +1,6 @@
 .pytest_cache/
 __pycache__/
 *.py[cod]
-.beads/
 .beads.gate.lock
 
 # Beads / Dolt files (added by bd init)
@@ -34,3 +33,10 @@ docs/salvage/
 # ~/gt/mathcity/mathcity/.codex/. Root-anchored so a legitimately-named
 # mathcity/ subdirectory elsewhere in the tree is unaffected.
 /mathcity/
+
+# The bead store is machine-local and is not tracked -- except identity.toml,
+# which carries the scope's canonical project id. That file declares itself
+# git-tracked, and a clone without it cannot resolve which bead scope it
+# belongs to. Ignore the store, keep the identity.
+.beads/*
+!.beads/identity.toml
