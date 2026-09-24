@@ -38,6 +38,39 @@ all comparison prose has been moved to a separate remark. If two rows would
 share an environment, stop and split the draft before editing the canonical
 file.
 
+### Mechanical check before closing the environment
+
+The one-concept rule is violated far more often than it is invoked,
+including by reviewers looking straight at the violation, because
+nothing catches it: a consequence sentence inside a `definition`
+compiles exactly as well as one outside it. Check it by hand, every
+time, on the draft you are about to write:
+
+- read the body from `\end{enumerate}` — or from the last defining
+  sentence — to `\end{definition}`;
+- every sentence in that span is a defect unless it is itself a
+  definition. "Equivalently, ...", "We identify ... with ...", "Thus $X$
+  is source-side while $Y$ is target-side", "It follows that ..." are
+  consequences, conventions and observations; all of them belong after
+  `\end{definition}`;
+- a convention ranging wider than this one definition belongs to the
+  Conventions section, not to either side of this environment.
+
+When editing an existing definition for any reason, run the same check
+over what is already there, and report violations you do not fix.
+
+### Competing notions each get a definition
+
+When a claim proves false because it conflated several inequivalent
+notions, the repair is structural and it starts here: define each
+candidate notion, with its own environment and label, placed *before*
+the statement that adjudicates them (LX10). The theorem then says under
+what hypotheses they agree, and examples show the hypotheses cannot be
+dropped.
+
+Do not record the conflation as a remark about a previous draft — see
+write-remark. The definitions and the theorem are the record.
+
 ## Drafting
 
 - Scan for notation collisions FIRST: the document's own preamble and

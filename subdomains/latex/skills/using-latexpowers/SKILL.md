@@ -26,6 +26,7 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | “Prove X” / research gap / suspect mathematics | `using-mathpowers` for that obligation, then return here for the requested artifact |
 | Claim needs a source / suspect cite / verification marker | `track-down-reference`; `clean-citations` for citation-repair proposals |
 | Evidenced statement / definition / connecting explanation | `write-proposition` / `write-definition` / `write-remark` |
+| Break an existing proposition into separately proved enumerated items | `break-up-proposition` — the default whenever a proposition environment has multiple items; preserve the mathematics, give each item a stable `\label{item:<slug>}`, cite parts with `\eqref{item:<slug>}`, and signpost each proof as “Proof of `\eqref{item:<slug>}`”; adding items is optional and requires evidence. |
 | Requested stub / discussion-to-skeleton / unresolved X | `rapid-prototype` — conjecture or definition, never a fake proof |
 | Scratch computation → notes | `explain-experiment` |
 | Computed graph / spectrum / mathematical plot | `generate-graphics` — Sage source, checked data, provenance, rendered preview |
@@ -103,6 +104,78 @@ consequence in prose, a remark, or a theorem-class environment outside it.
 The definition environment contains definitions only. Pass requires every
 multi-word definition to have an explicit enumeration and every immediate
 consequence to occur after the closing `\end{definition}`.
+
+The same rule governs **every theorem-class environment**, not only
+`definition`: the environment carries hypotheses and conclusion and nothing
+else. Unpacking ("Explicitly, for every $y$ there is ..."), explication of
+what the statement means, and secondary conclusions imported from a cited
+source go after the closing tag, each introduced by its own connective
+sentence. Test: a sentence that a reader who trusts the statement could skip
+without losing the statement belongs outside the environment. Verify by
+reading the body, never by compiling — a consequence sentence inside an
+environment compiles exactly as well as one outside it, so no build
+diagnostic exists for this defect and reviewers reliably miss it.
+
+## Default for multi-item propositions
+
+Whenever a proposition environment contains multiple `\item`s, invoke
+`break-up-proposition` by default. The standard result is one proposition
+environment whose items have stable semantic labels and one separately
+signposted proof block per item, with item references written as
+`\eqref{item:<slug>}`. This default applies during ordinary manuscript
+cleanup as well as when the user explicitly asks to break up a proposition.
+
+Do not add mathematical items merely because this default is active: preserve
+the existing conclusions and add an item only when the user requests it or
+the evidence supports it. If the parts are actually separate named theorem
+statements, write separate theorem-class environments instead. A user request
+to preserve the existing form overrides this layout default for that target.
+
+## Choosing the environment
+
+When it is unclear whether a fact should be a definition, a proposition, or a
+remark, ask how it would be formalized. The discriminator matches how these
+documents are consumed downstream, including by any Lean development built
+from them:
+
+| The fact, formalized | The environment here |
+|---|---|
+| a `def` — names an object or fixes notation | definition |
+| a `theorem`/`lemma` — has a proof and is applied elsewhere | proposition |
+| a `have` inside one proof, used nowhere else | prose in that proof; do not promote |
+| several separately named theorems | several statements, not one with parts |
+| nothing — no formal counterpart exists | remark, subject to write-remark's limits |
+
+A fact cited more than once earns a number and a label; a fact cited zero
+times is prose, or is deleted; a statement whose parts would be separate
+theorems is written as separate statements. A statement's enumerated parts
+are an interface — cite them by `\eqref{item:...}`, never by a literal "(1)",
+which survives the deletion of the part it names with no diagnostic. Repair a
+broken part-citation by giving each consumed part its own labelled statement,
+not by restoring an enumeration the author has rejected.
+
+The table is silent on motivation, intuition, and worked examples. Those have
+no formal counterpart and are governed by exposition, not by it.
+
+## Process belongs to the disclosure section
+
+The mathematical body states results, never the route to them. No statement,
+proof, or remark says "an earlier draft asserted", "in a previous version",
+or "we initially believed". Where the process itself must be recorded, it
+goes in the repository's AI-assistance/disclosure section and the `ai/` work
+records. This bounds, and does not weaken, the negative-results floor below:
+a refutation survives as mathematics, while the draft that held the refuted
+expectation does not survive at all.
+
+## Segregating imported results
+
+A result imported from the literature is segregated into its own section when
+it is **not immediately obvious to the reader** — a substantial theorem the
+argument leans on, stated so it can be cited and checked. An obvious or
+routine standard fact stays inline where it is used; hoisting it costs the
+reader a lookup for nothing. A section of imported results holds only
+imported results: a statement the paper proves itself does not belong there,
+however technical.
 
 Negative results are results (LX11). When the work behind a document refuted a
 claim, disproved an expectation, found a counterexample, or showed a proposed

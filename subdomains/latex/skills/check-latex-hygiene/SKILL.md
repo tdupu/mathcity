@@ -178,6 +178,38 @@ bead/file and a one-line remediation.
 no compilation target, no owner past draft, self-attested losslessness,
 mixed-concern diff, bead-as-journal, unbeaded gate dodge).
 
+**Pillar 10 — statement hygiene (silent defects).** None of these produce a
+build diagnostic, which is why they survive review; each is mechanically
+detectable and must be checked by inspection, not by compiling.
+
+- LX10.1 **Consequence prose inside an environment.** For each
+  `definition`/`theorem`/`proposition`/`lemma` body, read from the last
+  defining sentence (or `\end{enumerate}`) to the closing tag. Flag any
+  sentence that is a consequence, convention, or explication rather than part
+  of the statement — "Equivalently, ...", "We identify ... with ...", "Thus
+  $X$ is ...", "It follows that ...", "Explicitly, for every ...". These
+  belong after the closing tag. Report the environment's label and the
+  offending sentence.
+- LX10.2 **Ordinal part-citations.** Grep for `\ref{<label>}(1)`,
+  `~\ref{...}(2)`, `Proposition~\ref{...}(3)` and similar literal ordinals
+  naming a part of an enumerated statement. Each is a citation that will
+  survive deletion or reordering of the part it names with no diagnostic.
+  Require `\eqref{item:...}`. Report every site.
+- LX10.3 **Orphan statements.** Any numbered theorem-class statement whose
+  label is never `\ref`'d and whose content is not the document's headline
+  result: report as prose-or-delete. (Cross-check against `\nocite`-style
+  deliberate exceptions before flagging.)
+- LX10.4 **Process narration in the body.** Grep the mathematical body for
+  "earlier draft", "previous version", "originally", "we initially", "used to
+  say", "in an earlier". Process belongs to the AI-assistance/disclosure
+  section and the `ai/` records, never to a statement, proof, or remark. A
+  refutation stated as mathematics ("it is natural to expect $X$; in fact
+  $Y$") is compliant and is NOT flagged.
+- LX10.5 **Text hidden in `\iffalse`.** For each `\iffalse ... \fi` block,
+  report whether anything outside it `\ref`s a label defined inside, and
+  whether it contains a proof step the surrounding argument still asserts.
+  `\iffalse` emits no diagnostic, so parked text can silently become a gap.
+
 ## Output format
 
 ```

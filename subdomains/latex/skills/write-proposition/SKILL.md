@@ -18,6 +18,59 @@ hypotheses in the result, referring to the definition as needed. The
 statement may assert that a previously specified construction is
 well-defined; it must not introduce that construction while asserting it.
 
+## The environment holds the statement and nothing else
+
+A theorem-class environment contains hypotheses and conclusion. Unpacking
+("Explicitly, for every $y$ there is ..."), explication of what the
+statement means, worked notation, and secondary conclusions drawn from a
+cited source all go *after* `\end{...}`, each introduced by its own
+connective sentence rather than run on inside the environment. This is
+the Definition layout rule of `using-latexpowers` applied to every
+theorem-class environment, not only to `definition`.
+
+Test: if a reader who trusts the statement could skip a sentence without
+losing the statement, that sentence is outside the environment.
+
+## Enumerate only the parts that are consumed
+
+Enumerate a statement when more than one of its parts is cited somewhere.
+If exactly one part is used, state one thing and do not enumerate. Before
+enumerating, list the citing site for each intended part; a part with no
+citing site is deleted or demoted to a sentence in the proof, never
+shipped as an unused item.
+
+A statement's parts are an **interface**. Once enumerated and labelled,
+they are consumed by other statements, by later proofs, and by any
+formalization of the document. Therefore:
+
+- Cite a part by `\eqref{item:...}`, never as a literal "(1)", "(2)".
+  A hardcoded ordinal survives the deletion of the part it names and
+  LaTeX reports nothing; an `\eqref` breaks the build, which is the
+  point.
+- De-enumerating or reordering a statement re-points every citation of
+  its parts, in the same edit. Repair such a break by giving each
+  consumed part its own labelled statement — not by restoring an
+  enumerate whose shape the author has already rejected.
+
+## When the environment type is unclear, ask how it would be formalized
+
+A useful discriminator, and the one that matches how these documents are
+actually consumed downstream:
+
+| The fact, in a proof assistant | The environment here |
+|---|---|
+| a `def` — it names an object or fixes notation | definition (write-definition) |
+| a `theorem`/`lemma` — it has a proof and is applied elsewhere | proposition |
+| a `have` inside one proof, used nowhere else | prose inside that proof; do not promote |
+| several separately named theorems | several statements, not one with parts |
+| nothing — it has no formal counterpart | remark, and see write-remark's limits on it |
+
+Corollaries: a fact cited more than once earns a number and a label; a
+fact cited zero times is prose, or is deleted; a statement whose parts
+would be separate theorems is written as separate statements. The test
+is silent on motivation, intuition, and worked examples, which have no
+formal counterpart and are governed by exposition, not by this table.
+
 ## Inputs
 
 The claim, verbatim, and its EVIDENCE: a ledger row with proof-package
