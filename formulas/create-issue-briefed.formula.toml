@@ -117,7 +117,7 @@ TEMPLATE_PATH=""
 if [ -n "$TEMPLATE" ] && [ -f "$TPL_DIR/$TEMPLATE" ]; then
     TEMPLATE_PATH="$TPL_DIR/$TEMPLATE"
 elif [ -d "$TPL_DIR" ]; then
-    TEMPLATE_PATH=$(ls "$TPL_DIR"/*.y*ml "$TPL_DIR"/*.md 2>/dev/null | head -1)
+    TEMPLATE_PATH=$(find "$TPL_DIR" -maxdepth 1 -name '*.y*ml' -o -name '*.md' 2>/dev/null | sort | head -1)
 fi
 # TEMPLATE_PATH may be empty — compose-body then uses a plain issue body.
 ```
