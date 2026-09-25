@@ -23,8 +23,14 @@ authoritative source; this skill is only its enforcement procedure. Report
 what IS (or what the plan DECLARES), never what you wish were true.
 
 > **Status guard (PP2.1):** Read the `| Status |` row in POLICY-city.md's
-> header table at the start of every audit. Never assume a status and never
-> hardcode one here — this skill has been wrong that way before (it asserted
+> header table at the start of every audit. **Parse the FIRST bolded token in
+> that cell — the leading value, before any parenthetical.** Do NOT test whether
+> the row *contains* a status word: the live Adopted cell reads
+> `**Adopted** 2026-09-07 (Draft→Adopted on the pack owner's ...)`, so a
+> substring test matches `Draft` as well as `Adopted`, and a Draft-first check
+> lands on the softening branch against an Adopted policy. Adoption history
+> legitimately names the prior status and always will. Never assume a status and
+> never hardcode one here — this skill has been wrong that way before (it asserted
 > `Draft` for nine days after the policy was Adopted on 2026-09-07, softening
 > every finding in that window). Three branches:
 >
