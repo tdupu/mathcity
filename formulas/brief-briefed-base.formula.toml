@@ -135,7 +135,7 @@ gc runtime drain-ack; exit 0
 id = "file-brief"
 needs = ["compose-body"]
 title = "File the drafted body as a decision brief for {{source_bead}}"
-metadata = { "gc.run_target" = "mathcity.brief-operator", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "{{source_formula}}", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
+metadata = { "gc.run_target" = "{{brief_operator}}", "gc.brief.slug" = "{{brief_slug}}", "gc.brief.source" = "{{source_bead}}", "gc.brief.source_formula" = "{{source_formula}}", "gc.brief.source_step" = "file-brief", "gc.brief.routing_path" = "{{routing_path}}", "gc.brief.producer_contract" = "brief-producer.v1", "gc.brief.path" = "{{artifact_root}}/.pile/{{brief_slug}}.md" }
 description = """
 THE SHARED TERMINAL. Deposit the drafted body (written to
 `$GC_WORK_DIR/{{brief_slug}}-body.md` by `compose-body`) as a `brief-producer.v1`
