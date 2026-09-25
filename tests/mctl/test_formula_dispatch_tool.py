@@ -102,6 +102,7 @@ def test_the_tool_refuses_an_unknown_formula() -> None:
         formula="definitely-not-a-real-formula",
         catalogue=("do-work", "review", "brief-prep"),
         target="myrig/gc.run-operator",
+        targets=["myrig/gc.run-operator"],
         bead_id=None,
         variables={},
     )
@@ -118,6 +119,7 @@ def test_a_known_formula_plans_a_sling_with_its_vars() -> None:
         formula="brief-prep",
         catalogue=("do-work", "brief-prep"),
         target="myrig/gc.run-operator",
+        targets=["myrig/gc.run-operator"],
         bead_id=None,
         variables={"brief_slug": "s", "source": "SUBJECT.md"},
     )
@@ -144,6 +146,7 @@ def test_a_bead_id_selects_the_targeted_on_form() -> None:
         formula="do-work",
         catalogue=("do-work",),
         target="myrig/gc.run-operator",
+        targets=["myrig/gc.run-operator"],
         bead_id="mc-123",
         variables={},
     )
@@ -168,8 +171,111 @@ def test_variable_values_are_never_shell_joined() -> None:
         formula="review",
         catalogue=("review",),
         target="myrig/gc.run-operator",
+        targets=["myrig/gc.run-operator"],
         bead_id=None,
         variables={"report_path": "a b; rm -rf /"},
     )
     assert plan["ok"] is True
     assert "report_path=a b; rm -rf /" in plan["command"]
+
+
+# --- mc-6hv87: a dispatch to an agent with no sessions reported exit 0 -------
+#
+# Three workflows were dispatched to `magma_diff_alg/gc.run-operator`. All three
+# returned `outcome: "dispatched", exit_code: 0`. None could ever run: that rig
+# declares no `gc.run-operator` at all, so the molecules attached, decomposed
+# into step beads, and waited two days for a worker that cannot exist.
+#
+# The defect is not the missing pool -- a rig without workers is a configuration
+# choice. The defect is the SUCCESS REPORT. This module already refuses a
+# formula the city does not have, for the reason its own docstring gives: so it
+# is "not slung and left to fail somewhere downstream where the caller cannot
+# see it". A target the city cannot route is the same failure and was not
+# refused, because `plan_formula_dispatch` is handed a `catalogue` to check the
+# formula against and nothing to check the target against.
+#
+# Worse, the caller need not even name the bad target. `_handle_formula_dispatch`
+# defaults it to f"{ctx.rig_id}/gc.run-operator" unconditionally, so a Mayor who
+# omits `target` gets a fabricated one that may not exist.
+
+
+def _known_targets():
+    return ["hecke/gc.run-operator", "gascity-packs/gc.run-operator"]
+
+
+def test_the_tool_refuses_a_target_with_no_configured_sessions() -> None:
+    """The load-bearing new test: an unroutable dispatch must refuse, not report success."""
+    from mctl_core.formula_dispatch import plan_formula_dispatch
+
+    plan = plan_formula_dispatch(
+        formula="build-basic-briefed",
+        catalogue=["build-basic-briefed"],
+        target="magma_diff_alg/gc.run-operator",
+        targets=_known_targets(),
+        bead_id="mda-9j4",
+        variables={},
+    )
+
+    assert plan["ok"] is False, (
+        "a dispatch to an agent with zero configured sessions reported ok -- "
+        "this is mc-6hv87: exit 0 for work that provably cannot execute"
+    )
+    assert plan["code"] == "MFRM_UNROUTABLE_TARGET"
+    assert "magma_diff_alg/gc.run-operator" in plan["message"], (
+        "the refusal must name the target; a bare 'unroutable' cannot be acted on, "
+        "which is the same reason UNKNOWN_FORMULA names the formula"
+    )
+
+
+def test_the_refusal_names_targets_that_would_work() -> None:
+    """A typo'd rig is the common case and the caller cannot fix it from a bare refusal."""
+    from mctl_core.formula_dispatch import plan_formula_dispatch
+
+    plan = plan_formula_dispatch(
+        formula="build-basic-briefed",
+        catalogue=["build-basic-briefed"],
+        target="heckeee/gc.run-operator",
+        targets=_known_targets(),
+        bead_id=None,
+        variables={},
+    )
+    assert plan["ok"] is False
+    assert plan.get("routable_targets"), "refusal must offer the targets that do have capacity"
+
+
+def test_a_routable_target_still_plans_normally() -> None:
+    """Regression guard: the check must not refuse dispatches that were always fine."""
+    from mctl_core.formula_dispatch import plan_formula_dispatch
+
+    plan = plan_formula_dispatch(
+        formula="build-basic-briefed",
+        catalogue=["build-basic-briefed"],
+        target="hecke/gc.run-operator",
+        targets=_known_targets(),
+        bead_id="he-1",
+        variables={"k": "v"},
+    )
+    assert plan["ok"] is True, "a target with capacity must still dispatch"
+    assert plan["command"][:3] == ["gc", "sling", "hecke/gc.run-operator"]
+
+
+def test_an_unknown_roster_does_not_silently_pass_everything() -> None:
+    """If the roster cannot be read, the tool must say so rather than assume every target is fine.
+
+    This is the failure mode the guard exists to prevent, one level up: an
+    unreadable roster that defaults to "allow" restores exit-0-for-everything
+    while looking like a working check. `build_fleet_sessions` already reports
+    MCTL_FLEET_STATUS_PROBE_FAILED rather than returning an empty roster.
+    """
+    from mctl_core.formula_dispatch import plan_formula_dispatch
+
+    plan = plan_formula_dispatch(
+        formula="build-basic-briefed",
+        catalogue=["build-basic-briefed"],
+        target="anything/gc.run-operator",
+        targets=None,
+        bead_id=None,
+        variables={},
+    )
+    assert plan["ok"] is False
+    assert plan["code"] == "MFRM_TARGETS_UNKNOWN"

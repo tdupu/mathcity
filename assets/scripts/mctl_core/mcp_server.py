@@ -702,6 +702,7 @@ def _handle_formula_dispatch(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
         formula=arguments["formula"],
         catalogue=catalogue,
         target=arguments.get("target") or f"{ctx.rig_id}/gc.run-operator",
+        targets=_dispatchable_targets(ctx),
         bead_id=arguments.get("bead_id"),
         variables=arguments.get("vars") or {},
     )
@@ -714,6 +715,55 @@ def _handle_formula_dispatch(ctx: MctlContext, arguments: Mapping[str, Any]) -> 
         payload["applied"] = bool(payload["dispatch"].get("applied"))
     payload["diagnostics"] = _diagnostics(ctx, ())
     return payload
+
+
+
+def _dispatchable_targets(ctx: "MctlContext") -> list[str] | None:
+    """Agent names this city can actually route a dispatch to (mc-6hv87).
+
+    Read from `build_fleet_sessions`, the SAME reader the `fleet_sessions` tool
+    uses -- so what this refuses and what that tool shows cannot disagree, for
+    the reason the catalogue read above gives: it makes a refusal a fact rather
+    than an opinion.
+
+    Returns None when the roster is unreadable, and the planner refuses on None.
+    An unreadable roster must not read as "everything is routable": that would
+    restore the exit-0-for-everything this guard removes while looking like a
+    working check.
+
+    A slot is reported per INSTANCE (`hecke/gc.run-operator-3`), while a
+    dispatch names the AGENT (`hecke/gc.run-operator`). So each instance is
+    folded back to its agent by dropping a trailing `-<digits>`. Both forms are
+    kept: some agents are reported unnumbered (`hecke/core.control-dispatcher`
+    in the fleet fixtures), and a caller may legitimately name one instance.
+    """
+    import os
+    import re
+
+    from .fleet import build_fleet_sessions
+
+    try:
+        scope = resolve_city(
+            ctx.invocation_cwd,
+            city=ctx.city_root,
+            require_runtime_city=True,
+            env=os.environ,
+            trace_id=ctx.trace_id,
+        )
+        report = build_fleet_sessions(scope)
+    except Exception:  # noqa: BLE001 -- unreadable roster is a refusal, not a crash
+        return None
+    if any(getattr(d, "code", "") == "MCTL_FLEET_STATUS_PROBE_FAILED" for d in report.diagnostics):
+        return None
+
+    names: set[str] = set()
+    for slot in report.slots:
+        qualified = getattr(slot, "qualified_name", None)
+        if not isinstance(qualified, str) or not qualified:
+            continue
+        names.add(qualified)
+        names.add(re.sub(r"-\d+$", "", qualified))
+    return sorted(names)
 
 
 def _handle_formulas_catalog(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:

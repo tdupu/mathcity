@@ -53,6 +53,8 @@ __all__ = ["plan_formula_dispatch"]
 UNKNOWN_FORMULA = "MFRM_UNKNOWN_FORMULA"
 NO_TARGET = "MFRM_NO_TARGET"
 BAD_VARIABLE = "MFRM_BAD_VARIABLE"
+UNROUTABLE_TARGET = "MFRM_UNROUTABLE_TARGET"
+TARGETS_UNKNOWN = "MFRM_TARGETS_UNKNOWN"
 
 
 def _refusal(code: str, message: str, **extra: Any) -> dict[str, Any]:
@@ -64,6 +66,7 @@ def plan_formula_dispatch(
     formula: str,
     catalogue: Iterable[str],
     target: str,
+    targets: Iterable[str] | None,
     bead_id: str | None,
     variables: Mapping[str, str] | None,
 ) -> dict[str, Any]:
@@ -90,6 +93,38 @@ def plan_formula_dispatch(
             NO_TARGET,
             "a dispatch needs a target agent, e.g. '<rig>/gc.run-operator'",
             formula=formula,
+        )
+
+    # mc-6hv87. The formula is resolved against the catalogue three lines up so
+    # a name the city does not have is refused here rather than failing
+    # downstream where the caller cannot see it. The target had no such check,
+    # and the asymmetry cost two days: three workflows were dispatched to
+    # `magma_diff_alg/gc.run-operator`, a rig that declares no run-operator at
+    # all, and all three returned exit 0. They attached, decomposed into step
+    # beads, and waited for a worker that cannot exist.
+    #
+    # A roster we could not read must NOT default to allow. That would restore
+    # exit-0-for-everything while looking like a working check, which is the
+    # failure this guard exists to remove, one level up.
+    if targets is None:
+        return _refusal(
+            TARGETS_UNKNOWN,
+            "the configured agent roster could not be read, so whether "
+            f"{target!r} can run anything is unknown; refusing rather than "
+            "dispatching into the dark",
+            formula=formula,
+            target=target,
+        )
+
+    routable = tuple(targets)
+    if target not in routable:
+        return _refusal(
+            UNROUTABLE_TARGET,
+            f"{target!r} has no configured sessions in this city, so a dispatch "
+            "to it would attach and then wait for a worker that cannot exist",
+            formula=formula,
+            target=target,
+            routable_targets=sorted(routable)[:10],
         )
 
     items = dict(variables or {})
