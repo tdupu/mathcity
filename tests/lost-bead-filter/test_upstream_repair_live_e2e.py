@@ -15,7 +15,32 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# This file is a DELIBERATE red-phase test: it stays red until a live dispatch of
+# lost-bead-upstream-repair-rollup files a real decision brief. That red is the
+# signal and must be preserved.
+#
+# But it reads ~/gt -- the gascity twin -- which exists on some hosts and not
+# others. On a host without it every test here died with
+# FileNotFoundError: '/Users/<user>/gt' BEFORE reaching its assertion, so the red
+# meant "cannot look", not "not done yet". A deliberately-failing test that fails
+# for the wrong reason can never turn green and hides the condition it exists to
+# report.
+#
+# SKIP, not xfail and not pass: skipped is reported distinctly by pytest, so a
+# host that cannot evaluate this says so instead of borrowing either verdict.
+GT_ROOT = Path.home() / "gt"
+pytestmark = pytest.mark.skipif(
+    not GT_ROOT.is_dir(),
+    reason=(
+        f"{GT_ROOT} is absent on this host; this live-E2E test reads the gascity "
+        "twin's real classification data. Cannot evaluate here -- which is not the "
+        "same as the live dispatch not having happened."
+    ),
+)
 
 
 def _bd_search(query: str) -> str:
