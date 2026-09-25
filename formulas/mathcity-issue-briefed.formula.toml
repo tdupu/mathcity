@@ -131,7 +131,7 @@ elif [ -d "$TPL_DIR" ]; then
       feature) TEMPLATE_PATH=$(ls "$TPL_DIR"/feat*.y*ml 2>/dev/null | head -1) ;;
       docs)    TEMPLATE_PATH=$(ls "$TPL_DIR"/doc*.y*ml 2>/dev/null | head -1) ;;
     esac
-    [ -z "$TEMPLATE_PATH" ] && TEMPLATE_PATH=$(ls "$TPL_DIR"/*.y*ml "$TPL_DIR"/*.md 2>/dev/null | grep -v '/config.y' | head -1)
+    [ -z "$TEMPLATE_PATH" ] && TEMPLATE_PATH=$(find "$TPL_DIR" -maxdepth 1 -name '*.y*ml' -o -name '*.md' 2>/dev/null | sort | grep -v '/config.y' | head -1)
 fi
 ```
 The templates are the enforcement point and they change without telling you — read
