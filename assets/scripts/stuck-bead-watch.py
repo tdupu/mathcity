@@ -555,9 +555,23 @@ def _gc_session_list_active() -> list[dict]:
     return data.get("sessions", data if isinstance(data, list) else [])
 
 
+# `gc dolt health` exit codes, per its own source
+# (gascity examples/bd/dolt/commands/health/run.sh, final block):
+#
+#   0  server reachable, no quarantine
+#   2  server reachable, a compaction quarantine is standing (auto-GC blocked)
+#   1  server NOT reachable
+#
+# That script's comment is explicit that 2 exists "so CLI and CI callers can
+# catch a blocked compaction without conflating it with an unreachable
+# server (1)". Treating every non-zero code as unreachable re-introduces
+# exactly the conflation the code was added to prevent.
+_HEALTH_OK = frozenset((0, 2))
+
+
 def _preflight() -> None:
     result = _run(["gc", "dolt", "health"], capture_output=True, text=True)
-    if result.returncode != 0:
+    if result.returncode not in _HEALTH_OK:
         print(
             "I'm sorry, I can't do that — Dolt is unreachable.\n"
             "Run 'gc dolt start' and retry.\n"

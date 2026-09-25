@@ -10,9 +10,9 @@ SCRIPT_DIR="$(cd "$HERE/../../assets/scripts" && pwd)"
 
 echo "=== running unit tests ==="
 cd "$HERE/../.."
-python3 -m pytest tests/stuck-bead-watch/test_stuck_bead_watch.py -v
+"${PYTHON:-python3}" -m pytest tests/stuck-bead-watch/test_stuck_bead_watch.py -v
 
 echo "=== verifying script is syntactically valid and --help works ==="
-python3 "$SCRIPT_DIR/stuck-bead-watch.py" --help > /dev/null
+"${PYTHON:-python3}" "$SCRIPT_DIR/stuck-bead-watch.py" --help > /dev/null
 
 echo "ALL STUCK-BEAD-WATCH SMOKE CHECKS PASSED"

@@ -1,0 +1,51 @@
+description = """
+Lean formalization — stage 3: choose representations, then implement them.
+
+A reusable expansion, and the stage where most formalizations are won or lost. A
+bad representation choice is not a bug you fix later — it silently makes later
+theorems unprovable or, worse, provable but not meaning what the source meant.
+
+The two steps are deliberately split across tiers per POLICY-formulas F1.1/F1.2:
+CHOOSING the representation is mathematical judgment and routes to a planning
+role; IMPLEMENTING the chosen representation is execution.
+
+Carries the group-schemes-over-ZZ constraint as an explicit gate: theory that
+assumes characteristic zero or a field of scalars is a representation error that
+must be caught HERE, not after the proofs are written.
+
+Skills: lean-design-definitions, lean-define, lean-search.
+"""
+formula = "lean-formalize-definitions"
+type = "expansion"
+version = 1
+contract = "graph.v2"
+
+[catalog]
+name = "lean-formalize-definitions"
+description = "Stage 3 of Lean formalization: choose mathematical representations (planning tier), verify base-ring assumptions, then implement the agreed definitions and instances (execution tier)."
+
+[vars]
+[vars.base_ring_constraint]
+description = "Required base for the theory. Stated explicitly because assuming QQ where ZZ is required invalidates downstream targets."
+default = "ZZ"
+
+[[template]]
+id = "{target}.design-definitions"
+title = "Choose mathematical representations"
+metadata = { "gc.run_target" = "gc.design-author" }
+description_file = "../assets/workflows/lean-formalize-definitions/{target}.design-definitions.md"
+
+[[template]]
+id = "{target}.define"
+title = "Implement the agreed definitions"
+needs = ["{target}.design-definitions"]
+metadata = { "gc.run_target" = "gc.implementation-worker" }
+description_file = "../assets/workflows/lean-formalize-definitions/{target}.define.md"
+
+[template.check]
+max_attempts = 3
+
+[template.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/lean-baseline-green.sh"
+timeout = "20m"

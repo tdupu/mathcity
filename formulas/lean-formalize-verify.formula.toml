@@ -1,0 +1,60 @@
+description = """
+Lean formalization — stage 6: produce evidence, not assertion.
+
+A reusable expansion, and the stage that decides whether the work counts. Three
+distinct questions, deliberately not collapsed:
+
+  lean-verify   does it BUILD, and on what axioms?
+  lean-fidelity does the Lean say what the SOURCE said?
+  lean-status   what is formalized, what is conditional, what is blocked?
+
+A green build is not fidelity. A formalization can build perfectly and prove
+something the manuscript never claimed. The TauCeti contract states this in its own
+words: "a passing build is not formalization, roadmap, or review approval."
+
+Enforces the three-count invariant: every `sorry`/`admit` in the project must have a
+matching named gap entry AND an open bead. The counts must be equal.
+
+Skills: lean-verify, lean-fidelity, lean-status.
+"""
+formula = "lean-formalize-verify"
+type = "expansion"
+version = 1
+contract = "graph.v2"
+
+[catalog]
+name = "lean-formalize-verify"
+description = "Stage 6 of Lean formalization: build and axiom check, source-fidelity review, and a status accounting in which sorry count, gap entries and open beads must match."
+
+[vars]
+[vars.gap_document]
+description = "Path to the formalization-facing manuscript holding named gap entries (e.g. cliff-revised-lean.tex)."
+default = ""
+
+[[template]]
+id = "{target}.verify-build"
+title = "Verify build, coverage and axioms"
+metadata = { "gc.run_target" = "gc.run-operator" }
+description_file = "../assets/workflows/lean-formalize-verify/{target}.verify-build.md"
+
+[[template]]
+id = "{target}.verify-fidelity"
+title = "Check the formalization against the source"
+needs = ["{target}.verify-build"]
+metadata = { "gc.run_target" = "gc.review-synthesizer" }
+description_file = "../assets/workflows/lean-formalize-verify/{target}.verify-fidelity.md"
+
+[[template]]
+id = "{target}.verify-accounting"
+title = "Reconcile sorries, gap entries and beads"
+needs = ["{target}.verify-fidelity"]
+metadata = { "gc.run_target" = "gc.run-operator" }
+description_file = "../assets/workflows/lean-formalize-verify/{target}.verify-accounting.md"
+
+[template.check]
+max_attempts = 2
+
+[template.check.check]
+mode = "exec"
+path = ".gc/scripts/checks/lean-gap-accounting.sh"
+timeout = "10m"

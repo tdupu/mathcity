@@ -1,0 +1,105 @@
+description = """
+Lean formalization — the orchestrator.
+
+Chains the six stage expansions by `needs` edges into one graph:
+
+  baseline -> claims -> definitions -> statement -> prove -> verify
+
+A reusable expansion (ADR 0007: expansion is the default; a domain needs no matching
+gascity base, and inventing a Lean base contract would be the special case done
+first). Each stage remains independently usable — a caller who only wants a claim
+inventory expands `lean-formalize-claims` directly.
+
+The ordering is not stylistic. Definitions before statements because a
+representation choice determines which statements are even expressible; statements
+before proofs because a proved theorem with a wrong statement produces a green build
+certifying a false claim; verification last and separate because a passing build is
+not fidelity.
+
+This is a CAPABILITY, not terminal MathCity work (POLICY-formulas F8.3). Work that
+must end in the brief cycle runs `lean-formalize-briefed`, which wraps this.
+"""
+formula = "lean-formalize"
+type = "expansion"
+version = 1
+contract = "graph.v2"
+
+[catalog]
+name = "lean-formalize"
+description = "End-to-end Lean formalization capability: workspace baseline, claim inventory, representation design, statement alignment, bounded proof loop, and evidence verification, chained by needs edges."
+
+[vars]
+[vars.source_document]
+description = "Source manuscript being formalized."
+default = ""
+
+[vars.scope_box]
+description = "The bounded section under formalization. Required: an unstated scope makes the task unbounded."
+default = ""
+
+[vars.lean_project_dir]
+description = "Path to the Lean project."
+default = ""
+
+[vars.base_ring_constraint]
+description = "Required base for the theory (e.g. ZZ). Checked at stage 3."
+default = "ZZ"
+
+[vars.gap_document]
+description = "Formalization-facing manuscript holding named gap entries."
+default = ""
+
+[vars.allow_cold_build]
+description = "Whether a cold Mathlib build may be started. Default false."
+default = "false"
+
+[[template]]
+id = "{target}.baseline"
+title = "Lean workspace and toolchain baseline"
+metadata = { "gc.run_target" = "gc.run-operator" }
+expand = "lean-formalize-baseline"
+expand_vars = { lean_project_dir = "{{lean_project_dir}}", allow_cold_build = "{{allow_cold_build}}" }
+description_file = "../assets/workflows/lean-formalize/{target}.baseline.md"
+
+[[template]]
+id = "{target}.claims"
+title = "Inventory the source claims"
+needs = ["{target}.baseline"]
+metadata = { "gc.run_target" = "gc.requirements-planner" }
+expand = "lean-formalize-claims"
+expand_vars = { source_document = "{{source_document}}", scope_box = "{{scope_box}}" }
+description_file = "../assets/workflows/lean-formalize/{target}.claims.md"
+
+[[template]]
+id = "{target}.definitions"
+title = "Design and implement representations"
+needs = ["{target}.claims"]
+metadata = { "gc.run_target" = "gc.design-author" }
+expand = "lean-formalize-definitions"
+expand_vars = { base_ring_constraint = "{{base_ring_constraint}}" }
+description_file = "../assets/workflows/lean-formalize/{target}.definitions.md"
+
+[[template]]
+id = "{target}.statement"
+title = "Align statements with the source"
+needs = ["{target}.definitions"]
+metadata = { "gc.run_target" = "gc.design-author" }
+expand = "lean-formalize-statement"
+description_file = "../assets/workflows/lean-formalize/{target}.statement.md"
+
+[[template]]
+id = "{target}.prove"
+title = "Prove the aligned statements"
+needs = ["{target}.statement"]
+metadata = { "gc.run_target" = "gc.run-operator" }
+expand = "lean-formalize-prove"
+description_file = "../assets/workflows/lean-formalize/{target}.prove.md"
+
+[[template]]
+id = "{target}"
+title = "Verify the formalization"
+needs = ["{target}.prove"]
+metadata = { "gc.run_target" = "gc.run-operator" }
+expand = "lean-formalize-verify"
+expand_vars = { gap_document = "{{gap_document}}" }
+description_file = "../assets/workflows/lean-formalize/{target}.md"

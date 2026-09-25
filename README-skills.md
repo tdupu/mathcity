@@ -267,7 +267,7 @@ for exact review versions, executed checks and remaining limits.
 | `new-repo-style-policy` | `mathcity-repo-docs.new-repo-style-policy` | Sole write path for a repo's STYLE.md — writing rules and style variables; human-gated |
 | `triage-variants` | `mathcity-repo-docs.triage-variants` | Disposition each undeclared sibling .tex — merge/demote/declare/delete — one human approval per file; brownfield fork-not-merge repair |
 
-### Proof assistants — `subdomains/lean/skills/`  (11)
+### Proof assistants — `subdomains/lean/skills/`  (41)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -282,3 +282,4 @@ for exact review versions, executed checks and remaining limits.
 | `search-mathlib` | `mathcity-lean.search-mathlib` | Search Mathlib with LeanSearch/Loogle MCP or direct/local fallback; verify candidates under the target pin |
 | `search-scholar` | `mathcity-lean.search-scholar` | Search Google Scholar / Semantic Scholar for papers via MCP and return citations and metadata |
 | `search-stacks` | `mathcity-lean.search-stacks` | Retrieve tagged Stacks statements/proofs by MCP or direct HTTP; preserve informal source evidence |
+| `lean-frontier-dump` | `mathcity-lean.lean-frontier-dump` | Dump the mathematical frontier around a STUCK Lean goal — goal state, nearby Mathlib, the gap as a provable proposition, candidate and refuted routes — to a dated `ai/` package; type-3 obstructions only |

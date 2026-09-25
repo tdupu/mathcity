@@ -1,0 +1,37 @@
+description = """
+Lean formalization — stage 4: align ONE theorem's full type with the source.
+
+A reusable expansion, run once per target theorem. Kept separate from stage 5
+(proving) on purpose: a proved theorem whose STATEMENT does not mean what the
+source said is worse than no theorem, because the green build now certifies the
+wrong claim. Statement alignment and proof are separate gates and must not be
+collapsed into one step.
+
+Skills: lean-align-statement, lean-search.
+"""
+formula = "lean-formalize-statement"
+type = "expansion"
+version = 1
+contract = "graph.v2"
+
+[catalog]
+name = "lean-formalize-statement"
+description = "Stage 4 of Lean formalization: translate one source claim into a full Lean theorem statement and verify the type means what the source means, before any proof is attempted."
+
+[vars]
+[vars.claim_id]
+description = "Id of the claim from the stage-2 inventory that this statement formalizes."
+default = ""
+
+[[template]]
+id = "{target}.align-statement"
+title = "Translate the claim into a Lean statement"
+metadata = { "gc.run_target" = "gc.design-author" }
+description_file = "../assets/workflows/lean-formalize-statement/{target}.align-statement.md"
+
+[[template]]
+id = "{target}.statement-fidelity"
+title = "Check the statement against the source claim"
+needs = ["{target}.align-statement"]
+metadata = { "gc.run_target" = "gc.review-synthesizer" }
+description_file = "../assets/workflows/lean-formalize-statement/{target}.statement-fidelity.md"

@@ -1,0 +1,140 @@
+description = """
+Lean formalization with a decision-brief terminal — the terminal MathCity work
+formula for the lean-formalize family.
+
+WHY THIS EXISTS. The seven `lean-formalize*` expansions are CAPABILITIES, not
+terminal work: POLICY-formulas F8.3 says imported/non-briefed formulas are
+capabilities, and F8.1 requires every MathCity-owned `-briefed` formula to
+terminate in the brief cycle. Running `lean-formalize` alone produces Lean and no
+decision. This wrapper produces the decision.
+
+SHAPE. Extends `brief-briefed-base` and overrides `intake` and `compose-body` BY
+ID, in position, inheriting `file-brief` unchanged as the terminal. It does NOT
+append steps: the base's merge rule (gascity internal/formula/parser.go,
+mergeSteps) APPENDS an unknown child id after the parent's steps, which would land
+it after `file-brief` and break F8.1. Two overrides, no third id.
+
+WHAT IS BEING DECIDED. A formalization is not self-adjudicating. A green build
+answers "is this valid Lean"; it does not answer "should this land", "is the gap
+set acceptable", or "is the representation the one we want to live with". Those
+are human calls, and the brief exists to put them in front of a human with the
+evidence attached — the axiom list, the fidelity verdict, and the three-count
+reconciliation of sorries against gap entries against beads.
+
+DOES NOT SHIP. No push, no PR, no merge. The commissioned action runs only after
+adjudication, through the normal verdict edge.
+"""
+formula = "lean-formalize-briefed"
+version = 1
+extends = ["brief-briefed-base"]
+target_required = true
+
+[catalog]
+name = "lean-formalize-briefed"
+description = "Formalize a bounded scope in Lean via the lean-formalize capability, then terminate in a decision brief carrying the build, axiom, fidelity and gap-accounting evidence a human needs to rule on it."
+
+[vars]
+[vars.source_formula]
+description = "Leaf formula producing the brief. Overrides the base default for honest provenance (base default is a usage error if left)."
+default = "lean-formalize-briefed"
+
+[vars.routing_path]
+description = "Route from wrapper to producer, stamped into brief routing metadata."
+default = "lean-formalize-briefed,brief-briefed-base"
+
+[vars.terminal_action]
+description = "What an APPROVED brief commissions. dispatch-fix: the approved formalization is slung for landing through the normal publish path. Never executed here."
+default = "dispatch-fix"
+
+[vars.source_document]
+description = "Source manuscript being formalized."
+default = ""
+
+[vars.scope_box]
+description = "The bounded section under formalization. REQUIRED: an unstated scope makes the task unbounded, which is how a 7,681-line manuscript becomes an unbounded run."
+default = ""
+
+[vars.lean_project_dir]
+description = "Path to the Lean project."
+default = ""
+
+[vars.base_ring_constraint]
+description = "Required base for the theory. Checked at the definitions stage; assuming a field where an integral base is required invalidates downstream targets."
+default = "ZZ"
+
+[vars.gap_document]
+description = "Formalization-facing manuscript holding named gap entries, beside the source manuscript."
+default = ""
+
+[vars.allow_cold_build]
+description = "Whether a cold Mathlib build may be started. Default false: it is a multi-hour operation and a human decision."
+default = "false"
+
+[[steps]]
+id = "intake"
+title = "Formalize the bounded scope"
+metadata = { "gc.run_target" = "{{operator_target}}" }
+expand = "lean-formalize"
+expand_vars = { source_document = "{{source_document}}", scope_box = "{{scope_box}}", lean_project_dir = "{{lean_project_dir}}", base_ring_constraint = "{{base_ring_constraint}}", gap_document = "{{gap_document}}", allow_cold_build = "{{allow_cold_build}}" }
+description = """
+Run the `lean-formalize` capability over the bounded scope and collect its
+evidence. Follow that expansion's own step descriptions; do not re-derive them.
+
+SCOPE IS BOUNDED AND STATED. If `scope_box` is empty, STOP and report that the
+scope was never stated. Do not infer it from the whole document — an unbounded
+scope is how a bounded task becomes an open-ended one.
+
+STOP AND REPORT, do not push through, if any of these hold:
+  - the baseline cannot be established without a cold Mathlib build;
+  - a representation fails the base-ring constraint (that may invalidate a
+    roadmap target, which is a human decision);
+  - the proof loop exhausts its bound (the honest output is a recorded
+    obstruction via `lean-frontier-dump`, not another tactic).
+
+A partial result reported AS partial is a usable input to a decision. A partial
+result reported as complete is not.
+
+CARRY FORWARD, verbatim, for the brief body: the claim inventory with counts, the
+exact build command and its exit code, the per-theorem axiom list, the fidelity
+verdict per claim, and the three-count reconciliation (sorries / gap entries /
+open beads). Numbers you did not measure are not evidence.
+"""
+
+[[steps]]
+id = "compose-body"
+title = "Compose the formalization decision brief"
+needs = ["intake"]
+metadata = { "gc.run_target" = "{{operator_target}}" }
+description = """
+Compose the brief body from the intake step's evidence. Decision-at-Top is an
+INVARIANT: section 1 is "What is being decided", before origin, mathematics,
+timeline or gates.
+
+WHAT IS BEING DECIDED — state it as a question with concrete options, e.g.
+"Land this formalization of <scope_box> as-is with N recorded gaps, or hold it
+until gaps G1/G2 close?" Never "review this formalization".
+
+Then, in order:
+
+1. **Scope** — `scope_box`, and what was deliberately left out.
+2. **Coverage** — claims in scope, formalized, recorded as gaps. Numbers.
+3. **Build evidence** — the exact command, its exit code, and the axiom list per
+   theorem. `sorryAx` anywhere means the theorem is NOT proved whatever the build
+   says; say so plainly rather than reporting a green build.
+4. **Fidelity** — the per-claim verdict. A green build is not fidelity; if the
+   fidelity pass did not run, say it did not run rather than omitting the row.
+5. **Gap accounting** — the three counts and whether they match, with each `sorry`
+   paired to its file:line, gap entry and bead id. If they do not match, that is
+   the finding, not a detail to smooth over.
+6. **Representation decisions** — what was chosen, what was rejected, and any that
+   a reviewer would plausibly want revisited.
+7. **Recommended action** — with the residual risk named.
+
+HONESTY GATE. If a section's evidence is missing, write "not measured" and say
+why. Do not infer a value, and do not omit the section — an omitted row reads as
+a passed check. The whole purpose of this brief is that a human can rule on
+evidence, and a fabricated or silently-absent row destroys that.
+
+Do NOT execute the commissioned action. No push, no PR, no sling. The inherited
+`file-brief` terminal deposits the brief; the action follows adjudication.
+"""

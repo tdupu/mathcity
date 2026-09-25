@@ -52,7 +52,31 @@ if [ "${#ROOTS[@]}" -eq 0 ]; then
   ROOTS=(tests)
 fi
 
-PYTHON_BIN="${PYTHON:-python3}"
+# Resolve an interpreter that can actually import pytest.
+# Measured 2026-09-24: bare `python3` on this host is Homebrew's PEP-668 python
+# with NO pytest, so `python3 -m pytest` silently collected 234 files and ran
+# ZERO of them while the summary reported a pytest FAILURE. An interpreter that
+# cannot import pytest must fail LOUDLY here, not produce an unrunnable list.
+# Explicit paths, tested one at a time -- a multi-glob existence check aborts
+# the whole command under zsh NOMATCH and reports confident absence with exit 0.
+_pytest_ok() { [ -x "$1" ] && "$1" -c 'import pytest' >/dev/null 2>&1; }
+PYTHON_BIN=""
+for _cand in "${PYTHON:-}" "$HOME/.venvs/mathcity-tests/bin/python" python3; do
+  [ -n "$_cand" ] || continue
+  _resolved="$(command -v "$_cand" 2>/dev/null || printf '%s' "$_cand")"
+  if _pytest_ok "$_resolved"; then PYTHON_BIN="$_resolved"; break; fi
+done
+if [ -z "$PYTHON_BIN" ]; then
+  PYTHON_BIN="${PYTHON:-python3}"
+  echo "run-local-tests: WARNING -- no interpreter with pytest found." >&2
+  echo "  tried: \$PYTHON, ~/.venvs/mathcity-tests/bin/python, python3" >&2
+  echo "  Every pytest file will be COLLECTED AND NOT RUN. A pytest failure" >&2
+  echo "  below means 'could not run', not 'tests failed'." >&2
+  echo "  Fix: python3 -m venv ~/.venvs/mathcity-tests && \\" >&2
+  echo "       ~/.venvs/mathcity-tests/bin/pip install pytest" >&2
+fi
+# Child shell tests inherit it; several invoke `python3 -m pytest` themselves.
+export PYTHON="$PYTHON_BIN"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mathcity-local-tests.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 SHELL_LIST="$TMP_DIR/shell-tests.txt"
