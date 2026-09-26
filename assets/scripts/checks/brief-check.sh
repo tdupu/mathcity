@@ -286,7 +286,14 @@ require_toml_key_value() {
 # already carrying `PASS`/`N/A` are declaring the same thing, and failing them
 # would move briefs AWAY from the front end, which is the opposite of #67's
 # requirement.
-GATE_STATUS_DEFAULT="PASSED|PASS|NOT APPLICABLE|N/A"
+# NARROW by design. The comment above says widening is "deliberately per-gate,
+# never global" -- and G14 passes its own tri-state vocabulary as $3 at its call
+# site. This default was set to the WIDE vocabulary, which made the G14 widening
+# global: all 13 other gates then accepted PASSED / NOT APPLICABLE, so `G1:
+# PASSED` satisfied the test-evidence gate without the five-field structural
+# check -- the exact "would silently skip it" hazard named above. A gate that
+# accepts the token it exists to reject cannot fail on its own subject (P6.2).
+GATE_STATUS_DEFAULT="PASS|N/A"
 
 require_gate() {
   path="$1"
