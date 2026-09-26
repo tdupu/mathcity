@@ -17,7 +17,18 @@ trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0
 
 # The pattern under test, read from the script so this cannot drift from it.
-DEFAULT="$(grep -E '^GATE_STATUS_DEFAULT=' "$CHK" | head -1 | cut -d'"' -f2)"
+# G14's accepted set is the THIRD ARGUMENT at its own require_gate call site --
+# POLICY T7 gives G14 its own tri-state, so the gate passes it explicitly. This
+# used to read GATE_STATUS_DEFAULT, which was only equivalent while the widening
+# was GLOBAL -- and a global widening is the defect (it let `G1: PASSED` satisfy
+# the test-evidence gate without the five-field structural check). Reading the
+# default made this test assert the bug. Read what it claims to test.
+DEFAULT="$(grep -E 'require_gate .*"G14 ' "$CHK" | head -1 | sed -E 's/.*"G14 [^"]*"[[:space:]]*"([^"]*)".*/\1/')"
+if [ -z "$DEFAULT" ]; then
+  echo "gate-status-tokens: CANNOT VERIFY -- could not read G14's vocabulary from $CHK" >&2
+  echo "  (an empty accepted-set would make every case below pass vacuously)" >&2
+  exit 2
+fi
 
 check() {  # $1 token, $2 want (accept|reject)
   if printf 'G14 Test-execution: %s\n' "$1" | grep -Eq "G14 Test-execution:[[:space:]]*($DEFAULT)\\b"; then
