@@ -31,10 +31,32 @@
 # intake event. Bounded: 25 candidate ids per rig, early exit on first hit;
 # a check timeout (10s) means "not due this tick" — fail closed, retried.
 #
-# Implementation note: [[patches.agent]] in pack.toml cannot target agents
-# owned by a different pack (only pack-local agents can be patched at
-# pack-level per pack-spec §2.6). mathcity does not own gc.run-operator,
-# so this order approach is the correct fallback as specified in task-2-brief.
+# Implementation note: the order approach is right, but the reason recorded here
+# was WRONG and is corrected rather than deleted, because it nearly justified
+# building a second fallback.
+#
+# It said: "[[patches.agent]] in pack.toml cannot target agents owned by a
+# different pack (only pack-local agents can be patched at pack-level per
+# pack-spec §2.6)". Measured 2026-09-27 with a throwaway city -- a base pack
+# owning an agent at max_active_sessions = 0, a consumer pack importing it and
+# patching that ceiling to 4:
+#
+#     gc config show  ->  max_active_sessions = 4
+#
+# So a pack-level patch DOES reach an imported agent. §2.6 does not say
+# otherwise; it says pack-level patches run "after imported/base agents and the
+# current pack's own agents have been merged", which is what makes them
+# reachable.
+#
+# What DOES constrain this is precedence, not ownership. pack-spec §2.6's order
+# is: (2) pack-level patches, then (4) city-level patches. So a city.toml patch
+# overrides any imported pack's patch for the same agent -- measured on the same
+# fixture: pack-level 4 + city-level 0 resolves to 0.
+#
+# Consequence worth keeping: a pool capped in city.toml CANNOT be raised by
+# importing a pack, however the import is written. That is why the five zero
+# caps on kolchin (tdupu/mathcity#274) are not fixable through [imports.*] --
+# they are city-level, and only a city.toml change can move them.
 # (gastown.refinery removed 2026-07-09 per ba2ff381; gsp-7lc tracks the
 # pack-owned merge lane replacement.)
 
