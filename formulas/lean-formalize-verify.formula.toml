@@ -56,5 +56,5 @@ max_attempts = 2
 
 [template.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/lean-gap-accounting.sh"
+path = "../assets/scripts/checks/lean-gap-accounting.sh"
 timeout = "10m"
