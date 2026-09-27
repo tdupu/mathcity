@@ -73,11 +73,56 @@ server-mode load**, so bound the loop and expect each call to take seconds.
    `draining`/`asleep`, or LAST ACTIVE became recent). Note any that did
    NOT respond.
 
+## FALSE ZOMBIES — check the process before you believe the metrics
+
+**Observed live 2026-09-27 on kolchin.** Four sessions read as textbook
+zombies and were none:
+
+```
+hq-1iaq0  mathcity/core.control-dispatcher  active  AGE 12d  LAST ACTIVE 12d ago
+$ gc session logs hq-1iaq0
+gc session logs: no session file found for "hq-1iaq0"
+```
+
+Registered `active`, untouched 12 days, no session file — every signal this
+skill keys on says dead. The processes were all alive and busy:
+
+```
+$ pgrep -fl control-dispatcher
+67415  gc convoy control --serve --follow core.control-dispatcher
+67418  gc convoy control --serve --follow gascity/core.control-dispatcher
+67422  gc convoy control --serve --follow mathcity-testrig/core.control-dispatcher
+67578  gc convoy control --serve --follow mathcity/core.control-dispatcher
+
+$ ps -o pid=,etime=,time=,stat= -p 67415,67418,67422,67578
+67415  up 12-02:08  cpu 14158:21  Ss+
+67418  up 12-02:08  cpu 14501:45  Rs+     <- on CPU
+67422  up 12-02:08  cpu 14467:48  Ss+
+67578  up 12-02:08  cpu 13754:06  Rs+     <- on CPU
+```
+
+~14,000 CPU-minutes each. **Both "dead" signals are artifacts of measuring an
+agent-session concept against a server process:** a `gc convoy control --serve`
+process has no session *transcript*, so `gc session logs` finds no file; and
+`LAST ACTIVE` tracks agent turns, which it never takes. Neither means idle.
+
+**So before `close` or `prune`, confirm the process is actually gone:**
+
+```bash
+pgrep -fl "<template-name>"                     # is anything serving it?
+ps -o pid=,etime=,time=,stat= -p <pid>          # cpu time moving? state R?
+```
+
+A `--serve`/`--follow` process, or nonzero recent CPU time, means LIVE — skip it
+whatever the session list says. Closing one of these kills the dispatch layer,
+and the session list will look exactly the same afterward.
+
 ## Fallback — close, only if a nudge doesn't take
 
 A nudge revives a session whose agent process is alive-but-idle. If a
-nudged session shows no activity after a reasonable wait (its process is
-truly dead), close it to free the slot:
+nudged session shows no activity after a reasonable wait **and the process
+check above shows nothing serving it** (its process is truly dead), close it
+to free the slot:
 ```bash
 gc session close <id>     # single zombie
 gc session prune          # sweep old dormant sessions (skips live ones)
