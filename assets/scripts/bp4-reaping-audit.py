@@ -116,6 +116,12 @@ def main() -> int:
         print(f"BP4_AUDIT: UNREADABLE -- {exc}", file=sys.stderr)
         return 2
 
+    # The path alone does not make a wrong-store run obvious; the COUNT does.
+    # gascity-packs reads 598 beads in ~/repos and 9,895 in ~/gt. A reader who
+    # sees the count in the header catches the 16x twin mix-up that a bare path
+    # does not reveal (#273 fix 2).
+    print(f"BP4_AUDIT: {len(rows)} beads in store", file=sys.stderr)
+
     state = {r["id"]: str(r.get("status", "")).lower() for r in rows}
     closed_at = {r["id"]: str(r.get("closed_at") or "") for r in rows}
 

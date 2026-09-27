@@ -276,6 +276,14 @@ def main() -> int:
                 continue
             try:
                 loaded[root] = load_store(root, args.timeout)
+                # Per-store count, not just the path (#273 fix 2). This audit
+                # consults SEVERAL stores and picks the first that knows a bead,
+                # so "which store answered" is even less visible here than in a
+                # single-root audit. gascity-packs holds 598 beads in ~/repos and
+                # 9,895 in ~/gt; a reader who sees both counts can tell which
+                # twin actually resolved a bead.
+                print(f"ADJ_AUDIT: {len(loaded[root])} beads in {root}",
+                      file=sys.stderr)
             except Exception as exc:
                 unreadable[root] = str(exc)
         readable = [r for r in roots if r in loaded]
