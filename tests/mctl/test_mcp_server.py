@@ -621,6 +621,43 @@ def test_armed_external_clients_still_cannot_reach_mutating_tools(tmp_path: Path
     assert response["error"]["data"]["diagnostic"]["code"] == "MCTL_MCP_TOOL_DISABLED"
 
 
+def test_the_visible_roster_cannot_change_after_initialize_says_it_cannot(tmp_path: Path):
+    """`listChanged: False` is a promise; arming must not be able to break it (#210).
+
+    `serve_from_args` builds the server with `env=os.environ`, the LIVE mapping.
+    While arming was recomputed per call, one env change took `tools/list` from
+    0 tools to 35 in a single process -- after `initialize` had already declared
+    `capabilities.tools.listChanged = False`. A client that honours that
+    declaration never re-fetches, so the widening was unobservable to it.
+
+    This pins the declaration to the behaviour rather than the other way round:
+    a mutable mapping handed to the constructor is read once.
+    """
+    city_root, rig_root = runtime_fixture(tmp_path)
+    live_env = {"MCTL_BEADS_FIXTURE": str(rig_root / ".beads" / "issues.jsonl")}
+    instance = mcp_server.MctlMcpServer(
+        default_city=city_root,
+        default_rig="mathcity",
+        client_class="external",
+        env=live_env,
+    )
+
+    declared = instance.handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    )["result"]["capabilities"]["tools"]["listChanged"]
+    before = tool_list(instance)
+    live_env["MCTL_MCP_ENABLE_EXTERNAL_TOOLS"] = "1"
+    after = tool_list(instance)
+
+    assert declared is False
+    assert before == after == []
+    # The gate itself still works -- it is read at construction, not disabled.
+    armed = server(
+        city_root, rig_root, client_class="external", MCTL_MCP_ENABLE_EXTERNAL_TOOLS="1"
+    )
+    assert tool_list(armed) != []
+
+
 def test_internal_clients_reach_the_whole_surface(tmp_path: Path):
     city_root, rig_root = runtime_fixture(tmp_path)
 

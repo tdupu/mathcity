@@ -4896,12 +4896,33 @@ class MctlMcpServer:
         # Anything unrecognised falls back to the closed surface rather than
         # the open one; a typo must not arm a client class.
         self.client_class = declared if declared in CLIENT_CLASSES else "external"
+        # Arming is read ONCE, here, and never again (#210).
+        #
+        # `serve_from_args` passes `env=os.environ` -- the LIVE mapping -- so
+        # while this was a property recomputed per call, the visible roster
+        # could change underneath a client that had been told it could not:
+        # `initialize` declares `capabilities.tools.listChanged = False`, and a
+        # single env change took `tools/list` from 0 tools to 35 in one process,
+        # same server object, no re-import. A client that honours the
+        # declaration -- the correct behaviour -- never re-fetches, so it either
+        # misses the arming or holds a roster the server has since widened.
+        #
+        # Snapshotting makes the declaration true instead of making the flag
+        # lie: arming is a launch-time rollout gate, which is why the dashboard
+        # client already froze it with `dict(env or {})`. This aligns the stdio
+        # path with that. It does NOT give new tools a route into a running
+        # process -- TOOLS is a module-level tuple frozen at import, so that
+        # still needs a new process, which is #210's actual subject.
+        self._external_tools_armed = (
+            str(self.env.get(EXTERNAL_TOOLS_ENV, "")).strip() in {"1", "true", "yes"}
+        )
 
     # -- rollout gate --
 
     @property
     def external_tools_armed(self) -> bool:
-        return str(self.env.get(EXTERNAL_TOOLS_ENV, "")).strip() in {"1", "true", "yes"}
+        """The arming decision frozen at construction (see `__post_init__`)."""
+        return self._external_tools_armed
 
     def visible_tools(self) -> tuple[ToolSpec, ...]:
         if self.client_class == "internal":
