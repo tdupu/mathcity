@@ -12,6 +12,40 @@ version = "sha:3b3b89f2011e06d84459aa7bea1552382f13930a"
 source = "https://github.com/gastownhall/gascity-packs/tree/main/superpowers"
 version = "sha:3b3b89f2011e06d84459aa7bea1552382f13930a"
 
+# Subdomain child packs (ADR 0002). gc discovers only a pack's top-level
+# skills/ dir (internal/config/skill_discovery.go), so a nested subdomain is
+# reachable only when it is declared here. Local paths take no version.
+# mathcity-dev and mathcity-mayor are deliberately NOT here: dev adds two
+# reaping orders plus a root-scope named_session fleet, and mayor ships an
+# agent that can shadow the live Mayor. Both need their own verification.
+
+[imports.mathcity-brief-system]
+source = "./subdomains/brief-system"
+
+[imports.mathcity-computing]
+source = "./subdomains/computing"
+
+[imports.mathcity-latex]
+source = "./subdomains/latex"
+
+[imports.mathcity-lean]
+source = "./subdomains/lean"
+
+[imports.mathcity-lmfdb]
+source = "./subdomains/lmfdb"
+
+[imports.mathcity-magma]
+source = "./subdomains/magma"
+
+[imports.mathcity-policies]
+source = "./subdomains/policies"
+
+[imports.mathcity-repo-docs]
+source = "./subdomains/repo-docs"
+
+[imports.mathcity-teaching]
+source = "./subdomains/teaching"
+
 [providers.codex]
 base = "builtin:codex"
 options_schema_merge = "by_key"
