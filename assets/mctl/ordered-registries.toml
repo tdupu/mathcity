@@ -1,0 +1,105 @@
+# Ordered registries and the tests that guard them (#201 rule 2).
+#
+# WHY THIS FILE EXISTS
+#
+# git's conflict detection is blind to ordering and uniqueness. Two branches
+# can each insert into the same registry, merge textually clean, and still
+# produce a duplicate or an out-of-order entry. Measured on #182:
+#
+#     558f686   merged clean WITHOUT running the registry test  -> 4 tests red,
+#                                                                  merge aborted
+#     1cf074d   ran the registry test first, ordering verified  -> clean merge
+#
+# So: any branch touching a registry below runs that registry's guard before
+# its SHA is offered. `registry-merge-gate.py` reads this file and does it.
+#
+# WHY IT IS HAND-MAINTAINED
+#
+# Deriving `guards` by grepping the test tree does not work. `gates.toml` is
+# mentioned by 18 test files and `paths.toml` by 15, nearly all of which merely
+# load a fixture. The test that would actually catch a duplicate entry is one
+# or two of them. A generated mapping would run twenty tests to check one
+# property and still not say which one was the guard -- so the guard is named
+# here by a human who checked.
+#
+# SCOPE
+#
+# Only files where ORDER or UNIQUENESS is semantic. A plain keyed config table
+# is deliberately absent: `limits.toml`, `paths.toml` and `thresholds.toml` are
+# `[section] key = value` with no list and no positional meaning, so a textual
+# merge cannot produce the failure this gate exists to catch. Absence from this
+# file is a classification, not an oversight.
+#
+# ADDING AN ENTRY
+#
+# `path` is repo-relative. `guards` is every test that must pass before the
+# touching SHA is offered. `semantics` says what a bad merge would produce --
+# write it as the failure, not as a description, because that is what tells the
+# next reader whether their new registry belongs here.
+
+[[registry]]
+path = "assets/mctl/diagnostics.toml"
+guards = ["tests/mctl/test_diagnostics_registry.py"]
+semantics = "uniqueness"
+note = """199 per-code tables. A duplicated code is either a TOML parse error or
+a silent override, and the registry test is what turns that into a red test
+instead of a diagnostic that reports the wrong meaning. This is the file whose
+bad merge produced #201 rule 2."""
+
+[[registry]]
+path = "assets/mctl/blast_radius.toml"
+guards = [
+  "tests/mctl/test_blast_radius_registry_tool.py",
+  "tests/mctl/test_registry_report_carries_gate.py",
+]
+semantics = "uniqueness"
+note = "Per-operation classification tables; a duplicate silently reclassifies an operation's blast radius."
+
+[[registry]]
+path = "assets/brief-pipeline/brief-writers.toml"
+guards = ["tests/brief-writer-authority/smoke_test.sh"]
+semantics = "order+uniqueness"
+note = """The B2.11 authority register. A duplicate entry for one path can
+declare the same file both `authorized` and `violation`, and whichever the
+reader hits first wins -- so a bad merge silently grants or revokes write
+authority."""
+
+[[registry]]
+path = "assets/brief-pipeline/gates.toml"
+guards = [
+  "tests/unified-brief-gate-profiles/smoke_test.sh",
+  "tests/brief-gate-token-vocabulary/smoke_test.sh",
+]
+semantics = "order+uniqueness"
+note = """18 gate entries across profiles. Gate order is the order a brief is
+graded in, and a duplicate gate is graded twice -- which reads as a brief
+failing a gate it already passed."""
+
+[[registry]]
+path = "assets/brief-pipeline/required-sections.toml"
+guards = ["tests/mctl/test_required_sections_profile_scope.py"]
+semantics = "order+uniqueness"
+note = "Section numbering is positional (§1-§7); a reordered merge renumbers every section after the insert."
+
+[[registry]]
+path = "assets/brief-pipeline/path-resolvers.toml"
+guards = ["tests/brief-path-resolver-drift/smoke_test.sh"]
+semantics = "uniqueness"
+note = """70 entries, the largest register here and the most merge-prone. Its
+own test declares the set may SHRINK but never GROW, so a duplicate inserted by
+a clean textual merge fails the drift check rather than passing quietly."""
+
+[[registry]]
+path = "assets/brief-pipeline/section-discipline.toml"
+guards = ["tests/mctl/test_briefs_create_structural_validation.py"]
+semantics = "order+uniqueness"
+note = "Paired with required-sections.toml; the two are read together and a duplicate in either desynchronises them."
+
+[[registry]]
+path = "assets/brief-pipeline/no-brainer-categories.toml"
+guards = ["tests/deadpath-detector/smoke_test.sh"]
+semantics = "uniqueness"
+note = """Categories gate auto-execution (N5: auto-execute is the DEFAULT), so a
+duplicated or misordered category can widen what executes without review. The
+one registry here where a bad merge has a live blast radius rather than a red
+test."""
