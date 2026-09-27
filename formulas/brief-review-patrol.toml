@@ -108,7 +108,7 @@ description = """
 For each reviewed brief, exactly one of:
 
 NEVER patch the frontmatter in place. Route the write through `mctl`
-(B2.11/B2.14), using the typed call B2.8b declares owns this field:
+(B2.11/B2.14), using the typed call that owns this field:
 
 **On APPROVING** —
 `mctl` MCP tool `briefs_review_gate` with

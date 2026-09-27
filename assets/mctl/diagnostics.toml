@@ -297,13 +297,13 @@ module = "effects.py"
 [MBRF071]
 severity = "FATAL"
 meaning = "Refusing to advance review_gate: the observed gate is not the one the caller declared it was advancing from, so another writer moved it first."
-policy_ref = "B2.8b"
+policy_ref = "B2.8a"
 module = "effects.py"
 
 [MBRF072]
 severity = "FATAL"
 meaning = "Refusing to advance review_gate: the requested value is not in the declared review-lifecycle vocabulary."
-policy_ref = "B2.8b"
+policy_ref = "B2.8a"
 module = "effects.py"
 
 [MCTL_BEAD_RELATION_DANGLING]

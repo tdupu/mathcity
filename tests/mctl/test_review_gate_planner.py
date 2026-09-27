@@ -1,4 +1,4 @@
-"""#86/#84: the `review_gate` write path, and the root B2.8b declares for it.
+"""#86/#84: the `review_gate` write path, and the root B2.8a implies for it.
 
 `fields.py` READ `review_gate` among ~100 live keys and nothing could set it. So
 `formulas/brief-review-patrol.toml` instructed an agent to patch the brief's
@@ -7,7 +7,7 @@ NOT be fixed by "route it through mctl", because mctl had no call to route to.
 The only frontmatter writer was `plan_adjudication`, hardcoded to
 `status`/`verdict`/`adjudicated_at`.
 
-The load-bearing assertion here is `test_no_bead_is_written`. B2.8b declares the
+The load-bearing assertion here is `test_no_bead_is_written`. B2.8a declares the
 frontmatter canonical for this class, following B2.8a: the bead is scoped to
 "identity, status, timestamps and labels, and little else", and a PRE-adjudication
 field is none of those -- so a bead-first repair would resolve `review_gate` by
@@ -64,7 +64,7 @@ def _brief(ctx: MctlContext, brief_id: str, *, gate: str, status: str) -> Path:
 
 
 def test_no_bead_is_written(tmp_path: Path):
-    """B2.8b: frontmatter is the canonical root for this class, so the bead stays out.
+    """B2.8a: frontmatter is the canonical root for this class, so the bead stays out.
 
     Writing `review_gate` to a bead would mint a SECOND root for one artifact
     class, which is exactly the P1.22 failure the declaration exists to prevent.

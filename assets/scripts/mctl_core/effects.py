@@ -2351,7 +2351,7 @@ def _diagnostic_for_archive(
 
 
 #: The review-lifecycle vocabulary, declared at `skills/create-brief/SKILL.md:59`
-#: and given its canonical root by B2.8b. `iter-N` is a PATTERN, not a member --
+#: and given its canonical root by B2.8a. `iter-N` is a PATTERN, not a member --
 #: an enum that listed `iter-1` would go stale at the second iteration.
 REVIEW_GATE_VALUES = frozenset(
     {
@@ -2379,7 +2379,7 @@ def plan_review_gate(
     gate: str,
     from_gate: str | None = None,
 ) -> EffectPlan:
-    """Advance a brief's `review_gate` -- the write path B2.8b declares mctl owns.
+    """Advance a brief's `review_gate` -- the write path B2.8a declares mctl owns.
 
     THE GAP (tdupu/mathcity#86, #84). `fields.py` READS `review_gate` among ~100
     live keys and nothing could set it. So `formulas/brief-review-patrol.toml`
@@ -2388,7 +2388,7 @@ def plan_review_gate(
     because mctl had no call to route to. The only frontmatter writer was
     `plan_adjudication`, hardcoded to `status`/`verdict`/`adjudicated_at`.
 
-    WHY FRONTMATTER AND NOT THE BEAD. B2.8b declares the frontmatter canonical
+    WHY FRONTMATTER AND NOT THE BEAD. B2.8a declares the frontmatter canonical
     for this class, and B2.8a is why: it scopes the bead to "identity, status,
     timestamps and labels, and little else", and scopes B2.8's repair direction
     to "identity, status, timestamps, labels, and recorded verdict fields".

@@ -1933,7 +1933,7 @@ def _handle_briefs_review_gate(ctx: MctlContext, arguments: Mapping[str, Any]) -
     frontmatter in place because `mctl` read `review_gate` and could not write
     it -- a B2.11/B2.14 violation with no sanctioned alternative to route to.
 
-    Writes frontmatter only: B2.8b declares that the canonical root for this
+    Writes frontmatter only: B2.8a declares that the canonical root for this
     class, because B2.8a scopes the bead to identity/status/timestamps/labels and
     a pre-adjudication field is none of those.
     """
@@ -4140,7 +4140,7 @@ TOOLS: tuple[ToolSpec, ...] = (
             "plan. This is the write path #86 identified as missing and #84 "
             "needs: the review patrol patched frontmatter in place because "
             "`mctl` could read `review_gate` and not write it. Writes "
-            "FRONTMATTER ONLY and no bead -- B2.8b declares frontmatter the "
+            "FRONTMATTER ONLY and no bead -- B2.8a scopes the bead so that frontmatter is the "
             "canonical root for the review-lifecycle fields, because B2.8a "
             "scopes the bead to identity, status, timestamps and labels, and a "
             "pre-adjudication field is none of those (measured: `review_gate` in "
