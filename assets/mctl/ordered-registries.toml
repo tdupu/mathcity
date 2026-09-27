@@ -38,6 +38,19 @@
 # next reader whether their new registry belongs here.
 
 [[registry]]
+path = "assets/mctl/ordered-registries.toml"
+guards = ["tests/mctl/test_ordered_registries_register.py"]
+semantics = "uniqueness"
+note = """This file. `registry-merge-gate.py` builds `by_path` as a dict keyed on
+`path`, so a duplicate entry silently drops one entry's guards and the last one
+wins -- a register that guards less than it claims, which is the same objection
+its own scope note raises against a green check that misclassifies.
+
+Found by the gate itself: the first merge that brought new files alongside it
+reported this file as an undeclared assets registry and exited 2. The register is
+not exempt from its own rule."""
+
+[[registry]]
 path = "assets/mctl/diagnostics.toml"
 guards = ["tests/mctl/test_diagnostics_registry.py"]
 semantics = "uniqueness"
