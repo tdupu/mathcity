@@ -169,3 +169,53 @@ def test_a_single_spec_does_not_pay_for_a_pool():
     results = fan_out(client, [("briefs_show", {})])
     assert results[0]["tool"] == "briefs_show"
     assert client.max_concurrent == 1
+
+
+def test_the_shared_primary_client_takes_no_fanout_work(monkeypatch):
+    """#244: the primary is shared with every OTHER request, so nothing goes on it.
+
+    `/queue` costs ~1.8s idle and **65s** during a `/city` render -- a 36x
+    inflation. The cause was an assignment rule, not a property of `/queue`:
+    `_city_operations` lists `fleet_sessions` first, that call takes 60.0s
+    because `gc` times out (#159), and `workers = [client] + pool` with
+    `index % len(workers)` put index 0 on the PRIMARY every time. The primary
+    holds a lock around each exchange, so a concurrent page waited out the full
+    60s behind it.
+
+    Asserted as "the primary ran nothing", which is the invariant, rather than
+    as a timing bound -- a wall-clock assertion here would be the flaky shape
+    `test_fanout_actually_overlaps` already moved away from.
+    """
+    from mctl_dashboard import fanout
+
+    primary = _SlowClient(delay=0.01)
+    specs = [(f"tool_{i}", {}) for i in range(8)]
+
+    results = fanout.fan_out(primary, specs)
+
+    assert [r["tool"] for r in results] == [f"tool_{i}" for i in range(8)]
+    assert primary.calls == [], (
+        "the shared primary client must take no fan-out work while siblings "
+        f"exist; it ran {primary.calls}"
+    )
+
+
+def test_fanout_still_runs_everything_when_no_sibling_can_be_made():
+    """No `clone` -> serialized on the primary. Documented fallback, and it must hold.
+
+    Serialized is worse than concurrent and far better than not running, so a
+    client that cannot clone must still get every result. Without this the
+    siblings-only change above would silently drop work on such a client.
+    """
+    from mctl_dashboard.fanout import fan_out
+
+    class _NoClone(_SlowClient):
+        clone = None  # type: ignore[assignment]
+
+    client = _NoClone(delay=0.01)
+    specs = [("a", {}), ("b", {}), ("c", {})]
+
+    results = fan_out(client, specs)
+
+    assert [r["tool"] for r in results] == ["a", "b", "c"]
+    assert sorted(client.calls) == ["a", "b", "c"], "the primary must run them all"

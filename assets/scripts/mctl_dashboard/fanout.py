@@ -31,9 +31,20 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Mapping, Sequence
 
 #: Sibling connections are expensive (each is a process holding a store
-#: handle), so the pool is small. Three is the widest fan-out any current page
-#: performs.
-MAX_SIBLINGS = 3
+#: handle), so the pool stays small.
+#:
+#: This said "Three is the widest fan-out any current page performs" and that
+#: had gone stale: `_city_operations` fans out EIGHT surfaces (fleet_sessions,
+#: city_health, gates_status, blast_radius_registry, queue_status,
+#: costs_summary, worktrees_status, events_list), plus `context_rigs` when a
+#: panel is deferred. So the widest fan-out is nine, not three, and `/city` was
+#: running four-way concurrent while asking for eight.
+#:
+#: Four, not nine, and deliberately. `/city` keeps the same four-way concurrency
+#: it already had -- this buys the fix below, not extra width. Raising it
+#: further multiplies processes against a call that is slow because `gc` times
+#: out (#159), which is four slow pages instead of one, exactly as #244 warned.
+MAX_SIBLINGS = 4
 
 #: The pool lives ON the client, not in a module-level registry keyed by
 #: `id()`. CPython reuses ids once an object is collected, so an id-keyed
@@ -84,11 +95,23 @@ def fan_out(
         except Exception as exc:  # noqa: BLE001 - handed back to the caller
             return [exc]
 
-    # The primary client handles one spec; siblings take the rest. If no
-    # sibling could be made, everything still runs -- just serialized, which is
-    # exactly the behaviour we had before.
-    pool = _pool_for(client, len(specs) - 1)
-    workers = [client] + pool
+    # SIBLINGS ONLY, when there are any. The primary client is the one every
+    # OTHER request on the dashboard shares, and it holds a lock around each
+    # exchange -- so any spec placed on it blocks every concurrent page for that
+    # spec's duration.
+    #
+    # This is #244's measured 36x: `/queue` costs ~1.8s idle and 65s during a
+    # `/city` render. `_city_operations` lists `fleet_sessions` FIRST, it takes
+    # 60.0s because `gc` times out (#159), and `index % len(workers)` put index 0
+    # on the primary every time. So a concurrent `/queue` waited behind a 60s
+    # call on a shared pipe -- 60s of the measured 65s, arrived at from the
+    # assignment rule rather than from any property of `/queue`.
+    #
+    # Falling back to the primary when NO sibling could be made is the
+    # documented behaviour and stays: serialized is worse than concurrent and
+    # far better than not running.
+    pool = _pool_for(client, len(specs))
+    workers = pool or [client]
     results: list[Any] = [None] * len(specs)
 
     def _run(index: int) -> None:
