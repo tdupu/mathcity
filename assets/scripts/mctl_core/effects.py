@@ -3144,18 +3144,57 @@ def _toml_value(value: object) -> str:
     return f'"{_toml_escape(str(value))}"'
 
 
+def _toml_sections(prefix: str, table: Mapping[str, object]) -> list[str]:
+    """`[prefix]` and its nested sub-tables, scalars first, depth-first."""
+    scalars = {k: v for k, v in table.items() if not isinstance(v, Mapping)}
+    tables = {k: v for k, v in table.items() if isinstance(v, Mapping)}
+    lines = [f"[{prefix}]"]
+    lines.extend(f"{key} = {_toml_value(value)}" for key, value in scalars.items())
+    for key, value in tables.items():
+        lines.append("")
+        lines.extend(_toml_sections(f"{prefix}.{key}", value))
+    return lines
+
+
 def _update_simple_toml(path: Path, fields: Mapping[str, object]) -> None:
-    """Rewrite a decision TOML through a real parser.
+    """Rewrite a decision TOML through a real parser, PRESERVING nested tables.
 
     The previous writer split each line on the first `=`, so any line inside a
     multi-line string that looked like `key = ...` was rewritten instead of the
-    real key -- silently losing the verdict and mutating unrelated prose.
+    real key -- silently losing the verdict and mutating unrelated prose. Fixed
+    by parsing; this docstring's history is kept because the next defect was the
+    same shape one level down.
+
+    NESTED TABLES ARE SECTIONS, not values (tdupu/mathcity#83). Re-emitting every
+    parsed key as a flat `key = value` line destroyed them, and destroyed them
+    SILENTLY -- `_toml_value` falls through to `str(value)`, so a table became a
+    stringified Python repr. Measured 2026-09-27 on a decision record carrying the
+    commission continuation block:
+
+        [continuation]                  ->  continuation = "{'formula': 'do-the-thing',
+        formula = "do-the-thing"                             'vars': {'target': 'hecke'}}"
+        [continuation.vars]
+        target = "hecke"
+
+    Single-quoted, not valid TOML, not valid JSON, and written with no error. The
+    block is what `brief-record-decision.toml` says "makes APPROVE executable by
+    brief-decision-dispatch", and that formula keys the approve path on it -- so one
+    mctl adjudication of a commission brief silently broke its own approve path.
+
+    Scalars stay at the top, where a `[section]` header must not precede them: a
+    scalar emitted after `[continuation]` would be parsed as a member OF it, which
+    is a second, quieter corruption of the same shape.
     """
     existing: dict[str, object] = {}
     if path.exists():
         existing = dict(tomllib.loads(path.read_text(encoding="utf-8")))
     existing.update(fields)
-    lines = [f"{key} = {_toml_value(value)}" for key, value in existing.items()]
+    scalars = {k: v for k, v in existing.items() if not isinstance(v, Mapping)}
+    tables = {k: v for k, v in existing.items() if isinstance(v, Mapping)}
+    lines = [f"{key} = {_toml_value(value)}" for key, value in scalars.items()]
+    for key, value in tables.items():
+        lines.append("")
+        lines.extend(_toml_sections(key, value))
     _atomic_write(path, "\n".join(lines) + "\n")
 
 
