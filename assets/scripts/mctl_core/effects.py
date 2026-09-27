@@ -41,6 +41,7 @@ from .github_issues import (
     rig_for_issue,
 )
 from .briefs import (
+    OPTION_SOURCE_STACK_FILE,
     cached_brief_documents,
     decision_options,
     doctor_briefs,
@@ -56,7 +57,7 @@ from .diagnostics import Diagnostic, Severity
 from .structure import section_discipline_violations
 from .events import append_jsonl
 from .materialize_plan import FRONTMATTER_LINE
-from .redundant_state import ArtifactLayout, artifact_layout
+from .redundant_state import ArtifactLayout, artifact_layout, _is_terminal_status
 from .trace import append_aborted, append_applied, append_planned, trace_path
 
 
@@ -2172,6 +2173,179 @@ def _aggregated_decision_update(
             "source_bead": source_bead,
             "rig": ctx.rig_id,
             "decided_at": _now(),
+        },
+    )
+
+
+ARCHIVE_DIRNAME = ".adjudicated-archive"
+
+#: Frontmatter statuses that mean a brief has been decided. The stack
+#: frontmatter uses bare words (`adjudicated`, `approved`, `rejected`,
+#: `deferred`) where the legacy manifest uses compound forms
+#: (`adjudicated:approve-b(...)`), so this is checked with BOTH the bare set and
+#: `_is_terminal_status`'s prefix match -- the same concept written two ways is
+#: exactly the drift `LegacyManifestState.nonterminal_rows` documents.
+TERMINAL_FRONTMATTER_STATUSES = frozenset(
+    {"adjudicated", "approved", "rejected", "deferred", "rescinded", "superseded"}
+)
+
+_FRONTMATTER_STATUS = re.compile(r"^status:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+
+
+def _frontmatter_status(path: Path) -> str:
+    """The `status:` a stack document declares, or "" when it declares none.
+
+    Reads the head of the file only. A brief body can discuss `status:` in
+    prose, and a match from paragraph forty is not a declaration -- the same
+    reason `brief-check.sh` bounds its own frontmatter greps to `head -30`.
+    """
+    try:
+        head = "\n".join(path.read_text(encoding="utf-8").splitlines()[:40])
+    except OSError:
+        return ""
+    match = _FRONTMATTER_STATUS.search(head)
+    return match.group(1).strip().lower() if match else ""
+
+
+def plan_brief_archive(ctx: MctlContext, brief_id: str) -> EffectPlan:
+    """Move a decided brief off the pending stack -- the planner `_archive_brief` never had.
+
+    THE GAP (tdupu/mathcity#95). `_archive_brief` has existed and been correct
+    for some time: it copies under `_stack_index_lock`, verifies the copy before
+    unlinking, and de-indexes last so a crash leaves a recoverable row rather
+    than an invisible brief. It was unreachable. Repo-wide, the kind string
+    `"brief_archive"` appeared in exactly ONE place -- the applier's own
+    dispatch at `apply_cache_update` -- and nothing, not even its test,
+    constructed the `CacheUpdate` that would run it. The test imports
+    `_archive_brief` directly.
+
+    So the careful half shipped and the call site did not, and 28 briefs
+    carrying a TERMINAL status sat on the PENDING stack -- 8 -> 27 -> 28 -> 28
+    across four measurements. This is the call site.
+
+    WHY THIS WRITES NO BEAD. Every other planner here updates a bead because the
+    bead is canonical (B2.8) and the files are its cache. This one deliberately
+    does not: the bead is ALREADY terminal and already correct. What is wrong is
+    the cache -- a decided brief still listed as pending. So this is the cache
+    catching up to the canonical bead, which is the only direction B2.8 allows.
+    A plan that also "fixed" the bead would be inventing a lifecycle transition
+    that already happened.
+
+    WHY THE TERMINAL CHECK IS THE WHOLE SAFETY PROPERTY. Archiving removes a
+    brief from the presentation queue. Doing that to a PENDING brief destroys
+    live work, and does it silently -- the brief simply stops being shown. So a
+    non-terminal status is MBRF069 and FATAL, and it is checked here at plan
+    time rather than left to the applier: a precondition that refuses is
+    reviewable in a dry run, an exception is not.
+    """
+    layout = artifact_layout(ctx)
+    documents = [
+        path
+        for source, path in cached_brief_documents(ctx, brief_id)
+        if source == OPTION_SOURCE_STACK_FILE
+    ]
+    diagnostics: list[Diagnostic] = []
+    if not documents:
+        # Nothing on the stack is not a fault: an already-archived brief plans
+        # no work, the same way an absent decision TOML plans no write.
+        return EffectPlan(
+            trace_id=ctx.trace_id,
+            operation="briefs.archive",
+            target_brief_id=brief_id,
+            preconditions=(),
+            advisories=(),
+            bead_updates=(),
+            cache_updates=(),
+            event_writes=(),
+            trace_writes=(),
+        )
+
+    stack_path = documents[0]
+    status = _frontmatter_status(stack_path)
+    if not (status in TERMINAL_FRONTMATTER_STATUSES or _is_terminal_status(status)):
+        diagnostics.append(
+            _diagnostic_for_archive(
+                ctx,
+                "MBRF069",
+                brief_id,
+                stack_path,
+                f"status is {status!r}, which is not terminal",
+            )
+        )
+
+    archive_path = layout.root / ARCHIVE_DIRNAME / stack_path.name
+    if archive_path.exists():
+        try:
+            collision = archive_path.read_bytes() != stack_path.read_bytes()
+        except OSError:
+            collision = True
+        if collision:
+            diagnostics.append(
+                _diagnostic_for_archive(
+                    ctx,
+                    "MBRF070",
+                    brief_id,
+                    archive_path,
+                    "an archive copy of this slug already exists with different text",
+                )
+            )
+
+    today = date.today().isoformat()
+    cache_updates = (
+        CacheUpdate(
+            "brief_archive",
+            stack_path,
+            brief_id,
+            {"archive_path": str(archive_path), "index_path": str(layout.stack_index)},
+        ),
+    )
+    event_row = {
+        "brief_id": brief_id,
+        "operation": "briefs.archive",
+        "planned_effects": [item.to_dict() for item in cache_updates],
+        "trace_id": ctx.trace_id,
+    }
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="briefs.archive",
+        target_brief_id=brief_id,
+        preconditions=tuple(diagnostics),
+        advisories=(),
+        bead_updates=(),
+        cache_updates=cache_updates,
+        event_writes=(
+            JsonlWrite(
+                "event_write",
+                ctx.rig_root / ".beads" / "mctl" / "events" / f"{today}.jsonl",
+                event_row,
+            ),
+        ),
+        trace_writes=(
+            JsonlWrite(
+                "trace_write",
+                ctx.rig_root / ".beads" / "mctl" / "traces" / f"{today}.jsonl",
+                {**event_row, "city_path": str(ctx.city_root), "rig_name": ctx.rig_id},
+            ),
+        ),
+    )
+
+
+def _diagnostic_for_archive(
+    ctx: MctlContext, code: str, brief_id: str, path: Path, detail: str
+) -> Diagnostic:
+    return Diagnostic(
+        severity=Severity.FATAL,
+        code=code,
+        message=f"Refusing to archive {brief_id}: {detail}.",
+        hint=(
+            "Archiving removes a brief from the presentation queue. Adjudicate it "
+            "first, or resolve the duplicate copy by hand and re-run."
+        ),
+        facts={
+            "brief_id": brief_id,
+            "data_location": str(path),
+            "implementation_provenance": "mctl plan_brief_archive",
+            "rig": str(ctx.rig_id),
         },
     )
 

@@ -57,6 +57,7 @@ EXPECTED_TOOLS = (
     "blast_radius_registry",
     "briefs_relay_adjudication",
     "briefs_create",
+    "briefs_archive",
     "briefs_defer",
     "briefs_doctor",
     "briefs_list",

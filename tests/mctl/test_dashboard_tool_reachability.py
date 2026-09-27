@@ -45,6 +45,16 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
         "provider is current. The dashboard renders provider state through "
         "city_health; changing it is deliberately a typed-surface call, not a button."
     ),
+    "briefs_archive": (
+        "a destructive repair, not an adjudication action (#95). It REMOVES a brief "
+        "from the presentation queue, and the dashboard's whole job is to show that "
+        "queue -- so a misclick here deletes the thing the operator is looking at. "
+        "The refusals that make it safe (MBRF069 non-terminal, MBRF070 differing "
+        "archive copy) are plan-time preconditions best read in a dry run, which is "
+        "a typed-surface affordance rather than a button. Allowlist it when someone "
+        "designs a confirm-and-preview flow for it; until then it stays off the "
+        "page on purpose."
+    ),
     "artifact_locate": (
         "an agent-facing diagnostic (mc-8q0g4): it answers 'is this bead's artifact "
         "there, and could I even tell?' for a caller deciding whether to trust an "

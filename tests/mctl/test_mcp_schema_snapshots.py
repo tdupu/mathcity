@@ -101,6 +101,7 @@ def test_every_artifact_bearing_output_schema_requires_artifact_trust():
         "briefs_validate",
         "briefs_relay_adjudication",
         "briefs_defer",
+        "briefs_archive",
         "briefs_create",
     }
 
@@ -118,6 +119,7 @@ def test_mutating_tools_declare_a_dry_run_field_that_defaults_to_true():
         "bead_comment",
         "bead_hold",
         "bead_release",
+        "briefs_archive",
         "briefs_create",
         "briefs_defer",
         "briefs_relay_adjudication",

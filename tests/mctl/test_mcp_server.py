@@ -54,6 +54,7 @@ DECLARED_TOOLS = (
     # #110 shipped mctl_core/blast_radius.py with no tool, so no page could
     # reach it. Exposed as a reporting surface that states registry presence.
     "blast_radius_registry",
+    "briefs_archive",
     "briefs_create",
     "briefs_defer",
     "briefs_doctor",

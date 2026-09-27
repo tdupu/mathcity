@@ -282,6 +282,18 @@ meaning = "One brief is stored twice with different text -- a stack file and a d
 policy_ref = "B2.10"
 module = "documents.py"
 
+[MBRF069]
+severity = "FATAL"
+meaning = "Refusing to archive a brief whose status is not terminal -- archiving a pending brief would remove live work from the presentation queue."
+policy_ref = "B2.8"
+module = "effects.py"
+
+[MBRF070]
+severity = "FATAL"
+meaning = "Refusing to archive: an archive copy of this slug already exists with DIFFERENT text, which is the #95 defect-3 shape (one slug in both lanes) and must be surfaced rather than resolved."
+policy_ref = "B2.10"
+module = "effects.py"
+
 [MCTL_BEAD_RELATION_DANGLING]
 severity = "FATAL"
 meaning = "A relate edge names a bead this store cannot resolve, so it exists only as a dangling row -- counted by dependency_count, absent from `bd show` dependencies and from `bd dep list`. Measured against bd 1.1.0 on 2026-08-20: `bd dep add <local-id> <foreign-id>` exits 0 and produces exactly this."

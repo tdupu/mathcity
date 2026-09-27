@@ -105,6 +105,7 @@ from .effects import (
     plan_create_brief,
     plan_create_github_issue,
     plan_create_issue_bead,
+    plan_brief_archive,
     plan_deferral,
     plan_molecule_cancel,
 )
@@ -1922,6 +1923,24 @@ def _handle_briefs_relay_adjudication(ctx: MctlContext, arguments: Mapping[str, 
         )
 
     return _effect_payload(ctx, plan, _dry_run(arguments), on_apply=_emit_brief_decided)
+
+
+def _handle_briefs_archive(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Move a decided brief off the pending stack (#95). Dry run by default.
+
+    The call site `_archive_brief` never had. Before this, mctl could not
+    relocate a file at all: `EffectPlan` has creates, updates and writes and no
+    move, and the one applier that could do it was reachable only by importing a
+    private function -- so 28 terminal briefs sat on the pending stack while the
+    careful move-and-verify sat unused.
+
+    Refuses a NON-TERMINAL brief (MBRF069). That is the whole safety property:
+    archiving removes a brief from the presentation queue, and doing it to a
+    pending brief destroys live work silently.
+    """
+    return _effect_payload(
+        ctx, plan_brief_archive(ctx, arguments["brief_id"]), _dry_run(arguments)
+    )
 
 
 def _handle_briefs_defer(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -4084,6 +4103,37 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_briefs_relay_adjudication,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="briefs_archive",
+        title="Archive a decided brief",
+        description=(
+            "Move a brief carrying a TERMINAL status off the pending stack and "
+            "de-index it, as one act under the stack-index lock. This is the "
+            "repair path for #95: a decided brief left on the pending queue. "
+            "REFUSES a non-terminal brief (MBRF069) -- archiving removes a brief "
+            "from the presentation queue, so doing it to a pending brief would "
+            "destroy live work. Also refuses when an archive copy of the same "
+            "slug exists with DIFFERENT text (MBRF070), which is surfaced rather "
+            "than resolved. Writes no bead: the bead is already terminal and "
+            "correct, and this is the cache catching up to it (B2.8). A brief "
+            "with no stack file plans nothing, so a sweep is safely re-runnable. "
+            "Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "brief_id": _BRIEF_ID,
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["brief_id"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_briefs_archive,
         mutating=True,
         external_ready=False,
         artifact_state=True,
