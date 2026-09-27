@@ -107,14 +107,18 @@ metadata = { "gc.run_target" = "{{operator_target}}", "gc.brief.root" = "{{artif
 description = """
 For each reviewed brief, exactly one of:
 
-**On APPROVING** — patch the brief's frontmatter in place:
-- `review_gate: pending` → `review_gate: approved`
-- `status: pending-review` (or `in-review-iter-N`) → `status: approved`
-Leave all other frontmatter fields untouched. The brief is now
-pull-eligible.
+NEVER patch the frontmatter in place. Route the write through `mctl`
+(B2.11/B2.14), using the typed call B2.8b declares owns this field:
 
-**On failure, non-convergence within cap=4, or timeout** — patch:
-- `review_gate: pending` → `review_gate: review-failed`
+**On APPROVING** —
+`mctl` MCP tool `briefs_review_gate` with
+`brief_id=<slug>`, `gate="approved"`, `from_gate="pending"`.
+It advances `review_gate` AND carries `status: pending-review` (or
+`in-review-iter-N`) to `status: approved` in the same act, leaving every other
+frontmatter field untouched. The brief is then pull-eligible.
+
+**On failure, non-convergence within cap=4, or timeout** —
+`briefs_review_gate` with `gate="review-failed"`, `from_gate="pending"`,
 and surface to the Mayor: file an escalation bead via
 `<mathcity-pack-root>/assets/scripts/escalate.sh
 --title "[brief-review-patrol] Phase 5 failed: <brief-slug>"
@@ -125,6 +129,21 @@ work dir, never the pack root, and `$PACK_DIR` is not injected into a formula
 step.
 Do not delete, archive, or retry the brief; `review-failed` removes it from
 the patrol candidate set and a human or Mayor decides its fate.
+
+ALWAYS pass `from_gate="pending"`. The scan step observed these briefs at
+`pending` and the review takes time; between observing and writing, an
+adjudication or another patrol run can move the gate. `from_gate` refuses on a
+stale observation (MBRF071) rather than overwriting a decision this run never
+saw -- the frontmatter analogue of `bd update --if-status`.
+
+WHY THIS IS A TOOL CALL AND NOT A PATCH (tdupu/mathcity#84, #86). This step used
+to instruct a direct in-place edit, which is a B2.11/B2.14 violation -- and it
+could not be fixed by "route it through mctl", because until `briefs_review_gate`
+landed mctl had no call to route to: `fields.py` READ `review_gate` among ~100
+live keys and nothing could set it. The rule demanded a call that did not exist,
+which is why this sat unremediated while the patrol was paused city-wide rather
+than being repaired. Do not reintroduce a patch here if the tool call fails --
+report the failure, which is the point of routing through one writer.
 """
 
 [[steps]]
