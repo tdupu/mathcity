@@ -294,6 +294,18 @@ meaning = "Refusing to archive: an archive copy of this slug already exists with
 policy_ref = "B2.10"
 module = "effects.py"
 
+[MBRF071]
+severity = "FATAL"
+meaning = "Refusing to advance review_gate: the observed gate is not the one the caller declared it was advancing from, so another writer moved it first."
+policy_ref = "B2.8b"
+module = "effects.py"
+
+[MBRF072]
+severity = "FATAL"
+meaning = "Refusing to advance review_gate: the requested value is not in the declared review-lifecycle vocabulary."
+policy_ref = "B2.8b"
+module = "effects.py"
+
 [MCTL_BEAD_RELATION_DANGLING]
 severity = "FATAL"
 meaning = "A relate edge names a bead this store cannot resolve, so it exists only as a dangling row -- counted by dependency_count, absent from `bd show` dependencies and from `bd dep list`. Measured against bd 1.1.0 on 2026-08-20: `bd dep add <local-id> <foreign-id>` exits 0 and produces exactly this."

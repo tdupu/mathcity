@@ -386,6 +386,41 @@ by what adjudication unlocks, not by arrival time.*
   the table above, "repair" would mean deletion. Until a migration moves that
   state into beads, B2.8's repair direction is scoped to identity, status,
   timestamps, labels, and recorded verdict fields.
+- **B2.8b Declared canonical root for the review-lifecycle fields (P1.22).**
+  `review_gate`, and the pre-adjudication `status:` values it moves with
+  (`pending-review`, `in-review-iter-N`, `approved`, `review-failed`,
+  `escalation-unreviewed`, `escalation-self-checked`), have their **canonical
+  root in the brief document's frontmatter**. The bead is their serial number,
+  not their home.
+
+  This is a declaration, not a new arrangement: it names where these fields
+  already live so producers and readers resolve to one root (P1.22). Measured
+  2026-09-27 against `~/gt/mathcity` (2,364 beads): **`review_gate` appears in
+  0 bead metadata records** while 20 files carry `pending`, 16 `approved`, 2
+  `review-failed`, 2 `escalation-self-checked`.
+
+  It follows from B2.8a rather than contradicting B2.8. B2.8a scopes the bead to
+  "identity, status, timestamps and labels, and little else", and scopes B2.8's
+  repair direction to "identity, status, timestamps, labels, and recorded
+  verdict fields". `review_gate` is none of those — it is a *pre*-adjudication
+  lifecycle field, live precisely while no verdict exists — so a bead-first
+  reading would repair it by **deleting** it, which is the failure B2.8a was
+  written to stop.
+
+  **Writer:** `mctl` alone, per B2.11 and B2.14. The gap that made this
+  unresolvable was not the location but the absence of a write path:
+  `fields.py` reads `review_gate` among ~100 live keys and nothing could set it,
+  so `formulas/brief-review-patrol.toml` instructed a direct in-place patch
+  (tdupu/mathcity#84) and `mctl` had no call to offer instead (#86).
+
+  **How this evolves.** If a migration later moves brief state into beads — the
+  one B2.8a anticipates with "until a migration moves that state into beads" —
+  this root moves with the rest of that class, not separately. Moving
+  `review_gate` alone would split one lifecycle across two roots and produce
+  exactly the two-producers-one-class failure P1.22 forbids. The declaration is
+  therefore deliberately tied to the brief-body class rather than to the field:
+  whatever becomes canonical for `form`, `track` and `unlock_count` becomes
+  canonical for `review_gate` on the same migration.
 - **B2.9 Auto-executed briefs are still adjudicated.** No-brainer
   auto-execution (N-rules) is an adjudication: it records the verdict on the
   brief bead (authorizer = the automation identity + classifier evidence,
@@ -1129,6 +1164,7 @@ the brief bead and the bead is closed (B2.2).
 | 2026-07-12 | E7 amended to file-plus-pointer (PP1.9): bulky experiment outputs live in the filesystem keyed by bead ID (D4/E6/G7 staging conventions); the bead carries the verdict/summary line plus a pointer; original intent (results feed research beads, not the void) and pass/fail shape retained | human verdict "adopt" 2026-07-12; decision bead gsp-pxcu |
 | 2026-07-26 | Amend G9/N6: require explicit no-brainer classifier states and durable leak records | the human adjudicator approved using no-brainer leaks as replayable filter-repair signals |
 | 2026-08-15 | Add B2.10/N9: unified presentation pipeline and classifier evidence for every profile | the human adjudicator directive that present-briefs should show all briefs through one pile/stack lifecycle, with no-brainer and filter feedback installed on every source |
+| 2026-09-27 | Add **B2.8b**: the review-lifecycle fields (`review_gate` and the pre-adjudication `status:` values) have their declared canonical root in the brief document's frontmatter, written by `mctl` alone | P1.22 requires one declared canonical root per artifact class and calls an undeclared class a fail; this class had none. Measured 2026-09-27 on `~/gt/mathcity` (2,364 beads): `review_gate` in **0** bead metadata records, against 20 files at `pending`, 16 `approved`, 2 `review-failed`, 2 `escalation-self-checked`. Follows B2.8a, which scopes the bead to "identity, status, timestamps and labels, and little else" -- a pre-adjudication field is none of those, so a bead-first repair would DELETE it. Unblocks tdupu/mathcity#86 (no write path existed) and #84 (which patched frontmatter directly for want of one). Evolution is tied to the brief-body class, not the field: if a migration moves `form`/`track`/`unlock_count` into beads, `review_gate` moves with them, because moving it alone splits one lifecycle across two roots |
 | 2026-09-09 | B2.5 drops the live-computation clause; ordering reads the stored `unlock_count`. B2.11 gains ONE carve-out: brief-shuffle APPENDS `stack/.index.jsonl` during promotion | measurement, not preference. B2.5's clause was never implemented and the graph cannot support it -- 1 of 264 beads has a blocking edge, 508 of 528 edges are `related`, so a traversal returns ~0 while the stored field discriminates (35 of 97 rows carry 1-8). B2.11's carve-out matches `_stack_index_lock`, which names the SHUFFLER as the original appender and mctl as the newcomer; mctl has no append path, so the rule demanded a call that does not exist. Owner decisions, tdupu/mathcity#105 and #82 |
 | 2026-08-20 | Add B2.14: brief frontmatter is governed by B2.11 but enforced as a JUDGEMENT rule. The mechanical version was built and probed, not assumed unworkable: keying the register's reference scan on `status:`/`verdict:` hit 41 and 20 referencers and flagged all four probe cases, including the two known-clean (`create-brief`, `present-briefs`). Path literals are invented for one purpose and carry signal; field names are ubiquitous vocabulary and do not | reviewer trans set the bar at 3/3 probe cases and accepted the measurement at 2/3: "a green check that misclassifies create-brief is worse than not having the check at all" |
 | 2026-08-20 | Add B2.15: "drained" means de-indexed AND archived; de-indexing alone is not draining. Recorded as a DECISION rather than a clarification — gascity defines `drain` twice and neither sense implies archiving, so the term settled nothing and the choice made during the 35-row drain had never been recorded | the human adjudicator: "Let's ratify then" (decision bead `mc-g4k`). Archiving won because de-indexing is the path that had already produced a lying write (`remove-archived-row` asserting an archive it never checked); the 35 drained rows were measured 35/35 archived, so the rule codifies observed practice rather than requiring repair |

@@ -2350,6 +2350,195 @@ def _diagnostic_for_archive(
     )
 
 
+#: The review-lifecycle vocabulary, declared at `skills/create-brief/SKILL.md:59`
+#: and given its canonical root by B2.8b. `iter-N` is a PATTERN, not a member --
+#: an enum that listed `iter-1` would go stale at the second iteration.
+REVIEW_GATE_VALUES = frozenset(
+    {
+        "pending",
+        "approved",
+        "review-failed",
+        "escalation-unreviewed",
+        "escalation-self-checked",
+    }
+)
+_REVIEW_GATE_ITER = re.compile(r"^iter-\d+$")
+
+#: `status:` values the patrol moves alongside an APPROVING gate advance.
+_PRE_ADJUDICATION_STATUSES = re.compile(r"^(pending-review|in-review-iter-\d+)$")
+
+
+def is_review_gate(value: str) -> bool:
+    return value in REVIEW_GATE_VALUES or bool(_REVIEW_GATE_ITER.match(value))
+
+
+def plan_review_gate(
+    ctx: MctlContext,
+    brief_id: str,
+    *,
+    gate: str,
+    from_gate: str | None = None,
+) -> EffectPlan:
+    """Advance a brief's `review_gate` -- the write path B2.8b declares mctl owns.
+
+    THE GAP (tdupu/mathcity#86, #84). `fields.py` READS `review_gate` among ~100
+    live keys and nothing could set it. So `formulas/brief-review-patrol.toml`
+    instructed an agent to patch the frontmatter in place, which is a B2.11/B2.14
+    violation as written -- and it could not be fixed by "route it through mctl",
+    because mctl had no call to route to. The only frontmatter writer was
+    `plan_adjudication`, hardcoded to `status`/`verdict`/`adjudicated_at`.
+
+    WHY FRONTMATTER AND NOT THE BEAD. B2.8b declares the frontmatter canonical
+    for this class, and B2.8a is why: it scopes the bead to "identity, status,
+    timestamps and labels, and little else", and scopes B2.8's repair direction
+    to "identity, status, timestamps, labels, and recorded verdict fields".
+    `review_gate` is a PRE-adjudication field -- live precisely while no verdict
+    exists -- so a bead-first repair would resolve it by DELETING it. Measured
+    2026-09-27 on `~/gt/mathcity` (2,364 beads): `review_gate` appears in 0 bead
+    metadata records. Writing it to a bead here would mint a second root for one
+    class, which is the P1.22 failure.
+
+    So this plan writes NO bead, exactly like `plan_brief_archive`, and for a
+    related reason: the canonical representation for this field is the file.
+
+    `from_gate` IS THE CONCURRENCY GUARD, and it is optional on purpose. The
+    patrol advances only briefs it observed at `pending`, and between observing
+    and writing another writer can move the gate -- the same race
+    `BeadUpdate.if_status` guards on the bead side. Supplying it makes the write
+    conditional (MBRF071 when the observation is stale); omitting it is an
+    unconditional set, which is what a human repairing one brief by hand wants.
+    """
+    if not is_review_gate(gate):
+        return _review_gate_refusal(
+            ctx, brief_id, "MBRF072",
+            f"{gate!r} is not a declared review_gate value "
+            f"(expected one of {sorted(REVIEW_GATE_VALUES)} or iter-N)",
+        )
+
+    layout = artifact_layout(ctx)
+    documents = [
+        path
+        for source, path in cached_brief_documents(ctx, brief_id)
+        if source == OPTION_SOURCE_STACK_FILE
+    ]
+    if not documents:
+        # No stack document: nothing carries this field, so nothing to write.
+        # Absence is the ordinary path, as with an absent decision TOML.
+        return EffectPlan(
+            trace_id=ctx.trace_id,
+            operation="briefs.review_gate",
+            target_brief_id=brief_id,
+            preconditions=(),
+            advisories=(),
+            bead_updates=(),
+            cache_updates=(),
+            event_writes=(),
+            trace_writes=(),
+        )
+
+    stack_path = documents[0]
+    if from_gate is not None:
+        observed = _frontmatter_field(stack_path, "review_gate")
+        if observed != from_gate:
+            return _review_gate_refusal(
+                ctx, brief_id, "MBRF071",
+                f"observed review_gate is {observed or '<absent>'!r}, not the declared "
+                f"{from_gate!r}; another writer moved it first",
+                path=stack_path,
+            )
+
+    fields = {"review_gate": gate}
+    # An APPROVING advance carries `status:` with it -- the patrol's own contract.
+    # Only from a PRE-adjudication status: a brief already `adjudicated` must not
+    # be walked backwards to `approved`, which would contradict a recorded verdict.
+    if gate == "approved":
+        status = _frontmatter_field(stack_path, "status")
+        if _PRE_ADJUDICATION_STATUSES.match(status):
+            fields["status"] = "approved"
+
+    today = date.today().isoformat()
+    cache_updates = (CacheUpdate("brief_frontmatter", stack_path, brief_id, fields),)
+    event_row = {
+        "brief_id": brief_id,
+        "operation": "briefs.review_gate",
+        "planned_effects": [item.to_dict() for item in cache_updates],
+        "trace_id": ctx.trace_id,
+    }
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="briefs.review_gate",
+        target_brief_id=brief_id,
+        preconditions=(),
+        advisories=(),
+        bead_updates=(),
+        cache_updates=cache_updates,
+        event_writes=(
+            JsonlWrite(
+                "event_write",
+                ctx.rig_root / ".beads" / "mctl" / "events" / f"{today}.jsonl",
+                event_row,
+            ),
+        ),
+        trace_writes=(
+            JsonlWrite(
+                "trace_write",
+                ctx.rig_root / ".beads" / "mctl" / "traces" / f"{today}.jsonl",
+                {**event_row, "city_path": str(ctx.city_root), "rig_name": ctx.rig_id},
+            ),
+        ),
+    )
+
+
+def _frontmatter_field(path: Path, key: str) -> str:
+    """One frontmatter value, read from the head of the file only.
+
+    Bounded to 40 lines for the same reason `brief-check.sh` bounds its own
+    frontmatter greps to `head -30`: a brief body can discuss `status:` in prose,
+    and a match from paragraph forty is not a declaration.
+    """
+    try:
+        head = "\n".join(path.read_text(encoding="utf-8").splitlines()[:40])
+    except OSError:
+        return ""
+    match = re.search(rf"^{re.escape(key)}:[ \t]*(.+?)[ \t]*$", head, re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
+def _review_gate_refusal(
+    ctx: MctlContext, brief_id: str, code: str, detail: str, path: Path | None = None
+) -> EffectPlan:
+    facts = {
+        "brief_id": brief_id,
+        "implementation_provenance": "mctl plan_review_gate",
+        "rig": str(ctx.rig_id),
+    }
+    if path is not None:
+        facts["data_location"] = str(path)
+    return EffectPlan(
+        trace_id=ctx.trace_id,
+        operation="briefs.review_gate",
+        target_brief_id=brief_id,
+        preconditions=(
+            Diagnostic(
+                severity=Severity.FATAL,
+                code=code,
+                message=f"Refusing to advance review_gate on {brief_id}: {detail}.",
+                hint=(
+                    "Re-read the brief's current review_gate and retry with the "
+                    "observed value as from_gate, or omit from_gate for an "
+                    "unconditional set."
+                ),
+                facts=facts,
+            ),
+        ),
+        advisories=(),
+        bead_updates=(),
+        cache_updates=(),
+        event_writes=(),
+        trace_writes=(),
+    )
+
+
 def _plan(
     ctx: MctlContext,
     *,

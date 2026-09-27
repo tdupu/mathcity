@@ -63,6 +63,7 @@ DECLARED_TOOLS = (
     "briefs_pile_state",
     "briefs_present",
     "briefs_relay_adjudication",
+    "briefs_review_gate",
     "briefs_show",
     "briefs_validate",
     "city_health",

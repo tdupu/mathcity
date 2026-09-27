@@ -55,6 +55,7 @@ EXPECTED_TOOLS = (
     "beads_list",
     "beads_show",
     "blast_radius_registry",
+    "briefs_review_gate",
     "briefs_relay_adjudication",
     "briefs_create",
     "briefs_archive",

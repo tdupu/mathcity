@@ -45,6 +45,14 @@ DELIBERATELY_UNREACHABLE: dict[str, str] = {
         "provider is current. The dashboard renders provider state through "
         "city_health; changing it is deliberately a typed-surface call, not a button."
     ),
+    "briefs_review_gate": (
+        "the review PATROL's write path (#86), not an operator action. A human "
+        "adjudicating on the dashboard records a verdict via "
+        "briefs_relay_adjudication; review_gate is the PRE-adjudication lane the "
+        "patrol drives, and its `from_gate` concurrency guard is meaningful only "
+        "to a caller that just observed the gate -- a button cannot honestly "
+        "supply it. Allowlist it if a review-lane screen is ever built."
+    ),
     "briefs_archive": (
         "a destructive repair, not an adjudication action (#95). It REMOVES a brief "
         "from the presentation queue, and the dashboard's whole job is to show that "

@@ -107,6 +107,7 @@ from .effects import (
     plan_create_issue_bead,
     plan_brief_archive,
     plan_deferral,
+    plan_review_gate,
     plan_molecule_cancel,
 )
 from .fields import read_frontmatter
@@ -1923,6 +1924,29 @@ def _handle_briefs_relay_adjudication(ctx: MctlContext, arguments: Mapping[str, 
         )
 
     return _effect_payload(ctx, plan, _dry_run(arguments), on_apply=_emit_brief_decided)
+
+
+def _handle_briefs_review_gate(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
+    """Advance a brief's `review_gate` (#86/#84). Dry run by default.
+
+    The call `brief-review-patrol.toml` needed and could not make. It patched
+    frontmatter in place because `mctl` read `review_gate` and could not write
+    it -- a B2.11/B2.14 violation with no sanctioned alternative to route to.
+
+    Writes frontmatter only: B2.8b declares that the canonical root for this
+    class, because B2.8a scopes the bead to identity/status/timestamps/labels and
+    a pre-adjudication field is none of those.
+    """
+    return _effect_payload(
+        ctx,
+        plan_review_gate(
+            ctx,
+            arguments["brief_id"],
+            gate=arguments["gate"],
+            from_gate=arguments.get("from_gate"),
+        ),
+        _dry_run(arguments),
+    )
 
 
 def _handle_briefs_archive(ctx: MctlContext, arguments: Mapping[str, Any]) -> dict[str, object]:
@@ -4103,6 +4127,49 @@ TOOLS: tuple[ToolSpec, ...] = (
             _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
         ),
         handler=_handle_briefs_relay_adjudication,
+        mutating=True,
+        external_ready=False,
+        artifact_state=True,
+    ),
+    ToolSpec(
+        name="briefs_review_gate",
+        title="Advance a brief's review gate",
+        description=(
+            "Set a brief's `review_gate` (and, on an APPROVING advance from a "
+            "pre-adjudication status, its `status:`) through the shared effect "
+            "plan. This is the write path #86 identified as missing and #84 "
+            "needs: the review patrol patched frontmatter in place because "
+            "`mctl` could read `review_gate` and not write it. Writes "
+            "FRONTMATTER ONLY and no bead -- B2.8b declares frontmatter the "
+            "canonical root for the review-lifecycle fields, because B2.8a "
+            "scopes the bead to identity, status, timestamps and labels, and a "
+            "pre-adjudication field is none of those (measured: `review_gate` in "
+            "0 of 2,364 bead metadata records). `from_gate` makes the write "
+            "conditional on the gate still reading what the caller observed "
+            "(MBRF071), which is the frontmatter analogue of `if_status`; omit "
+            "it for an unconditional set. Dry run by default."
+        ),
+        input_schema=request_schema(
+            {
+                "brief_id": _BRIEF_ID,
+                "gate": {
+                    "type": "string",
+                    "description": (
+                        "Target gate: pending | approved | review-failed | "
+                        "escalation-unreviewed | escalation-self-checked | iter-N."
+                    ),
+                },
+                "from_gate": nullable_string(
+                    "Advance only if the gate still reads this (concurrency guard)."
+                ),
+                "dry_run": DRY_RUN_PROPERTY,
+            },
+            ["brief_id", "gate"],
+        ),
+        output_schema=response_schema(
+            _EFFECT_RESPONSE, ["applied", "effect_plan"], artifact_state=True
+        ),
+        handler=_handle_briefs_review_gate,
         mutating=True,
         external_ready=False,
         artifact_state=True,
