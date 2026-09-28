@@ -306,6 +306,12 @@ meaning = "Refusing to advance review_gate: the requested value is not in the de
 policy_ref = "B2.8a"
 module = "effects.py"
 
+[MGHW_UNKNOWN_WRITE_KIND]
+severity = "FATAL"
+meaning = "Refusing a GitHub write whose kind the applier does not know -- nothing was posted. Guards the case where a new write kind reaches the plan without a branch in the applier, which previously defaulted to CREATE."
+policy_ref = "P6.1"
+module = "effects.py"
+
 [MCTL_BEAD_RELATION_DANGLING]
 severity = "FATAL"
 meaning = "A relate edge names a bead this store cannot resolve, so it exists only as a dangling row -- counted by dependency_count, absent from `bd show` dependencies and from `bd dep list`. Measured against bd 1.1.0 on 2026-08-20: `bd dep add <local-id> <foreign-id>` exits 0 and produces exactly this."

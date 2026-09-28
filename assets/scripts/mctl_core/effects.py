@@ -147,6 +147,12 @@ class FileCreate:
         }
 
 
+#: Every `GithubWrite.kind` the applier knows how to perform. An unknown kind is
+#: REFUSED rather than defaulted, so adding a kind to the plan without teaching
+#: the applier fails loudly instead of filing an issue (see `_apply_github_write`).
+GITHUB_WRITE_KINDS = frozenset({"create", "edit"})
+
+
 @dataclass(frozen=True)
 class GithubWrite:
     """A GitHub tracker mutation this plan intends to make (#185).
@@ -1996,6 +2002,27 @@ def _apply_github_write(
     error becomes a typed `MGHW_GH_UNAVAILABLE` object -- never a bare string,
     which was #203 -- built through the shared `_diagnostic` constructor.
     """
+    # EXPLICIT dispatch, and an unknown kind REFUSES. This was `else: create`,
+    # which meant any future kind that forgot its branch would silently FILE AN
+    # ISSUE -- the loudest possible wrong action from the quietest possible
+    # omission. #253 proposes `comment` and `close` kinds for a split, so the
+    # next hand here is exactly the one that would have hit it.
+    #
+    # Refusing before the subprocess keeps the guarantee this applier is built on:
+    # nothing outside the city is touched unless a branch deliberately chose to
+    # touch it.
+    if write.kind not in GITHUB_WRITE_KINDS:
+        raise MutationError(
+            _diagnostic(
+                ctx,
+                Severity.FATAL,
+                "MGHW_UNKNOWN_WRITE_KIND",
+                f"Refusing a GitHub write of unknown kind {write.kind!r}; nothing was posted.",
+                brief_id=plan.target_brief_id,
+                detail=f"known kinds: {sorted(GITHUB_WRITE_KINDS)}",
+                suggested_next_command="",
+            )
+        )
     try:
         if write.kind == "edit":
             url = edit_issue(write.repo, int(write.number), write.body)
