@@ -188,6 +188,41 @@ costly and is the reason test selections in this day's commits are scoped.
 
 ---
 
+## The `ma` repair, as commands (re-verified 2026-09-29)
+
+`assets/scripts/dolt-remote-repair.py` automates this, but **it is not on
+kolchin**: kolchin's checkout sits on `fix/lean-gate-check-paths` at `247560a`
+while these commits are on `main`, and the script is absent from its pack cache
+too. Getting it there is itself a write to kolchin. So the sequence is recorded
+here in full, for whoever has access:
+
+```bash
+# on kolchin, in ~/repos/mathcity
+# 1. the file half — drop the "/." (config.yaml is gitignored, so it cannot
+#    arrive through the code repo; P1.10 keeps machine values out of pack content)
+#    .beads/config.yaml:13   remote: "git+ssh://git@github.com/tdupu/mathcity-dolt.git"
+
+# 2. the database half — kolchin's Dolt server has NO remote registered
+#    ("Remotes: (none)"), which is why bd falls back to config.yaml today.
+bd dolt remote remove origin   # harmless if absent
+bd dolt remote add origin 'git+ssh://git@github.com/tdupu/mathcity-dolt.git'
+
+# 3. verify
+bd dolt show                   # expect origin, with no /./
+bd dolt pull && bd dolt push
+```
+
+**The target was verified from the laptop on 2026-09-27 and re-verified
+2026-09-29:** `tdupu/mathcity-dolt` resolves (4 refs) and `isPrivate: true`, so
+P1.11's verified-private condition holds before the write rather than after.
+
+**Both commands should succeed on kolchin**, because kolchin has no schema skew
+(finding 3) — the same two commands are refused on `~/repos/mathcity`, whose
+`mc` store is blocked at v64/v67. That asymmetry is the whole reason this is a
+kolchin-side repair and not a laptop-side one.
+
+---
+
 ## What is blocked, and on what
 
 | item | blocked on |
