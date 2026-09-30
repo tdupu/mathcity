@@ -147,3 +147,5 @@ they are local state, not source:
 - `.dolt/`, `*.db`, `.beads-credential-key` — Dolt working state and
   credentials.
 - `__pycache__/`, `*.py[cod]`, `.pytest_cache/` — Python build/cache artifacts.
+- `worktrees/` — nested checkouts created by `do-work.prepare-worktree` for
+  isolated per-item work. Tracking them would commit a second copy of the repo.
