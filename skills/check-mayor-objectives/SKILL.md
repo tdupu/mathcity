@@ -88,6 +88,28 @@ Nothing here is causal. Position may be correlated with how hard or how vague an
 objective is, if charges tend to put the clear work first. The corpus cannot
 separate those, and the script does not pretend to.
 
+## Corpus COVERAGE — read this before quoting any between-session number
+
+The report opens with `== CORPUS COVERAGE ==`: how many catalog entries exist, which
+sessions actually contribute rows, which contribute nothing and why, and the **longest
+contiguous gap** in the contributing set.
+
+This exists because the schema-defect report did **not** name every exclusion, though it
+claimed to. `extract` skips an entry whose `objectives_eval` key is ABSENT with a bare
+`continue`, so those sessions left no trace at all — on the catalog at the time of writing,
+**20 of the 28 non-contributing sessions were invisible**, and the printed note said their
+exclusion was "visible rather than a quiet gap". That is the exact failure this script was
+written to prevent, occurring inside this script.
+
+**Why the gap's SHAPE matters and not just its size.** On that catalog the contributing set
+was `K1–K10` plus `K39–K44` — two clusters with a **28-session hole, K11–K38**. The COUNT
+table is between-session, so it is era-confounded on coverage grounds alone, independently
+of the warning already printed beside it. The POSITION table is within-session and is
+unaffected by the gap, which is the second reason to prefer it.
+
+An absent key is **not** a defect — a session that recorded no evaluation is missing data,
+not malformed data. The two are reported separately for that reason.
+
 ## Corpus schema defects it also reports
 
 The catalog is hand-written each session and has drifted:

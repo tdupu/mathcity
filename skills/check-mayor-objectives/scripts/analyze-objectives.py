@@ -109,9 +109,65 @@ def report_defects(defects):
         print(f"  {n:3d}x  {msg}")
         print(f"        sessions: {ks}")
     print("  Rows with a drifted KEY are NORMALISED above, not dropped. Entries whose")
-    print("  objectives_eval is not a list CANNOT be read at all and are excluded from")
-    print("  every denominator — their sessions are named above so the exclusion is")
-    print("  visible rather than a quiet gap.")
+    print("  objectives_eval is PRESENT but not a list CANNOT be read at all and are")
+    print("  excluded from every denominator; their sessions are named above.")
+    print("  Entries whose objectives_eval key is ABSENT are NOT defects and are NOT")
+    print("  listed here — see CORPUS COVERAGE, which names them. Before that section")
+    print("  existed this report claimed every exclusion was named, and 20 of 28 were")
+    print("  not.")
+
+
+def report_coverage(catalog, rows):
+    """Which sessions contribute rows, and which contribute NOTHING and why.
+
+    `report_defects` names only entries whose `objectives_eval` is PRESENT but
+    malformed.  `extract` skips an entry whose key is ABSENT with a bare
+    `continue`, so those sessions were excluded from every denominator with no
+    trace — which is precisely the failure this script exists to prevent,
+    occurring inside this script.  Printed before the tables so the denominators
+    below are read against the coverage that produced them."""
+    have = {r["session"] for r in rows}
+    contributing, absent, unreadable = [], [], []
+    for s in catalog:
+        k = s.get("mayor_session")
+        if k in have:
+            contributing.append(k)
+        elif s.get("objectives_eval") is None:
+            absent.append(k)
+        else:
+            unreadable.append(k)
+
+    print("\n== CORPUS COVERAGE ==")
+    print(f"  catalog entries      : {len(catalog)}")
+    print(f"  CONTRIBUTING         : {len(contributing)}  {sorted(contributing)}")
+    print(f"  contributing NOTHING : {len(absent) + len(unreadable)}")
+    if absent:
+        print(f"    objectives_eval ABSENT     : {len(absent):3d}  {sorted(absent)}")
+    if unreadable:
+        print(f"    objectives_eval UNREADABLE : {len(unreadable):3d}  {sorted(unreadable)}")
+
+    if not contributing:
+        return
+    missing = [k for k in range(min(contributing), max(contributing) + 1)
+               if k not in have]
+    if not missing:
+        return
+    best = cur = [missing[0], missing[0]]
+    for k in missing[1:]:
+        if k == cur[1] + 1:
+            cur[1] = k
+        else:
+            if cur[1] - cur[0] > best[1] - best[0]:
+                best = cur
+            cur = [k, k]
+    if cur[1] - cur[0] > best[1] - best[0]:
+        best = cur
+    print(f"  LONGEST CONTIGUOUS GAP : K{best[0]}-K{best[1]} "
+          f"({best[1] - best[0] + 1} sessions)")
+    print("  => The COUNT table is BETWEEN-session and is drawn from a corpus with")
+    print("     that hole in it, so it is era-confounded on coverage grounds alone,")
+    print("     independently of the warning printed with it. The POSITION table is")
+    print("     WITHIN-session and is unaffected by the gap.")
 
 
 def main():
@@ -134,6 +190,7 @@ def main():
     sessions = sorted({r["session"] for r in rows})
     print(f"structured objective rows: {len(rows)} across {len(sessions)} sessions "
           f"(K{sessions[0]}–K{sessions[-1]})")
+    report_coverage(catalog, rows)
 
     # ---- headline completion -------------------------------------------------
     c = Counter(r["completed"] for r in rows)
