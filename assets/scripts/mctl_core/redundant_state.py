@@ -289,6 +289,48 @@ def _file_artifact(kind: str, path: Path) -> RedundantArtifact:
     )
 
 
+def _resolve_stack_row_path(layout: ArtifactLayout, raw_path: str) -> Path:
+    """Resolve a stack index row's ``path`` against the root it is relative to.
+
+    The live index holds four serializations of the same file -- see
+    ``brief-stack-index.path_serialization``, which exists because comparing them
+    against a single base is what once turned a 1-row gap into a claimed 44%
+    divergence. This resolver is the read side of that same fact.
+
+    Joining every relative row against ``layout.stack`` (MBRF001) is correct for
+    a BARE name only. The writer ``brief-shuffle-fast-drain.py:812`` emits the
+    briefs-relative ``f"stack/{slug}.md"``, which that join turned into
+    ``.../stack/stack/x.md``; the city-relative ``.beads/briefs/stack/x.md``
+    became ``.../stack/.beads/briefs/stack/x.md``. Both read as ``stale`` while
+    the brief was sitting in place.
+
+    Resolution is by form, never by probing the filesystem for whichever
+    candidate happens to exist: a row that points at a genuinely missing file
+    must still resolve to that missing path and report ``stale``.
+    """
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    parts = path.parts
+    if not parts:
+        return layout.stack / path
+    # City-relative: the row repeats the briefs-root tail (".beads/briefs/..."),
+    # so strip the longest tail of layout.root that the row re-states. Derived
+    # from layout.root rather than a literal ".beads/briefs" because the root is
+    # configurable (`brief_root` in paths.toml).
+    root_parts = layout.root.parts
+    for n in range(min(len(parts), len(root_parts)), 0, -1):
+        if root_parts[-n:] == parts[:n]:
+            return layout.root.joinpath(*parts[n:])
+    # Briefs-relative: "stack/x.md" is relative to the briefs root, not the stack
+    # directory. Keyed on the stack directory's own name so a reconfigured
+    # `stack` path keeps working.
+    if parts[0] == layout.stack.name:
+        return layout.root / path
+    # Bare: "x.md" lives directly in the stack directory.
+    return layout.stack / path
+
+
 def _stack_artifact(
     layout: ArtifactLayout, row: dict[str, object] | None, decision_state: str
 ) -> RedundantArtifact:
@@ -297,9 +339,10 @@ def _stack_artifact(
             "stack_index", layout.stack_index, "missing", "no stack index row"
         )
     raw_path = row.get("path")
-    stack_path = Path(raw_path) if isinstance(raw_path, str) else layout.stack / "<missing-path>"
-    if not stack_path.is_absolute():
-        stack_path = layout.stack / stack_path
+    if not isinstance(raw_path, str):
+        stack_path = layout.stack / "<missing-path>"
+    else:
+        stack_path = _resolve_stack_row_path(layout, raw_path)
     if not stack_path.is_file():
         return RedundantArtifact("stack_index", stack_path, "stale", "index row points at a missing file")
     if decision_state in {"adjudicated", "deferred"}:
