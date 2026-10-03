@@ -17,15 +17,19 @@ refusals, both visible in dry-run because they are blocking `preconditions`
 - a molecule ROOT with open steps (`MBCL_ROOT_HAS_OPEN_STEPS`, FATAL). `force`
   does NOT bypass it -- it is the false-success guard mc-i9bwz Sec 5.1 exists to
   create; deliberate cascade-close is `molecule_cancel` (adjudicated 2026-08-28).
-- a bead blocked by open dependencies (`MBCL_BLOCKED_BY_OPEN_DEPS`, ERROR).
-  `force` downgrades ONLY this one, and the apply passes `bd update --force`.
+- a bead blocked by open dependencies (`MBCL_BLOCKED_BY_OPEN_DEPS`, ERROR), in
+  bd's sense of blocked: an open dependency counts only on a `blocks`,
+  `conditional-blocks` or `waits-for` edge on which this bead is the dependent
+  (`IsBlockedInTx`, mc-h8331). `tracks`, `parent-child`, `related` and every
+  other type never block. `force` downgrades ONLY this refusal, and the apply
+  passes `bd update --force`.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
 
-from .beads import BeadLabelChange, BeadUpdate, read_beads
+from .beads import BeadLabelChange, BeadUpdate, _first_string, read_beads
 from .context import MctlContext
 from .diagnostics import Diagnostic, Severity
 from .effects import EffectPlan, JsonlWrite, MutationError, _diagnostic, _now
@@ -35,6 +39,16 @@ from .molecules import (
     is_molecule_root,
     open_steps_of,
 )
+
+#: bd's blocking edge types: `IsBlockingEdge` in beads `internal/types/types.go`
+#: (bd 1.3.0, 71c4cd08b), the set bd's close-time check `IsBlockedInTx` counts.
+#: Every other type -- `tracks`, `parent-child`, `related`, ... -- is structural
+#: or informational and never blocks a close (mc-h8331).
+_BLOCKING_DEPENDENCY_TYPES = frozenset({"blocks", "conditional-blocks", "waits-for"})
+
+#: Where an edge names the bead depended on: `beads._dependency_ids`'s keys, in
+#: its order, with its `id` fallback last (the `bd show --json` shape).
+_DEPENDS_ON_KEYS = ("depends_on_id", "depends_on_issue_id", "depends_on", "source_id", "id")
 
 
 @dataclass(frozen=True)
@@ -108,7 +122,7 @@ def plan_bead_close(ctx: MctlContext, request: BeadCloseInput) -> EffectPlan:
             )
 
     preconditions: list[Diagnostic] = []
-    open_deps = _open_dependencies(bead.source_dependencies, beads)
+    open_deps = _open_dependencies(_blocking_dependency_ids(bead), beads)
     if open_deps and not request.force:
         named = ", ".join(open_deps)
         preconditions.append(
@@ -318,11 +332,59 @@ def _bead_exists(ctx: MctlContext, bead_id: str) -> bool:
     return False
 
 
+def _blocking_dependency_ids(bead) -> tuple[str, ...]:
+    """The ids this bead depends on through one of bd's blocking edge types.
+
+    Read from the raw edges, because `Bead.source_dependencies` keeps ids only:
+    the edge type is gone by then, which is how a step's `tracks` edge to its
+    own workflow root refused every unforced close (mc-h8331). Both filters
+    are bd's own close-time rule (`IsBlockedInTx`):
+
+    - only `_BLOCKING_DEPENDENCY_TYPES` count. The type is read from `type`,
+      else `dependency_type`; an entry with neither counts as `blocks`, bd's
+      default type, so an unreadable edge fails closed;
+    - only edges on which THIS bead is the dependent count: `issue_id` equal to
+      its id, or absent. An entry whose `issue_id` names another bead is that
+      bead's edge, never this one's.
+    """
+    entries = bead.raw.get("dependencies")
+    if not isinstance(entries, list):
+        return ()
+    ids: list[str] = []
+    for entry in entries:
+        if isinstance(entry, str):
+            if entry:
+                ids.append(entry)
+            continue
+        if not isinstance(entry, dict):
+            continue
+        issue_id = entry.get("issue_id")
+        if issue_id and issue_id != bead.id:
+            continue
+        if _edge_type(entry) not in _BLOCKING_DEPENDENCY_TYPES:
+            continue
+        depends_on = _first_string(entry, _DEPENDS_ON_KEYS)
+        if depends_on:
+            ids.append(depends_on)
+    return tuple(sorted(set(ids)))
+
+
+def _edge_type(entry) -> str:
+    """An edge's type: `type`, else `dependency_type`, else bd's default `blocks`."""
+    for key in ("type", "dependency_type"):
+        value = entry.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "blocks"
+
+
 def _open_dependencies(dep_ids, beads) -> tuple[str, ...]:
     """The dependency ids that resolve to a still-open bead in this rig.
 
-    Reimplemented as a plan-time read (bd's own blocked refusal fires only at
-    apply time, so it would never show in a dry run). A dependency this rig
+    Its caller passes `_blocking_dependency_ids(bead)`, so the type and
+    direction filters have already run: this is the open-status half of bd's
+    rule, reimplemented as a plan-time read (bd's own blocked refusal fires only
+    at apply time, so it would never show in a dry run). A dependency this rig
     cannot resolve is NOT counted as blocking: "we could not see it" is not "it
     is open", and inventing a block would be a plausible-refusal failure.
     """
