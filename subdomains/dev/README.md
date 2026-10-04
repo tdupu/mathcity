@@ -65,8 +65,12 @@ numbers.
 
 | Skill | Purpose |
 | --- | --- |
+| `adjust-behavior` | Repair the instructions behind an undesired agent behavior: repro → cause → repair → verify. |
 | `adjust-workers` | Scale concurrent run-operators on a Gas City rig through the briefed pack-change workflow. |
 | `audit-recent-work` | Account for work adjudicated over a session or date range, including brief records, decisions, and in-flight molecules. |
+| `behavior-cause` | Trace a reproduced behavior to candidate artifacts with evidence and detected ownership. |
+| `behavior-repro` | Turn a behavior complaint into evidence confirmed by majority-of-k fresh runs. |
+| `behavior-verify` | Paired A/B with blind grading; only `repaired` ships. |
 | `check-build-formulas-and-skills` | Audit formula and skill catalog completeness plus formula hygiene. |
 | `check-build-hygiene` | Audit the live install (binaries, repos, imports, skill sinks) against POLICY.md; drift list with per-item remediation. |
 | `check-city-policy` | Audit a plan, diff, or running-city state against the City Operations Policy. |

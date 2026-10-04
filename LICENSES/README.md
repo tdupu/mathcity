@@ -33,9 +33,23 @@ tidied:
   which is not ours to complete.
 - MIT's retention obligation attaches to copied expression, not to ideas.
 
-## What was actually established, and what was not
+### mattpocock/skills (MIT)
 
-The notice above is retained **by the repository owner's direction**, as
+[github.com/mattpocock/skills](https://github.com/mattpocock/skills), Copyright
+(c) 2026 Matt Pocock. Its notice is retained verbatim at
+[mattpocock-skills-MIT.txt](./mattpocock-skills-MIT.txt).
+
+Unlike mathlib-quality, this is **copied expression**, so retaining the notice
+is an obligation, not a courtesy. `skills/domain-modeling/SKILL.md` is upstream
+`skills/engineering/domain-modeling/SKILL.md` at commit
+`ee8bae40062cd6b435073368ed0c540f48c35862` (2026-06-17) with one sentence
+removed (the link to `CONTEXT-FORMAT.md`). `skills/domain-modeling/ADR-FORMAT.md`
+is the same commit's file, unchanged. Upstream has since renamed `CONTEXT.md`
+to `GLOSSARY.md`; this copy keeps the earlier convention.
+
+## What was actually established for mathlib-quality, and what was not
+
+The mathlib-quality notice is retained **by the repository owner's direction**, as
 acknowledgment of design influence and as the conservative choice. It is not the
 result of a finding that text was copied. The distinction is recorded rather than
 blurred, because a licensing file's whole value is that it is accurate.

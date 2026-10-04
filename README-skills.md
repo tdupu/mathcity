@@ -4,7 +4,7 @@ Parent: [README.md](./README.md)
 
 **Single canonical cross-pack index of every skill in the mathcity pack family.**
 
-178 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
+184 skills across the parent pack and 8 subdomain child packs (ADR 0002). This file is the ONE complete list; the tables in each `subdomains/*/README.md` are pack-local views of the same skills — do not treat them as competing indexes. When they disagree, **this file wins**.
 
 **Maintenance (single source of truth — no competing updater):**
 - `skill-creator-math` appends the new skill's row here as the last step of creating a skill.
@@ -60,7 +60,7 @@ for exact review versions, executed checks and remaining limits.
 | Undetermined mathematics: resolve or visibly block | Agent | Same skill package; local reasoning and independent proof reviewer; supplied test evidence | Run the case-03 phase trials in `tests/research-synthesis/README.md` | `tests/research-synthesis/`, case 03 | See the correction section of the validation record; historical prompt-only PASS is insufficient | N/A — this correction |
 | Exact target with prerequisite backfill | Agent | Same; exact requested statement and evidence | `using-mathpowers: start from this target, backfill, then write the presentation` | `tests/research-synthesis/` | See validation record; no claim of general proof certification | N/A — this refactor |
 
-### Parent pack — `mathcity/skills/`  (62)
+### Parent pack — `mathcity/skills/`  (64)
 
 | Skill | Alias | What it does |
 |---|---|---|
@@ -90,11 +90,13 @@ for exact review versions, executed checks and remaining limits.
 | `dolt-init` | `mathcity.dolt-init` | Initialize the bd (beads) Dolt database and set the dolt remote in both the city-side rig and repo-side working copy |
 | `dolt-pull` | `mathcity.dolt-pull` | Commit any pending beads changes locally, then pull from the Dolt remote |
 | `dolt-push` | `mathcity.dolt-push` | Commit any pending beads changes and push to the Dolt remote |
+| `domain-modeling` | `mathcity.domain-modeling` | Build and sharpen a project's domain model — glossary terms and sparing ADRs. Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT; see LICENSES/) |
 | `doubt` | `mathcity.doubt` | Adversarial background fact-checker — forks a subagent told the current agent is WRONG, tasked with finding falsehoods in any claim the session makes. Non-blocking; surfaces verdict inline when fork completes. |
 | `fan-out` | `mathcity.fan-out` | Fan an epic bead out into sub-beads (convoy members) WITHOUT consuming additional WIP-dispatcher slots |
 | `file-briefs` | `mathcity.file-briefs` | Async brief-filing variant of grill-with-docs for Mayor onboarding |
 | `formula-creator` | `mathcity.formula-creator` | Create a new formula TOML in a Gas City pack and validate gc/bd command surface before committing |
 | `fp-finder-skill` | `mathcity.fp-finder-skill` | Fixed-point convergence engine for SKILL.md files |
+| `frontier-dump` | `mathcity.frontier-dump` | Delegate a prompt to the best available frontier agent and save a dated research dump, refutations included, under ai/ |
 | `gate-test-execution-silent` | `mathcity.gate-test-execution-silent` | G14 gate (test-execution-silent) |
 | `gc-recycle-bead` | `mathcity.gc-recycle-bead` | Handle graceful lifecycle transitions for research beads — beads that contain mathematical decisions, session notes, or research context rather than purely actionable task steps |
 | `generate-prompt` | `mathcity.generate-prompt` | Turn a mathematical issue, note, or vague problem into one evidence-grounded, execution-ready prompt pinned to project data, references, computations, and deliverables |
@@ -149,14 +151,18 @@ for exact review versions, executed checks and remaining limits.
 | `profile-magma` | `mathcity-computing.profile-magma` | Wrap the Magma code the user is working on in a profiling harness to find bottlenecks (slow intrinsics, memory hogs) |
 | `update-issue` | `mathcity-computing.update-issue` | Replace a GitHub issue's body with a single up-to-date canonical statement, consolidating all prior body versions into ONE archive comment per issue (folded via HTML <details> blocks) |
 
-### Pack development / hygiene — `subdomains/dev/skills/`  (30)
+### Pack development / hygiene — `subdomains/dev/skills/`  (34)
 
 | Skill | Alias | What it does |
 |---|---|---|
 | `add-to-gascity-ledger` | `mathcity-dev.add-to-gascity-ledger` | Record a gc-layer problem or lifecycle event in the gascity issue ledger, then display the updated ledger |
 | `add-to-surface-ledger` | `mathcity-dev.add-to-surface-ledger` | Record new evidence about an MCP command or skill in the surface-status ledger, then display the updated ledger |
+| `adjust-behavior` | `mathcity-dev.adjust-behavior` | Repair the instructions (skill, instruction file, prompt template) behind an undesired agent behavior: repro, cause, repair, verify |
 | `adjust-workers` | `mathcity-dev.adjust-workers` | Scale the number of concurrent run-operators on a Gas City rig — reads live session counts, proposes a max_active_sessions patch, and routes it through the briefed pack-change path (city-toml-via-packs-not-hand policy). |
 | `audit-recent-work` | `mathcity-dev.audit-recent-work` | Produce a full accounting of work adjudicated in a session or date range — brief-record beads, decision beads, stack archives, and in-flight molecules — across all rigs. Distinguishes mid-flight build-basic-briefed molecules from genuine dispatch gaps. |
+| `behavior-cause` | `mathcity-dev.behavior-cause` | Trace a reproduced agent behavior to candidate artifacts, with evidence and a detected ownership finding for each |
+| `behavior-repro` | `mathcity-dev.behavior-repro` | Turn a complaint about agent behavior into evidence: undesired/desired/situation, confirmed by majority-of-k fresh runs |
+| `behavior-verify` | `mathcity-dev.behavior-verify` | Show an instruction edit changed the behavior: paired A/B, blind grading, majority-of-k verdict |
 | `city-status` | `mathcity-dev.city-status` | Read-only Gas City fleet and work-queue snapshot — checks tmux liveness, active sessions, in-progress beads (with lease/heartbeat status), molecule step tables (steps done, +1h change, start/completion times), brief pipeline state (.pile/.stack counts, shuffler lock), and Dolt health. |
 | `formula-creator-math` | `mathcity-dev.formula-creator-math` | Create a MathCity-owned briefed/work-boundary formula TOML with the enforced briefed-terminal-step convention |
 | `formula-work` | `mathcity-dev.formula-work` | Dispatch a bead to the formula-creator-math formula, which drafts a mathcity formula TOML and gates it behind a human decision brief |

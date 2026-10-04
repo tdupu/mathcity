@@ -1,0 +1,3 @@
+interface:
+  display_name: "Frontier Dump"
+  short_description: "Delegate prompts to the best frontier agent and save dated scratch dumps"
