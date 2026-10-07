@@ -1,0 +1,101 @@
+description = """
+Run `derive-verdict` over every open brief on the stack every 6 hours and write a
+DERIVATION RECORD — which briefs an Adopted rule already decides, which two rules
+conflict over, and which genuinely need a human.
+
+IT RECORDS NO VERDICTS, DELIBERATELY, AND THAT IS THE WHOLE DESIGN.
+
+`derive-verdict`'s own contract: "Read-only — never records a verdict, never
+closes a brief, never writes bead state; recording is adjudicate-brief's." It
+"produces a derivation record, not a recorded verdict." This formula is that
+skill on a timer, and it stops where the skill stops.
+
+The recording half is NOT authorized yet. ADR 0006 ("Agents May Record
+Policy-Derived Verdicts") is `Status: Proposed (2026-09-15)`, and PP2.1 says a
+Draft governs nothing until Adopted — which is why both existing derivation
+passes in `docs/derivations/` open by saying nothing in them was written to a
+bead as a verdict. When ADR 0006 is Adopted, the recording step is a separate
+formula that calls `adjudicate-brief`; it is not a flag on this one.
+
+And ADR 0006 point 5 would still forbid the obvious shortcut even then:
+"Independence is structural. An agent may never adjudicate a brief it authored."
+So a sweep that derived AND recorded would have to check authorship per brief.
+Keeping derivation separate from recording means this formula never has to.
+
+WHY IT IS WORTH RUNNING WITHOUT THE RECORDING HALF. The 2026-09-26 pass found
+64 of 213 briefs needed no human decision. That is the value: it turns a pile
+nobody can face into a short ratification list, and it costs no authority to
+produce. A human ratifying 64 derivations in a batch is a different afternoon
+from reading 213 briefs.
+
+PHASE. Deliberately NOT `vapor`. Deriving a verdict is a reading act — it has to
+weigh a rule's text against a brief's options and refuse when the rule is
+judgement-kind (CT13.4). A shell script cannot do that, and a formula that
+pretended to would be the "proxy that passes confidently on the cases it cannot
+see" failure Pillar 7 warns about.
+"""
+formula = "derive-verdict-sweep"
+version = 1
+
+[catalog]
+name = "derive-verdict-sweep"
+description = "Every 6h, derive which open briefs an Adopted rule already decides. Writes a derivation record; records no verdicts (ADR 0006 is Proposed)."
+
+[vars]
+
+[vars.artifact_root]
+description = "Brief pipeline artifact root — the stack whose open briefs are swept."
+default = "~/.gc/mathcity/aggregated-briefs"
+
+[vars.record_root]
+description = "Where the dated derivation record is written. One file per sweep."
+default = "docs/derivations"
+
+[[steps]]
+id = "derive"
+title = "Derive verdicts for every open brief, and record the outcome counts"
+description = """
+Use the `mathcity.derive-verdict` skill. Read its SKILL.md first — this step is
+that skill applied in bulk, not a reimplementation of it.
+
+For EVERY open brief on the stack at `{{artifact_root}}`:
+
+1. Enumerate the brief's options. **If the options are not enumerable, stop at
+   step 1 for that brief** — the skill says so explicitly; there is nothing to
+   eliminate, and it is UNDETERMINED by construction rather than by judgement.
+2. Check adoption **PER RULE, not per document.** A Draft policy governs nothing
+   (PP2.1), and 27 individually-PROPOSED rules currently live inside Adopted
+   documents. A rule's own PROPOSED marker beats its document's Adopted header.
+3. Emit exactly one outcome per brief: **DERIVED**, **CONFLICT**, or
+   **UNDETERMINED** — plus the skill's two loud refusals, which are results and
+   must NOT be folded into UNDETERMINED's prose (CT13.4).
+4. For a DERIVED outcome, quote the governing rule **verbatim** and name which
+   option each rule kills. Cite rule TEXT, never a rule ID — ADR 0006 point 3,
+   from Taylor: "we shouldn't explicitly mention the policy numbers in outside
+   references… they could change and are not stable."
+
+Then write ONE dated file under `{{record_root}}` in the established shape — see
+`docs/derivations/2026-09-26-premise-testing-pass.md` — carrying:
+
+- the counts per outcome, and the total swept;
+- for each DERIVED brief: its id, the verbatim rule text, and the option killed;
+- for each CONFLICT: both rules and both readings (PP6.1(c));
+- every refusal, named, with why it refused.
+
+DO NOT, in this step or any other:
+
+- record a verdict on any bead;
+- close, defer, or re-present any brief;
+- write bead state of any kind;
+- hand a DERIVED outcome onward to `adjudicate-brief`.
+
+The last one is the easy mistake: the skill's own table says a DERIVED outcome
+goes to `adjudicate-brief` for recording, and that is true of the skill used
+interactively by an agent with authority. It is NOT true of this sweep, because
+ADR 0006 is still Proposed. This formula's terminal output is the record.
+
+If the sweep cannot read the stack, FAIL LOUDLY (P6.1) rather than writing a
+record with zero counts. A derivation record that says "0 briefs" when it could
+not look is indistinguishable from a clean pile, which is the measurement defect
+this pack has hit repeatedly.
+"""

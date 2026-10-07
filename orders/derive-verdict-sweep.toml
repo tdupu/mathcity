@@ -1,0 +1,49 @@
+# Every 6 hours, derive which open briefs an Adopted rule already decides.
+#
+# Taylor's request, 2026-10-06: "Every 6 hours have the kolchin mayor derive its
+# own adjudications. Do this with a cron job."
+#
+# Built as the DERIVATION half only. Two things in ADR 0006 shape that:
+#
+#   - It is `Status: Proposed (2026-09-15)`, and PP2.1 says a Draft governs
+#     nothing until Adopted. So an agent recording a derived verdict is not
+#     authorized today. `derive-verdict` is read-only by its own contract and
+#     stays inside that.
+#   - Point 5: "Independence is structural. An agent may never adjudicate a brief
+#     it authored." So "derive its OWN adjudications" is the one shape the
+#     authorizing ADR rules out. Deriving separately from recording means this
+#     order never has to test authorship.
+#
+# When ADR 0006 is Adopted, the recording step is a SEPARATE order calling
+# `adjudicate-brief`, with the authorship check point 5 requires. Not a flag here.
+#
+# POOL — and this order is INERT on kolchin as shipped.
+#
+# `mathcity.brief-operator` is `scaled (min=0, max=0)` on kolchin (measured
+# 2026-10-06), so this will never claim a slot there until those caps come off
+# (tdupu/mathcity#274). It is pooled here anyway because all 22 other mathcity
+# orders are, and inventing a different pool target for this one would be the
+# drive-by scope creep P2.4 forbids — the cap is the thing to fix, not the
+# convention.
+#
+# Two live pools exist on kolchin today if a sooner run is wanted:
+# `mathcity-testrig/mathcity.brief-operator` (max=3) and `mayor.mayor` (max=1).
+# The Mayor pool is the semantically right target for Taylor's wording, but it is
+# max=1 and currently held by a 28-day session — an order needing that slot would
+# starve on it, which is exactly the singleton-slot failure the `nudge-city`
+# skill documents. That is a deployment decision, not a default.
+#
+# TRIGGER. `cron`, not `cooldown`: "every 6 hours" should mean 00:00/06:00/12:00/
+# 18:00, not "6h after whenever the last run happened to finish." Cooldown drifts
+# with runtime; cron does not. Shape copied from the only cron-triggered formula
+# order in the fleet, `mol-dog-stale-db` (`0 */4 * * *`).
+
+[order]
+description = "Every 6h, derive which open briefs an Adopted rule already decides; write a derivation record, record no verdicts (ADR 0006 is Proposed)"
+scope = "city"
+formula = "derive-verdict-sweep"
+trigger = "cron"
+schedule = "0 */6 * * *"
+pool = "mathcity.brief-operator"
+timeout = "900s"
+idempotent = true

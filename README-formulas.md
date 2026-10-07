@@ -38,6 +38,7 @@ _Regenerate/verify with `/update-README`._
 | `commission-work-briefed` | methodology | Design and review a dispatch graph for fresh or ambiguous work, then file an approval brief before implementation dispatch. |
 | `create-issue-briefed` | do-work | Draft a template-complete upstream issue body and file it as a human decision brief. |
 | `decision-enforce` | do-work | Enforce the bd-decision-canonical principle at formula call sites. |
+| `derive-verdict-sweep` | do-work | Every 6h, derive which open briefs an Adopted rule already decides. Writes a dated derivation record; records NO verdicts — ADR 0006 is `Proposed`, so `derive-verdict`'s read-only contract is the boundary. |
 | `file-or-sendback-route` | do-work | Post-decision file-or-sendback gate: log the routing choice for a decided brief. |
 | `formula-creator-math` | methodology | Create a MathCity-owned briefed/work-boundary formula TOML, enforcing the briefed-terminal-step convention. |
 | `lost-bead-classification-rollup` | do-work | Group lost-bead classifications by fingerprint and prepare downstream filter-rule proposals. |
