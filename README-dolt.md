@@ -72,6 +72,33 @@ git ls-remote git@github.com:<owner>/<repo>-dolt.git refs/dolt/data
 
 A SHA line means the backup landed.
 
+### `refs/dolt/data` is authoritative — `refs/heads/main` is not
+
+Check `refs/dolt/data`, not `refs/heads/main`. On a git-backed Dolt remote the
+branch ref can sit unchanged across a successful push, so **"main didn't move"
+does not mean the push failed.** Measured 2026-10-08 on `<owner>/mathcity-dolt`:
+after a force push that `bd dolt push` reported as `Push complete.`, the remote
+still showed `refs/heads/main` at its pre-push SHA while `refs/dolt/data` had
+moved and a fresh clone returned 2856 issues, up from 1591.
+
+**Neither is `Push complete.` sufficient on its own.** Two earlier attempts on
+the same store were killed mid-transfer; both had uploaded chunks and moved
+`refs/dolt/data` while landing nothing, because the ref update is atomic and
+happens last. A partial upload and a completed push therefore look alike from
+the ref alone.
+
+Verify a push by CONTENT, not by the log line and not by one ref:
+
+```bash
+dolt clone git+ssh://git@github.com/./<owner>/<repo>-dolt.git /tmp/verify-<repo>
+cd /tmp/verify-<repo> && dolt sql -q "SELECT COUNT(*) FROM issues;"
+```
+
+Then diff the ids against the local store: the check that matters is **zero
+remote ids absent locally** (nothing was dropped). Local ids missing upstream
+are normal if writes continued during the push — ephemeral `*-wisp-*` rows in
+particular.
+
 ## Two-Sided Sync
 
 If you keep both a city-side rig checkout and a repo-side working clone, point

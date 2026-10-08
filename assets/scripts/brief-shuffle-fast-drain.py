@@ -812,7 +812,11 @@ def process_item(source: Path, brief_root: Path, gate_config: dict[str, Any], ap
                         "path": f"stack/{slug}.md",
                         "source": f".pile/{slug}.md",
                         "gate_profile": profile,
-                        "unlock_count": 0,
+                        # mc-jdyr1: no "unlock_count" here. The drain does not
+                        # count unlocks, so writing 0 fabricated a measurement
+                        # rather than recording one -- a consumer could not tell
+                        # "never unlocked" from "never looked". Absent means
+                        # unknown; a real count belongs to whoever measures it.
                         "created_at": utc_now(),
                     })
                 except OSError:
