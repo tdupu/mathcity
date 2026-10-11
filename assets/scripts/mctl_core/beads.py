@@ -18,6 +18,62 @@ BD_TIMEOUT_ENV = "MCTL_BD_TIMEOUT_SECONDS"
 BD_GUARD_MISMATCH_EXIT = 13
 BD_LIST_ARGS = ("bd", "list", "--all", "--limit", "0", "--json", "--readonly")
 
+#: bd REFUSES `--readonly` on a proxied-server store: "strict readonly is
+#: unavailable for dolt proxied-server backend; refusing to open a store that
+#: cannot guarantee mutation-free access". That is a deliberate refusal rather
+#: than a gap -- bd will not promise a guarantee the proxy cannot enforce -- and
+#: there is no non-strict variant of the flag to fall back to. Gas City 1.5
+#: moves every city and rig onto that backend, so passing the flag
+#: unconditionally makes EVERY mctl bead read raise BeadReadError. That is what
+#: took the brief pipeline down on 2026-10-08.
+#:
+#: Gate the flag, do not drop it. Dropping it everywhere would surrender the
+#: mutation guard on the stores where bd CAN still honour it -- which is most of
+#: them, and all of the ones these audits run against by default.
+#: bd reports this refusal as a JSON object on STDOUT with an empty stderr and
+#: a non-zero exit, so a stderr-only check never sees it. Match the stable
+#: machine code first and keep the prose as a fallback for older builds.
+_BD_PROXIED_READONLY_CODE = "proxy.readonly.unsupported"
+_BD_PROXIED_READONLY_REFUSAL = "strict readonly is unavailable"
+_PROXIED_DOLT_MODE = "proxied-server"
+_readonly_args_cache: dict[str, tuple[str, ...]] = {}
+
+
+def bd_readonly_args(rig_root: Path) -> tuple[str, ...]:
+    """`("--readonly",)` when bd can honour it for this store, else `()`.
+
+    Decided from `dolt_mode` in the store's own `.beads/metadata.json` -- a file
+    read, deliberately not a bd subprocess. This sits in front of every bead
+    read, and paying a process launch to learn how to launch a process would
+    double the cost of the thing it protects.
+
+    An absent, unreadable or unrecognised metadata file KEEPS the flag. The safe
+    default is the stricter one: a store we cannot classify is treated as one
+    that can still honour the guarantee, so a misclassification costs
+    availability (bd refuses, and `_read_bd` recovers from that refusal) instead
+    of silently dropping the mutation guard. Cached per store because a
+    backend does not change underneath a running command.
+    """
+    key = str(rig_root)
+    cached = _readonly_args_cache.get(key)
+    if cached is not None:
+        return cached
+    args: tuple[str, ...] = ("--readonly",)
+    try:
+        with open(Path(rig_root) / ".beads" / "metadata.json", encoding="utf-8") as handle:
+            if json.load(handle).get("dolt_mode") == _PROXIED_DOLT_MODE:
+                args = ()
+    except (OSError, ValueError):
+        pass
+    _readonly_args_cache[key] = args
+    return args
+
+
+def bd_list_args(rig_root: Path) -> tuple[str, ...]:
+    """`BD_LIST_ARGS` with `--readonly` gated for this store's backend."""
+    readonly = bd_readonly_args(rig_root)
+    return tuple(a for a in BD_LIST_ARGS if a != "--readonly") + readonly
+
 #: Metadata flag a sourced create carries WHILE its links are still being made
 #: (#192). `bd create` then a separate `bd link` per source is two writes under
 #: one call: if a link fails, the bead is already written. Marking it incomplete
@@ -596,28 +652,70 @@ def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
         raise BeadReadError(f"Could not read bead export {path}: {error}") from error
 
 
+def _bd_error_text(stdout: str | None) -> str:
+    """The `error` field of a bd JSON failure payload, or "" if there is none."""
+    try:
+        payload = json.loads(stdout or "")
+    except ValueError:
+        return ""
+    if isinstance(payload, dict):
+        code = str(payload.get("code") or "").strip()
+        message = str(payload.get("error") or "").strip()
+        if message:
+            return f"{message} [{code}]" if code else message
+    return ""
+
+
+def _is_proxied_readonly_refusal(result: subprocess.CompletedProcess[str]) -> bool:
+    """True when bd declined `--readonly` because the backend is proxied."""
+    blob = f"{result.stdout or ''}\n{result.stderr or ''}"
+    return _BD_PROXIED_READONLY_CODE in blob or _BD_PROXIED_READONLY_REFUSAL in blob
+
+
 def _read_bd(
     rig_root: Path, timeout: int, *, issue_type: str | None = None
 ) -> Iterable[Mapping[str, object]]:
-    try:
-        result = subprocess.run(
-            [*BD_LIST_ARGS, *(("--type", issue_type) if issue_type else ())],
-            cwd=rig_root,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=timeout,
+    argv = [*bd_list_args(rig_root), *(("--type", issue_type) if issue_type else ())]
+
+    def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args, cwd=rig_root, text=True, capture_output=True, check=False, timeout=timeout
         )
+
+    try:
+        result = _run(argv)
+        # Second line of defence behind `bd_readonly_args`. That helper reads
+        # metadata.json, so a store whose file is missing, stale or
+        # out-of-sync with the running server is still classified as able to
+        # honour --readonly and still gets refused here. Recover from bd's own
+        # verdict, which is authoritative in a way the file is not, and retry
+        # once without the flag rather than failing a read the backend can
+        # serve perfectly well.
+        if (
+            result.returncode != 0
+            and "--readonly" in argv
+            and _is_proxied_readonly_refusal(result)
+        ):
+            argv = [a for a in argv if a != "--readonly"]
+            _readonly_args_cache[str(rig_root)] = ()
+            result = _run(argv)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise BeadReadError(f"Could not query beads through bd: {error}") from error
     if result.returncode != 0:
-        raise BeadReadError(result.stderr.strip() or f"{' '.join(BD_LIST_ARGS)} failed")
+        # bd puts structured failures on stdout, so a stderr-only message
+        # degrades to a bare "... failed" that says nothing. Prefer stderr,
+        # fall back to whatever bd actually reported.
+        raise BeadReadError(
+            result.stderr.strip()
+            or _bd_error_text(result.stdout)
+            or f"{' '.join(argv)} failed"
+        )
     try:
         parsed: Any = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise BeadReadError(f"{' '.join(BD_LIST_ARGS)} returned invalid JSON: {error}") from error
+        raise BeadReadError(f"{' '.join(argv)} returned invalid JSON: {error}") from error
     if not isinstance(parsed, list) or not all(isinstance(row, dict) for row in parsed):
-        raise BeadReadError(f"{' '.join(BD_LIST_ARGS)} did not return a JSON list of objects")
+        raise BeadReadError(f"{' '.join(argv)} did not return a JSON list of objects")
     return parsed
 
 
