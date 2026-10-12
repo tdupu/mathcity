@@ -100,7 +100,15 @@ def order_roots(city_root: Path, extra, data=None):
         roots.append(sp / "orders")
 
     # gc materializes remote imports here; these ARE declared, just cached.
-    roots += sorted((Path.home() / ".gc" / "cache" / "repos").glob("*/orders"))
+    # GATED ON THE CITY ACTUALLY DECLARING IMPORTS. Unconditionally adding the
+    # machine-global cache made every city -- including a tmp_path fixture that
+    # declares nothing -- sweep kolchin's real orders, so no fixture could ever
+    # produce an empty sweep and three tests failed on a live box while passing
+    # nowhere. A city that declares no imports has no materialized imports to
+    # read, and inheriting another city's cache is the same wrong-container
+    # error this check exists to catch.
+    if sources:
+        roots += sorted((Path.home() / ".gc" / "cache" / "repos").glob("*/orders"))
     roots += sorted(city_root.glob("*/orders"))
     roots += [Path(e).expanduser() for e in extra]
 

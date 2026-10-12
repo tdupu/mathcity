@@ -149,6 +149,7 @@ pending_retry_count() {
 #
 # The comment previously claimed this mirrors "how brief-decision-dispatch
 # resolves escalate.sh". It does not: that formula and every other in this pack
+# deadpath-ok: prose naming the <mathcity-pack-root>/assets/scripts/ placeholder in order to contrast it with this formula's dirname-chain; deleting the sentence would delete the explanation of why this formula is the pack's only exception
 # use a literal <mathcity-pack-root>/assets/scripts/... placeholder. This is the
 # only dirname-chain in the pack, so it had no sibling to be checked against.
 PACK_ROOT="$(gc order show revise-return 2>/dev/null | sed -n 's/^Source:[[:space:]]*//p' | head -n1 | xargs -I{} dirname {} 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)"
