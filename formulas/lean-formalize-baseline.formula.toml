@@ -48,5 +48,5 @@ max_attempts = 2
 
 [template.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/lean-baseline-green.sh"
+path = "../assets/scripts/checks/lean-baseline-green.sh"
 timeout = "20m"

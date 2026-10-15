@@ -44,7 +44,7 @@ max_attempts = 4
 
 [template.check.check]
 mode = "exec"
-path = ".gc/scripts/checks/lean-no-sorry.sh"
+path = "../assets/scripts/checks/lean-no-sorry.sh"
 timeout = "30m"
 
 [[template.children]]

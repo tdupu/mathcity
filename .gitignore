@@ -40,3 +40,11 @@ docs/salvage/
 # belongs to. Ignore the store, keep the identity.
 .beads/*
 !.beads/identity.toml
+
+# Formula worktrees. `do-work.prepare-worktree` creates a NESTED CHECKOUT at
+# $(pwd)/worktrees/<source-anchor-id> inside this repo (gascity-packs asset
+# gascity/assets/workflows/do-work/prepare-worktree.md, step 4). The asset never
+# says to ignore it, so without this line every prepared worktree shows up as
+# untracked and one `git add -A` commits an entire second checkout.
+# mathcity-testrig already carries this line; mathcity did not.
+worktrees/
