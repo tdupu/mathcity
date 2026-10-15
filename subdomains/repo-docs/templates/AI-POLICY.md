@@ -151,21 +151,41 @@ Pass: every AI-surfaced entry in the `.bib` is marked verified in the records.
 Fail: an unverified AI-proposed reference in the `.bib`. (A reference surfaced,
 checked, and correctly discarded is not a finding.)
 
-**AI12 — Placement is fixed [C].**
-The unnumbered **Software and AI assistance** subsection goes at the end of
-the introduction; in a document with no introduction, immediately after the
-opening overview; in a document with neither, as the first unnumbered
-subsection before the first numbered section; failing all three, immediately
-after the front matter. A document that has an abstract
-also carries one factual disclosure sentence in it; a document with no
-abstract owes no abstract sentence. Acknowledgements stay separate — no
-invented grants, hospitality, or thanks. A journal or user placement
-requirement overrides this rule when recorded with the manuscript.
-Pass: the subsection is present, unnumbered, correctly headed, at the first
-of those four positions the document admits; and the abstract carries the
-disclosure sentence whenever the document has an abstract.
-Fail: subsection absent, misheaded, numbered, placed later than the position
-the document admits, or an abstract without the sentence.
+**AI12 — Placement is one of two layouts [C].**
+The disclosure takes one of two layouts, chosen by the human authors and
+recorded in `ai-usage.md`.
+(1) A numbered **Software and AI assistance** section immediately after the
+introduction. (2) A short numbered **Software and AI assistance**
+subsection as the last subsection of the introduction, with the full
+numbered **Software and AI assistance** section in the appendix. The short
+subsection is one paragraph with no lower-level headings: each AI system
+with model, harness, dates and citation, and its kinds of work; the
+numbered results an AI produced or first found, refutations first, each
+attributed to a named system; that
+the subsection and the appendix section were drafted by AI and how the
+authors reviewed them; the AI9 sentence; and a reference to the appendix
+section. Derivation accounts and literature searches stay in the appendix.
+Layout (2) needs an introduction. In a document with no introduction,
+layout (1) goes after the opening overview, or immediately after front
+matter if there is no overview. The full section has thirteen subsections, in order: Methods:
+typesetting; Methods: agent management; Methods: record keeping; Methods:
+natural language proofs; Methods: adversarial reviews; Methods: AI
+assisted computations; Methods: AI statement; Proofreading and adversarial
+review; Literature review; AI findings and procedure; Provenance; Due
+diligence; Formalization. Token accounting is a separate appendix section and
+the last one; in layout (2) the disclosure section immediately precedes
+it. A category with no activity states that fact. A document with an
+abstract also carries one factual disclosure sentence there; a document
+with no abstract owes none. Acknowledgements stay separate — no invented
+grants, hospitality, or thanks. A journal placement requirement overrides
+this rule when recorded with the manuscript.
+Pass: the document matches one layout exactly — full section, ordered
+subsections and token appendix at their locations, plus the closing
+introduction subsection in layout (2) — or a recorded override governs; the
+abstract carries the disclosure sentence when one exists.
+Fail: an absent or misheaded section, missing or misleveled subsection,
+missing token appendix, a mixture of the layouts, the disclosure anywhere
+else without an override, or an abstract without its disclosure sentence.
 
 **AI13 — Computations are recomputed, not quoted [C][R].**
 Numeric, algebraic, and combinatorial claims originating in an AI session are

@@ -29,7 +29,7 @@ AI16, AI20.
 | Explain how the result was derived, not just that a model produced it | AI8 |
 | State that responsibility stays with the human authors, and make sure every coauthor assents | AI9 |
 | Verify every AI-surfaced reference against the real source before it enters the `.bib` | AI11 |
-| Put the unnumbered **Software and AI assistance** subsection at the end of the introduction — else after the opening overview, else first before the first numbered section; add the abstract sentence iff the document has an abstract | AI12 |
+| Put the numbered **Software and AI assistance** section immediately after the introduction, or in the appendix with a short closing introduction subsection pointing to it (the authors choose), with the thirteen categories listed in AI12 as subsections and token accounting as the last appendix section; add an abstract disclosure sentence iff an abstract exists | AI12 |
 | Re-derive AI-originated computations in a real system and report them as that system's output | AI13 |
 | Record refutation-only sessions too, and carry the refutation into the document | AI14 |
 | Keep one master `ai/ai-usage.md` and one `ai/tokens.md` — written only by `update-ai-usage` / `update-tokens` — with the evidence behind them retained at a named location | AI15 |

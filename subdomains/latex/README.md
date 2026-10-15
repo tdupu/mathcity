@@ -65,7 +65,7 @@ transcript or second ATOM ledger is needed. Examples and coverage are in the
 | `using-latexpowers` | Entry point with shared planning, research, execution, review, and cleanup; see `math-workflow` |
 | `write-definition` | Draft one definition, notation-collision-checked against the repo's standing conventions |
 | `write-example` | One self-contained worked example or counterexample with explicit hypotheses, evidence and optional linked figure |
-| `write-introduction` | Introduction/abstract LAST behind a hard refusal gate (markers, VERIFY, LX4, contradictions, ledger-proved only) |
+| `write-introduction` | Introduction/abstract LAST, drafted fresh from the finished body, behind a hard refusal gate (markers, VERIFY, LX4, contradictions, ledger-proved only); dos and don'ts in an editable reference list |
 | `write-materials-and-methods` | Software/Acknowledgements/AI-disclosure section from the ai-usage/tokens trail; trail-facts only |
 | `latex-ai-statement` | Read-only audit of a .tex AI disclosure vs the repo's AI-POLICY.md and the ai-usage/tokens trail; AI19 submission gate |
 | `check-ai-statement` | Check-family alias for `latex-ai-statement` |

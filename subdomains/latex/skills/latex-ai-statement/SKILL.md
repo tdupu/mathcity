@@ -1,6 +1,6 @@
 ---
 name: latex-ai-statement
-description: Read-only audit of a specified .tex file's Software and AI assistance disclosure against the repo's AI-POLICY.md (AI rules) and against the ai-usage.md / tokens.md trail — placement, abstract sentence, model and harness naming, software and skill citations with hyperlinked pinpoint locators, self-disclosure that the AI statement itself was generated or drafted by AI, AI-result declarations with literature-search outcomes, human-responsibility statement, and absence of agent-as-warrant or prompt residue. Emits a structured verdict block with per-rule PASS/FAIL/DEFER, counts, and quoted evidence; routes repairs, never applies them. Use on "check the AI statement", "latex-ai-statement", "check-ai-statement", "is the disclosure correct", "audit the software section", before arXiv submission, or as the AI19 gate before any manuscript promotion. NOT for writing the disclosure (write-materials-and-methods) and NOT for the master records themselves (update-ai-usage, update-tokens).
+description: Read-only audit of a .tex file's Software and AI assistance disclosure against the repo's AI-POLICY.md (AI rules) and against the ai-usage.md / tokens.md trail — layout, thirteen subsections, token appendix, abstract sentence, model and harness naming, software and skill citations with hyperlinked pinpoint locators, self-disclosure that the AI statement itself was generated or drafted by AI, AI-result declarations with literature-search outcomes, human-responsibility statement, and absence of agent-as-warrant or prompt residue. Emits a structured verdict block with per-rule PASS/FAIL/DEFER, counts, and quoted evidence; routes repairs, never applies them. Use on "check the AI statement", "is the disclosure correct", "audit the software section", before arXiv submission, or as the AI19 gate before any manuscript promotion. NOT for writing the disclosure (write-materials-and-methods) and NOT for the master records themselves (update-ai-usage, update-tokens).
 ---
 
 # latex-ai-statement
@@ -15,7 +15,7 @@ must contain) and the **trail** (what is actually true). A disclosure that
 satisfies the policy but overstates the trail is the worse failure.
 
 The object being audited includes the disclosure itself. When AI drafted or
-revised the Software and AI assistance subsection, that subsection is an
+revised the Software and AI assistance section, that section is an
 AI-result and must say so explicitly; a sentence elsewhere saying that AI was
 used does not discharge this requirement.
 
@@ -65,6 +65,60 @@ must be able to fail.
 - **trail**: `<repo>/ai/ai-usage.md`, `<repo>/ai/tokens.md`, unless the repo
   policy explicitly declares other locations.
 
+## Default manuscript structure
+
+Unless a recorded venue requirement overrides it, the manuscript uses one
+of two layouts, and the audit names which one it found:
+
+- **Layout 1:** a numbered `\section{Software and AI assistance}`
+  immediately after the Introduction; with no Introduction, after the
+  opening overview, else after front matter.
+- **Layout 2:** a short numbered `\subsection{Software and AI assistance}`
+  as the Introduction's last subsection, with the full numbered
+  `\section{Software and AI assistance}` in the appendix. The short
+  subsection is one paragraph with no lower-level headings carrying the
+  five elements (a)–(e) of `write-materials-and-methods`' list, in order.
+  Any of the thirteen headings, a derivation account (AI8) or literature
+  hits (AI5) inside it is duplication and fails AI12. AI14's expectation
+  clause and locators are checked in the appendix's item 10, not here.
+
+The choice between them is the authors'; neither is a finding against the
+other. A mixture (the full disclosure in both places, the short
+subsection with no appendix section, or the reverse) fails. The full
+section promotes the PCF disclosure's former subsubsections to these
+thirteen `\subsection` headings, in this order:
+
+1. Methods: typesetting
+2. Methods: agent management
+3. Methods: record keeping
+4. Methods: natural language proofs
+5. Methods: adversarial reviews
+6. Methods: AI assisted computations
+7. Methods: AI statement
+8. Proofreading and adversarial review
+9. Literature review
+10. AI findings and procedure
+11. Provenance
+12. Due diligence
+13. Formalization
+
+The sections report the actual project evidence; a heading with no activity
+states that fact. Do not copy the PCF paper's history, tools, claims, or
+human-review assertions into another manuscript. Check that the token table
+is in a separate appendix with its counting scope, model/harness, available
+token classes, and cost status. Missing telemetry is labeled unavailable,
+not zero. When the repository's AI12 admits only one layout, or neither (the former
+unnumbered-subsection rule), the house structure above governs the AI12
+verdict: a manuscript in either house layout is not failed for disagreeing
+with the stale rule, and one that matches only the stale rule fails AI12.
+Add a `POLICY-STALE AI12` finding quoting the repository's AI12 and route
+its amendment to `new-repo-ai-policy`; never rewrite the policy during a
+read-only audit. Report whether an `ai-usage.md` entry's Prompt field carries a
+`Layout choice (AI12):` line for this manuscript; without one, report
+`UNRECORDED-CHOICE` (route to `update-ai-usage`), not an AI12 FAIL. Token accounting is the
+last appendix section; in layout 2 the disclosure section immediately
+precedes it.
+
 ## Checks
 
 Derive rule inventory and counts from the resolved policy's markers, in numeric
@@ -84,7 +138,7 @@ manuscript and delegate the record face. Name the failing face; omit no rule.
 | AI8 | Each AI-result has a derivation account. |
 | AI9 | Explicit human-responsibility statement present. |
 | AI11 | No unverified AI-proposed reference **in the `.bib`**; a surfaced-then-discarded reference is not a finding. |
-| AI12 | Unnumbered **Software and AI assistance** subsection at the first admitted position: end of introduction; else after opening overview; else first unnumbered subsection before first numbered section; else immediately after front matter. Abstract disclosure sentence **iff an abstract exists**. Honour a recorded manuscript placement override; name its location. |
+| AI12 | The document matches exactly one layout of the house structure above — layout 1 (numbered section immediately after the introduction; with no introduction, after the opening overview, else after front matter) or layout 2 (closing introduction subsection plus appendix section) — with the thirteen ordered subsections and a separate token-accounting appendix. An abstract carries one factual disclosure sentence when present. Honour a recorded venue override and name its location. |
 | AI13 | Computational claims attributed to a system actually run; "model asserted" not worded as "system computed". |
 | AI14 | Negative findings exhibited with their numbered statement and both locators, **before** the positives, each naming the expectation it corrects; counts carried and excluded reported. A keyword scan does not discharge this. |
 | AI18 | No prompt residue; no reader directed to `ai-usage.md`, `tokens.md`, scratch paths, or private chats. |
@@ -118,12 +172,17 @@ is missing per DEFER, and report the DEFER count in the verdict.
     Cycle: <n> of 3   Prior report: <path, or none — first run>
     Scope: <n> manuscripts checked   Revision: <commit or version string>
     Rules: <n> checked, <n> delegated [R], <n> DEFER
+    Structure: layout 1 | layout 2 (short subsection: <n>/5 elements) |
+    mixed | none; layout choice: recorded at <entry> | unrecorded;
+    13 subsection headings checked, <n> missing or misleveled;
+    token appendix: last | misplaced | absent | recorded override
     Statement self-disclosure: <n> checked, <n> explicit AI-authorship declarations,
     <n> missing skill chains, <n> missing human-review clauses
     Findings: <code> <rule> <quoted evidence>
 
 Finding codes: `FAIL`, `DEFER`, `EVIDENCE-ABSENT`, `FLOOR-BREACH`,
-`MALFORMED-POLICY`, `OVERSTATEMENT`, `OMISSION`.
+`MALFORMED-POLICY`, `POLICY-STALE`, `UNRECORDED-CHOICE`, `OVERSTATEMENT`,
+`OMISSION`.
 
 ## Routing
 

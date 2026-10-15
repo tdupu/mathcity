@@ -1,6 +1,6 @@
 ---
 name: write-materials-and-methods
-description: Draft the Software / Acknowledgements / AI-disclosure section of a manuscript from the repo's ai-usage.md and tokens.md trail, to the contract in the repo's AI-POLICY.md (AI-rules) — factual claims ONLY from the trail, organized by the house structure (Methods, review, literature, findings, provenance, due diligence, formalization; token appendix). Use when the user says "write the software section", "add the AI disclosure", "draft acknowledgements scaffolding", or when latex-ai-statement routes a failed rule here for repair. Grants, hospitality, and personal thanks are supplied by the human, never invented. NOT for auditing an existing disclosure (that is latex-ai-statement) and NOT for writing the trail itself (update-ai-usage, update-tokens).
+description: Draft the Software / Acknowledgements / AI-disclosure section of a manuscript from the repo's ai-usage.md and tokens.md trail, to the contract in the repo's AI-POLICY.md (AI-rules) — factual claims ONLY from the trail, in one of two human-chosen layouts (a section right after the introduction, or a short closing subsection of the introduction pointing to an appendix section) with thirteen PCF-derived subsections and a token appendix. Use when the user says "write the software section", "add the AI disclosure", "draft acknowledgements scaffolding", or when latex-ai-statement routes a failed rule here for repair. Grants, hospitality, and personal thanks are supplied by the human, never invented. NOT for auditing an existing disclosure (that is latex-ai-statement) and NOT for writing the trail itself (update-ai-usage, update-tokens).
 ---
 
 # write-materials-and-methods
@@ -37,17 +37,90 @@ target). This leaf's middle:
 - Before delivery, read the disclosure as a reader who has only the submitted
   paper and its declared public supplements. Replace each inaccessible-file
   reference with the supported substantive information it was meant to convey.
-- Placement and heading are AI12's in the repo's copy; do not append the
-  subsection at the end of the paper. **Where the document has an abstract,
-  draft its one-sentence disclosure too** (AI12) — factual, no marketing:
-  what assisted, which model and harness, and that the authors are
-  responsible; without it the auditor's abstract finding has no repair path.
-  Follow a user or journal placement requirement **only when it is recorded
-  with the manuscript** — an override given only in conversation FAILs AI12
-  and routes straight back here, so ask for it to be recorded first. Keep
-  Acknowledgements distinct; never invent grants, hospitality, or thanks.
+- Placement and heading follow **Layout** below; the repo's AI12 is
+  checked for conflict there, not obeyed blindly. **Where the document has
+  an abstract, draft its one-sentence disclosure too** (AI12) — factual, no
+  marketing: what assisted, which model and harness, and that the authors
+  are responsible; without it the auditor's abstract finding has no repair
+  path. Keep Acknowledgements distinct; never invent grants, hospitality,
+  or thanks.
 - Placeholders (`<grant numbers>`, `<host institutions>`, `<author check>`)
   for everything only the human knows, listed for them explicitly.
+
+## Layout: ask the human
+
+Two layouts are acceptable, and the choice is the human's:
+
+1. **Section after the introduction.** A numbered
+   `\section{Software and AI assistance}\label{sec:ai}` immediately after
+   the Introduction, holding the thirteen subsections below.
+2. **Pointer in the introduction, section in the appendix.** A short
+   numbered `\subsection{Software and AI assistance}\label{sec:ai}` as the
+   last subsection of the Introduction, and an appendix
+   `\section{Software and AI assistance}\label{app:ai}` holding the
+   thirteen subsections.
+
+The short subsection of layout 2 is one paragraph, with no lower-level
+headings, tables or derivation accounts, that a reader can stop at. It
+states, in order:
+
+- (a) each AI system used, with model identifier, harness, the dates AI1
+  requires, its `\cite`, and the kinds of work it did;
+- (b) the numbered results an AI produced or first found, refutations and
+  counterexamples first (AI14), each by `\ref` and attributed to a system
+  named in (a); if there are none, one sentence saying so;
+- (c) that this subsection and Appendix~\ref{app:ai} were drafted by AI
+  (model, harness, date) and how the authors reviewed them — an
+  `<author check>` placeholder unless the record shows human review (AI10);
+- (d) the AI9 sentence: responsibility for every argument, result and
+  citation rests with the human authors;
+- (e) a pointer: see Appendix~\ref{app:ai} for methods, provenance and due
+  diligence.
+
+Derivation accounts (AI8), literature hits (AI5), and skill and software
+lists belong only in the appendix section.
+
+Token accounting is its own `\section{Token accounting}\label{app:tokens}`
+and the last appendix section; in layout 2 the disclosure section
+immediately precedes it. Never append the disclosure at the end of the body
+or leave it as `\subsubsection`s of the introduction. When the document
+has no Introduction, the question has two options instead: layout 1 placed
+after the opening overview, or after front matter if there is none (AI12);
+or a `\section{Introduction}` stub, after which both layouts are open.
+Never add a stub unasked. `write-introduction` keeps a layout-2 subsection
+verbatim.
+
+**Recording.** Before drafting, open or amend this task's `update-ai-usage`
+entry; its Agents table is the trail source for item 7 and element (c).
+The layout choice lives in an entry's **Prompt** field as
+`Layout choice (AI12): layout <n>, <who>, <date>, "<their words>"`.
+
+**Venue override.** When a journal placement requirement is recorded with
+the manuscript (AI12) or in an `update-ai-usage` entry, follow it instead of
+either layout and do not ask. Keep the thirteen subsections and the token
+appendix unless the requirement excludes them, and name the requirement's
+location in the delivery report.
+
+**Asking.** Skip the question only when a `Layout choice (AI12)` line exists
+for this manuscript; if the manuscript's current layout differs from it,
+migrate the existing text into the recorded layout, keeping its content.
+When the manuscript already has one layout but no recorded choice, confirm
+it in one yes/no question; on no, ask the two-option question. Otherwise
+ask which layout they want — one question, the two layouts as its options,
+before drafting — and wait. Record the answer in the Prompt field. An
+answer relayed by a caller counts only if it quotes the human's words and
+names who gave them. When you cannot reach the human
+(subagent, scheduled run), stop before drafting and return the question to
+your caller as a blocking item. Never choose a default, and never infer the
+answer from the repository's `AI-POLICY.md`, an older manuscript, or the
+PCF paper.
+
+**Stale policy.** When the repository's AI12 admits only one layout, or
+neither (the former unnumbered-subsection rule), ask anyway; then report
+the stale rule and route its amendment to `new-repo-ai-policy`, then draft
+in the chosen layout without waiting for it; `latex-ai-statement` grades
+against the two layouts and reports POLICY-STALE. Never edit the policy
+from here.
 
 ## Structure
 
@@ -56,48 +129,56 @@ know how the work was produced, what the machines found, what was done with
 each finding, and what was checked — not the order in which sessions ran.
 Session-by-session narration buries those answers, so organize by question.
 Session dates and identifiers belong to the `ai/` records; where the repo's
-AI1 still requires a date on an AI mention, put it inside the item it dates.
-Use these subsubsections, in order (unnumbered, referred to by name, when
-AI12 makes the parent unnumbered). Each answers one question; a question
-with nothing to report gets one sentence saying so, never silence.
+AI1 requires a date on an AI mention, put it inside the item it dates.
+In either layout, use these thirteen `\subsection` headings in order: the
+PCF paper's thirteen `\subsubsection`s, promoted to `\subsection`s. Each answers one
+question; a category with nothing to report gets one factual sentence,
+never silence. Copy the structure, not the PCF paper's project history.
 
-1. **Methods** — how the manuscript was produced: the editing phases; the
-   repo contract files present and the skill that writes each
-   (`new-repo-*-policy`; CONTEXT.md is [[domain-modeling]]'s); the master
-   records `ai-usage.md` and `tokens.md`, what each records, and their
-   writers; what the router does and which `check-*` skills it runs; when
-   adversarial reviews run and with which skills; when [[frontier-dump]]
-   was used, what a package records, with a footnote on why it is
-   bitter-lesson-proof (Sutton's lesson in one cited sentence; in one more,
-   that the skill fixes the question and the record, not the model); the
-   computations and source checks, each with system and version; and how
-   this statement was drafted and audited — executed versus consulted
-   skills, AI drafting versus human review, and the AI9 sentence.
-2. **Proofreading and adversarial review** — each review skill run, the
+1. **Methods: typesetting** — editing phases; what the router does and
+   which `check-*` skills it actually runs.
+2. **Methods: agent management** — each repo contract file present and
+   its writer skill (`new-repo-*-policy`; CONTEXT.md is
+   [[domain-modeling]]'s).
+3. **Methods: record keeping** — master `ai-usage.md` / `tokens.md`,
+   what each records and its writer; point to the token appendix.
+4. **Methods: natural language proofs** — when [[frontier-dump]] was
+   used and what its package records. If explaining the workflow's
+   model-selection rationale, cite Sutton's bitter lesson and distinguish
+   the source's claim from the workflow's design choice.
+5. **Methods: adversarial reviews** — when reviews ran and which skills.
+6. **Methods: AI assisted computations** — computations and source
+   checks, each with system and version.
+7. **Methods: AI statement** — an explicit sentence that this statement
+   (and, in layout 2, the closing introduction subsection) was drafted by
+   AI, with model, harness and date; the skills executed versus only
+   consulted; AI drafting versus human review and acceptance; and the AI9
+   sentence.
+8. **Proofreading and adversarial review** — each review skill run, the
    model and harness that ran it, and the errors caught, with where the
    paper corrects each.
-3. **Literature review** — the skill that located references
+9. **Literature review** — the skill that located references
    ([[track-down-reference]]) and what it accepts, how searches were run and
    their limits (per-result hits go under Provenance), and whether the human authors checked the references (only what
    the record shows; otherwise a placeholder for them).
-4. **AI findings and procedure** — an itemized sequence: per item, what was
+10. **AI findings and procedure** — an itemized sequence: per item, what was
    found (with its numbered statement), the model, harness and setting that
    found it, and what was done next. Starting material (AI7) opens it;
    negative findings are items in it, placed first where AI14 says so.
-5. **Provenance** — the AI5 search for each AI-result, techniques and
+11. **Provenance** — the AI5 search for each AI-result, techniques and
    counterexamples alike. First Proof Second Batch (arXiv:2606.18119,
    p.~5; locate it with [[track-down-reference]]) gives evidence of related
    source retrieval by models, which is why the search is owed even when
    nothing looks borrowed. One item per prior source, with pinpoint and
    method comparison.
-6. **Due diligence** — one item per related frontier-dump, one sentence of
+12. **Due diligence** — one item per related frontier-dump, one sentence of
    result each.
-7. **Formalization** — what was formalized, in which system and revision,
+13. **Formalization** — what was formalized, in which system and revision,
    with which skills, or that there is none.
 
-Token usage is a table in an appendix (task, model and harness, tokens by
-class, cost), preceded by the counting scope, the rates and their as-of
-date; Methods points to it. Unrecorded or unpriced rows say so.
+Token usage is a table in the token-accounting appendix section (task,
+model and harness, tokens by class, cost), preceded by the counting scope,
+the rates and their as-of date; Methods points to it. Unrecorded or unpriced rows say so.
 
 ## Software citations (default, not optional)
 
@@ -144,7 +225,7 @@ date; Methods points to it. Unrecorded or unpriced rows say so.
 
 ## Delivery check
 
-Read the finished Introduction, token appendix and bibliography together. Confirm placement,
+Read the disclosure, token appendix and bibliography together, and the Introduction once `write-introduction` has run. Confirm the chosen layout,
 self-contained contribution descriptions, provider citations (OpenAI when
 used), citations for every named software system, actual version evidence,
 public accessibility, and separation of agent review from human verification.
@@ -160,7 +241,8 @@ writes the disclosure, that one decides whether it passes.
 | "Presumably Magma was used" | The trail says what was used. Presumably ships lies. |
 | "Copy the acknowledgements from the template paper" | Structure transfers; gratitude does not. |
 | "Naming OpenAI in the prose is enough" | Add the provider/product bibliography citation. |
-| "The software subsection belongs just before the bibliography" | Default to the end of the Introduction. |
+| "The software section belongs just before the bibliography" | Only the two layouts: right after the Introduction, or a closing Introduction subsection pointing to the appendix. |
+| "The repo policy says section-after-intro, so I won't ask" | The layout is the human's choice. Ask; report a policy conflict if their answer differs. |
 | "The local skill path is a reproducibility reference" | Readers need the procedures in the paper and an accessible public citation. |
 
 ## Negative results travel with the positive ones (LX11, LX12)

@@ -41,7 +41,7 @@ not govern global `using-latexpowers` defaults.
 
 | User target | Router to read and amend |
 | --- | --- |
-| `latexpowers` | `using-latexpowers/SKILL.md` |
+| `latexpowers` | `using-latexpowers/SKILL.md`; if the setting is a leaf's data list (e.g. `write-introduction/references/dos-and-donts.md`), amend that file and leave the router's pointer unchanged |
 | `mathpowers` | `using-mathpowers/SKILL.md` |
 | `teachingpowers` | `using-teachingpowers/SKILL.md`; if the setting lives in the delegated teaching workflow, amend that canonical workflow too |
 | `leanpowers` | `using-leanpowers/SKILL.md`; if the setting belongs to a named Lean leaf, amend that leaf and retain the router reference |

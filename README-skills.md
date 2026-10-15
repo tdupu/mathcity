@@ -214,7 +214,7 @@ for exact review versions, executed checks and remaining limits.
 | `using-latexpowers` | `mathcity-latex.using-latexpowers` | Manuscript entry point with research/proof handoffs, section-and-claim plans, writer gates, validation, and cleanup |
 | `write-definition` | `mathcity-latex.write-definition` | Draft one definition, notation-collision-checked against the repo's standing conventions |
 | `write-example` | `mathcity-latex.write-example` | Write one evidenced, self-contained example or counterexample, preserving finite computation versus general proof |
-| `write-introduction` | `mathcity-latex.write-introduction` | Introduction/abstract LAST behind a hard refusal gate (markers, VERIFY, LX4, contradictions, ledger-proved only) |
+| `write-introduction` | `mathcity-latex.write-introduction` | Introduction/abstract LAST, drafted fresh from the finished body, behind a hard refusal gate (markers, VERIFY, LX4, contradictions, ledger-proved only); dos and don'ts in an editable reference list |
 | `write-materials-and-methods` | `mathcity-latex.write-materials-and-methods` | Software/Acknowledgements/AI-disclosure section from the ai-usage/tokens trail; trail-facts only |
 | `write-proposition` | `mathcity-latex.write-proposition` | Draft one proposition (statement + LX4/ST6 proof) from an evidenced claim into the canonical file |
 | `write-remark` | `mathcity-latex.write-remark` | Draft one remark; claim-shaped content is routed to write-proposition |

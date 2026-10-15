@@ -21,6 +21,8 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | Layout health / “which file is real?” | `check-layout` |
 | Undeclared sibling `.tex` | `triage-variants` — authorized per-file disposition before affected writing |
 | Style / build / LaTeX hygiene / references / citations | `check-style` / `check-latex` / `check-latex-hygiene` / `check-labels-and-refs` / `check-citations` |
+| “Sounds like AI” / “too many claudeisms” / de-slop an agent-drafted section | `purge-claudisms` — scan against the dated list, rewrite hits in place, rescan to zero; before `check-style` or `referee-report` |
+| “Is this paragraph good?” / per-paragraph prose pass over a file | `check-paragraph` — one subagent per paragraph via its `split_paragraphs.py`; six-line verdicts collected into `reviews/paragraphs-<file>-<date>.md`; read-only |
 | Compare two manuscript source versions | `latex-diff` — resolve both `.tex` inputs, generate a disposable `latexdiff`, and report the exact sources and validation result |
 | Formalize manuscript claims | `using-leanpowers` under the same coordinator and claim IDs; return exact checked statements, assumptions and fidelity evidence before writing |
 | “Prove X” / research gap / suspect mathematics | `using-mathpowers` for that obligation, then return here for the requested artifact |
@@ -39,11 +41,11 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | Review-response attachments / report with responses / response-letter PDF | `triage-referee-report` artifact-only mode — preserve the supplied report as the black source, omit interleaved author comments from the report copy, and place one matching response below each item in `\color{red}` |
 | Decision-record audit | `check-adr` |
 | “Prep for arXiv” / editorial stripping | `garbage-collect` — approval of the concrete strip set |
-| Methods / software / AI disclosure | `write-materials-and-methods` — to the repo's `AI-POLICY.md` contract |
+| Methods / software / AI disclosure | `write-materials-and-methods` — to the repo's `AI-POLICY.md` contract; it asks the human which of its two layouts to use |
 | “Is the AI statement right?” / pre-submission disclosure audit | `latex-ai-statement` — per-rule verdict against `AI-POLICY.md` and the trail; routes repairs |
 | Record an AI task's provenance / cost | `update-ai-usage` / `update-tokens` — sole write paths for the repo's master `ai-usage.md` and `tokens.md` |
 | Amend the repo's AI-usage contract | `new-repo-ai-policy` — human-authorized amendment |
-| Finished manuscript introduction/abstract request | `write-introduction` — readiness/refusal gates; an introductory topic prototype uses the synthesis route |
+| Introduction / abstract | `write-introduction` — always the final stage (below), on the human's ask or yes; an introductory topic prototype uses the synthesis route |
 | Amend layout / LaTeX / style / decisions / agent contracts | `new-repo-layout-policy` / `new-repo-latex-policy` / `new-repo-style-policy` / `new-repo-adr-policy` / `new-repo-agents-policy` — human-authorized amendments |
 | Amend LX rules | `new-latex-policy` — human-authorized amendment to the separate mathcity `subdomains/latex/POLICY.md`; this route does not govern global `using-latexpowers` guidance |
 | Amend global LaTeX workflow guidance | Apply the requested change directly to this skill; do not route it through mathcity's `new-latex-policy` gate |
@@ -64,13 +66,33 @@ resolution ledger for the received report. Keep the `.tex` sources and their
 compiled PDFs together in the declared scratch or revision root.
 
 The received-review trigger takes precedence over the self-review trigger when
-the user supplies an existing report or asks for a response to one. Phrases
-such as “response to the referee,” “reply to reviewers,” “report with
-responses,” “review-response attachments,” and “convert the attached review to
-TeX/PDF” all select `triage-referee-report` artifact-only mode unless the user
-also authorizes substantive manuscript revision.
+the user supplies an existing report or asks for a response to one. “Response
+to the referee,” “reply to reviewers,” “report with responses,” “review-response
+attachments,” and “convert the attached review to TeX/PDF” all select
+`triage-referee-report` artifact-only mode unless the user also authorizes
+substantive manuscript revision.
+
+## Final stage: the introduction
+
+A manuscript workflow that makes a material body change ends by asking the
+human one question: "The body is settled; write the introduction from a
+fresh draft now?" On yes, run `write-introduction`; it is the last body
+writer, and its own last step updates the AI record and disclosure. A body change is material when it adds, removes, reorders
+or changes a theorem-class statement, its hypotheses, a section, or a label
+the introduction references; anything less is reported, with any
+introduction claim it made stale. Ask only after every other write, check
+and review, and after the AI disclosure exists in a layout the human chose;
+if it does not, route to `write-materials-and-methods` (its layout
+question) first, then ask.
+Read-only checks and reviews may follow the introduction; a finding that
+needs a body edit reopens the body, and the final stage runs again. No
+other route drafts the introduction; a wording fix the human dictates goes
+through `revise` on their explicit instruction, and the closing AI
+subsection of layout 2 belongs to `write-materials-and-methods`.
 
 ## Online references and link macros
+
+The default bibliography style is AMS alpha (`amsalpha` in BibTeX); explicit user, venue, or repository styles take precedence.
 
 When a reader should consult an HTML page—such as a Stacks Project tag, an
 LMFDB record, or a GitHub repository—give both a bibliography citation and an
