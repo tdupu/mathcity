@@ -74,6 +74,85 @@ BD_TIMEOUT_SECONDS = int(os.environ.get("MCTL_BD_TIMEOUT_SECONDS", "120"))
 # `mctl_core.beads.Bead.is_open`. Anything else -- closed, done -- is
 # adjudicated or abandoned, and its pile file is stale cache.
 OPEN_BEAD_STATUSES = {"open", "hooked", "in_progress", "blocked", "review", "testing"}
+# bd REFUSES `--readonly` on a proxied-server store: "strict readonly is
+# unavailable for dolt proxied-server backend; refusing to open a store that
+# cannot guarantee mutation-free access". That is a deliberate refusal, not a
+# gap, and there is no non-strict variant to fall back to. Gas City 1.5 moves
+# every city and rig onto that backend, so passing the flag unconditionally
+# makes EVERY fast drain on a proxied rig exit non-zero -- which it has done
+# since 2026-10-08.
+#
+# Gate the flag, do not drop it: `~/repos/*` twins are still dolt_mode=server,
+# where `--readonly` is both supported and load-bearing. BD_LIST_ARGS above is
+# deliberately UNCHANGED and still carries the flag -- it is documented as
+# byte-identical to `mctl_core.beads.BD_LIST_ARGS` and is embedded verbatim in
+# error text, which must keep describing the canonical query. This mirrors
+# mctl_core's gate (53aaf42), which fixed only that module and left this
+# standalone asset still broken.
+_BD_PROXIED_READONLY_CODE = "proxy.readonly.unsupported"
+_BD_PROXIED_READONLY_REFUSAL = "strict readonly is unavailable"
+_PROXIED_DOLT_MODE = "proxied-server"
+_readonly_args_cache: dict[str, tuple[str, ...]] = {}
+
+
+def bd_readonly_args(rig_root: Path) -> tuple[str, ...]:
+    """`("--readonly",)` when bd can honour it for this store, else `()`.
+
+    Decided from `dolt_mode` in the store's own `.beads/metadata.json` -- a file
+    read, deliberately not a bd subprocess, since this sits in front of every
+    bead read.
+
+    An absent, unreadable or unrecognised metadata file KEEPS the flag. The safe
+    default is the stricter one: a store that cannot be classified is treated as
+    one that can still honour the guarantee, so a misclassification costs
+    availability (bd refuses, and the retry below recovers) instead of silently
+    dropping the mutation guard. Cached per store because a backend does not
+    change underneath a running command.
+    """
+    key = str(rig_root)
+    cached = _readonly_args_cache.get(key)
+    if cached is not None:
+        return cached
+    args: tuple[str, ...] = ("--readonly",)
+    try:
+        with open(Path(rig_root) / ".beads" / "metadata.json", encoding="utf-8") as handle:
+            if json.load(handle).get("dolt_mode") == _PROXIED_DOLT_MODE:
+                args = ()
+    except (OSError, ValueError):
+        pass
+    _readonly_args_cache[key] = args
+    return args
+
+
+def bd_list_args(rig_root: Path) -> tuple[str, ...]:
+    """`BD_LIST_ARGS` with `--readonly` gated for this store's backend."""
+    return tuple(a for a in BD_LIST_ARGS if a != "--readonly") + bd_readonly_args(rig_root)
+
+
+def _bd_error_text(stdout: str | None) -> str:
+    """The `error` field of a bd JSON failure payload, or "" if there is none."""
+    try:
+        payload = json.loads(stdout or "")
+    except ValueError:
+        return ""
+    if isinstance(payload, dict):
+        code = str(payload.get("code") or "").strip()
+        message = str(payload.get("error") or "").strip()
+        if message:
+            return f"{message} [{code}]" if code else message
+    return ""
+
+
+def _is_proxied_readonly_refusal(result: subprocess.CompletedProcess[str]) -> bool:
+    """True when bd declined `--readonly` because the backend is proxied.
+
+    Checks BOTH streams, and this is the non-obvious part: bd emits the refusal
+    as JSON on STDOUT with exit 1 and an EMPTY stderr, so a stderr-only check
+    silently never fires. Keyed on the stable `code` field, with the prose kept
+    only as a fallback for older builds.
+    """
+    blob = f"{result.stdout or ''}\n{result.stderr or ''}"
+    return _BD_PROXIED_READONLY_CODE in blob or _BD_PROXIED_READONLY_REFUSAL in blob
 
 
 @dataclass(frozen=True)
@@ -120,10 +199,30 @@ def gate_evidence_section(text: str) -> str | None:
     return section if next_heading is None else section[:next_heading.start()]
 
 
+# STATUS_PATTERN anchors `^(.+?)` at line start, so a producer that bullets or
+# bolds its evidence (`- G14: PASSED`, `**G14**: PASSED`) keyed the status under
+# `- G14` / `**G14**`. gate_failure looks the key up with an exact
+# `statuses.get(evidence_key)`, so a declared, PASSING gate was reported as
+# `missing required gate` -- the brief rejected on its punctuation. The list
+# marker needs trailing whitespace to match, so `* G14` reads as a bullet while
+# `**G14**` does not and falls through to emphasis peeling. Emphasis characters
+# are peeled from the ENDS only, leaving labels with internal underscores
+# (`G3 test_evidence`) untouched.
+#
+# Same tolerance, and the same limit, as classifier_error: markers are accepted
+# around the LABEL only. The verdict stays a bare token, since widening the
+# value side is how a check stops discriminating.
+LIST_MARKER = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+")
+
+
+def normalize_gate_label(label: str) -> str:
+    return LIST_MARKER.sub("", label.strip(), count=1).strip().strip("*_`").strip()
+
+
 def gate_statuses(text: str) -> dict[str, list[str]]:
     statuses: dict[str, list[str]] = {}
     for match in STATUS_PATTERN.finditer(text):
-        statuses.setdefault(match.group(1), []).append(match.group(2))
+        statuses.setdefault(normalize_gate_label(match.group(1)), []).append(match.group(2))
     return statuses
 
 
@@ -411,21 +510,43 @@ def read_brief_beads(rig_root: Path | None, fixture: Path | None) -> dict[str, s
             "--brief-root has no .beads component, so no rig root can be derived; "
             "pass --bead-fixture to supply canonical brief beads"
         )
-    try:
-        result = subprocess.run(
-            list(BD_LIST_ARGS), cwd=rig_root, text=True, capture_output=True,
+    argv = list(bd_list_args(rig_root))
+
+    def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args, cwd=rig_root, text=True, capture_output=True,
             check=False, timeout=BD_TIMEOUT_SECONDS,
         )
+
+    try:
+        result = _run(argv)
+        # Second line of defence behind `bd_readonly_args`. That helper reads
+        # metadata.json, so a store whose file is missing, stale, or
+        # out-of-sync with the running server is still classified as able to
+        # honour --readonly and still gets refused here. gascity-packs-briefpath
+        # is exactly that case: metadata says `server`, the live backend is
+        # proxied. Recover from bd's own verdict, which is authoritative in a
+        # way the file is not, and retry once without the flag rather than
+        # failing a read the backend can serve perfectly well. Clearing the memo
+        # lets later reads skip the doomed first attempt.
+        if result.returncode != 0 and "--readonly" in argv and _is_proxied_readonly_refusal(result):
+            argv = [a for a in argv if a != "--readonly"]
+            _readonly_args_cache[str(rig_root)] = ()
+            result = _run(argv)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise MembershipError(f"could not query beads through bd: {error}") from error
     if result.returncode != 0:
-        raise MembershipError(result.stderr.strip() or f"{' '.join(BD_LIST_ARGS)} failed")
+        # bd puts structured failures on stdout, so a stderr-only message
+        # degrades to a bare "... failed" that says nothing.
+        raise MembershipError(
+            result.stderr.strip() or _bd_error_text(result.stdout) or f"{' '.join(argv)} failed"
+        )
     try:
         parsed = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise MembershipError(f"{' '.join(BD_LIST_ARGS)} returned invalid JSON: {error}") from error
+        raise MembershipError(f"{' '.join(argv)} returned invalid JSON: {error}") from error
     if not isinstance(parsed, list) or not all(isinstance(row, dict) for row in parsed):
-        raise MembershipError(f"{' '.join(BD_LIST_ARGS)} did not return a JSON list of objects")
+        raise MembershipError(f"{' '.join(argv)} did not return a JSON list of objects")
     return {
         row["id"]: str(row.get("status") or "open")
         for row in parsed
