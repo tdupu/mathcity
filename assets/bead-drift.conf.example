@@ -1,0 +1,33 @@
+#!/bin/sh
+# bead-drift.conf.example — machine-local configuration for bead-drift-report.sh.
+#
+# Copy to ~/.gc/bead-drift.conf and fill in. Run /setup-bead-drift to generate it.
+#
+# This file holds endpoint and database values, which POLICY.md P1.10 forbids in
+# pack content. The real copy lives under ~/.gc (outside every git repo), so it
+# cannot be committed anywhere -- do NOT relocate it into a repo and gitignore it.
+# Never commit real values.
+
+# Path to a mysql client that can speak to a Dolt sql-server.
+# Dolt ships no `dolt sql --host` and no `dolt sql-client`, so an external
+# client is required. Must support --ssl-mode=DISABLED (NOT --skip-ssl).
+MYSQL_BIN=/path/to/mysql
+
+# Roots holding the two sides of each bead-store pair.
+REPOS_ROOT=$HOME/repos
+GT_ROOT=$HOME/gt
+
+# Dolt sql-server endpoint for each side, and the connecting user. The host is
+# machine-local endpoint config and never belongs in tracked content.
+DB_HOST=127.0.0.1
+REPOS_PORT=0
+GT_PORT=0
+MYSQL_USER=root
+
+# Twin pairing overrides, space-separated "repos_db:gt_db" pairs.
+#
+# Stores are paired by their .beads/metadata.json dolt_database. Add a pair
+# here ONLY where the two sides disagree on the name; identical names need no
+# entry. Leave empty when every pair agrees -- an empty map is the goal state,
+# and each entry is a store whose names should be reconciled instead.
+TWIN_ALIASES=""
