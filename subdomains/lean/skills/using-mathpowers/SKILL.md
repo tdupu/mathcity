@@ -27,6 +27,7 @@ The coordinator carries the request through planning, execution, validation, and
 | Conflicting claims / before harvest or promotion | `contradiction-check`; resolve the conflict before dependent work |
 | “Gather background” / expository spec | `create-exposition` |
 | Proof technique or analogy | `find-the-technique`; source leads return through verification |
+| Several candidate definitions / “what is the right definition of X?” | `find-the-right-definition`; try every candidate against targets, special cases, generalizations, known constructions and ease of use |
 | arXiv / scholarly papers / Stacks / Mathlib / mathematical data | `search-arxiv` / `search-scholar` / `search-stacks` / `search-mathlib` / `search-lmfdb` |
 | Typed Lean goal / local applicability of a search hit | Installed `lean-search` with workspace pin and search receipts; return checked applications to this coordinator |
 | Requested Mathlib/LeanSearch MCP setup | `install-loogle`; actual host tool discovery and smoke test |
