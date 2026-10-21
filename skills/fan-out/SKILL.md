@@ -1,92 +1,97 @@
 ---
 name: fan-out
-description: Fan an epic bead out into sub-beads (convoy members) WITHOUT consuming additional WIP-dispatcher slots. Use when an agent has claimed an epic bead from the pull-dispatcher and needs to decompose it ("fan out this epic", "fan-out <epic-id>", "decompose my epic into sub-beads", "split this slot into sub-tasks"). Encodes the tree metadata (parent_bead, is_leaf, branch naming, dispatch.slot=free) that lets the refinery contract the branch tree bottom-up and lets the WIP patrol ignore sub-beads. Companion to create-convoy. Works for any agent that can run gc and bd.
-version: "0.1"
+description: >-
+  Delegate independent parts of a task to subagents, recursively when useful,
+  then integrate and verify their work. Also fan a Gas City epic bead into
+  convoy sub-beads without consuming more dispatcher slots. Use for "fan out
+  this task", "fan-out epic", or "split this work among agents".
 ---
 
 # fan-out
 
-You claimed an epic bead. That epic = **one** dispatcher slot. Fan the work out
-into sub-beads inside an owned convoy; the sub-beads are the *implementation*
-of your slot, not new slots. When all sub-beads close, land the convoy, close
-the epic, and the slot frees.
+The invoking agent owns integration, verification, and cleanup.
 
-## When to use / not use
+## Delegate agent work
 
-| Check | Result |
+1. Split useful parallel work into bounded, reviewable assignments. Identify
+   dependencies, shared files, the integration target, and acceptance checks.
+   Ask each child to report changed paths, branch/worktree, commits, checks,
+   and unresolved issues.
+2. Choose each child's model and reasoning effort for its difficulty,
+   uncertainty, cost, and latency, subject to runtime instructions. Any child
+   may delegate independent parts; this skill sets no depth or child-count
+   limit. Each child integrates and verifies its descendants' work.
+3. For concurrent code edits, use separate branches and worktrees when changes
+   may overlap or need isolation. Record who created each and its merge target.
+   If agents share a checkout, assign disjoint paths or serialize writes.
+   Preserve others' uncommitted work.
+4. Review each child's changes. As children finish, integrate in dependency
+   order, resolve conflicts, and check the combined result. Repair, reassign,
+   or report failed and blocked work.
+5. Once integrated, safely remove worktrees and branches created for this
+   fan-out under repository Git rules. Retain any with unmerged or uncommitted
+   work. The invoking agent checks every descendant's outcome, verifies the
+   final result, and reports any retained worktree or branch.
+
+For a Gas City epic, also follow the convoy procedure below.
+
+## Gas City epic beads
+
+One claimed epic bead occupies one dispatcher slot; its sub-beads implement
+that slot. An atomic bead worker may delegate to subagents without creating
+another bead fan-out.
+
+| Bead check | Action |
 | --- | --- |
-| `bd show <bead> --json` → `metadata.dispatch.type == "epic"` | **Fan out (this skill)** |
-| No `dispatch.type=epic` on the bead | Atomic — work it directly, do NOT fan out |
-| Sub-bead of someone else's epic | You are a leaf — just do the work, never re-fan |
+| `bd show <bead> --json` has `metadata.dispatch.type == "epic"` | Use the convoy steps below. |
+| No `dispatch.type=epic` | Work the bead directly; subagent delegation remains available. |
+| Sub-bead of another epic | Do not create a nested convoy; subagent delegation remains available. |
 
-## Key invariant
+**Every convoy sub-bead needs `dispatch.slot=free`.** The dispatcher tracks the
+root epic; missing metadata can double-count a slot.
 
-**Sub-beads with `dispatch.slot=free` do NOT consume WIP slots.** The
-dispatcher (N=6 global) tracks only the root epic bead. Never create a
-sub-bead without this metadata, or the WIP patrol will double-count.
-
-## Steps
-
-1. **Confirm you hold an epic slot.**
-
-   ```bash
-   bd show <EPIC> --json | grep -o '"dispatch[^,}]*'   # expect type: epic
-   ```
-
-2. **Create the convoy** (skip if `metadata.convoy_id` already set on the
-   epic). Use the `create-convoy` skill — it sets `--owned`, the target
-   branch, and `root_bead`/`feature_branch` metadata, and returns `CONVOY`.
-
-3. **Create sub-beads with tree metadata.** One per sub-task. Branch names
-   encode the tree: `<feature-branch>/<subtask-slug>` — the refinery infers
-   parent/child from branch names.
+1. Confirm the epic metadata with `bd show <EPIC> --json`.
+2. Use `create-convoy` to create an owned convoy if the epic has no
+   `metadata.convoy_id`. It provides `CONVOY` and the feature branch.
+3. Create one sub-bead per task. Set its target explicitly: convoy membership
+   does not make the convoy its parent. Leave `branch` unset so the worker's
+   formula can create and record a branch. Never name a new branch
+   `<feature-branch>/...`; Git cannot hold it alongside the integration ref.
 
    ```bash
    bd create --title="<sub-task>" -t task \
      --parent=<EPIC> \
-     --metadata '{"parent_bead":"<EPIC>","is_leaf":true,"branch":"<feature-branch>/<subtask-slug>","dispatch":{"slot":"free"}}' \
+     --metadata '{"parent_bead":"<EPIC>","is_leaf":true,"target":"<feature-branch>","dispatch":{"slot":"free"}}' \
      --description="<what done looks like for this sub-bead>"
-   ```
-
-4. **Add each sub-bead to the convoy.**
-
-   ```bash
    gc convoy add <CONVOY> <sub-bead-id>
    ```
 
-5. **Dispatch the sub-bead work.** Sub-beads run concurrently but ride on your
-   slot. Either sling each to an idle worker (`--no-convoy` prevents a second
-   auto-convoy wrapping the bead):
+4. Verify each sub-bead's `metadata.target` is the integration branch before
+   dispatch. Send it to an idle worker with
+   `gc sling <rig>/<worker> <sub-bead-id> --no-convoy`, or through the rig's
+   polecat work formula with
+   `gc sling <rig>/polecat <sub-bead-id> --on mol-polecat-work`.
+   Those workers may use subagents recursively under the delegation rules
+   above; this does not create extra convoy members.
+5. Monitor the members and integrate their work through the rig's active
+   merge route. Confirm the integration branch contains the intended changes
+   and passes the combined checks before closing the epic:
 
    ```bash
-   gc sling <rig>/<worker> <sub-bead-id> --no-convoy
-   ```
-
-   or pour a wisp per sub-bead via the rig's polecat work formula:
-
-   ```bash
-   gc sling <rig>/polecat <sub-bead-id> --on mol-polecat-work
-   ```
-
-6. **Monitor and land.** The deacon fires convoy-completion when all members
-   reach `status=closed`, triggering the refinery's bottom-up contraction:
-   complete leaves merge into `<feature-branch>`, which may itself become a
-   new leaf. Your final act as the epic worker — ONLY after all members are
-   closed:
-
-   ```bash
-   gc convoy status <CONVOY>      # verify N/N closed
-   gc convoy land <CONVOY>        # terminate owned convoy (never --force casually)
+   gc convoy status <CONVOY>      # verify every member is closed
+   gc convoy land <CONVOY>        # never use --force casually
    bd close <EPIC> --reason "fan-out complete, convoy landed"
    ```
 
-   Closing the epic frees your dispatcher slot.
+   Closing the epic frees its dispatcher slot. Account for and clean up
+   task-created worktrees and branches after integration, subject to the
+   repository's Git rules.
 
-## Failure modes
+## Failure recovery
 
-- Stuck member → fix or `bd close` it with a reason; do not `land --force`
-  while work is genuinely open.
-- Slot double-count → a sub-bead is missing `dispatch.slot=free`; patch with
+- A stuck member remains open until its work is repaired, reassigned, or
+  explicitly resolved; do not force-land a convoy with genuine work open.
+- If a sub-bead lacks `dispatch.slot=free`, set it with
   `bd update <id> --set-metadata dispatch.slot=free`.
-- Refinery can't find the parent branch → sub-bead `branch` metadata doesn't
-  follow `<feature-branch>/<slug>`; rename and update metadata.
+- If a task branch or target is wrong, correct its metadata and verify the
+  intended merge destination before integrating it.

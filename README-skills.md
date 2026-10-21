@@ -92,7 +92,7 @@ for exact review versions, executed checks and remaining limits.
 | `dolt-push` | `mathcity.dolt-push` | Commit any pending beads changes and push to the Dolt remote |
 | `domain-modeling` | `mathcity.domain-modeling` | Build and sharpen a project's domain model — glossary terms and sparing ADRs. Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT; see LICENSES/) |
 | `doubt` | `mathcity.doubt` | Adversarial background fact-checker — forks a subagent told the current agent is WRONG, tasked with finding falsehoods in any claim the session makes. Non-blocking; surfaces verdict inline when fork completes. |
-| `fan-out` | `mathcity.fan-out` | Fan an epic bead out into sub-beads (convoy members) WITHOUT consuming additional WIP-dispatcher slots |
+| `fan-out` | `mathcity.fan-out` | Coordinate recursive subagent delegation, integrate and clean up branches/worktrees, and fan epic beads into convoy members |
 | `file-briefs` | `mathcity.file-briefs` | Async brief-filing variant of grill-with-docs for Mayor onboarding |
 | `formula-creator` | `mathcity.formula-creator` | Create a new formula TOML in a Gas City pack and validate gc/bd command surface before committing |
 | `fp-finder-skill` | `mathcity.fp-finder-skill` | Fixed-point convergence engine for SKILL.md files |
