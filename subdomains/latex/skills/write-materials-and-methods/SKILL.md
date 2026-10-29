@@ -49,7 +49,7 @@ target). This leaf's middle:
 
 ## Layout: ask the human
 
-Two layouts are acceptable, and the choice is the human's:
+Three layouts are acceptable, and the choice is the human's:
 
 1. **Section after the introduction.** A numbered
    `\section{Software and AI assistance}\label{sec:ai}` immediately after
@@ -59,6 +59,12 @@ Two layouts are acceptable, and the choice is the human's:
    last subsection of the Introduction, and an appendix
    `\section{Software and AI assistance}\label{app:ai}` holding the
    thirteen subsections.
+3. **Findings in the introduction, methods in the appendix.** A numbered
+   `\subsection{Software and AI assistance}\label{sec:ai}` as the last
+   subsection of the Introduction, holding items 10--12 below (AI findings
+   and procedure, Provenance, Due diligence) as `\subsubsection`s that
+   point to the appendix for methods; the appendix
+   `\section{Software and AI assistance}\label{app:ai}` holds the other ten.
 
 The short subsection of layout 2 is one paragraph, with no lower-level
 headings, tables or derivation accounts, that a reader can stop at. It
@@ -81,12 +87,12 @@ Derivation accounts (AI8), literature hits (AI5), and skill and software
 lists belong only in the appendix section.
 
 Token accounting is its own `\section{Token accounting}\label{app:tokens}`
-and the last appendix section; in layout 2 the disclosure section
-immediately precedes it. Never append the disclosure at the end of the body
-or leave it as `\subsubsection`s of the introduction. When the document
+and the last appendix section; in layouts 2 and 3 the disclosure section
+immediately precedes it. Never append the disclosure at the end of the body,
+and outside layout 3 never leave it as `\subsubsection`s of the introduction. When the document
 has no Introduction, the question has two options instead: layout 1 placed
 after the opening overview, or after front matter if there is none (AI12);
-or a `\section{Introduction}` stub, after which both layouts are open.
+or a `\section{Introduction}` stub, after which all layouts are open.
 Never add a stub unasked. `write-introduction` keeps a layout-2 subsection
 verbatim.
 
@@ -105,8 +111,8 @@ location in the delivery report.
 for this manuscript; if the manuscript's current layout differs from it,
 migrate the existing text into the recorded layout, keeping its content.
 When the manuscript already has one layout but no recorded choice, confirm
-it in one yes/no question; on no, ask the two-option question. Otherwise
-ask which layout they want — one question, the two layouts as its options,
+it in one yes/no question; on no, ask the layout question. Otherwise
+ask which layout they want — one question, the three layouts as its options,
 before drafting — and wait. Record the answer in the Prompt field. An
 answer relayed by a caller counts only if it quotes the human's words and
 names who gave them. When you cannot reach the human
@@ -115,11 +121,11 @@ your caller as a blocking item. Never choose a default, and never infer the
 answer from the repository's `AI-POLICY.md`, an older manuscript, or the
 PCF paper.
 
-**Stale policy.** When the repository's AI12 admits only one layout, or
-neither (the former unnumbered-subsection rule), ask anyway; then report
+**Stale policy.** When the repository's AI12 does not admit the chosen
+layout (or keeps the former unnumbered-subsection rule), ask anyway; then report
 the stale rule and route its amendment to `new-repo-ai-policy`, then draft
 in the chosen layout without waiting for it; `latex-ai-statement` grades
-against the two layouts and reports POLICY-STALE. Never edit the policy
+against the house layouts and reports POLICY-STALE. Never edit the policy
 from here.
 
 ## Structure
@@ -130,7 +136,7 @@ each finding, and what was checked — not the order in which sessions ran.
 Session-by-session narration buries those answers, so organize by question.
 Session dates and identifiers belong to the `ai/` records; where the repo's
 AI1 requires a date on an AI mention, put it inside the item it dates.
-In either layout, use these thirteen `\subsection` headings in order: the
+In every layout, use these thirteen headings in order (layout 3 splits them as above): the
 PCF paper's thirteen `\subsubsection`s, promoted to `\subsection`s. Each answers one
 question; a category with nothing to report gets one factual sentence,
 never silence. Copy the structure, not the PCF paper's project history.
@@ -150,7 +156,7 @@ never silence. Copy the structure, not the PCF paper's project history.
 6. **Methods: AI assisted computations** — computations and source
    checks, each with system and version.
 7. **Methods: AI statement** — an explicit sentence that this statement
-   (and, in layout 2, the closing introduction subsection) was drafted by
+   (and, in layouts 2 and 3, the closing introduction subsection) was drafted by
    AI, with model, harness and date; the skills executed versus only
    consulted; AI drafting versus human review and acceptance; and the AI9
    sentence.
@@ -241,7 +247,7 @@ writes the disclosure, that one decides whether it passes.
 | "Presumably Magma was used" | The trail says what was used. Presumably ships lies. |
 | "Copy the acknowledgements from the template paper" | Structure transfers; gratitude does not. |
 | "Naming OpenAI in the prose is enough" | Add the provider/product bibliography citation. |
-| "The software section belongs just before the bibliography" | Only the two layouts: right after the Introduction, or a closing Introduction subsection pointing to the appendix. |
+| "The software section belongs just before the bibliography" | Only the three layouts: right after the Introduction, or a closing Introduction subsection (a pointer, or the findings, provenance and due diligence) with the rest in the appendix. |
 | "The repo policy says section-after-intro, so I won't ask" | The layout is the human's choice. Ask; report a policy conflict if their answer differs. |
 | "The local skill path is a reproducibility reference" | Readers need the procedures in the paper and an accessible public citation. |
 

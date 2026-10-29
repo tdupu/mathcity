@@ -68,7 +68,7 @@ must be able to fail.
 ## Default manuscript structure
 
 Unless a recorded venue requirement overrides it, the manuscript uses one
-of two layouts, and the audit names which one it found:
+of three layouts, and the audit names which one it found:
 
 - **Layout 1:** a numbered `\section{Software and AI assistance}`
   immediately after the Introduction; with no Introduction, after the
@@ -81,9 +81,13 @@ of two layouts, and the audit names which one it found:
   Any of the thirteen headings, a derivation account (AI8) or literature
   hits (AI5) inside it is duplication and fails AI12. AI14's expectation
   clause and locators are checked in the appendix's item 10, not here.
+- **Layout 3:** a numbered `\subsection{Software and AI assistance}` as
+  the Introduction's last subsection holding AI findings and procedure,
+  Provenance and Due diligence as `\subsubsection`s, with the other ten
+  subsections in the appendix `\section{Software and AI assistance}`.
 
-The choice between them is the authors'; neither is a finding against the
-other. A mixture (the full disclosure in both places, the short
+The choice among them is the authors'; none is a finding against
+another. A mixture (the full disclosure in both places, the short
 subsection with no appendix section, or the reverse) fails. The full
 section promotes the PCF disclosure's former subsubsections to these
 thirteen `\subsection` headings, in this order:
@@ -107,16 +111,16 @@ states that fact. Do not copy the PCF paper's history, tools, claims, or
 human-review assertions into another manuscript. Check that the token table
 is in a separate appendix with its counting scope, model/harness, available
 token classes, and cost status. Missing telemetry is labeled unavailable,
-not zero. When the repository's AI12 admits only one layout, or neither (the former
+not zero. When the repository's AI12 does not admit the layout found (or keeps the former
 unnumbered-subsection rule), the house structure above governs the AI12
-verdict: a manuscript in either house layout is not failed for disagreeing
+verdict: a manuscript in a house layout is not failed for disagreeing
 with the stale rule, and one that matches only the stale rule fails AI12.
 Add a `POLICY-STALE AI12` finding quoting the repository's AI12 and route
 its amendment to `new-repo-ai-policy`; never rewrite the policy during a
 read-only audit. Report whether an `ai-usage.md` entry's Prompt field carries a
 `Layout choice (AI12):` line for this manuscript; without one, report
 `UNRECORDED-CHOICE` (route to `update-ai-usage`), not an AI12 FAIL. Token accounting is the
-last appendix section; in layout 2 the disclosure section immediately
+last appendix section; in layouts 2 and 3 the disclosure section immediately
 precedes it.
 
 ## Checks
@@ -138,7 +142,7 @@ manuscript and delegate the record face. Name the failing face; omit no rule.
 | AI8 | Each AI-result has a derivation account. |
 | AI9 | Explicit human-responsibility statement present. |
 | AI11 | No unverified AI-proposed reference **in the `.bib`**; a surfaced-then-discarded reference is not a finding. |
-| AI12 | The document matches exactly one layout of the house structure above — layout 1 (numbered section immediately after the introduction; with no introduction, after the opening overview, else after front matter) or layout 2 (closing introduction subsection plus appendix section) — with the thirteen ordered subsections and a separate token-accounting appendix. An abstract carries one factual disclosure sentence when present. Honour a recorded venue override and name its location. |
+| AI12 | The document matches exactly one layout of the house structure above — layout 1 (numbered section immediately after the introduction; with no introduction, after the opening overview, else after front matter) or layout 2 (closing introduction subsection plus appendix section) or layout 3 (findings, provenance and due diligence in the closing introduction subsection, the other ten in the appendix) — with the thirteen ordered subsections and a separate token-accounting appendix. An abstract carries one factual disclosure sentence when present. Honour a recorded venue override and name its location. |
 | AI13 | Computational claims attributed to a system actually run; "model asserted" not worded as "system computed". |
 | AI14 | Negative findings exhibited with their numbered statement and both locators, **before** the positives, each naming the expectation it corrects; counts carried and excluded reported. A keyword scan does not discharge this. |
 | AI18 | No prompt residue; no reader directed to `ai-usage.md`, `tokens.md`, scratch paths, or private chats. |
@@ -172,7 +176,7 @@ is missing per DEFER, and report the DEFER count in the verdict.
     Cycle: <n> of 3   Prior report: <path, or none — first run>
     Scope: <n> manuscripts checked   Revision: <commit or version string>
     Rules: <n> checked, <n> delegated [R], <n> DEFER
-    Structure: layout 1 | layout 2 (short subsection: <n>/5 elements) |
+    Structure: layout 1 | layout 2 (short subsection: <n>/5 elements) | layout 3 |
     mixed | none; layout choice: recorded at <entry> | unrecorded;
     13 subsection headings checked, <n> missing or misleveled;
     token appendix: last | misplaced | absent | recorded override

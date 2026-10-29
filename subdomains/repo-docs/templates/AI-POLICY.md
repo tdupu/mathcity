@@ -151,8 +151,8 @@ Pass: every AI-surfaced entry in the `.bib` is marked verified in the records.
 Fail: an unverified AI-proposed reference in the `.bib`. (A reference surfaced,
 checked, and correctly discarded is not a finding.)
 
-**AI12 — Placement is one of two layouts [C].**
-The disclosure takes one of two layouts, chosen by the human authors and
+**AI12 — Placement is one of three layouts [C].**
+The disclosure takes one of three layouts, chosen by the human authors and
 recorded in `ai-usage.md`.
 (1) A numbered **Software and AI assistance** section immediately after the
 introduction. (2) A short numbered **Software and AI assistance**
@@ -165,7 +165,10 @@ attributed to a named system; that
 the subsection and the appendix section were drafted by AI and how the
 authors reviewed them; the AI9 sentence; and a reference to the appendix
 section. Derivation accounts and literature searches stay in the appendix.
-Layout (2) needs an introduction. In a document with no introduction,
+(3) The same closing introduction subsection holding AI findings and
+procedure, Provenance and Due diligence as subsubsections, with the other
+ten subsections in the appendix section.
+Layouts (2) and (3) need an introduction. In a document with no introduction,
 layout (1) goes after the opening overview, or immediately after front
 matter if there is no overview. The full section has thirteen subsections, in order: Methods:
 typesetting; Methods: agent management; Methods: record keeping; Methods:
@@ -173,7 +176,7 @@ natural language proofs; Methods: adversarial reviews; Methods: AI
 assisted computations; Methods: AI statement; Proofreading and adversarial
 review; Literature review; AI findings and procedure; Provenance; Due
 diligence; Formalization. Token accounting is a separate appendix section and
-the last one; in layout (2) the disclosure section immediately precedes
+the last one; in layouts (2) and (3) the disclosure section immediately precedes
 it. A category with no activity states that fact. A document with an
 abstract also carries one factual disclosure sentence there; a document
 with no abstract owes none. Acknowledgements stay separate — no invented
