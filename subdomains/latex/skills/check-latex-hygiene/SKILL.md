@@ -58,11 +58,12 @@ bead/file and a one-line remediation.
 - Read `../../definition-separation.md` and enumerate every theorem-class
   body in the declared input closure or requested file scope, including
   aliases and starred forms. Report the number reviewed.
-- Review every body in context for embedded terms, objects, constructions,
-  or notation. A zero keyword count is not a PASS. Retain a disposition
+- Review every body in context for embedded defined words, and every
+  definition environment for a reused word. Notation local to one result is
+  allowed. A zero keyword count is not a PASS. Retain a disposition
   for each candidate and quote every violation with its file and line.
-- Any violation gives **revise** with extraction before first use as the
-  remediation. Ordinary hypotheses and proved identities/existence/
+- Any violation gives **revise**: extract a defined word before first use, or
+  return disguised notation to the results that use it. Ordinary hypotheses and proved identities/existence/
   uniqueness/well-definedness are allowed; do not turn a proof obligation
   into a premise while extracting.
 - Run the positive and negative examples in that document when introducing

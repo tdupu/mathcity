@@ -37,10 +37,10 @@ ledger).
 - Statement discipline per the repo's STYLE.md (ST1 proposition-only,
   ST2 explicit hypotheses, ST3 line length); LX floor applies (LX4:
   proof, pinpoint citation, or textbook note — nothing else ships).
-- **Definition separation (LX10):** before drafting or revising a result,
-  put new terms, constructions, and notation in preceding definitions or
-  notation paragraphs. Keep hypotheses and proved conclusions in the
-  statement. Run the body-by-body review in `definition-separation.md`;
+- **Defined words and notation (LX10):** before drafting or revising a result,
+  put new reused words in preceding definitions, and notation used across the
+  document before its first use. Notation local to one result, hypotheses and
+  proved conclusions stay in the statement. Run the body-by-body review in `definition-separation.md`;
   a clean compile or keyword scan does not establish this rule. It applies
   even when the local STYLE.md has no ST10 yet.
 - Citations only through `track-down-reference` output (opened-source

@@ -1,4 +1,4 @@
-# Definition separation — LX10 review procedure
+# Defined words and notation — LX10 review procedure
 
 Parent: [POLICY.md](./POLICY.md#rules). LX10 is the rule source.
 Every writing leaf runs this through WRITERS.md; check-style and
@@ -12,11 +12,14 @@ check-latex-hygiene enforce it even if a local STYLE.md lacks ST10.
 2. Enumerate all theorem-class bodies. Record their count and locations.
    Read each body in context, not only sentences containing a keyword.
 3. For each introduction of a term, object, map, construction, or symbol,
-   ask whether it specifies meaning or asserts a mathematical property.
-   New meaning belongs before the statement. Bound variables, hypotheses,
-   reminders of earlier definitions, and proved characterizations stay.
+   ask whether it is a defined word that is reused, notation local to this
+   result, or a mathematical assertion. A defined word belongs before the
+   statement. Local notation, bound variables, hypotheses, reminders of
+   earlier definitions, and proved characterizations stay.
+   Also list definition environments: one naming no reused word is notation
+   in disguise.
 4. Record each candidate's disposition with a quote and location. Any
-   embedded definition means revise. An unreviewed body means incomplete,
+   embedded defined word, or notation in disguise, means revise. An unreviewed body means incomplete,
    not pass. Neither a successful compile nor zero keyword hits is evidence
    of semantic conformance.
 5. On an authorized revision, place the definition or construction before
@@ -67,8 +70,11 @@ and retain the actual verdicts in the agent-side report.
 | Case | Required LX10 verdict |
 | --- | --- |
 | Definition nested in a theorem | Revise; extract it. |
-| `put`, `write ... for`, `called`, or `where ... means` introduces a new notion inside a result | Revise; prose definitions count. |
-| A starred custom theorem contains only `N(x):={y:d(x,y)<=1}` and a property | Revise; no keyword is needed. |
+| `put`, `write ... for`, `called`, or `where ... means` introduces a word reused elsewhere inside a result | Revise; prose definitions count. |
+| A starred custom theorem contains only `N(x):={y:d(x,y)<=1}` and a property, and `N` is used in other results | Revise; no keyword is needed. |
+| "Let A be a subvariety and put B=f(A). Then ..." with B used only in this result | Pass; this is local notation. |
+| "a = b, where b is ..." with b used only in this result | Pass; this is local notation. |
+| "Bounding data (f,A,B,g,Z) consist of ...", used only to shorten one statement | Revise; notation in disguise. Return it to that statement. |
 | “Let G be a finite group and H a subgroup. Then the order of H divides the order of G.” | Pass; quantification and hypotheses are permitted. |
 | Already-defined center Z(A), with a theorem computing Z(A) for a Clifford algebra | Pass; an identity computing an existing object is a conclusion. |
 | A recipe is given before the result, which proves it descends or is well-defined | Pass if its conditions and proof obligation are preserved. |

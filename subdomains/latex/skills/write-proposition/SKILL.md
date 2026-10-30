@@ -12,8 +12,8 @@ leaf's middle:
 
 ## Definition separation
 
-Before the statement, extract each new term, construction, or notation
-into a preceding definition or notation paragraph (LX10). Keep the
+Before the statement, extract each new reused word into a preceding definition
+(LX10). Notation local to this result stays in its setup. Keep the
 hypotheses in the result, referring to the definition as needed. The
 statement may assert that a previously specified construction is
 well-defined; it must not introduce that construction while asserting it.

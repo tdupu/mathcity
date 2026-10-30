@@ -54,7 +54,7 @@ Latex mode uses `using-mathpowers` for proofs/research and executes the requeste
 | Refuted claim / counterexample / failed expectation from prior work | State it as a result (LX11) — `write-proposition` or `write-example` for the refutation, `write-remark` for the intuition it corrects; never drop the claim and its refutation together |
 | Rendering prior work into a new document (dump, digest, synthesis, revision, introduction, exposition, merge, handoff) | Carry the input's negative results forward first (LX12); list any excluded finding with its scope reason |
 
-Checks precede affected writes. Definitions, constructions, and new notation precede theorem-class statements (LX10), even without a local ST10. Once a definition is introduced, later sections may explain or specialize it but may not silently change its meaning; revise the first definition and its dependents together if the semantics must change. Review statement bodies; compilation alone does not verify this.
+Checks precede affected writes. Defined words precede theorem-class statements, while notation local to one result stays in its setup (LX10), even without a local ST10. Once a definition is introduced, later sections may explain or specialize it but may not silently change its meaning; revise the first definition and its dependents together if the semantics must change. Review statement bodies; compilation alone does not verify this.
 
 For received-review response artifacts, the supplied report is the authoritative
 source text. The report artifact must preserve its item order and review wording

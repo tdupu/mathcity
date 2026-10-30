@@ -5,7 +5,7 @@ Parent: [README.md](./README.md)
 | Field  | Value      |
 | ------ | ---------- |
 | Status | Draft      |
-| Date   | 2026-09-19 |
+| Date   | 2026-10-30 |
 | Prefix | LX         |
 
 What makes a LaTeX document in this project correct and well-formed.
@@ -56,20 +56,22 @@ Every entry in the `.bib` file is cited at least once in the document.
 - Pass: every bib key appears in some `\cite` (or the file is a declared shared bibliography noted in the preamble).
 - Fail: uncited entries in a document-local `.bib` with no such declaration.
 
-**LX10 — Definitions precede theorem-class statements.**
-Across every repository and document tier, introduce mathematical terms,
-objects, constructions, and notation in a separate definition, construction,
-or notation paragraph before the result that uses them. A theorem,
-proposition, lemma, corollary, claim, conjecture, or equivalent custom
-statement environment states hypotheses and conclusions; it must not also
-serve as a definition. This includes inline or parenthetical definitions,
-"where ... means", "put", "write ... for", and defining assignments such as
-`:=`, not just nested `definition` environments.
+**LX10 — Defined words precede theorem-class statements.**
+A definition gives a special word or phrase, set in italics or bold, that is
+reused. Across every repository and document tier, introduce a defined word in
+a definition before the result that uses it, or in a sentence where the type of
+writing allows. A theorem-class environment must not also define a word: no
+inline or parenthetical definition of a term reused elsewhere.
 
-Ordinary quantification and hypotheses ("Let $G$ be a finite group") remain
-in the statement. Recalling already defined notation and asserting an
-identity, characterization, existence, uniqueness, or well-definedness is
-allowed; these are not definitions. If a construction requires such a
+Introducing notation is not making a definition. A symbol used only within one
+result may be introduced in that result's setup, with "Let", "put", "write" or
+"where". Notation used across a document goes before its first use.
+
+A definition environment that names no reused word is notation in disguise;
+revise it. Recalling earlier definitions, and asserting an identity,
+characterization, existence, uniqueness or well-definedness, stay allowed.
+
+If a construction requires such a
 result, give its recipe with the needed conditions before the statement,
 then prove that it works; do not silently assume the conclusion. A purely
 local abbreviation inside a proof may stay there, but terminology used
@@ -82,10 +84,12 @@ changes, revise the first definition and every dependent statement together.
 
 - Pass: enumerate every theorem-class environment (including custom aliases
   and starred forms), review each body in context, and report the number
-  checked and zero embedded definitions. A keyword scan alone cannot pass.
-- Fail -> **revise**: quote each embedded definition with file and line;
-  move it before the result, retain all hypotheses and mathematical claims,
-  and check notation collisions, labels, references, and compilation.
+  checked, zero embedded defined words, and zero definition environments
+  without a reused word. A keyword scan alone cannot pass.
+- Fail -> **revise**: quote each with file and line; move a defined word before
+  the result, or return disguised notation to the results that use it. Retain
+  all hypotheses and mathematical claims, and check notation collisions,
+  labels, references, and compilation.
 - This is a binding default quality floor for existing and new repositories,
   even when their local STYLE.md predates ST10. Local policies may tighten
   it, never omit or weaken it. See `definition-separation.md` for examples
@@ -176,6 +180,7 @@ Check-labels-and-refs
 
 | Date       | Change                                                                                                                                   |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-30 | Amend LX10: a definition gives a reused word; notation local to one result stays in its setup; definition environments naming no reused word are revised. Approved by Taylor Dupuy in conversation: introducing notation and making a definition are different things. |
 | 2026-09-19 | Add LX11 (negative results are stated as results, with the expectation they refute named) and LX12 (derived outputs carry input negative results forward). Requested by Taylor Dupuy in conversation 2026-09-19: refutations are "very important learning moments" and the arithmetic-jet work had produced intuition-correcting results that a synthesis pass had dropped rather than reported. |
 | 2026-09-17 | Add LX10: definitions precede theorem-class statements in every repository and tier; explicitly requested by Taylor in conversation (he-oj8ve). LX7–LX9 belonged to the superseded draft and are not reused. |
 | 2026-07-12 | Full rewrite: policy is now self-contained document-quality rules only (LX1–LX6); bead workflow content moved to `latex-bead-guide.md`; aspirational ideas archived to `../../docs/beads-and-latex-scratch.md`. |
