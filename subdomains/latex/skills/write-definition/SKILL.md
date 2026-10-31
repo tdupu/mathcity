@@ -9,8 +9,9 @@ Runs `subdomains/latex/WRITERS.md` preamble and postamble in full. This leaf's m
 
 ## Definition separation
 
-Place the definition before the first theorem-class statement that uses
-it (LX10), never inside that statement. When extracting an existing
+Place a defined word before the first theorem-class statement that uses
+it (LX10), never inside that statement. Notation local to one result is
+not a definition: leave it in that result's setup. When extracting an existing
 definition, retain its parameter conditions and keep every hypothesis
 needed by the subsequent result explicit. Do not promote a claim of
 existence or well-definedness into an assumption of the definition.

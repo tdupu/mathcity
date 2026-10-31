@@ -42,7 +42,7 @@ uncertainty in the caption and agent-side ledger.
 - For a worked case, reuse a supplied/existing example label. If absent,
   request `write-example` once with figure insertion disabled, then resume.
   Insert once, link both ways, return without redispatch. Keep the derivation
-  in the example; definitions precede results (LX10).
+  in the example; defined words precede results (LX10).
 - Follow WRITERS' edit tags, preserve superseded prose as comments, and leave
   every human annotation untouched. Answer a human question with an adjacent
   `\agentreply{...}`, never by replacing its marker. Add verified pinpoint

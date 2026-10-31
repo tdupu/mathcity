@@ -23,7 +23,7 @@ tree and AI-POLICY.md into the AGENTS contracts table in this same pass, or
 they have tree rows; their content is written only by `update-ai-usage` and
 `update-tokens` (AI15). The templates carry
 default rules that ship with the repo and do not depend on a pack being
-installed next to it — in particular ST10 (definitions precede statements)
+installed next to it — in particular ST10 (defined words precede statements)
 and ST11 (negative results are stated as results, and derived artifacts
 carry them forward). Instantiate those as they stand: they are floors, and
 trimming one during instantiation is the quiet way the contract gets lost. Prefer the EXISTING structure where it is sane — few folders

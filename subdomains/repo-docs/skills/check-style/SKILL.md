@@ -53,7 +53,8 @@ Mechanical clauses ([C]) get commands; judgment clauses get quotes:
 
 - **ST10 / LX10** — always run the statement-body review in
   `subdomains/latex/definition-separation.md`, including custom aliases
-  and starred forms. Quote embedded definitions, report the number of
+  and starred forms. Quote embedded definitions of reused words (notation
+  local to one result is not a violation), report the number of
   bodies reviewed, and record the verdict for every candidate. This
   binding floor applies even if the resolved STYLE.md lacks ST10; a
   missing local rule is not an exemption. Keywords are triage only.

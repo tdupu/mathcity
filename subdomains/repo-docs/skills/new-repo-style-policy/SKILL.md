@@ -38,7 +38,8 @@ Two rules in the STYLE.md template are floors: a repo's copy may make them
 stricter, may not weaken or delete them, and an amendment that does either is
 refused rather than presented.
 
-- **ST10** — definitions precede theorem-class statements.
+- **ST10** — defined words precede theorem-class statements; notation local
+  to one result stays in its setup.
 - **ST11** — negative results are stated as results, and derived artifacts
   carry them forward. A proposal to drop ST11 because "the refuted claim is
   no longer in the document" has the rule backwards: the refutation is the
